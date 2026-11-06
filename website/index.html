@@ -3,23 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>clayjs: malleable documents</title>
-<meta name="description" content="The tools you need to make a static HTML file behave like a Google Document: editable, auto-save, live sync, etc.">
+<title>clayjs: give HTML files super powers</title>
+<meta name="description" content="One ClayJS script tag lets a static HTML file edit and save itself, with optional live sync, undo, and a CMS.">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="canonical" href="https://clayjs.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="clayjs">
-<meta property="og:title" content="clayjs: malleable documents">
-<meta property="og:description" content="The tools you need to make a static HTML file behave like a Google Document: editable, auto-save, live sync, etc.">
+<meta property="og:title" content="clayjs: give HTML files super powers">
+<meta property="og:description" content="One ClayJS script tag lets a static HTML file edit and save itself, with optional live sync, undo, and a CMS.">
 <meta property="og:url" content="https://clayjs.com/">
 <meta property="og:image" content="https://clayjs.com/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="clayjs: the document is the app, the document is the database">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="clayjs: malleable documents">
-<meta name="twitter:description" content="The tools you need to make a static HTML file behave like a Google Document: editable, auto-save, live sync, etc.">
+<meta name="twitter:title" content="clayjs: give HTML files super powers">
+<meta name="twitter:description" content="One ClayJS script tag lets a static HTML file edit and save itself, with optional live sync, undo, and a CMS.">
 <meta name="twitter:image" content="https://clayjs.com/og-image.png">
 <link rel="stylesheet" href="styles.css">
 <script src="prism.min.js"></script>
@@ -45,7 +45,7 @@
     <a href="#concept">The idea</a>
     <a href="#save">Make it save</a>
     <a href="#feedback">Know it saved</a>
-    <a href="#document">Make it a document</a>
+    <a href="#document">Make it editable</a>
     <a href="#next-problems">What you'll hit next</a>
     <a href="#regions">What gets saved</a>
     <a href="#configure">Get your script tag</a>
@@ -56,10 +56,10 @@
 
   <!-- ================= HERO ================= -->
   <section style="border-top: none; padding-top: 64px;">
-    <h1 class="display">Malleable documents</h1>
-    <p class="lede" style="margin-top: 14px;">The tools you need to make a static HTML file behave like a Google&nbsp;Document: editable, auto-save, live sync, etc.</p>
+    <h1 class="display">Give HTML files super powers</h1>
+    <p class="lede" style="margin-top: 14px;">One script tag lets a static HTML file edit and save itself, with optional live sync, undo, and a visual CMS.</p>
     <p style="margin-top: 18px;">
-      <a class="btn primary" href="/docs/guide/quick-start/" style="text-decoration: none; display: inline-block;">Get started</a>
+      <a class="btn primary" href="https://journal.hyperclay.com/" style="text-decoration: none; display: inline-block; margin-right: 6px;">Try an example</a>
       <a class="btn ghost" href="/docs/start/" data-send-agent="Read https://clayjs.com/docs/start.md. Pick the problems I am solving with the file I describe, and read only those pages before you start." style="text-decoration: none; display: inline-block; margin-left: 6px;">Send this to your agent</a>
       <a class="btn ghost" href="#configure" style="text-decoration: none; display: inline-block; margin-left: 6px;">Get your script tag</a>
     </p>
@@ -87,6 +87,10 @@
   &lt;/body&gt;
 &lt;/html&gt;</code></pre>
     <p>That's a complete app. Type into the heading, hit Save, refresh: your words are still there. The file saved itself.</p>
+    <p style="margin-top: 18px;">
+      <a class="btn ghost" href="/docs/guide/quick-start/" style="text-decoration: none; display: inline-block;">Get started</a>
+      <a class="btn ghost" href="#configure" style="text-decoration: none; display: inline-block; margin-left: 6px;">Get your script tag</a>
+    </p>
   </section>
 
   <!-- ================= CONCEPT ================= -->
@@ -104,7 +108,7 @@
   <!-- ================= STEP 1: SAVE ================= -->
   <section id="save">
     <h2 class="section-title">Make it save</h2>
-    <p>Keep your edits in the HTML file itself. ClayJS sends the document to its host, which writes the updated file. Choose when to save, or turn on autosave. <a href="/docs/guide/saving/">See how saving works</a>.</p>
+    <p>Keep your edits in the HTML file itself. ClayJS sends the HTML to its host, which writes the updated file. Choose when to save, or turn on autosave. <a href="/docs/guide/saving/">See how saving works</a>.</p>
   </section>
 
   <!-- ================= STEP 2: FEEDBACK ================= -->
@@ -123,8 +127,8 @@
 
   <!-- ================= STEP 3: DOCUMENT ================= -->
   <section id="document">
-    <h2 class="section-title">Make it a document</h2>
-    <p>Type directly into a heading, format a note, or fill in a form. ClayJS can save the text and field values as part of the document. <a href="/docs/guide/quick-start/">Build your first editable file</a>.</p>
+    <h2 class="section-title">Make it editable</h2>
+    <p>Type directly into a heading, format a note, or fill in a form. ClayJS can save the text and field values into the HTML file. <a href="/docs/guide/quick-start/">Build your first editable file</a>.</p>
     <div class="sheet live" id="doc-sheet">
       <span class="filename">meeting.html</span>
       <span class="realbadge">saved in your browser</span>
@@ -141,7 +145,7 @@
   <!-- ================= NEXT PROBLEMS ================= -->
   <section id="next-problems">
     <h2 class="section-title">Saved files have a lifecycle</h2>
-    <p>Three things come up in almost every malleable file, usually in this order. Open the one you're facing.</p>
+    <p>Three things come up in almost every self-saving HTML file, usually in this order. Open the one you're facing.</p>
 
     <details class="fold" onbeforesnapshot="this.removeAttribute('open')">
       <summary><span class="prob">I shouldn't have to press Save.</span><span class="sol">autosave</span></summary>
@@ -179,7 +183,7 @@
     <details class="fold" onbeforesnapshot="this.removeAttribute('open')">
       <summary><span class="prob">Visitors can see my edit controls.</span><span class="sol">edit mode</span></summary>
       <div class="fold-body">
-        <p>Your first malleable file can keep its controls exposed; that's fine. When you share it, mark the owner-only parts and clayjs strips or disables them for everyone else. The server decides who the owner is.</p>
+        <p>Your first HTML file can keep its controls exposed; that's fine. When you share it, mark the owner-only parts and clayjs strips or disables them for everyone else. The server decides who the owner is.</p>
         <pre><code class="language-markup">&lt;h1 editmode:contenteditable&gt;Only the owner can edit this&lt;/h1&gt;
 &lt;button clay="no-save" onclick="clay.save()"&gt;Save&lt;/button&gt;</code></pre>
         <div class="mode-toggle" role="radiogroup" aria-label="Simulate who is looking at the file" clay="no-save no-watch">
@@ -204,51 +208,63 @@
   <!-- ================= REGIONS ================= -->
   <section id="regions">
     <h2 class="section-title">Control what gets saved</h2>
-    <p>Keep temporary controls and status displays out of the saved document while preserving your content. Regions let you choose how each part of the page participates in saving. <a href="/docs/regions/">Explore regions</a>.</p>
+    <p>Keep temporary controls and status displays out of the saved HTML file while preserving your content. Regions let you choose how each part of the page participates in saving. <a href="/docs/regions/">Explore regions</a>.</p>
   </section>
 
   <!-- ================= CONFIGURATOR ================= -->
   <section id="configure">
     <h2 class="section-title">What does your file need?</h2>
-    <p>Check what applies. The script tag updates as you go; plugins load only in the browser, only when checked.</p>
+    <p>Start with the recommended set, then check only what your file needs. The snippet updates as you go.</p>
 
     <div class="config" clay="no-save no-watch">
       <div class="choices">
         <label class="row locked">
           <input type="checkbox" checked disabled>
-          <span><span class="what">Saving</span><span class="why">The core. Always on.</span></span>
+          <span><span class="what">Saving</span><span class="why">Writes changes back into the HTML file itself. Always on.</span></span>
         </label>
         <label class="row">
-          <input type="checkbox" checked data-plugin="richclay" data-default="on">
-          <span><span class="what">Rich text editing</span><span class="why">The <code>editable</code> attribute: bold, lists, links. On by default.</span></span>
+          <input type="checkbox" checked data-plugin="sync">
+          <span><span class="what">Live sync across open copies</span><span class="why">Updates open tabs, devices, and teammates in place without a reload.</span></span>
         </label>
         <label class="row">
-          <input type="checkbox" data-plugin="indicator">
-          <span><span class="what">A built-in save indicator</span><span class="why">A small ready-made status chip, if you'd rather not style your own.</span></span>
+          <input type="checkbox" checked data-plugin="undo">
+          <span><span class="what">Undo and redo</span><span class="why">Steps back and forward through changes across the whole page, not just text fields.</span></span>
         </label>
         <label class="row">
-          <input type="checkbox" data-plugin="sync">
-          <span><span class="what">Sync edits across open copies</span><span class="why">Live sync between tabs, devices, and collaborators.</span></span>
+          <input type="checkbox" checked data-plugin="indicator">
+          <span><span class="what">Save indicator</span><span class="why">Shows when edits are saving or saved with a small built-in status chip.</span></span>
         </label>
         <label class="row">
-          <input type="checkbox" data-plugin="live">
-          <span><span class="what">Live JSON data for games</span><span class="why">A JSON tag becomes a shared object that players change in real time.</span></span>
+          <input type="checkbox" checked data-plugin="menu">
+          <span><span class="what">Owner menu</span><span class="why">A small menu for owners with an edit switch, SEO and link preview settings, undo, and download.</span></span>
+        </label>
+        <label class="row">
+          <input type="checkbox" data-plugin="richclay" data-default="on">
+          <span><span class="what">Rich text editing</span><span class="why">Turn on when people editing text on the page need bold, lists, or links.</span></span>
+        </label>
+        <label class="row">
+          <input type="checkbox" data-extra="sapjs">
+          <span><span class="what">Reactive records (SapJS)</span><span class="why">Adds sap.js when your page has totals that depend on other values or lists of records that update their views.</span></span>
+        </label>
+        <label class="row">
+          <input type="checkbox" data-extra="data">
+          <span><span class="what">JSON data for other tools</span><span class="why">Adds an api rules tag when scripts, agents, or other tools need to read the page's data as JSON.</span></span>
         </label>
         <label class="row">
           <input type="checkbox" data-plugin="sortable">
           <span><span class="what">Drag items to reorder</span><span class="why">The <code>sortable</code> attribute for lists and boards.</span></span>
         </label>
         <label class="row">
-          <input type="checkbox" data-plugin="undo">
-          <span><span class="what">Undo / redo</span><span class="why">⌘Z that understands the whole document, not just text fields.</span></span>
+          <input type="checkbox" data-plugin="cms">
+          <span><span class="what">A content sidebar (CMS)</span><span class="why">Edit-in-place panel for the file's content. Needs a two-line setup, shown below.</span></span>
         </label>
         <label class="row">
           <input type="checkbox" data-plugin="ai-edit">
           <span><span class="what">AI editing</span><span class="why">Select text, press ⌘J, and ask your AI agent for a change. Needs HTML Clay or Hyperclay Local.</span></span>
         </label>
         <label class="row">
-          <input type="checkbox" data-plugin="cms">
-          <span><span class="what">A content sidebar (CMS)</span><span class="why">Edit-in-place panel for the file's content. Needs a two-line setup, shown below.</span></span>
+          <input type="checkbox" data-plugin="live">
+          <span><span class="what">Live JSON data for games</span><span class="why">A JSON tag becomes a shared object that players change in real time.</span></span>
         </label>
       </div>
       <div class="out">
@@ -257,6 +273,12 @@
           <button type="button" class="btn" id="copy-config" data-hv-goal="snippet-copy" data-hv-what="configurator">Copy</button>
         </div>
         <pre><code class="language-markup" id="config-output"></code></pre>
+        <div class="cms-extra" id="data-extra">
+          <p class="small" style="margin-bottom: 6px;"><strong>Data setup:</strong> name the parts of your page that hold data. The host then returns them as JSON:</p>
+          <pre style="margin-top: 0;"><code class="language-markup">&lt;script type="application/json" data-rules-name="api" data-rules-version="1"&gt;
+{ "items": [".item", { "name": ".name", "done": "input@checked" }] }
+&lt;/script&gt;</code></pre>
+        </div>
         <div class="cms-extra" id="cms-extra">
           <p class="small" style="margin-bottom: 6px;"><strong>CMS setup:</strong> add one more tag naming the parts of your page that count as content. The sidebar builds itself from it:</p>
           <pre style="margin-top: 0;"><code class="language-markup">&lt;script data-rules-name="cms" data-rules-version="1" type="application/json"&gt;
@@ -278,7 +300,7 @@
   <section id="runs-on">
     <h2 class="section-title">Your file is yours</h2>
     <p>It runs on <a href="https://hyperclay.com">hyperclay.com</a>, on your own machine with <a href="https://hyperclaylocal.com/">Hyperclay Local</a> or <a href="https://htmlclay.com/">HTML Clay</a>, or against <a href="/docs/endpoint/">about 20 lines of your own server code</a>. Download it anytime; it's just HTML.</p>
-    <p class="small">The fastest way to try a malleable file with zero setup is a free account on <a href="https://hyperclay.com">hyperclay.com</a>.</p>
+    <p class="small">The fastest way to try a self-saving HTML file with zero setup is a free account on <a href="https://hyperclay.com">hyperclay.com</a>.</p>
   </section>
 
   <!-- QUOTE SLOT 2 — removed 2026-07-16, hidden pending permission. Restore markup from git history once the ask lands. -->
@@ -400,6 +422,9 @@
   var output = document.getElementById("config-output");
   var cmsExtra = document.getElementById("cms-extra");
   var boxes = Array.prototype.slice.call(document.querySelectorAll("[data-plugin]"));
+  var sapBox = document.querySelector('[data-extra="sapjs"]');
+  var dataBox = document.querySelector('[data-extra="data"]');
+  var dataExtra = document.getElementById("data-extra");
   function renderConfig() {
     var plugins = [];
     var excludes = [];
@@ -413,11 +438,15 @@
     if (plugins.length) params.push("plugins=" + plugins.join(","));
     if (excludes.length) params.push("exclude=" + excludes.join(","));
     var url = "https://clayjs.com/v1/clay.js" + (params.length ? "?" + params.join("&") : "");
-    output.textContent = '<script src="' + url + '"><\/script>';
+    var lines = ['<script src="' + url + '"><\/script>'];
+    if (sapBox.checked) lines.push('<script src="https://clayjs.com/v1/sap.js"><\/script>');
+    if (dataBox.checked) lines.push('<script type="application/json" data-rules-name="api" data-rules-version="1">\n{ "items": [".item", { "name": ".name", "done": "input@checked" }] }\n<\/script>');
+    output.textContent = lines.join("\n");
+    dataExtra.classList.toggle("show", dataBox.checked);
     if (window.Prism) Prism.highlightElement(output);
     cmsExtra.classList.toggle("show", plugins.indexOf("cms") !== -1);
   }
-  boxes.forEach(function (box) { box.addEventListener("change", renderConfig); });
+  boxes.concat([sapBox, dataBox]).forEach(function (box) { box.addEventListener("change", renderConfig); });
   renderConfig();
 
   document.getElementById("copy-config").addEventListener("click", function () {
