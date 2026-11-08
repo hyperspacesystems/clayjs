@@ -136,6 +136,26 @@
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-11-07
+
+### Added
+- A visitor menu for people who do not edit, with an embedded shell.
+- Looks and appreciation link items in the visitor menu.
+- An owner notice that follows the page as you scroll.
+- A Start over row in the visitor menu. It asks first, then deletes this browser's draft and reloads the page as its owner saved it.
+
+### Fixed
+- Menu stepper arrows run the newest callbacks and keep their section.
+- When you keep a look, the kept theme stays in `html[look]`, so an upgrade paints it.
+- An upgrade reads its `If-Match` stamp before it captures the page, so a save during the download fails the write instead of being lost.
+- A tab with no stamp learns one before the capture, and the upgrade writes against exactly the stamp it was given.
+- A view-mode tab copies the page at the moment it reads the stamp.
+- A reopened storage error card keeps Download building the live page.
+- Live sync keeps `<noscript>` content as text through merges and relay frames, including escaped text and `<template>` content, so fallback markup never moves into the page or gets saved into the file.
+- Visitor drafts remember which draft they were built on, so a tab whose write another tab overwrote without seeing it merges both back instead of losing its work.
+- A draft built on one from an older version is matched by its bytes, and a full history without a tab's write keeps that tab's rows.
+- Start over gives the draft a new slot id, frees the old slot, and reloads the other tabs, so a discarded draft stays gone and their next save does not bring it back.
+
 ## [1.22.0] - 2026-11-06
 
 ### Added
