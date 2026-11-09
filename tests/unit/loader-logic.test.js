@@ -157,7 +157,7 @@ describe("resolveModules", () => {
 
     const edit = resolveModules(params({ plugins: "page,menu" }), true);
     expect(edit.plugins).not.toContain("plugins/menu.js");
-    expect(edit.late).toEqual(["plugins/menu.js", "plugins/source.js"]);
+    expect(edit.late).toEqual(["plugins/menu.js", "plugins/wire.js", "plugins/ai-edit.js", "plugins/source.js"]);
   });
 
   test("exclude CSV removes a default-on plugin", () => {
@@ -177,11 +177,14 @@ describe("resolveModules", () => {
   // ai-edit is a consumer of clay.wire: it asks `clay.wire.helpers()` whether the
   // host runs it and sends through `clay.wire.send`. Asking for it has to bring the
   // wire, and the wire has to load first, or the plugin evaluates against nothing.
+  // Both ride the late tail, after the editor takes input, in that order.
   test("plugins=ai-edit implies wire, which loads before it", () => {
-    const { plugins } = resolveModules(params({ plugins: "ai-edit" }), true);
-    expect(plugins).toContain("plugins/wire.js");
-    expect(plugins.indexOf("plugins/wire.js"))
-      .toBeLessThan(plugins.indexOf("plugins/ai-edit.js"));
+    const { plugins, late } = resolveModules(params({ plugins: "ai-edit" }), true);
+    expect(plugins).not.toContain("plugins/wire.js");
+    expect(plugins).not.toContain("plugins/ai-edit.js");
+    expect(late).toContain("plugins/wire.js");
+    expect(late.indexOf("plugins/wire.js"))
+      .toBeLessThan(late.indexOf("plugins/ai-edit.js"));
   });
 
   test("plugins=page implies live and sync, which load before it", () => {
@@ -205,34 +208,41 @@ describe("resolveModules", () => {
 
   // Cmd+J inside a Block document is ai-edit's composer, so the editor half of `page`
   // brings the plugin and the wire it sends through, on every document that already
-  // asked for `page`.
-  test("plugins=page implies ai-edit and the wire, which load before it", () => {
-    const { plugins } = resolveModules(params({ plugins: "page,menu,indicator" }), true);
-    expect(plugins).toContain("plugins/wire.js");
-    expect(plugins).toContain("plugins/ai-edit.js");
-    expect(plugins.indexOf("plugins/wire.js")).toBeLessThan(plugins.indexOf("plugins/ai-edit.js"));
+  // asked for `page` — after the editor is ready, not before it.
+  test("plugins=page implies ai-edit and the wire, which load after the editor is ready", () => {
+    const { plugins, late } = resolveModules(params({ plugins: "page,menu,indicator" }), true);
+    expect(plugins).not.toContain("plugins/wire.js");
+    expect(plugins).not.toContain("plugins/ai-edit.js");
+    expect(late).toContain("plugins/wire.js");
+    expect(late).toContain("plugins/ai-edit.js");
+    expect(late.indexOf("plugins/wire.js")).toBeLessThan(late.indexOf("plugins/ai-edit.js"));
   });
 
   // The reader half implies nothing: a reader loads no editor, no wire and no composer.
   test("plugins=page in view mode brings neither the wire nor ai-edit", () => {
-    const { plugins } = resolveModules(params({ plugins: "page,menu,indicator" }), false);
+    const { plugins, late } = resolveModules(params({ plugins: "page,menu,indicator" }), false);
     expect(plugins).not.toContain("plugins/wire.js");
     expect(plugins).not.toContain("plugins/ai-edit.js");
+    expect(late).not.toContain("plugins/wire.js");
+    expect(late).not.toContain("plugins/ai-edit.js");
   });
 
   // Excluding the wire has to run after the implications, or `page` re-adds ai-edit
   // with nothing to send through.
   test("exclude=wire drops ai-edit from a page too", () => {
-    const { plugins } = resolveModules(params({ plugins: "page,menu,indicator", exclude: "wire" }), true);
+    const { plugins, late } = resolveModules(params({ plugins: "page,menu,indicator", exclude: "wire" }), true);
     expect(plugins).not.toContain("plugins/wire.js");
     expect(plugins).not.toContain("plugins/ai-edit.js");
+    expect(late).not.toContain("plugins/wire.js");
+    expect(late).not.toContain("plugins/ai-edit.js");
     expect(plugins).toContain("plugins/page.js");
   });
 
   test("exclude=ai-edit takes the AI entry points off a page that implies it", () => {
-    const { plugins } = resolveModules(params({ plugins: "page,menu,indicator", exclude: "ai-edit" }), true);
+    const { plugins, late } = resolveModules(params({ plugins: "page,menu,indicator", exclude: "ai-edit" }), true);
     expect(plugins).not.toContain("plugins/ai-edit.js");
-    expect(plugins).toContain("plugins/wire.js");
+    expect(late).not.toContain("plugins/ai-edit.js");
+    expect(late).toContain("plugins/wire.js");
     expect(plugins).toContain("plugins/page.js");
   });
 
@@ -241,21 +251,26 @@ describe("resolveModules", () => {
   // brings nothing, so the wire it implies stays out too. A page that wants the
   // wire in view mode names it.
   test("plugins=ai-edit in view mode has no wire", () => {
-    const { plugins } = resolveModules(params({ plugins: "ai-edit" }), false);
+    const { plugins, late } = resolveModules(params({ plugins: "ai-edit" }), false);
     expect(plugins).not.toContain("plugins/wire.js");
     expect(plugins).not.toContain("plugins/ai-edit.js");
+    expect(late).not.toContain("plugins/wire.js");
+    expect(late).not.toContain("plugins/ai-edit.js");
   });
 
   test("plugins=ai-edit,wire in view mode has the wire", () => {
-    const { plugins } = resolveModules(params({ plugins: "ai-edit,wire" }), false);
-    expect(plugins).toContain("plugins/wire.js");
+    const { plugins, late } = resolveModules(params({ plugins: "ai-edit,wire" }), false);
+    expect(plugins).not.toContain("plugins/wire.js");
+    expect(late).toContain("plugins/wire.js");
     expect(plugins).not.toContain("plugins/ai-edit.js");
+    expect(late).not.toContain("plugins/ai-edit.js");
   });
 
   test("plugins=ai-edit in edit mode has both the wire and ai-edit", () => {
-    const { plugins } = resolveModules(params({ plugins: "ai-edit" }), true);
-    expect(plugins).toContain("plugins/wire.js");
-    expect(plugins).toContain("plugins/ai-edit.js");
+    const { plugins, late } = resolveModules(params({ plugins: "ai-edit" }), true);
+    expect(plugins).not.toContain("plugins/wire.js");
+    expect(late).toContain("plugins/wire.js");
+    expect(late).toContain("plugins/ai-edit.js");
   });
 
   // The editor half is editOnly, so in view mode `page` brings nothing with it:
@@ -329,7 +344,8 @@ describe("resolveModules", () => {
 
   test("ai-edit does not bring undo, which would take Cmd+Z in every text field", () => {
     expect(resolveModules(params(), true).plugins).not.toContain("plugins/undo.js");
-    expect(resolveModules(params({ plugins: "ai-edit" }), true).plugins).not.toContain("plugins/undo.js");
+    const ai = resolveModules(params({ plugins: "ai-edit" }), true);
+    expect([...ai.plugins, ...ai.late]).not.toContain("plugins/undo.js");
   });
 });
 
@@ -437,23 +453,23 @@ describe("page-view, the reader half of page", () => {
 describe("a Document's plugin plan", () => {
   const everywhere = (plan) => [...plan.core, ...plan.plugins, ...plan.late];
 
-  test("plugins=page: no richclay anywhere, source only in late", () => {
+  test("plugins=page: no richclay anywhere, the wire, the composer and source in late", () => {
     const plan = resolveModules(params({ plugins: "page" }), true);
     expect(everywhere(plan)).not.toContain("plugins/richclay.js");
     expect(plan.plugins).not.toContain("plugins/source.js");
-    expect(plan.late).toEqual(["plugins/source.js"]);
+    expect(plan.late).toEqual(["plugins/wire.js", "plugins/ai-edit.js", "plugins/source.js"]);
   });
 
   test("plugins=page,richclay: asking for it by name defeats the displacement", () => {
     const plan = resolveModules(params({ plugins: "page,richclay" }), true);
     expect(plan.plugins).toContain("plugins/richclay.js");
-    expect(plan.late).toEqual(["plugins/source.js"]);
+    expect(plan.late).toEqual(["plugins/wire.js", "plugins/ai-edit.js", "plugins/source.js"]);
   });
 
   test("plugins=page,source: source stays late even when named", () => {
     const plan = resolveModules(params({ plugins: "page,source" }), true);
     expect(plan.plugins).not.toContain("plugins/source.js");
-    expect(plan.late).toEqual(["plugins/source.js"]);
+    expect(plan.late).toEqual(["plugins/wire.js", "plugins/ai-edit.js", "plugins/source.js"]);
   });
 
   test("view mode plugins=page: neither richclay nor source", () => {

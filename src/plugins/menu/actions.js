@@ -137,8 +137,11 @@ export function attachActions({ addItem, note, currentMode }) {
   // item that can only say it is unavailable. In view mode the plugin is not loaded
   // yet, so there is nobody to ask and the item waits for the click, as it always has.
   if (pageWants("ai-edit")) {
-    const loaded = clay().aiEdit;
     (async () => {
+      // ai-edit loads late, after the editor is ready, so it can attach after this menu.
+      // Ask for it where it lands, as the item's own run does, rather than where the
+      // menu boots: the item is drawn once there is a plugin to say what the host lists.
+      const loaded = clay().aiEdit || (currentMode() === "edit" ? await whenPresent(() => clay().aiEdit) : null);
       if (loaded?.available) {
         if (!(await loaded.available())) return;
       } else if (!loaded && pageWants("page")) {

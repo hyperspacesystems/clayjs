@@ -67,8 +67,9 @@ const chip = () => document.querySelector('[data-clay-ai-edit="chip"]');
 const docBubble = () => document.querySelector('[data-clay-ai-edit="bubble"]');
 const heading = () => document.querySelector("h1");
 
-// Every step of a send is a microtask, and the wire's handle settles on its own.
-const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
+// Every step of a send is a microtask, the comment conventions the send path imports on
+// first use included, and the wire's handle settles on its own.
+const flush = async () => { for (let i = 0; i < 64; i++) await Promise.resolve(); };
 
 let aiEdit = null;
 let aiEditParticipant = null;

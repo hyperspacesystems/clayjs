@@ -58,6 +58,14 @@ async function boot({ cookie = true, edit = false, plugins = "menu", resume = nu
   if (settle) await flush();
 }
 
+// ai-edit loads late, after the editor is ready, so a boot that does not settle has
+// not attached it yet: the spy goes on as soon as it appears, before the reload
+// receipt runs.
+async function spyOnPick() {
+  for (let i = 0; i < 100 && !window.clay.aiEdit; i++) await wait(2);
+  return jest.spyOn(window.clay.aiEdit, "pick").mockResolvedValue(true);
+}
+
 const listOf = () => $(".clay-menu-list", "menu");
 const noteOf = () => $(".clay-menu-note", "menu");
 const buttonOf = (id) => $(`[role="menuitem"][data-menu-id="${id}"]`, "menu");
@@ -232,6 +240,30 @@ test("a host that lists no ai-edit helper gets no Ask AI item", async () => {
   expect(buttonOf("clay.download")).not.toBeNull();
 });
 
+// ai-edit loads late, after the editor is ready, so the menu boots before the plugin it
+// asks exists. The item waits for it rather than deciding against a missing plugin.
+test("the Ask AI item waits for ai-edit, which loads after the menu", async () => {
+  const { attachActions } = await import("../../src/plugins/menu/actions.js");
+  window.clay = { editPlugins: ["menu", "ai-edit"] };
+  window.fetch = async () => ({
+    ok: false,
+    status: 404,
+    statusText: "Not Found",
+    headers: { get: () => null },
+    text: async () => "",
+    json: async () => ({}),
+  });
+  const items = [];
+  attachActions({ addItem: (item) => items.push(item), note: () => {}, currentMode: () => "edit" });
+
+  await flush();
+  expect(items.some((item) => item.id === "clay.ai")).toBe(false);
+
+  window.clay.aiEdit = { available: async () => true, pick: jest.fn() };
+  for (let i = 0; i < 40 && !items.some((item) => item.id === "clay.ai"); i++) await wait(10);
+  expect(items.some((item) => item.id === "clay.ai")).toBe(true);
+});
+
 test("Ask AI from view mode enters edit live and runs the action", async () => {
   await boot({ plugins: "menu,ai-edit" });
 
@@ -281,7 +313,7 @@ test("Ask AI says why when the mode change is refused", async () => {
 test("a receipt left by the reload runs the action once in edit mode", async () => {
   await boot({ plugins: "menu,ai-edit", edit: true, resume: "ai", settle: false, helpers: [{ name: "ai-edit", state: "ready" }] });
 
-  const pick = jest.spyOn(window.clay.aiEdit, "pick").mockResolvedValue(true);
+  const pick = await spyOnPick();
   for (let i = 0; i < 50 && !buttonOf("clay.ai"); i++) await wait(10);
   await wait(120);
   await flush();
@@ -293,7 +325,7 @@ test("a receipt left by the reload runs the action once in edit mode", async () 
 test("a reload entry waits for the page's AI surface before opening the picker", async () => {
   await boot({ plugins: "menu,ai-edit", edit: true, resume: "ai", settle: false, helpers: [{ name: "ai-edit", state: "ready" }] });
 
-  const pick = jest.spyOn(window.clay.aiEdit, "pick").mockResolvedValue(true);
+  const pick = await spyOnPick();
   let release;
   const ready = new Promise((resolve) => { release = resolve; });
   window.clay.page = { ready, ai: null };
@@ -307,6 +339,38 @@ test("a reload entry waits for the page's AI surface before opening the picker",
 
   expect(pick).toHaveBeenCalledTimes(1);
   expect(noteOf().hidden).toBe(true);
+});
+
+// Before ai-edit loads there is no listener at all, so the key is the browser's; once it
+// loads, a Block document without its surface still leaves the key alone rather than
+// opening the DOM path over the editor.
+test("Cmd+J on a Block document before ai-edit loads is left to the browser", async () => {
+  await boot({ plugins: "menu,ai-edit", edit: true, settle: false, helpers: [{ name: "ai-edit", state: "ready" }] });
+  document.body.insertAdjacentHTML("afterbegin", '<article data-page="1"></article>');
+  window.clay.editPlugins = [...window.clay.editPlugins, "page"];
+  const panelShown = () => {
+    const panel = document.querySelector('[data-clay-ai-edit="panel"]');
+    return !!panel && !panel.hidden;
+  };
+  const press = () => {
+    const event = new KeyboardEvent("keydown", { key: "j", code: "KeyJ", ctrlKey: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    return event;
+  };
+
+  try {
+    expect(press().defaultPrevented).toBe(false);
+    expect(panelShown()).toBe(false);
+
+    for (let i = 0; i < 100 && !window.clay.aiEdit; i++) await wait(10);
+    expect(window.clay.aiEdit).toBeTruthy();
+
+    expect(press().defaultPrevented).toBe(false);
+    expect(panelShown()).toBe(false);
+    expect(document.querySelectorAll("[data-edit-id]").length).toBe(0);
+  } finally {
+    document.querySelector("article[data-page]")?.remove();
+  }
 });
 
 test("Download in edit mode saves what a save would send now", async () => {

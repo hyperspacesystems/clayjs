@@ -45,13 +45,11 @@ import { loadedEngine, mergeEngine } from "../sync/merge-engine.js";
 import Mutation from "../lib/mutation.js";
 import { startsAtImport } from "../core/is-edit-mode.js";
 import { deepActiveElement } from "../dom/active-element.js";
-import { MAX_PAYLOAD_BYTES, contextRefsOf, wantsPage } from "../lib/ai-comment.js";
 import { holdAllSaves, releaseAllSaves } from "../core/save.js";
 import { STRIP_FROM_SAVE, SNAPSHOT_REMOVE_SELECTOR } from "../lib/region-policy.js";
 import { enableContentEditable } from "../core/admin-contenteditable.js";
 import onDomReady from "../lib/dom-ready.js";
 import wire from "./wire.js";
-import { createPicker } from "./ai-edit/picker.js";
 import { set } from "../lib/hostile-css.js";
 import { bevelBox, bevelButton, bevelSurface, bevelText, bevelInput, bevelIconButton, pageScheme, paintLook, setShown, RUNTIME_ONLY } from "../ui/bevel-controls.js";
 import { TOKENS, GLYPHS, FONT_SANS, FONT_MONO, SHADOW } from "../ui/bevel.js";
@@ -282,7 +280,7 @@ function candidateFrom(html, tag) {
 
 // ---------------------------------------------------------------- session lifecycle
 
-function newSession(el, comment, quote) {
+function newSession(el, comment, quote, { contextRefsOf, wantsPage }) {
   const docMode = el === document.body;
   const elementHTML = docMode ? strippedBodyHTML() : el.outerHTML;
   const payload = {
@@ -317,7 +315,10 @@ function newSession(el, comment, quote) {
 
 async function sendRequest(el, comment, quote) {
   if (el.aiTarget) return sendTargetRequest(el, comment, quote);
-  session = newSession(el, comment, quote);
+  // The comment conventions load here, where a request is sent, not at boot: a page
+  // whose composer is never typed into does not fetch them.
+  const { MAX_PAYLOAD_BYTES, contextRefsOf, wantsPage } = await import("../lib/ai-comment.js");
+  session = newSession(el, comment, quote, { contextRefsOf, wantsPage });
   // Refused here, before anything is sent or paused: the envelope would refuse it
   // anyway, and a refusal the page cannot explain is worse than one it can.
   if (new Blob([JSON.stringify(session.payload)]).size > MAX_PAYLOAD_BYTES) {
@@ -1348,7 +1349,11 @@ async function pick() {
   if (!panel || session || barMode) return false;
   if (picker?.picking) return true;
   const ai = pageAi();
-  picker = createPicker({
+  // The overlay loads here, where it is opened, not at boot. A failed fetch is the
+  // same answer as nothing to pick with: the menu says so and nothing else changes.
+  const mod = await import("./ai-edit/picker.js").catch(() => null);
+  if (!mod) return false;
+  picker = mod.createPicker({
     surface: ai?.active() ? ai : null,
     onPicked: (target) => openPanel(target, target.quote),
     onWholePage: () => openPanel(ai?.active() ? ai.wholePage() : document.body),
