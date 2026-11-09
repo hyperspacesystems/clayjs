@@ -4,7 +4,7 @@
 import { openPageMenu } from "../chrome.js";
 import { schema } from "../schema.js";
 import { createToolHost } from "../tools.js";
-import { toolViews } from "../tool-views.js";
+import { toolBlockViews, toolViews } from "../tool-views.js";
 
 export const TOOL_CSS = `
 .page-tool-block { position: relative; min-height: 48px; border: 1px solid var(--page-rule); border-radius: 8px; padding: 12px; }
@@ -13,13 +13,15 @@ export const TOOL_CSS = `
 [data-tool-note], [data-tool-error] { color: var(--page-danger); font-size: 0.85em; }`;
 
 export class ToolView {
-  constructor(node, view, getPos, { host, revise = null }) {
+  constructor(node, view, getPos, { host, revise = null, blocks = null }) {
     this.node = node;
     this.view = view;
     this.getPos = getPos;
     this.host = host;
     this.revise = revise;
+    this.blocks = blocks;
     this.showingFallback = false;
+    this.suspended = false;
     const doc = view.dom.ownerDocument;
     this.dom = doc.createElement("section");
     this.dom.className = "page-tool-block";
@@ -35,19 +37,32 @@ export class ToolView {
     this.menu.setAttribute("aria-label", "Tool options");
     this.menu.addEventListener("click", () => this.openMenu());
     this.dom.append(this.content, this.menu);
+    if (this.blocks && this.dom.dataset.id) this.blocks.set(this.dom.dataset.id, this);
     this.mount();
   }
 
   mount() {
     this.instance?.dispose();
     this.instance = null;
-    if (this.showingFallback) this.content.innerHTML = this.node.attrs.artifact?.fallbackHtml ?? "";
+    if (this.suspended || this.showingFallback) this.content.innerHTML = this.node.attrs.artifact?.fallbackHtml ?? "";
     else this.instance = this.host.mount(this.content, {
       id: this.node.attrs.id,
       artifact: this.node.attrs.artifact,
       rev: this.node.attrs.rev,
       seed: this.node.attrs.state,
     });
+  }
+
+  suspend() {
+    if (this.suspended) return;
+    this.suspended = true;
+    this.mount();
+  }
+
+  resume() {
+    if (!this.suspended) return;
+    this.suspended = false;
+    this.mount();
   }
 
   openMenu() {
@@ -69,26 +84,39 @@ export class ToolView {
     if (node.type !== schema.nodes.tool || node.attrs.id !== this.node.attrs.id) return false;
     const changed = node.attrs.rev !== this.node.attrs.rev || JSON.stringify(node.attrs.artifact) !== JSON.stringify(this.node.attrs.artifact);
     this.node = node;
-    if (changed) this.mount();
+    if (changed) {
+      this.suspended = false;
+      this.mount();
+    }
     return true;
   }
 
   stopEvent(event) { return this.dom.contains(event.target); }
   ignoreMutation() { return true; }
-  destroy() { this.instance?.dispose(); this.instance = null; }
+  destroy() {
+    const id = this.node.attrs.id;
+    if (this.blocks?.get(id) === this) this.blocks.delete(id);
+    this.instance?.dispose();
+    this.instance = null;
+  }
 }
 
 export function createFeature({ toolHost = null, revise = null, view = null } = {}) {
   const host = toolHost ?? createToolHost({ mode: "edit" });
-  if (view) toolViews.set(view, host);
+  const blocks = new Map();
+  if (view) {
+    toolViews.set(view, host);
+    toolBlockViews.set(view, blocks);
+  }
   return {
     id: "tool",
     nodeViews: {
-      tool: (node, editorView, getPos) => new ToolView(node, editorView, getPos, { host, revise }),
+      tool: (node, editorView, getPos) => new ToolView(node, editorView, getPos, { host, revise, blocks }),
     },
     css: TOOL_CSS,
     dispose() {
       if (view && toolViews.get(view) === host) toolViews.delete(view);
+      if (view && toolBlockViews.get(view) === blocks) toolBlockViews.delete(view);
       if (!toolHost) host.dispose();
     },
   };

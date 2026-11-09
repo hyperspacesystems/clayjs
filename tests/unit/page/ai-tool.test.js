@@ -4,6 +4,9 @@ import { createPageAi } from "../../../src/page/ai-surface.js";
 import { capabilityAdvertised } from "../../../src/page/tool-capability.js";
 import { previewShown } from "../../../src/page/ai-preview.js";
 import { history } from "../../../src/vendor/prosemirror.vendor.js";
+import { installPageFeature } from "../../../src/page/editor.js";
+import * as toolFeature from "../../../src/page/features/tool.js";
+import { createToolHost } from "../../../src/page/tools.js";
 import { editor, ids, posOf, select, typeText } from "./view-helpers.js";
 
 /**
@@ -30,12 +33,30 @@ const TABLE_TOOL = {
   summary: "Revenue",
 };
 
+// A tool that writes its own data on a schedule, as a running timer does.
+const TICKER = {
+  title: "Ticker",
+  html: "<output>0</output>",
+  css: "",
+  javascript: "function mount(tool) { const out = tool.root.querySelector('output'); const show = () => { out.textContent = String(tool.state.data?.count ?? 0); }; tool.on('change', show); const tick = () => tool.schedule(() => { tool.state.add(['count'], 1); tick(); }, 10); tick(); show(); }",
+  fallbackHtml: "<p>Ticker</p>",
+  summary: "Ticker",
+};
+
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const waitFor = async (check) => {
+  for (let i = 0; i < 100; i++) {
+    if (check()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return false;
+};
 
 const baseClay = window.clay;
-let view, ai, live, sent, acceptState, saveResult;
+let view, ai, live, sent, acceptState, saveResult, toolHost;
 
-function setup({ blocks = [["p", "paragraph", ""]], records = null, tools = {}, accepting = true, save = { ok: true } } = {}) {
+function setup({ blocks = [["p", "paragraph", ""]], records = null, tools = {}, accepting = true, save = { ok: true }, mountTools = false } = {}) {
   document.body.innerHTML = '<article data-page="1"></article>';
   live = createStore({ name: "page.tools", value: tools }).handle;
   sent = [];
@@ -53,6 +74,10 @@ function setup({ blocks = [["p", "paragraph", ""]], records = null, tools = {}, 
   saveResult = save;
   acceptState = jest.fn(async () => saveResult);
   view = records ? editor([], { blocks: records }) : editor(blocks);
+  if (mountTools) {
+    toolHost = createToolHost({ store: live, mode: "edit" });
+    installPageFeature({ view, toolHost }, "tool", toolFeature);
+  }
   ai = createPageAi({
     getView: () => view,
     store: accepting ? live : { set() { throw new Error("state-too-large"); } },
@@ -74,7 +99,8 @@ async function generate(target, comment = "make a counter") {
 
 afterEach(() => {
   if (view && !view.isDestroyed) view.destroy();
-  view = ai = live = null;
+  toolHost?.dispose();
+  view = ai = live = toolHost = null;
   window.clay = baseClay;
   document.body.innerHTML = "";
 });
@@ -389,6 +415,99 @@ test("a second revise and Keep on the same tool is applied too", async () => {
   expect(view.state.doc.child(0).attrs.artifact.title).toBe("Made");
   expect(view.state.doc.child(0).attrs.rev).not.toBe(firstRev);
   expect(live.data.t[view.state.doc.child(0).attrs.rev]).toEqual({ count: 2 });
+});
+
+test("a tool that writes its own data on a schedule is paused for its revision and kept", async () => {
+  setup({
+    blocks: [["t", "tool", "", { artifact: TICKER, rev: "r1", state: { count: 0 } }]],
+    tools: { t: { r1: { count: 0 } } },
+    mountTools: true,
+  });
+  const output = () => view.dom.querySelector(".page-tool-content output");
+  expect(await waitFor(() => output() && Number(output().textContent) > 0)).toBe(true);
+
+  const target = ai.reviseTool("t");
+  const started = await target.start("make it bigger");
+
+  // The request is out and the original tool has stopped running.
+  expect(output()).toBe(null);
+  const paused = live.data.t.r1.count;
+  await wait(40);
+  expect(live.data.t.r1.count).toBe(paused);
+
+  const handle = started.send({});
+  sent[0].finish(reply(started.id, "Made"));
+  expect((await target.propose((await handle.done).result)).status).toBe("ready");
+  // The preview is up and the tool it replaces still does not run.
+  expect(output()).toBe(null);
+
+  expect(await target.keep()).toEqual({ status: "kept" });
+  expect(view.state.doc.child(0).attrs.artifact.title).toBe("Made");
+  // The kept block mounts its new revision exactly as before.
+  expect(await waitFor(() => output()?.textContent === "Made")).toBe(true);
+});
+
+test("Discard remounts a paused tool from its saved data", async () => {
+  setup({
+    blocks: [["t", "tool", "", { artifact: TICKER, rev: "r1", state: { count: 0 } }]],
+    tools: { t: { r1: { count: 0 } } },
+    mountTools: true,
+  });
+  const output = () => view.dom.querySelector(".page-tool-content output");
+  expect(await waitFor(() => output())).toBe(true);
+  const target = ai.reviseTool("t");
+  await target.start("make it bigger");
+  expect(output()).toBe(null);
+  const paused = live.data.t.r1.count;
+
+  target.discard();
+
+  expect(await waitFor(() => output())).toBe(true);
+  expect(Number(output().textContent)).toBeGreaterThanOrEqual(paused);
+  expect(await waitFor(() => live.data.t.r1.count > paused)).toBe(true);
+});
+
+test("a failed Keep remounts a paused tool from its saved data", async () => {
+  setup({
+    blocks: [["t", "tool", "", { artifact: TICKER, rev: "r1", state: { count: 0 } }]],
+    tools: { t: { r1: { count: 0 } } },
+    save: { ok: false },
+    mountTools: true,
+  });
+  const output = () => view.dom.querySelector(".page-tool-content output");
+  expect(await waitFor(() => output())).toBe(true);
+  const target = ai.reviseTool("t");
+  const { outcome } = await generate(target, "make it bigger");
+  await target.propose(outcome.result);
+  const paused = live.data.t.r1.count;
+
+  const kept = await target.keep();
+
+  expect(kept).toEqual({ status: "failed", message: "The tool could not be saved, so it was not added. Try again." });
+  expect(await waitFor(() => output())).toBe(true);
+  expect(Number(output().textContent)).toBeGreaterThanOrEqual(paused);
+});
+
+test("a peer's data change during the preview still refuses Keep", async () => {
+  setup({
+    blocks: [["t", "tool", "", { artifact: TICKER, rev: "r1", state: { count: 0 } }]],
+    tools: { t: { r1: { count: 0 } } },
+    mountTools: true,
+  });
+  const output = () => view.dom.querySelector(".page-tool-content output");
+  expect(await waitFor(() => output())).toBe(true);
+  const target = ai.reviseTool("t");
+  const { outcome } = await generate(target, "make it bigger");
+  expect((await target.propose(outcome.result)).status).toBe("ready");
+  const paused = live.data.t.r1.count;
+  live.set(["t", "r1", "count"], paused + 50);
+
+  const kept = await target.keep();
+
+  expect(kept.status).toBe("failed");
+  expect(kept.message).toContain("data changed while AI was working");
+  expect(await waitFor(() => output())).toBe(true);
+  expect(Number(output().textContent)).toBeGreaterThanOrEqual(paused + 50);
 });
 
 test("a tool someone else revised while the model worked is not replaced", async () => {

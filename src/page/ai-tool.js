@@ -11,6 +11,7 @@ import { tablesFromDoc, toolContext } from "./tool-data.js";
 import { showPreview, showWidget, clearPreview } from "./ai-preview.js";
 import { validateArtifact, validateState } from "./rich/tool-runtime.js";
 import { createToolTransport } from "./tool-transport.js";
+import { toolBlockViews } from "./tool-views.js";
 
 const { Selection } = state;
 
@@ -133,6 +134,16 @@ export function createToolTargets({
       preview = null;
     };
 
+    // The block that runs this tool, if this editor mounts it, so a revision can pause
+    // it while the request and its preview are up.
+    const blockNow = () => {
+      const view = viewNow();
+      return view && toolId ? toolBlockViews.get(view)?.get(toolId) ?? null : null;
+    };
+
+    const suspendTool = () => blockNow()?.suspend();
+    const resumeTool = () => blockNow()?.resume();
+
     // Every way Keep can fail leaves the same trace: no proposal on screen, the block
     // and its state as they were, and an editor that answers again.
     const failKeep = (message) => {
@@ -140,6 +151,7 @@ export function createToolTargets({
       const view = viewNow();
       disposePreview();
       if (view) clearPreview(view);
+      resumeTool();
       return { status: "failed", message };
     };
 
@@ -176,6 +188,9 @@ export function createToolTargets({
           if (found?.node.type !== schema.nodes.tool) return { status: "refused", code: "gone", message: GONE };
           revision = found.node.attrs.rev;
           payloadTarget = { toolId, rev: revision };
+          // The tool must not write to its own data while the request runs or its
+          // preview is shown, so it pauses and the snapshot is taken from its saved data.
+          suspendTool();
           current = { artifact: found.node.attrs.artifact, state: liveState(toolId, revision) };
           captured = canonical(current.state);
         }
@@ -190,9 +205,12 @@ export function createToolTargets({
                 candidate = { id: toolId, rev: null, artifact: result.artifact, state: result.state };
                 return { state: "done", result };
               },
-              (error) => ({ state: "error", error: error?.message || error?.code || "the helper reported an error", code: error?.code ?? null }),
+              (error) => {
+                resumeTool();
+                return { state: "error", error: error?.message || error?.code || "the helper reported an error", code: error?.code ?? null };
+              },
             );
-            return { done, cancel: () => client.discard(pending) };
+            return { done, cancel: () => { resumeTool(); client.discard(pending); } };
           },
         };
       },
@@ -273,6 +291,7 @@ export function createToolTargets({
         const view = viewNow();
         if (view) clearPreview(view);
         client.discard(pending);
+        resumeTool();
         targets.delete(toolId ?? "new");
       },
     };

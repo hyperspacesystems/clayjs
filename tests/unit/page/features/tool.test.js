@@ -11,7 +11,7 @@ import { createPageEditor, installPageFeature } from "../../../../src/page/edito
 import { createFeatureLoader } from "../../../../src/page/feature-loader.js";
 import { FEATURES } from "../../../../src/page/features/registry.js";
 import { createToolHost } from "../../../../src/page/tools.js";
-import { toolViews } from "../../../../src/page/tool-views.js";
+import { toolBlockViews, toolViews } from "../../../../src/page/tool-views.js";
 import { createYPageBinding, seedValue, blocksFromYValue, enc } from "../../../../src/page/ybind/index.js";
 
 const { TextSelection } = pmState;
@@ -21,6 +21,15 @@ const ARTIFACTS = [...readFileSync(new URL("../../../../docs/page-tool.md", impo
 const TALLY = ARTIFACTS[1];
 const PARAGRAPH = { id: "p", text: "Hi " };
 const TOOL = { id: "tally", t: "tool", attrs: { artifact: TALLY, rev: "r1" } };
+// A tool that writes its own data on a schedule, as a running timer does.
+const TICKER = {
+  title: "Ticker",
+  html: "<output>0</output>",
+  css: "",
+  javascript: "function mount(tool) { const out = tool.root.querySelector('output'); const show = () => { out.textContent = String(tool.state.data?.count ?? 0); }; tool.on('change', show); const tick = () => tool.schedule(() => { tool.state.add(['count'], 1); tick(); }, 10); tick(); show(); }",
+  fallbackHtml: "<p>Ticker</p>",
+  summary: "Ticker",
+};
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const cleanups = [];
@@ -42,7 +51,8 @@ const toolsHandle = (value) => createStore({ name: "page.tools", value: clone(va
 const openTab = (initial, { load = realLoad, tools = {} } = {}) => {
   const store = createStore({ name: "page", value: initial });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
-  const host = createToolHost({ store: toolsHandle(tools), mode: "edit" });
+  const toolStore = toolsHandle(tools);
+  const host = createToolHost({ store: toolStore, mode: "edit" });
   const calls = [];
   const holder = { view: null, host };
   const features = createFeatureLoader({
@@ -61,7 +71,7 @@ const openTab = (initial, { load = realLoad, tools = {} } = {}) => {
     binding.dispose();
     binding.ydoc.destroy();
   });
-  return { store, binding, view, calls, host };
+  return { store, binding, view, calls, host, toolStore };
 };
 
 const toolBlocks = (view) => {
@@ -79,11 +89,11 @@ const slash = (view) => {
   view.someProp("handleTextInput", (handler) => handler(view, from, to, "/", () => view.state.tr.insertText("/", from, to)));
   return view.dom.parentElement.querySelector(".page-menu");
 };
-const toolNode = (id, pos) => schema.nodes.tool.create({ id, pos, artifact: TALLY, rev: "r1" });
-const addTool = (tab, id) => {
+const toolNode = (id, pos, artifact = TALLY) => schema.nodes.tool.create({ id, pos, artifact, rev: "r1" });
+const addTool = (tab, id, artifact = TALLY) => {
   const doc = tab.view.state.doc;
   const pos = keyBetween(doc.child(doc.childCount - 1).attrs.pos, null);
-  tab.view.dispatch(tab.view.state.tr.insert(doc.content.size, toolNode(id, pos)));
+  tab.view.dispatch(tab.view.state.tr.insert(doc.content.size, toolNode(id, pos, artifact)));
 };
 const send = (from, to, key) => {
   const value = enc(Y.encodeStateAsUpdateV2(from.binding.ydoc, Y.encodeStateVector(to.binding.ydoc)));
@@ -127,6 +137,29 @@ test("a tool inserted while editing loads the view part once", async () => {
   expect(await waitFor(() => view.dom.querySelector(".page-tool-block output"))).toBe(true);
   expect(calls).toEqual(["tool"]);
   expect(toolBlocks(view)).toHaveLength(1);
+});
+
+test("a tool block is suspended to its fallback and resumes from its saved data", async () => {
+  const tab = openTab(seedValue([PARAGRAPH]), { tools: { ticker: { r1: { count: 0 } } } });
+  addTool(tab, "ticker", TICKER);
+  const output = () => tab.view.dom.querySelector(".page-tool-block output");
+  expect(await waitFor(() => output() && Number(output().textContent) > 0)).toBe(true);
+  const block = toolBlockViews.get(tab.view).get("ticker");
+  expect(block).toBeTruthy();
+
+  block.suspend();
+
+  expect(output()).toBe(null);
+  expect(tab.view.dom.querySelector(".page-tool-content").innerHTML).toBe(TICKER.fallbackHtml);
+  const paused = tab.toolStore.data.ticker.r1.count;
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  expect(tab.toolStore.data.ticker.r1.count).toBe(paused);
+
+  block.resume();
+
+  expect(await waitFor(() => output())).toBe(true);
+  expect(Number(output().textContent)).toBeGreaterThanOrEqual(paused);
+  expect(await waitFor(() => tab.toolStore.data.ticker.r1.count > paused)).toBe(true);
 });
 
 test("a tool that arrives from a peer opens the view part once", async () => {
