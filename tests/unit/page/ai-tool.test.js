@@ -21,12 +21,21 @@ const artifact = (title) => ({
   summary: title,
 });
 
+const TABLE_TOOL = {
+  title: "Revenue",
+  html: "<output>-</output>",
+  css: "",
+  javascript: "function mount(tool) { const table = tool.table('revenue'); tool.root.querySelector('output').textContent = table ? String(table.rows[0].cells.c2) : 'no table'; }",
+  fallbackHtml: "<p>Revenue</p>",
+  summary: "Revenue",
+};
+
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const baseClay = window.clay;
 let view, ai, live, sent, acceptState, saveResult;
 
-function setup({ blocks = [["p", "paragraph", ""]], tools = {}, accepting = true, save = { ok: true } } = {}) {
+function setup({ blocks = [["p", "paragraph", ""]], records = null, tools = {}, accepting = true, save = { ok: true } } = {}) {
   document.body.innerHTML = '<article data-page="1"></article>';
   live = createStore({ name: "page.tools", value: tools }).handle;
   sent = [];
@@ -43,7 +52,7 @@ function setup({ blocks = [["p", "paragraph", ""]], tools = {}, accepting = true
   };
   saveResult = save;
   acceptState = jest.fn(async () => saveResult);
-  view = editor(blocks);
+  view = records ? editor([], { blocks: records }) : editor(blocks);
   ai = createPageAi({
     getView: () => view,
     store: accepting ? live : { set() { throw new Error("state-too-large"); } },
@@ -129,6 +138,26 @@ test("Generate previews without touching the document, then Keep saves state bef
   expect(view.state.doc.child(0).type.name).toBe("paragraph");
 });
 
+test("the preview reads the document\u0027s tables, as the kept tool would", async () => {
+  setup({
+    records: {
+      revenue: {
+        t: "table", pos: "B",
+        cols: { c1: { pos: "1", name: "Item" }, c2: { pos: "2", name: "Amount" } },
+        rows: { r1: { pos: "1", cells: { c1: "Ada", c2: "10" } } },
+      },
+    },
+  });
+  const target = ai.newTool(null);
+  const started = await target.start("show revenue");
+  expect(started.status).toBe("ok");
+  const handle = started.send({});
+  sent.at(-1).finish({ state: "done", result: { requestId: started.id, artifact: TABLE_TOOL, state: {} } });
+  expect((await target.propose((await handle.done).result)).status).toBe("ready");
+
+  expect(view.dom.querySelector(".page-ai-preview output").textContent).toBe("10");
+});
+
 test("a state write the store refuses leaves no block and says why", async () => {
   setup({ accepting: false });
   const target = ai.newTool(null);
@@ -150,6 +179,55 @@ test("a save that does not accept the new state leaves no block", async () => {
 
   expect(await target.keep()).toEqual({ status: "failed", message: "Save already in progress" });
   expect(view.state.doc.child(0).type.name).toBe("paragraph");
+});
+
+test("a rejected save while Keeping closes the preview and gives the editor back", async () => {
+  setup();
+  const target = ai.newTool(null);
+  const { outcome } = await generate(target);
+  await target.propose(outcome.result);
+  expect(view.editable).toBe(false);
+  acceptState.mockImplementation(async () => { throw new Error("offline"); });
+
+  const kept = await target.keep();
+
+  expect(kept).toEqual({ status: "failed", message: "The tool could not be saved, so it was not added. Try again." });
+  expect(previewShown(view.state)).toBe(false);
+  expect(view.editable).toBe(true);
+  expect(view.state.doc.child(0).type.name).toBe("paragraph");
+});
+
+test("a refused state while Keeping closes the preview and gives the editor back", async () => {
+  setup({ save: { ok: false } });
+  const target = ai.newTool(null);
+  const { outcome } = await generate(target);
+  await target.propose(outcome.result);
+
+  const kept = await target.keep();
+
+  expect(kept).toEqual({ status: "failed", message: "The tool could not be saved, so it was not added. Try again." });
+  expect(previewShown(view.state)).toBe(false);
+  expect(view.editable).toBe(true);
+  expect(view.state.doc.child(0).type.name).toBe("paragraph");
+});
+
+test("a stale revision while Keeping closes the preview and gives the editor back", async () => {
+  setup({
+    blocks: [["t", "tool", "", { artifact: artifact("Old"), rev: "r1", state: { count: 1 } }]],
+    tools: { t: { r1: { count: 1 } } },
+  });
+  const target = ai.reviseTool("t");
+  const { outcome } = await generate(target, "make it bigger");
+  await target.propose(outcome.result);
+  view.dispatch(view.state.tr.setNodeMarkup(0, null, { ...view.state.doc.child(0).attrs, rev: "other" }));
+  expect(previewShown(view.state)).toBe(true);
+
+  const kept = await target.keep();
+
+  expect(kept.status).toBe("failed");
+  expect(previewShown(view.state)).toBe(false);
+  expect(view.editable).toBe(true);
+  expect(view.state.doc.child(0).attrs.rev).toBe("other");
 });
 
 test("a save that fails after the block is applied keeps the edit and retries the save alone", async () => {
@@ -266,6 +344,27 @@ test("a revision sends the tool's live artifact and state as current, and Keep r
 
   history.undo(view.state, view.dispatch);
   expect(view.state.doc.child(0).attrs.rev).toBe("r1");
+});
+
+test("a second revise and Keep on the same tool is applied too", async () => {
+  setup({
+    blocks: [["t", "tool", "", { artifact: artifact("Old"), rev: "r1", state: { count: 1 } }]],
+    tools: { t: { r1: { count: 1 } } },
+  });
+  const first = ai.reviseTool("t");
+  const { outcome } = await generate(first, "make it bigger");
+  await first.propose(outcome.result);
+  expect(await first.keep()).toEqual({ status: "kept" });
+  const firstRev = view.state.doc.child(0).attrs.rev;
+  expect(firstRev).not.toBe("r1");
+
+  const second = ai.reviseTool("t");
+  const { outcome: again } = await generate(second, "make it bigger again");
+  expect((await second.propose(again.result)).status).toBe("ready");
+  expect(await second.keep()).toEqual({ status: "kept" });
+  expect(view.state.doc.child(0).attrs.artifact.title).toBe("Made");
+  expect(view.state.doc.child(0).attrs.rev).not.toBe(firstRev);
+  expect(live.data.t[view.state.doc.child(0).attrs.rev]).toEqual({ count: 2 });
 });
 
 test("a tool someone else revised while the model worked is not replaced", async () => {

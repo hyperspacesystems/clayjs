@@ -7,7 +7,7 @@ import { asStep } from "./blocksel.js";
 import { keyBetween, newId } from "./model.js";
 import { createToolClient } from "./rich/page-tool.js";
 import { createToolHost } from "./tools.js";
-import { toolContext } from "./tool-data.js";
+import { tablesFromDoc, toolContext } from "./tool-data.js";
 import { showPreview, showWidget, clearPreview } from "./ai-preview.js";
 import { validateArtifact, validateState } from "./rich/tool-runtime.js";
 import { createToolTransport } from "./tool-transport.js";
@@ -18,9 +18,11 @@ const GONE = "This page is not open for editing any more.";
 const NO_WIRE = "AI tool making isn't available on this page right now.";
 const NO_STORE = "This document can't save tool state.";
 const MOVED = "The place for this tool moved. Close this and run /ai where you want the tool.";
-const STALE_REVISION = "This tool changed while you were revising, so nothing was replaced. Revise it again, or keep it as a new tool.";
+const STALE_REVISION = "This tool changed while you were revising, so nothing was replaced. Ask again.";
 const BAD_ARTIFACT = "The AI reply is not a usable tool.";
 const BAD_STATE = "The AI reply's tool state is too large or not data.";
+const CHANGED = "This tool's data changed while the new version was being made, so it was not replaced. Ask again to include the latest data.";
+const SAVE_FAILED = "The tool could not be saved, so it was not added. Try again.";
 const UNSAVED = "Your tool is in the document, but saving failed. It will be saved with your next edit.";
 
 function findBlock(doc, id) {
@@ -100,6 +102,15 @@ export function createToolTargets({
 
   const targets = new Map();
 
+  const canonical = (value) => {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+    if (value && typeof value === "object") {
+      const keys = Object.keys(value).sort();
+      return `{${keys.map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+    }
+    return JSON.stringify(value) ?? "null";
+  };
+
   function toolTarget(toolId = null, remove = null) {
     const opened = viewNow();
     const bookmark = toolId || !opened ? null : bookmarkIn(opened.state, remove);
@@ -115,10 +126,21 @@ export function createToolTargets({
     let preview = null;
     let kept = false;
     let revision = null;
+    let captured = null;
 
     const disposePreview = () => {
       preview?.host?.dispose();
       preview = null;
+    };
+
+    // Every way Keep can fail leaves the same trace: no proposal on screen, the block
+    // and its state as they were, and an editor that answers again.
+    const failKeep = (message) => {
+      kept = false;
+      const view = viewNow();
+      disposePreview();
+      if (view) clearPreview(view);
+      return { status: "failed", message };
     };
 
     const target = {
@@ -141,6 +163,8 @@ export function createToolTargets({
         return node && typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : emptyRect();
       },
       async start(comment) {
+        candidate = null;
+        kept = false;
         const view = viewNow();
         if (!view) return { status: "refused", code: "gone", message: GONE };
         // Read here, not imported: a page with exclude=wire must not pull the wire in.
@@ -153,6 +177,7 @@ export function createToolTargets({
           revision = found.node.attrs.rev;
           payloadTarget = { toolId, rev: revision };
           current = { artifact: found.node.attrs.artifact, state: liveState(toolId, revision) };
+          captured = canonical(current.state);
         }
         pending = client.request(comment, toolContext(view.state.doc, view.dom.ownerDocument.title), payloadTarget, current);
         return {
@@ -182,11 +207,13 @@ export function createToolTargets({
         return mountPreview(view);
       },
       async keep() {
-        if (!candidate || kept) return { status: "failed", message: STALE_REVISION };
+        if (!candidate || kept) return failKeep(STALE_REVISION);
         const view = viewNow();
-        if (!view) return { status: "failed", message: GONE };
+        if (!view) return failKeep(GONE);
         const tools = storeNow();
-        if (!tools) return { status: "failed", message: NO_STORE };
+        if (!tools) return failKeep(NO_STORE);
+        const liveChanged = () => toolId && captured !== null && canonical(liveState(toolId, revision)) !== captured;
+        if (liveChanged()) return failKeep(CHANGED);
         kept = true;
         const id = candidate.id ?? allocate("b");
         const rev = allocate("rev");
@@ -196,24 +223,24 @@ export function createToolTargets({
         try {
           await tools.set([id, rev], edit.state);
         } catch (error) {
-          kept = false;
-          return { status: "failed", message: error?.message ?? NO_STORE };
+          return failKeep(error?.message ?? NO_STORE);
         }
-        const accepted = await acceptState();
+        let accepted = null;
+        try {
+          accepted = await acceptState();
+        } catch {
+          return failKeep(SAVE_FAILED);
+        }
         if (accepted?.ok !== true && !["saved", "clean"].includes(accepted?.state)) {
-          kept = false;
-          return { status: "failed", message: accepted?.msg ?? accepted?.message ?? "Tool state was not saved" };
+          return failKeep(accepted?.msg ?? accepted?.message ?? SAVE_FAILED);
         }
         if (toolId) {
           const found = findBlock(view.state.doc, toolId);
-          if (found?.node.type !== schema.nodes.tool || found.node.attrs.rev !== revision) {
-            kept = false;
-            return { status: "failed", message: STALE_REVISION };
-          }
+          if (found?.node.type !== schema.nodes.tool || found.node.attrs.rev !== revision) return failKeep(STALE_REVISION);
         } else if (!placeIn(view.state, bookmark)) {
-          kept = false;
-          return { status: "failed", message: MOVED };
+          return failKeep(MOVED);
         }
+        if (liveChanged()) return failKeep(CHANGED);
         disposePreview();
         clearPreview(view);
         if (toolId) {
@@ -222,7 +249,7 @@ export function createToolTargets({
             ...found.node.attrs, artifact: edit.artifact, rev: edit.rev,
           })));
         } else if (!insertCandidate(view, edit, bookmark)) {
-          return { status: "failed", message: MOVED };
+          return failKeep(MOVED);
         }
         // The block is in the document now: a failed save neither undoes it nor asks the
         // model again, it retries the save alone, once.
@@ -235,7 +262,9 @@ export function createToolTargets({
             saved = false;
           }
         }
-        return saved ? { status: "kept" } : { status: "failed", message: UNSAVED };
+        if (!saved) return { status: "failed", message: UNSAVED };
+        targets.delete(toolId ?? "new");
+        return { status: "kept" };
       },
       discard() {
         disposePreview();
@@ -248,7 +277,10 @@ export function createToolTargets({
 
     function mountPreview(view) {
       disposePreview();
-      const host = createToolHost({ mode: "view" });
+      const host = createToolHost({
+        mode: "view",
+        tables: () => tablesFromDoc(view.state.doc).map(({ id, cols, rows }) => ({ id, cols, rows })),
+      });
       const dom = view.dom.ownerDocument.createElement("div");
       dom.className = "page-ai-preview";
       try {
