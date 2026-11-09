@@ -71,7 +71,15 @@ function freshDocument(editMode) {
 async function bootWith(boot, editMode, manifest = null, supplement = null) {
   freshDocument(editMode);
   let ready = null;
+  const plan = resolveModules(new URLSearchParams("plugins=page"), editMode, { isDraftMode: false, hasSap: false });
+  const pendingLate = new Set(plan.late.map((path) => path.slice(path.lastIndexOf("/") + 1, -3)));
+  const announced = (event) => pendingLate.delete(event.detail.plugin);
+  document.addEventListener("clay:plugin-ready", announced);
   await boot("https://clayjs.com/1.0.0", new URLSearchParams("plugins=page"), (clay) => { ready = clay; }, manifest, supplement);
+  // Late plugins load after clay.ready; the assembled client is complete once each has
+  // announced itself, not when boot() returns.
+  for (let i = 0; i < 200 && pendingLate.size; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  document.removeEventListener("clay:plugin-ready", announced);
   return { ready, keys: Object.keys(window.clay).sort() };
 }
 

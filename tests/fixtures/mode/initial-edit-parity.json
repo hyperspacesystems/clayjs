@@ -6,13 +6,14 @@
       "listeners": {
         "window": 14,
         "document": 78,
-        "Element": 36
+        "Element": 38
       },
       "observers": 3,
       "intervals": 0,
       "clayKeys": [
         "Mutation",
         "addDocumentTransform",
+        "aiEdit",
         "assets",
         "cacheBust",
         "canEdit",
@@ -52,6 +53,7 @@
         "trash",
         "upload",
         "variants",
+        "wire",
         "writeData"
       ],
       "plugins": [
@@ -61,6 +63,8 @@
         "live",
         "page",
         "menu",
+        "wire",
+        "ai-edit",
         "source"
       ],
       "moduleCalls": {
@@ -87,12 +91,14 @@
         "lib/cache-bust.js": 1,
         "lib/mutation.js": 1,
         "lib/region-policy.js": 1,
+        "plugins/ai-edit.js": 1,
         "plugins/indicator.js": 1,
         "plugins/live.js": 1,
         "plugins/menu.js": 1,
         "plugins/page.js": 1,
         "plugins/source.js": 1,
         "plugins/upload.js": 1,
+        "plugins/wire.js": 1,
         "sync/live-sync.js": 1
       }
     },
@@ -102,7 +108,7 @@
       "listeners": {
         "window": 9,
         "document": 28,
-        "Element": 11
+        "Element": 13
       },
       "observers": 2,
       "intervals": 0,

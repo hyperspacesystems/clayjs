@@ -283,6 +283,8 @@
       "late": [
         "plugins/menu.js",
         "plugins/upgrade.js",
+        "plugins/wire.js",
+        "plugins/ai-edit.js",
         "plugins/source.js"
       ]
     },

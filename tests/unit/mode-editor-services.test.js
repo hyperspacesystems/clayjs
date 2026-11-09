@@ -123,7 +123,7 @@ test("a preview on screen is preserved by a refusal, and dispose stops the handl
   clickSection(section);
   textarea().value = "tighten this";
   panel().querySelector('[data-clay-ai-edit-part="send"]').click();
-  await flush();
+  await frames();
   expect(fakeWire.send).toHaveBeenCalledTimes(1);
 
   handle.settle({ state: "done", result: { html: EDITED, model: "m" } });

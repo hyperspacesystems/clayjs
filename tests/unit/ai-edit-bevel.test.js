@@ -21,6 +21,7 @@ const FOCUS_RULE =
 const part = (name) => document.querySelector(`[data-clay-ai-edit-part="${name}"]`);
 const root = (name) => document.querySelector(`[data-clay-ai-edit="${name}"]`);
 const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 let buildCalls = [];
 
@@ -192,6 +193,7 @@ test("the bar takes the page's scheme when it appears, and Stop takes it away", 
   await captureAsync(async () => {
     part("send").click();
     await flush();
+    await tick();
   });
   expect(root("panel").hidden).toBe(true);
   expect(root("status-bar").hidden).toBe(false);
@@ -216,6 +218,7 @@ test("a host failure is spoken by the bar in the warning colour, with X to close
   const calls = await captureAsync(async () => {
     part("send").click();
     await flush();
+    await tick();
   });
   const status = part("bar-status");
   expect(root("status-bar").hidden).toBe(false);
@@ -225,11 +228,14 @@ test("a host failure is spoken by the bar in the warning colour, with X to close
   expect([part("bar-close").hidden, part("bar-keep").hidden]).toEqual([false, true]);
 });
 
-test("a request too large is the panel's own warning, in the panel's own tone", () => {
+test("a request too large is the panel's own warning, in the panel's own tone", async () => {
   openOnSection();
   const status = part("status");
   part("input").value = "x".repeat(1000 * 1024);
-  const calls = capture(() => part("send").click());
+  const calls = await captureAsync(async () => {
+    part("send").click();
+    await tick();
+  });
   expect(status.getAttribute("data-tone")).toBe("warn");
   expect(last(calls, status, "color")).toBe(TOKENS.ox);
   // Nothing was sent, so the box stays open with its text and no bar appears.
