@@ -203,6 +203,39 @@ describe("resolveModules", () => {
     expect(plugins).not.toContain("plugins/upload.js");
   });
 
+  // Cmd+J inside a Block document is ai-edit's composer, so the editor half of `page`
+  // brings the plugin and the wire it sends through, on every document that already
+  // asked for `page`.
+  test("plugins=page implies ai-edit and the wire, which load before it", () => {
+    const { plugins } = resolveModules(params({ plugins: "page,menu,indicator" }), true);
+    expect(plugins).toContain("plugins/wire.js");
+    expect(plugins).toContain("plugins/ai-edit.js");
+    expect(plugins.indexOf("plugins/wire.js")).toBeLessThan(plugins.indexOf("plugins/ai-edit.js"));
+  });
+
+  // The reader half implies nothing: a reader loads no editor, no wire and no composer.
+  test("plugins=page in view mode brings neither the wire nor ai-edit", () => {
+    const { plugins } = resolveModules(params({ plugins: "page,menu,indicator" }), false);
+    expect(plugins).not.toContain("plugins/wire.js");
+    expect(plugins).not.toContain("plugins/ai-edit.js");
+  });
+
+  // Excluding the wire has to run after the implications, or `page` re-adds ai-edit
+  // with nothing to send through.
+  test("exclude=wire drops ai-edit from a page too", () => {
+    const { plugins } = resolveModules(params({ plugins: "page,menu,indicator", exclude: "wire" }), true);
+    expect(plugins).not.toContain("plugins/wire.js");
+    expect(plugins).not.toContain("plugins/ai-edit.js");
+    expect(plugins).toContain("plugins/page.js");
+  });
+
+  test("exclude=ai-edit takes the AI entry points off a page that implies it", () => {
+    const { plugins } = resolveModules(params({ plugins: "page,menu,indicator", exclude: "ai-edit" }), true);
+    expect(plugins).not.toContain("plugins/ai-edit.js");
+    expect(plugins).toContain("plugins/wire.js");
+    expect(plugins).toContain("plugins/page.js");
+  });
+
   // editOnly, like upload: the comment box is an editing gesture, and no host lists
   // a ready helper to a page that cannot edit. A plugin this mode does not load
   // brings nothing, so the wire it implies stays out too. A page that wants the
@@ -438,6 +471,22 @@ describe("a Document's plugin plan", () => {
 
   test("plugins=sync in view mode: nothing is late", () => {
     expect(resolveModules(params({ plugins: "sync" }), false).late).toEqual([]);
+  });
+
+  // hyper-undo takes Cmd+Z for the whole window, so it would fight the history the
+  // document's own editor keeps. This is the one name that loses even when the page
+  // asks for it by hand.
+  test("plugins=page,undo: undo is left out though it was named, and says so", () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const plan = resolveModules(params({ plugins: "page,undo" }), true);
+    expect(everywhere(plan)).not.toContain("plugins/undo.js");
+    expect(warn).toHaveBeenCalledWith('clayjs: plugin "undo" cannot run with "page" and was left out');
+    warn.mockRestore();
+  });
+
+  test("plugins=undo alone still loads undo", () => {
+    const plan = resolveModules(params({ plugins: "undo" }), true);
+    expect(plan.plugins).toContain("plugins/undo.js");
   });
 });
 

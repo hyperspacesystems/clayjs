@@ -5,7 +5,12 @@ export { capabilityAdvertised } from "../tool-capability.js";
 const CONTEXT_LIMIT = 16384;
 const bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
 
-/** @typedef {{protocol: 'page-tool/1', requestId: string, prompt: string, context: {title: string, outline: unknown[], tables: unknown[]}, target: null | {toolId: string, rev: string}}} ToolRequest */
+/**
+ * @typedef {{protocol: 'page-tool/1', requestId: string, prompt: string,
+ *   context: {title: string, outline: unknown[], tables: unknown[]},
+ *   target: null | {toolId: string, rev: string},
+ *   current: null | {artifact: object, state: unknown}}} ToolRequest
+ */
 /** @typedef {{requestId: string, artifact: object, state: unknown}} ToolResult */
 /** @typedef {{requestId: string, code: string, message: string}} ToolFailure */
 
@@ -31,7 +36,12 @@ function trimmedContext(context) {
   return copy;
 }
 
-export function createToolClient({ transport, newId }) {
+// The wire sees the request id as the host's own column, a UUID: a made-up string is
+// refused before the model is asked.
+const freshRequestId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+export function createToolClient({ transport, newId = freshRequestId }) {
   let active = null;
   const discard = (candidate) => {
     if (!candidate || candidate.discarded || candidate.done) return;
@@ -41,14 +51,14 @@ export function createToolClient({ transport, newId }) {
     candidate.resolve({ requestId: candidate.requestId, code: "discarded", message: "Candidate discarded" });
   };
   return {
-    request(prompt, context, target = null) {
+    request(prompt, context, target = null, current = null) {
       const trimmed = trimmedContext(context);
       if (active) discard(active);
       const requestId = newId();
       const candidate = { requestId, discarded: false, done: false };
       candidate.promise = new Promise((resolve) => { candidate.resolve = resolve; });
       active = candidate;
-      const request = { protocol: "page-tool/1", requestId, prompt, context: trimmed, target };
+      const request = { protocol: "page-tool/1", requestId, prompt, context: trimmed, target, current };
       candidate.request = request;
       const finish = (reply) => {
         if (candidate.discarded || candidate.done || reply?.requestId !== requestId) return;
@@ -62,9 +72,14 @@ export function createToolClient({ transport, newId }) {
         } else candidate.resolve(typeof reply?.code === "string" ? reply : { requestId, code: "invalid-result", message: "invalid-result" });
       };
       try {
-        Promise.resolve(transport.request(request)).then(finish, (error) => finish({ requestId, code: "transport-error", message: String(error?.message ?? error) }));
+        const failed = (error) => finish({
+          requestId,
+          code: typeof error?.code === "string" ? error.code : "transport-error",
+          message: String(error?.message ?? error),
+        });
+        Promise.resolve(transport.request(request)).then(finish, failed);
       } catch (error) {
-        finish({ requestId, code: "transport-error", message: String(error?.message ?? error) });
+        finish({ requestId, code: typeof error?.code === "string" ? error.code : "transport-error", message: String(error?.message ?? error) });
       }
       return candidate;
     },

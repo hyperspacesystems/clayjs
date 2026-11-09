@@ -4,7 +4,8 @@ import { $ } from "./helpers/editor-ui.js";
 
 // Scenario: the menu's editing items call the services that already do the job. Undo
 // and Redo follow the page's history and only exist when the page asked for the undo
-// plugin, Ask AI enters edit mode first or resumes across the reload, and Download
+// plugin, Ask AI to improve this page enters edit mode first or resumes across the
+// reload, and Download
 // saves what a save would send now. Every case boots through the real loader.
 
 const SLOT = "/notes.html";
@@ -22,7 +23,7 @@ function clearRoot() {
   for (const name of Array.from(root.attributes, (attribute) => attribute.name)) root.removeAttribute(name);
 }
 
-async function boot({ cookie = true, edit = false, plugins = "menu", resume = null, settle = true } = {}) {
+async function boot({ cookie = true, edit = false, plugins = "menu", resume = null, settle = true, helpers = null } = {}) {
   jest.resetModules();
   sessionStorage.clear();
   localStorage.clear();
@@ -35,14 +36,21 @@ async function boot({ cookie = true, edit = false, plugins = "menu", resume = nu
   if (resume != null) sessionStorage.setItem(docKey("menu-resume"), JSON.stringify(resume));
   document.head.innerHTML = "";
   document.body.innerHTML = BODY;
-  window.fetch = async () => ({
-    ok: false,
-    status: 404,
-    statusText: "Not Found",
-    headers: { get: () => null },
-    text: async () => "",
-    json: async () => ({}),
-  });
+  window.fetch = async (url) => {
+    // A host that lists a wire helper answers discovery; everything else is absent.
+    if (helpers && String(url).includes("/_/meta")) {
+      const body = JSON.stringify({ spec: 1, extensions: ["wire"], document: { helpers } });
+      return { ok: true, status: 200, headers: { get: () => "application/json" }, text: async () => body };
+    }
+    return {
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+      headers: { get: () => null },
+      text: async () => "",
+      json: async () => ({}),
+    };
+  };
   window.clay = {};
   const params = new URLSearchParams(`plugins=${plugins}&exclude=richclay,source`);
   const { boot: run } = await import("../../src/loader.js");
@@ -83,7 +91,7 @@ test("view mode still records what an edit session would load", async () => {
   expect(Object.isFrozen(window.clay.editPlugins)).toBe(true);
 });
 
-test("a page that did not ask for undo gets no pair and no Ask AI item", async () => {
+test("a document with neither page nor undo gets no pair and no Ask AI item", async () => {
   await boot({ plugins: "menu" });
 
   expect(listOf()).not.toBeNull();
@@ -92,6 +100,14 @@ test("a page that did not ask for undo gets no pair and no Ask AI item", async (
   expect(buttonOf("clay.ai")).toBeNull();
   expect(buttonOf("clay.download")).not.toBeNull();
 });
+
+// A Block-based document keeps its history in its own editor, so its pair reads that
+// service and never hyper-undo's.
+function asPageDocument(history) {
+  window.clay.editPlugins = ["menu", "page"];
+  window.clay.page = { history };
+  document.dispatchEvent(new CustomEvent("clay:modechange"));
+}
 
 test("both halves of the pair stay disabled in view mode, whatever history says", async () => {
   await boot({ plugins: "menu,undo" });
@@ -125,19 +141,64 @@ test("in edit mode the pair follows history and clicks reach the undo service", 
   expect(isDisabled("clay.undo.redo")).toBe(false);
 });
 
-test("Ask AI opens the editor in edit mode, and says so when it cannot", async () => {
-  await boot({ plugins: "menu,ai-edit", edit: true });
+test("a page plugin document's pair renders, follows clay.page.history and clicks reach it", async () => {
+  await boot({ plugins: "menu", edit: true });
 
-  const open = jest.fn(async () => true);
-  window.clay.aiEdit = { open };
+  const history = { undo: jest.fn(), redo: jest.fn(), canUndo: true, canRedo: false };
+  asPageDocument(history);
+
+  expect(window.clay.undo).toBeUndefined();
+  expect(buttonOf("clay.undo.undo")).not.toBeNull();
+  expect(isDisabled("clay.undo.undo")).toBe(false);
+  expect(isDisabled("clay.undo.redo")).toBe(true);
+
+  click(buttonOf("clay.undo.undo"));
+  expect(history.undo).toHaveBeenCalledTimes(1);
+
+  undoChange(false, true);
+  expect(isDisabled("clay.undo.undo")).toBe(true);
+  expect(isDisabled("clay.undo.redo")).toBe(false);
+  click(buttonOf("clay.undo.redo"));
+  expect(history.redo).toHaveBeenCalledTimes(1);
+
+  // The editor closed after the item was drawn: the press reaches nothing and throws
+  // nothing, because the service is read at use time.
+  window.clay.page = null;
+  expect(() => click(buttonOf("clay.undo.undo"))).not.toThrow();
+  expect(history.undo).toHaveBeenCalledTimes(1);
+});
+
+test("an ordinary document with undo loaded still uses clay.undo, not a page on the window", async () => {
+  await boot({ plugins: "menu,undo", edit: true });
+
+  const undo = { undo: jest.fn(), redo: jest.fn(), canUndo: true, canRedo: false };
+  window.clay.undo = undo;
+  const pageHistory = { undo: jest.fn(), redo: jest.fn(), canUndo: false, canRedo: true };
+  window.clay.page = { history: pageHistory };
+  document.dispatchEvent(new CustomEvent("clay:modechange"));
+
+  expect(window.clay.editPlugins).not.toContain("page");
+  expect(isDisabled("clay.undo.undo")).toBe(false);
+  expect(isDisabled("clay.undo.redo")).toBe(true);
+
+  click(buttonOf("clay.undo.undo"));
+  expect(undo.undo).toHaveBeenCalledTimes(1);
+  expect(pageHistory.undo).not.toHaveBeenCalled();
+});
+
+test("Ask AI starts the picker in edit mode, and says so when it cannot", async () => {
+  await boot({ plugins: "menu,ai-edit", edit: true, helpers: [{ name: "ai-edit", state: "ready" }] });
+
+  const pick = jest.spyOn(window.clay.aiEdit, "pick").mockResolvedValue(true);
+  for (let i = 0; i < 50 && !buttonOf("clay.ai"); i++) await wait(10);
+  expect(buttonOf("clay.ai").textContent).toContain("Ask AI to improve this page");
 
   click(buttonOf("clay.ai"));
   await flush();
 
-  expect(open).toHaveBeenCalledTimes(1);
-  expect(open.mock.calls[0][0]).toBe(document.body);
+  expect(pick).toHaveBeenCalledTimes(1);
 
-  open.mockImplementation(async () => false);
+  pick.mockResolvedValue(false);
   click(buttonOf("clay.ai"));
   await flush();
 
@@ -145,21 +206,46 @@ test("Ask AI opens the editor in edit mode, and says so when it cannot", async (
   expect(noteOf().hidden).toBe(false);
 });
 
+test("a Block document in view mode gets Ask AI only when the host lists the helper", async () => {
+  await boot({ plugins: "menu,ai-edit,page", helpers: [{ name: "ai-edit", state: "ready" }] });
+  expect(window.clay.editPlugins).toContain("page");
+  for (let i = 0; i < 50 && !buttonOf("clay.ai"); i++) await wait(10);
+  expect(buttonOf("clay.ai")).not.toBeNull();
+});
+
+test("a Block document in view mode whose host lists no ai-edit helper gets no item", async () => {
+  await boot({ plugins: "menu,ai-edit,page" });
+  await flush();
+
+  expect(window.clay.editPlugins).toContain("page");
+  expect(buttonOf("clay.ai")).toBeNull();
+  expect(buttonOf("clay.download")).not.toBeNull();
+});
+
+test("a host that lists no ai-edit helper gets no Ask AI item", async () => {
+  await boot({ plugins: "menu,ai-edit", edit: true });
+  await flush();
+
+  expect(window.clay.aiEdit).toBeTruthy();
+  expect(await window.clay.aiEdit.available()).toBe(false);
+  expect(buttonOf("clay.ai")).toBeNull();
+  expect(buttonOf("clay.download")).not.toBeNull();
+});
+
 test("Ask AI from view mode enters edit live and runs the action", async () => {
   await boot({ plugins: "menu,ai-edit" });
 
   const setMode = jest.fn(async () => ({ ok: true }));
   window.clay.setMode = setMode;
-  const open = jest.fn(async () => true);
-  window.clay.aiEdit = { open };
+  const pick = jest.fn(async () => true);
+  window.clay.aiEdit = { pick };
 
   click(buttonOf("clay.ai"));
   await flush();
 
   expect(setMode).toHaveBeenCalledTimes(1);
   expect(setMode).toHaveBeenCalledWith("edit");
-  expect(open).toHaveBeenCalledTimes(1);
-  expect(open.mock.calls[0][0]).toBe(document.body);
+  expect(pick).toHaveBeenCalledTimes(1);
   expect(window.clay.storage.session.get("menu-resume")).toBeUndefined();
 });
 
@@ -167,13 +253,13 @@ test("Ask AI from view mode leaves its receipt for the reload", async () => {
   await boot({ plugins: "menu,ai-edit" });
 
   window.clay.setMode = jest.fn(async () => ({ ok: true, reloading: true }));
-  const open = jest.fn(async () => true);
-  window.clay.aiEdit = { open };
+  const pick = jest.fn(async () => true);
+  window.clay.aiEdit = { pick };
 
   click(buttonOf("clay.ai"));
   await flush();
 
-  expect(open).not.toHaveBeenCalled();
+  expect(pick).not.toHaveBeenCalled();
   expect(window.clay.storage.session.get("menu-resume")).toBe("ai");
 });
 
@@ -181,29 +267,46 @@ test("Ask AI says why when the mode change is refused", async () => {
   await boot({ plugins: "menu,ai-edit" });
 
   window.clay.setMode = jest.fn(async () => ({ ok: false, code: "permission-denied" }));
-  const open = jest.fn(async () => true);
-  window.clay.aiEdit = { open };
+  const pick = jest.fn(async () => true);
+  window.clay.aiEdit = { pick };
 
   click(buttonOf("clay.ai"));
   await flush();
 
   expect(noteOf().textContent).toBe("You don't have permission to edit this document.");
-  expect(open).not.toHaveBeenCalled();
+  expect(pick).not.toHaveBeenCalled();
   expect(window.clay.storage.session.get("menu-resume")).toBeUndefined();
 });
 
 test("a receipt left by the reload runs the action once in edit mode", async () => {
-  await boot({ plugins: "menu,ai-edit", edit: true, resume: "ai", settle: false });
+  await boot({ plugins: "menu,ai-edit", edit: true, resume: "ai", settle: false, helpers: [{ name: "ai-edit", state: "ready" }] });
 
-  const open = jest.fn(async () => true);
-  window.clay.aiEdit = { open };
+  const pick = jest.spyOn(window.clay.aiEdit, "pick").mockResolvedValue(true);
   for (let i = 0; i < 50 && !buttonOf("clay.ai"); i++) await wait(10);
   await wait(120);
   await flush();
 
-  expect(open).toHaveBeenCalledTimes(1);
-  expect(open.mock.calls[0][0]).toBe(document.body);
+  expect(pick).toHaveBeenCalledTimes(1);
   expect(window.clay.storage.session.get("menu-resume")).toBeUndefined();
+});
+
+test("a reload entry waits for the page's AI surface before opening the picker", async () => {
+  await boot({ plugins: "menu,ai-edit", edit: true, resume: "ai", settle: false, helpers: [{ name: "ai-edit", state: "ready" }] });
+
+  const pick = jest.spyOn(window.clay.aiEdit, "pick").mockResolvedValue(true);
+  let release;
+  const ready = new Promise((resolve) => { release = resolve; });
+  window.clay.page = { ready, ai: null };
+
+  await wait(80);
+  expect(pick).not.toHaveBeenCalled();
+
+  release();
+  window.clay.page.ai = {};
+  for (let i = 0; i < 100 && pick.mock.calls.length === 0; i++) await wait(10);
+
+  expect(pick).toHaveBeenCalledTimes(1);
+  expect(noteOf().hidden).toBe(true);
 });
 
 test("Download in edit mode saves what a save would send now", async () => {

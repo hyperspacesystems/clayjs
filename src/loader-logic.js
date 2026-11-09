@@ -189,11 +189,15 @@ const PLUGIN_ORDER = ["visitor-drafts", "visitor-menu", "richclay", "indicator",
 // The menu is how a person opens the CMS: hypercms adds no button of its own. It loads
 // in view too, because that is where a person starts, and it shows itself only to
 // someone who can edit. A page with its own control uses exclude=menu.
-const IMPLIES = { cms: ["quickcrop", "upload", "menu"], "ai-edit": ["wire"], page: ["live", "sync", "upload"] };
+const IMPLIES = { cms: ["quickcrop", "upload", "menu"], "ai-edit": ["wire"], page: ["live", "sync", "upload", "wire", "ai-edit"] };
 
 // A Document's editor owns its article's rich text, so richclay (for [editable]) has
 // nothing to do there; plugins=page,richclay still loads it.
 const DISPLACES = { page: ["richclay"] };
+// A Document's editor keeps its own history, the same one Cmd+Z in the editor uses, and
+// hyper-undo takes Cmd+Z for the whole window: loaded together the two would fight over
+// every press. This is the one pair where a name the page asked for by hand still loses.
+const CANNOT_RUN_WITH = { page: ["undo"] };
 // No first paint or keystroke waits for these. source keeps the file's bytes outside
 // the edited parts stable; a save before it installs is the ordinary full serialization.
 // upgrade only asks the host for a newer version once `clay.ready` resolves.
@@ -241,8 +245,6 @@ export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap
   if (hasSap) enabled.add("derive");
   // Two or more looks need the dock's variant pill, and only someone who can edit sees it.
   if (hasVariants && (isEditMode || canEdit)) enabled.add("menu");
-  // ai-edit cannot run without the wire, so excluding the wire excludes it too.
-  if (excluded.has("wire")) enabled.delete("ai-edit");
   if (!isEditMode && !isDraftMode && enabled.has("page")) enabled.add("page-view");
   // A plugin this mode does not load brings nothing with it, whether a default put
   // it in the set or the tag named it. A page that wants what an edit-only plugin
@@ -255,6 +257,9 @@ export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap
     if (PLUGIN_PATHS[name].editOnly && !isEditMode) continue;
     for (const implied of IMPLIES[name] || []) enabled.add(implied);
   }
+  // ai-edit cannot run without the wire, so excluding the wire excludes it too. After
+  // the implications, or a page that implies ai-edit would re-add it without a wire.
+  if (excluded.has("wire")) enabled.delete("ai-edit");
   for (const name of excluded) enabled.delete(name);
   if (isDraftMode) {
     for (const name of DRAFT_DROPS) enabled.delete(name);
@@ -274,6 +279,15 @@ export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap
 
   for (const [owner, names] of Object.entries(DISPLACES)) {
     if (enabled.has(owner)) for (const name of names) if (!explicit.has(name)) enabled.delete(name);
+  }
+
+  for (const [owner, names] of Object.entries(CANNOT_RUN_WITH)) {
+    if (!enabled.has(owner)) continue;
+    for (const name of names) {
+      if (!enabled.has(name)) continue;
+      enabled.delete(name);
+      console.warn(`clayjs: plugin "${name}" cannot run with "${owner}" and was left out`);
+    }
   }
 
   const plugins = [];

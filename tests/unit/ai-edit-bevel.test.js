@@ -78,7 +78,7 @@ test("the panel is a Bevel surface holding a Bevel input and Bevel buttons", () 
 
   expect(panel.style.getPropertyValue("border-radius")).toBe("12px");
   expect(part("pointer")).not.toBeNull();
-  // Compose only: Send, and the panel's own note. Stop, Keep, Revert and the reply's
+  // Compose only: Send, and the panel's own note. Stop, Keep, Discard and the reply's
   // warnings belong to the bar now.
   for (const name of ["stop", "keep", "revert", "warnings"]) {
     expect([name, panel.querySelector(`[data-clay-ai-edit-part="${name}"]`)]).toEqual([name, null]);

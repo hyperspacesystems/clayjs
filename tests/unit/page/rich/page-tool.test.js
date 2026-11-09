@@ -20,7 +20,7 @@ test("request has a stable id and one pending candidate; a new request discards 
   await Promise.resolve();
   const second = client.request("second", context, { toolId: "t", rev: "r1" });
   await Promise.resolve();
-  expect(calls[0]).toEqual({ protocol: "page-tool/1", requestId: first.requestId, prompt: "first", context, target: null });
+  expect(calls[0]).toEqual({ protocol: "page-tool/1", requestId: first.requestId, prompt: "first", context, target: null, current: null });
   expect(calls[1].target).toEqual({ toolId: "t", rev: "r1" });
   expect(cancelled).toEqual([first.requestId]);
   await expect(client.wait(first)).rejects.toMatchObject({ code: "discarded" });
@@ -68,10 +68,45 @@ test("context drops trailing table rows before outline entries to fit 16 KB", as
   expect(new TextEncoder().encode(JSON.stringify(sent)).length).toBeLessThanOrEqual(16384);
 });
 
-test("capability requires the exact extension", () => {
-  expect(capabilityAdvertised({ extensions: ["page-tool/1"] })).toBe(true);
+test("a revision carries the live artifact and state as current, and a new tool sends none", async () => {
+  const { client, calls } = setup();
+  const current = { artifact, state: { count: 1 } };
+  client.request("revise it", context, { toolId: "t", rev: "r1" }, current);
+  await Promise.resolve();
+  expect(calls[0].current).toEqual(current);
+  client.request("make one", context);
+  await Promise.resolve();
+  expect(calls[1].current).toBe(null);
+});
+
+test("a request id is the browser's UUID, and only falls back when it has none", async () => {
+  const uuid = "5c2e7a10-3f4b-4d5e-8a9b-0c1d2e3f4a5b";
+  Object.defineProperty(globalThis.crypto, "randomUUID", { value: () => uuid, configurable: true });
+  try {
+    const real = createToolClient({ transport: { request: async () => new Promise(() => {}), cancel() {} } });
+    expect(real.request("build", context).requestId).toBe(uuid);
+  } finally {
+    delete globalThis.crypto.randomUUID;
+  }
+  const fallback = createToolClient({ transport: { request: async () => new Promise(() => {}), cancel() {} } });
+  expect(fallback.request("build", context).requestId).toMatch(/^[a-z0-9]+-[a-z0-9]+$/);
+});
+
+test("the capability needs the helper list, and the old extension alone is not enough", () => {
+  expect(capabilityAdvertised({ extensions: ["page-tool/1"] })).toBe(false);
   expect(capabilityAdvertised({ extensions: ["page-tool/2"] })).toBe(false);
   expect(capabilityAdvertised({})).toBe(false);
+  expect(capabilityAdvertised({ document: { helpers: [{ name: "page-tool", state: "ready" }] } })).toBe(true);
+  expect(capabilityAdvertised({ document: { helpers: [{ name: "page-tool", state: "unavailable" }] } })).toBe(true);
+  expect(capabilityAdvertised({ document: { helpers: [{ name: "ai-edit", state: "ready" }] } })).toBe(false);
+  expect(capabilityAdvertised({ document: { helpers: [{ name: "page-tool", state: "denied" }] } })).toBe(false);
+});
+
+test("a transport error keeps its own code instead of becoming a generic failure", async () => {
+  const refused = Object.assign(new Error("no-wire"), { code: "no-wire" });
+  const client = createToolClient({ transport: { request: () => Promise.reject(refused), cancel() {} }, newId: () => "only" });
+  const candidate = client.request("make it", { title: "t", outline: [], tables: [] });
+  await expect(client.wait(candidate)).rejects.toMatchObject({ code: "no-wire" });
 });
 
 test("a reply with neither an artifact nor a failure code is a failure", async () => {

@@ -1,3 +1,6 @@
+// /ai tools as contract A targets: the page's AI surface builds one of these and the
+// shared panel in ai-edit.js drives it. Making a tool and revising one differ only in
+// the request's target and current revision, and in what Keep writes.
 import { state } from "../vendor/prosemirror.vendor.js";
 import { schema } from "./schema.js";
 import { asStep } from "./blocksel.js";
@@ -5,8 +8,20 @@ import { keyBetween, newId } from "./model.js";
 import { createToolClient } from "./rich/page-tool.js";
 import { createToolHost } from "./tools.js";
 import { toolContext } from "./tool-data.js";
+import { showPreview, showWidget, clearPreview } from "./ai-preview.js";
+import { validateArtifact, validateState } from "./rich/tool-runtime.js";
+import { createToolTransport } from "./tool-transport.js";
 
 const { Selection } = state;
+
+const GONE = "This page is not open for editing any more.";
+const NO_WIRE = "AI tool making isn't available on this page right now.";
+const NO_STORE = "This document can't save tool state.";
+const MOVED = "The place for this tool moved. Close this and run /ai where you want the tool.";
+const STALE_REVISION = "This tool changed while you were revising, so nothing was replaced. Revise it again, or keep it as a new tool.";
+const BAD_ARTIFACT = "The AI reply is not a usable tool.";
+const BAD_STATE = "The AI reply's tool state is too large or not data.";
+const UNSAVED = "Your tool is in the document, but saving failed. It will be saved with your next edit.";
 
 function findBlock(doc, id) {
   let found = null;
@@ -14,175 +29,265 @@ function findBlock(doc, id) {
   return found;
 }
 
+// The block the /ai was typed in and the text of that query. Keep uses it to place the
+// tool and to remove exactly the slash text, never a caret that moved meanwhile.
+function bookmarkIn(st, remove) {
+  const $head = st.selection.$head;
+  const index = Math.min(Math.max($head.index(0), 0), st.doc.childCount - 1);
+  const host = st.doc.child(index);
+  return {
+    hostId: host?.attrs.id ?? null,
+    slashText: remove ? st.doc.textBetween(remove.from, remove.to) : null,
+    slashOffset: remove && $head.depth ? remove.from - $head.before(1) - 1 : null,
+  };
+}
+
+// Where the tool goes: over an empty or slash-only block, else in a new block after it.
+function placeIn(st, bookmark) {
+  const found = bookmark?.hostId ? findBlock(st.doc, bookmark.hostId) : null;
+  if (!found) return null;
+  const next = st.doc.maybeChild(found.index + 1);
+  const replace = found.node.isTextblock && (found.node.content.size === 0 || found.node.textContent === bookmark.slashText);
+  return {
+    ...found,
+    replace,
+    pos: replace ? found.node.attrs.pos : keyBetween(found.node.attrs.pos, next?.attrs.pos ?? null),
+    insertAt: replace ? found.at : found.at + found.node.nodeSize,
+  };
+}
+
 function insertCandidate(view, candidate, bookmark) {
   const st = view.state;
-  const found = findBlock(st.doc, bookmark?.hostId) ?? (() => {
-    const index = Math.min(st.selection.$head.index(0), st.doc.childCount - 1);
-    let at = 0;
-    for (let i = 0; i < index; i++) at += st.doc.child(i).nodeSize;
-    return { node: st.doc.child(index), at, index };
-  })();
-  const { node: current, at, index } = found;
-  const next = st.doc.maybeChild(index + 1);
-  const replace = current.isTextblock && (current.content.size === 0 || bookmark?.hostId === current.attrs.id && current.textContent === bookmark.slashText);
-  const pos = replace ? current.attrs.pos : keyBetween(current.attrs.pos, next?.attrs.pos ?? null);
+  const place = placeIn(st, bookmark);
+  if (!place) return false;
+  const { node: current, at, insertAt, replace } = place;
   const tool = schema.nodes.tool.create({
-    id: candidate.id, pos, parent: current.attrs.parent ?? null,
+    id: candidate.id, pos: place.pos, parent: current.attrs.parent ?? null,
     artifact: candidate.artifact, rev: candidate.rev, state: candidate.state,
   });
-  const place = replace ? at : at + current.nodeSize;
   const tr = st.tr;
   if (!replace && bookmark?.hostId === current.attrs.id && bookmark.slashText && bookmark.slashOffset >= 0) {
     const from = at + 1 + bookmark.slashOffset;
     const to = from + bookmark.slashText.length;
     if (to <= at + current.nodeSize - 1 && st.doc.textBetween(from, to) === bookmark.slashText) tr.delete(from, to);
   }
-  const mapped = tr.mapping.map(place);
+  const mapped = tr.mapping.map(insertAt);
   tr.replaceWith(mapped, replace ? tr.mapping.map(at + current.nodeSize) : mapped, tool);
   tr.setSelection(Selection.near(tr.doc.resolve(Math.min(mapped + tool.nodeSize, tr.doc.content.size))));
   view.dispatch(asStep(tr).scrollIntoView());
+  return true;
 }
 
-export function createAiTool({ getView, store, transport, acceptState = () => globalThis.clay?.save?.flush?.(), newId: allocate = newId }) {
-  const client = transport ? createToolClient({ transport, newId: () => allocate("request") }) : null;
-  let panel = null;
-  let generation = 0;
+const emptyRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 });
 
-  const close = () => {
-    generation++;
-    if (!panel) return;
-    client?.discard(panel.pending);
-    panel.preview?.dispose();
-    panel.previewHost?.dispose();
-    panel.element.remove();
-    panel = null;
+export function createToolTargets({
+  getView,
+  store = () => null,
+  acceptState = () => globalThis.clay?.save?.flush?.(),
+  newId: allocate = newId,
+  transport = createToolTransport(),
+} = {}) {
+  const viewNow = () => {
+    const view = getView();
+    return view && !view.isDestroyed ? view : null;
+  };
+  const storeNow = () => (typeof store === "function" ? store() : store);
+
+  const liveState = (id, rev) => {
+    const value = storeNow()?.data?.[id]?.[rev];
+    return value === undefined ? {} : value;
   };
 
-  const open = ({ target = null, remove = null } = {}) => {
-    close();
-    const view = getView();
-    if (!view) return;
-    const selection = view.state.selection;
-    const host = view.state.doc.child(Math.min(selection.$head.index(0), view.state.doc.childCount - 1));
-    const bookmark = {
-      hostId: host?.attrs.id,
-      slashText: remove ? view.state.doc.textBetween(remove.from, remove.to) : null,
-      slashOffset: remove && selection.$head.depth ? remove.from - selection.$head.before(1) - 1 : null,
-    };
-    const doc = view.dom.ownerDocument;
-    const element = doc.createElement("section");
-    element.className = "page-ai-panel";
-    element.contentEditable = "false";
-    element.setAttribute("role", "dialog");
-    element.setAttribute("aria-label", target ? "Revise tool" : "Make a tool with AI");
-    const input = doc.createElement("textarea");
-    input.setAttribute("aria-label", "Describe the tool");
-    input.placeholder = target ? "What should change?" : "Describe the tool you want";
-    const status = doc.createElement("p");
-    status.className = "page-ai-status";
-    const previewRoot = doc.createElement("div");
-    previewRoot.className = "page-ai-preview";
-    const actions = doc.createElement("div");
-    actions.className = "page-ai-actions";
-    element.append(input, status, previewRoot, actions);
-    view.dom.parentElement.append(element);
-    panel = { element, input, status, previewRoot, actions, target, bookmark, candidate: null, pending: null, preview: null, previewHost: null, kept: false, busy: false };
+  const targets = new Map();
 
-    const button = (label, run) => {
-      const el = doc.createElement("button");
-      el.type = "button";
-      el.textContent = label;
-      el.addEventListener("click", run);
-      actions.append(el);
+  function toolTarget(toolId = null, remove = null) {
+    const opened = viewNow();
+    const bookmark = toolId || !opened ? null : bookmarkIn(opened.state, remove);
+    let onStatus = null;
+    const client = createToolClient({
+      transport: {
+        request: (request) => transport.request(request, { onStatus: (status) => onStatus?.(status) }),
+        cancel: (id) => transport.cancel(id),
+      },
+    });
+    let pending = null;
+    let candidate = null;
+    let preview = null;
+    let kept = false;
+    let revision = null;
+
+    const disposePreview = () => {
+      preview?.host?.dispose();
+      preview = null;
     };
-    const showPrompt = () => {
-      if (!panel) return;
-      panel.preview?.dispose();
-      panel.previewHost?.dispose();
-      panel.preview = null;
-      panel.previewHost = null;
-      panel.previewRoot.replaceChildren();
-      panel.input.hidden = false;
-      panel.actions.replaceChildren();
-      button("Generate", generate);
-      button("Cancel", close);
-      panel.input.focus();
-    };
-    const showCandidate = () => {
-      const p = panel;
-      p.input.hidden = true;
-      p.status.textContent = "";
-      p.previewHost = createToolHost({ mode: "view" });
-      p.preview = p.previewHost.mount(p.previewRoot, { id: "preview", rev: "preview", artifact: p.candidate.artifact, seed: p.candidate.state });
-      p.actions.replaceChildren();
-      button("Keep", keep);
-      button("Revise", showPrompt);
-      button("Discard", close);
-    };
-    const generate = async () => {
-      const p = panel;
-      if (!p || p.busy || !p.input.value.trim()) return;
-      if (!client) { p.status.textContent = "Tool generation is unavailable"; return; }
-      p.busy = true;
-      p.status.textContent = "Making your tool…";
-      p.actions.replaceChildren();
-      button("Cancel", close);
-      const turn = ++generation;
-      const candidate = client.request(p.input.value.trim(), toolContext(view.state.doc, doc.title), p.target);
-      p.pending = candidate;
-      try {
-        const result = await client.wait(candidate);
-        if (panel !== p || turn !== generation) return;
-        p.candidate = { artifact: result.artifact, state: result.state, id: null, rev: null };
-        showCandidate();
-      } catch (error) {
-        if (panel !== p || turn !== generation) return;
-        p.status.textContent = error.message;
-        p.actions.replaceChildren();
-        button("Generate", generate);
-        button("Cancel", close);
-      } finally { p.busy = false; }
-    };
-    const keep = async () => {
-      const p = panel;
-      if (!p?.candidate || p.busy || p.kept) return;
-      p.busy = true;
-      const candidate = p.candidate;
-      candidate.id ??= p.target?.toolId ?? allocate("b");
-      candidate.rev ??= allocate("rev");
-      try {
-        if (!store) throw new Error("This document can't save tool state");
-        await store.set([candidate.id, candidate.rev], candidate.state);
+
+    const target = {
+      aiTarget: true,
+      label: toolId ? "This tool" : "New tool",
+      ref: toolId ? [toolId] : [],
+      placeholder: toolId ? "What should change?" : "Describe the tool you want",
+      get isConnected() {
+        const view = viewNow();
+        if (!view) return false;
+        return toolId ? !!findBlock(view.state.doc, toolId) : true;
+      },
+      getBoundingClientRect() {
+        const view = viewNow();
+        if (!view) return emptyRect();
+        if (preview) return preview.dom.getBoundingClientRect();
+        const id = toolId ?? bookmark?.hostId;
+        const found = id ? findBlock(view.state.doc, id) : null;
+        const node = found ? view.nodeDOM(found.at) : null;
+        return node && typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : emptyRect();
+      },
+      async start(comment) {
+        const view = viewNow();
+        if (!view) return { status: "refused", code: "gone", message: GONE };
+        // Read here, not imported: a page with exclude=wire must not pull the wire in.
+        if (!globalThis.window?.clay?.wire) return { status: "refused", code: "no-wire", message: NO_WIRE };
+        let payloadTarget = null;
+        let current = null;
+        if (toolId) {
+          const found = findBlock(view.state.doc, toolId);
+          if (found?.node.type !== schema.nodes.tool) return { status: "refused", code: "gone", message: GONE };
+          revision = found.node.attrs.rev;
+          payloadTarget = { toolId, rev: revision };
+          current = { artifact: found.node.attrs.artifact, state: liveState(toolId, revision) };
+        }
+        pending = client.request(comment, toolContext(view.state.doc, view.dom.ownerDocument.title), payloadTarget, current);
+        return {
+          status: "ok",
+          id: pending.requestId,
+          send: (hooks = {}) => {
+            onStatus = typeof hooks.onStatus === "function" ? hooks.onStatus : null;
+            const done = client.wait(pending).then(
+              (result) => {
+                candidate = { id: toolId, rev: null, artifact: result.artifact, state: result.state };
+                return { state: "done", result };
+              },
+              (error) => ({ state: "error", error: error?.message || error?.code || "the helper reported an error", code: error?.code ?? null }),
+            );
+            return { done, cancel: () => client.discard(pending) };
+          },
+        };
+      },
+      async propose(result) {
+        const view = viewNow();
+        if (!view || !result) return { status: "refused", message: GONE };
+        const artifact = validateArtifact(result.artifact);
+        if (!artifact.ok) return { status: "refused", message: BAD_ARTIFACT };
+        const held = validateState(result.state);
+        if (!held.ok) return { status: "refused", message: BAD_STATE };
+        candidate = { id: toolId, rev: null, artifact: result.artifact, state: result.state };
+        return mountPreview(view);
+      },
+      async keep() {
+        if (!candidate || kept) return { status: "failed", message: STALE_REVISION };
+        const view = viewNow();
+        if (!view) return { status: "failed", message: GONE };
+        const tools = storeNow();
+        if (!tools) return { status: "failed", message: NO_STORE };
+        kept = true;
+        const id = candidate.id ?? allocate("b");
+        const rev = allocate("rev");
+        const edit = { ...candidate, id, rev };
+        // Two stages: the state has to be accepted first, and only then does the block
+        // appear, so a refused state leaves no block and one undo item.
+        try {
+          await tools.set([id, rev], edit.state);
+        } catch (error) {
+          kept = false;
+          return { status: "failed", message: error?.message ?? NO_STORE };
+        }
         const accepted = await acceptState();
         if (accepted?.ok !== true && !["saved", "clean"].includes(accepted?.state)) {
-          throw new Error(accepted?.msg ?? accepted?.message ?? "Tool state was not saved");
+          kept = false;
+          return { status: "failed", message: accepted?.msg ?? accepted?.message ?? "Tool state was not saved" };
         }
-        if (panel !== p || p.kept) return;
-        if (p.target) {
-          const found = findBlock(view.state.doc, p.target.toolId);
-          if (found?.node.type !== schema.nodes.tool || found.node.attrs.rev !== p.target.rev) {
-            p.status.textContent = "This tool changed while you were revising. Keep as a new tool, or discard.";
-            p.target = null;
-            candidate.id = null;
-            candidate.rev = null;
-            p.actions.replaceChildren();
-            button("Keep as new tool", keep);
-            button("Discard", close);
-            return;
+        if (toolId) {
+          const found = findBlock(view.state.doc, toolId);
+          if (found?.node.type !== schema.nodes.tool || found.node.attrs.rev !== revision) {
+            kept = false;
+            return { status: "failed", message: STALE_REVISION };
           }
+        } else if (!placeIn(view.state, bookmark)) {
+          kept = false;
+          return { status: "failed", message: MOVED };
+        }
+        disposePreview();
+        clearPreview(view);
+        if (toolId) {
+          const found = findBlock(view.state.doc, toolId);
           view.dispatch(asStep(view.state.tr.setNodeMarkup(found.at, null, {
-            ...found.node.attrs, artifact: candidate.artifact, rev: candidate.rev,
+            ...found.node.attrs, artifact: edit.artifact, rev: edit.rev,
           })));
-        } else insertCandidate(view, candidate, p.bookmark);
-        p.kept = true;
-        close();
-      } catch (error) {
-        if (panel === p) p.status.textContent = error.message;
-      } finally { p.busy = false; }
+        } else if (!insertCandidate(view, edit, bookmark)) {
+          return { status: "failed", message: MOVED };
+        }
+        // The block is in the document now: a failed save neither undoes it nor asks the
+        // model again, it retries the save alone, once.
+        let saved = false;
+        for (let attempt = 0; attempt < 2 && !saved; attempt++) {
+          try {
+            const result = await acceptState();
+            saved = result?.ok !== false;
+          } catch {
+            saved = false;
+          }
+        }
+        return saved ? { status: "kept" } : { status: "failed", message: UNSAVED };
+      },
+      discard() {
+        disposePreview();
+        const view = viewNow();
+        if (view) clearPreview(view);
+        client.discard(pending);
+        targets.delete(toolId ?? "new");
+      },
     };
-    showPrompt();
-    return element;
-  };
 
-  return { open, dispose: close };
+    function mountPreview(view) {
+      disposePreview();
+      const host = createToolHost({ mode: "view" });
+      const dom = view.dom.ownerDocument.createElement("div");
+      dom.className = "page-ai-preview";
+      try {
+        host.mount(dom, { id: "preview", rev: "preview", artifact: candidate.artifact, seed: candidate.state });
+      } catch (error) {
+        host.dispose();
+        return { status: "refused", message: BAD_ARTIFACT };
+      }
+      preview = { host, dom };
+      // A revision covers the block it replaces; a new tool stands at its bookmark.
+      if (toolId) {
+        showPreview(view, { ids: [toolId], dom });
+        return { status: "ready" };
+      }
+      const place = placeIn(view.state, bookmark);
+      if (!place) {
+        disposePreview();
+        return { status: "refused", message: MOVED };
+      }
+      if (place.replace) showPreview(view, { ids: [place.node.attrs.id], dom });
+      else showWidget(view, { at: place.insertAt, dom });
+      return { status: "ready" };
+    }
+
+    if (toolId) targets.set(toolId, target);
+    return target;
+  }
+
+  return {
+    newTool(remove = null) {
+      return toolTarget(null, remove);
+    },
+    // A revision target follows the block it names: the same tool asked about twice is
+    // the same target, so its draft survives a closed panel.
+    reviseTool(toolId) {
+      const known = targets.get(toolId);
+      if (known?.isConnected) return known;
+      targets.delete(toolId);
+      return toolTarget(toolId);
+    },
+  };
 }

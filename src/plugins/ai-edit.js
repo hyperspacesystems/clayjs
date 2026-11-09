@@ -21,7 +21,7 @@
  *
  * The bus version previewed the reply as it streamed. The wire carries status lines
  * only — replaceable progress, capped and droppable — so the page shows throttled
- * status lines ("Writing, 1.8 KB") and then the result once, with Keep/Revert as
+ * status lines ("Writing, 1.8 KB") and then the result once, with Keep/Discard as
  * before. `@page` reads the saved file from disk rather than a copy in the payload:
  * the plugin saves first and then sends `{ page: true }`, because a whole page never
  * fits the envelope.
@@ -29,12 +29,12 @@
  * The comment box is compose only: a click anywhere outside it closes it, keeping the
  * text as a draft for that target, and Send moves the whole live state to one compact
  * bar at the bottom of the viewport. The bar carries the host's progress and Stop, the
- * reply's warnings and Keep/Revert, and then the save, so no part of a running edit
+ * reply's warnings and Keep/Discard, and then the save, so no part of a running edit
  * depends on a popover the person may want out of the way.
  *
  * Undo integration: observers pause at request start. On Keep the element is rewound
  * to the snapshot while still paused, observers resume, then one final morph lands
- * the whole AI edit as a single undoable step. On Revert the rewind happens under
+ * the whole AI edit as a single undoable step. On Discard the rewind happens under
  * pause, so history never sees the edit at all.
  *
  * All injected chrome is runtime-only (`no-save no-watch no-snapshot`): never saved,
@@ -45,11 +45,13 @@ import { loadedEngine, mergeEngine } from "../sync/merge-engine.js";
 import Mutation from "../lib/mutation.js";
 import { startsAtImport } from "../core/is-edit-mode.js";
 import { deepActiveElement } from "../dom/active-element.js";
+import { MAX_PAYLOAD_BYTES, contextRefsOf, wantsPage } from "../lib/ai-comment.js";
 import { holdAllSaves, releaseAllSaves } from "../core/save.js";
 import { STRIP_FROM_SAVE, SNAPSHOT_REMOVE_SELECTOR } from "../lib/region-policy.js";
 import { enableContentEditable } from "../core/admin-contenteditable.js";
 import onDomReady from "../lib/dom-ready.js";
 import wire from "./wire.js";
+import { createPicker } from "./ai-edit/picker.js";
 import { set } from "../lib/hostile-css.js";
 import { bevelBox, bevelButton, bevelSurface, bevelText, bevelInput, bevelIconButton, pageScheme, paintLook, setShown, RUNTIME_ONLY } from "../ui/bevel-controls.js";
 import { TOKENS, GLYPHS, FONT_SANS, FONT_MONO, SHADOW } from "../ui/bevel.js";
@@ -62,9 +64,6 @@ const UNIT_SELECTOR = "h1,h2,h3,h4,h5,h6,p,figure";
 const BLOCK_SELECTOR = "p,h1,h2,h3,h4,h5,h6,li,dt,dd,blockquote,pre,figcaption,td,th";
 const CONTAINER_SELECTOR = "section,article,aside,header,footer,nav,main,div,ul,ol,dl,table,figure,form";
 const NOT_TEXT = "script,style,template,textarea,input,select,button,iframe,svg,math";
-// The request ceiling, kept below the host's 1 MiB envelope so the refusal happens
-// here, where the message can say what to do about it.
-const MAX_PAYLOAD_BYTES = 900 * 1024;
 const TOO_LARGE = "This section is too large for AI editing; select a smaller part.";
 const SAVE_FAILED = "The save did not finish; the edit is still on the page.";
 
@@ -98,6 +97,7 @@ let helperState = null;  // "ready" or "unavailable"
 let listeners = null;    // the AbortController every handler one session added listens on
 let observers = [];      // the page observers that session opened
 let styleEl = null;      // the one stylesheet the chrome needed
+let picker = null;       // the area picker while it is over the page
 let chromeToken = 0;     // the latest init(); a teardown retires the one before it
 
 function dropDraft(el) {
@@ -126,6 +126,15 @@ async function helperStateNow() {
   const helper = list.find(h => h.name === HELPER);
   return helper && (helper.state === 'ready' || helper.state === 'unavailable') ? helper.state : null;
 }
+
+// The page half of "rewrite a chosen area", read at use time: it is null until the
+// page plugin's own dynamic import lands, and on any page that is no Block document.
+const pageAi = () => window.clay?.page?.ai || null;
+
+// A Block document whose own surface has not loaded yet (or failed): the DOM path
+// must stand down, because morphing the editor would replace it.
+const isBlockDoc = () => !!window.clay?.editPlugins?.includes('page') && !!document.querySelector('article[data-page]');
+const blockDocWithoutSurface = () => isBlockDoc() && !pageAi()?.active();
 
 // ---------------------------------------------------------------- observers (undo/autosave)
 
@@ -168,6 +177,9 @@ function liveRange() {
 // else it is the block around the whole selection, so a backward selection and a
 // forward one land on the same element.
 function targetFromRange(range) {
+  // A Block document has its own selection toolbar, and its blocks are ProseMirror
+  // DOM: the page surface names the area instead.
+  if (pageAi() || blockDocWithoutSurface()) return null;
   let node = range.commonAncestorContainer;
   if (node.nodeType !== 1) node = node.parentElement;
   if (!node || !document.body.contains(node)) return null;
@@ -272,14 +284,6 @@ function candidateFrom(html, tag) {
 
 function newSession(el, comment, quote) {
   const docMode = el === document.body;
-  // Context refs are @tokens containing a dot or slash (@notes.md, @src/x.js). Bare
-  // @words are not refs: a leading one is an engine token (@fable, @codex — routed
-  // helper-side), and mid-text ones are prose.
-  // The @ has to start a word, so an email address or a URL is prose too.
-  const contextRefs = [...comment.matchAll(/(?<![\w\u00C0-\u024F.@\/:-])@([\w.-]*[/.][\w./-]*)/g)]
-    .map(m => m[1].replace(/\.+$/, '')) // a sentence's full stop is not part of the name
-    .filter(ref => ref !== 'page')
-    .filter(ref => /[/.]/.test(ref));
   const elementHTML = docMode ? strippedBodyHTML() : el.outerHTML;
   const payload = {
     id: 'req-' + Date.now().toString(36) + '-' + (++requestCounter),
@@ -287,7 +291,7 @@ function newSession(el, comment, quote) {
     tag: el.tagName.toLowerCase(),
     elementHTML,
     comment,
-    contextRefs
+    contextRefs: contextRefsOf(comment)
   };
   if (quote) {
     payload.quote = quote.text;
@@ -295,7 +299,7 @@ function newSession(el, comment, quote) {
   }
   // Document mode reads the live page itself, and every other @page request reads
   // the file from disk: the plugin saves first, then asks for it by flag.
-  if (!docMode && /(?<![\w\u00C0-\u024F.@\/:-])@page(?![\w\/-]|\.\w)/.test(comment)) payload.page = true;
+  if (!docMode && wantsPage(comment)) payload.page = true;
   return {
     id: payload.id,
     el,
@@ -312,6 +316,7 @@ function newSession(el, comment, quote) {
 }
 
 async function sendRequest(el, comment, quote) {
+  if (el.aiTarget) return sendTargetRequest(el, comment, quote);
   session = newSession(el, comment, quote);
   // Refused here, before anything is sent or paused: the envelope would refuse it
   // anyway, and a refusal the page cannot explain is worse than one it can.
@@ -350,6 +355,71 @@ async function sendRequest(el, comment, quote) {
   if (outcome.state === 'done') onDone(outcome.result || {});
   else if (outcome.state === 'cancelled') onError('HTML Clay stopped this edit.');
   else onError(outcome.error || 'the helper reported an error');
+}
+
+// A page area's request. Nothing morphs and no save hold is taken, so the page keeps
+// autosaving while a person types during a long request, and Keep is the target's own
+// one undoable transaction. Only the bar and the panel belong to this plugin here.
+async function sendTargetRequest(target, comment, quote) {
+  const live = {
+    id: null,
+    el: target,
+    target,
+    docMode: false,
+    state: 'requesting',
+    paused: false,
+    held: false,
+    handle: null,
+    finalCandidate: null
+  };
+  session = live;
+  // A refusal is the box's answer: the comment stays in it, unsent and still a draft.
+  let started;
+  try {
+    started = await target.start(comment, quote);
+  } catch (error) {
+    onError(error?.message || 'the helper reported an error');
+    return;
+  }
+  if (session !== live) return; // stopped while the request was being built
+  if (started.status !== 'ok') {
+    session = null;
+    setStatus(started.message, 'warn');
+    return;
+  }
+  live.id = started.id;
+  keepDraft(target, comment);
+  closePanelForSend();
+  barLifecycle = {};
+  showBar('working');
+  setBarStatus('Sending\u2026');
+  const handle = started.send({
+    onStatus: ({ text }) => { if (session === live) setBarStatus(text); }
+  });
+  live.handle = handle;
+  const outcome = await handle.done;
+  if (session !== live) return;
+  if (outcome.state !== 'done') {
+    if (outcome.state === 'cancelled') onError('HTML Clay stopped this edit.');
+    else onError(outcome.error || 'the helper reported an error');
+    return;
+  }
+  live.state = 'deciding';
+  let result;
+  try {
+    result = await target.propose(outcome.result || {});
+  } catch (error) {
+    onError(error?.message || 'the reply could not be applied');
+    return;
+  }
+  if (session !== live) return;
+  if (result.status !== 'ready') {
+    onError(result.message);
+    return;
+  }
+  dropDraft(target);
+  showBar('ready');
+  setBarStatus(readyText(result.warnings || [], (outcome.result || {}).model), result.warnings?.length ? 'warn' : '');
 }
 
 // What a reply may not add: anything that runs code. Each part is counted, and the
@@ -469,6 +539,11 @@ function revertSession() {
   const s = session;
   session = null;
   if (!s) return;
+  if (s.target) {
+    s.target.discard();
+    positionChrome();
+    return;
+  }
   try {
     if ((s.state === 'requesting' || s.state === 'deciding') && loadedEngine()) {
       sessionMorph(s, s.snapshot, { rewind: true });
@@ -484,6 +559,7 @@ async function keepSession() {
   const s = session;
   if (!s) return;
   session = null;
+  if (s.target) return keepTarget(s.target);
   // What is on screen is what Keep keeps: the preview may have been edited by hand.
   const liveResult = s.docMode ? strippedBodyHTML() : s.el.outerHTML;
   try {
@@ -506,6 +582,29 @@ async function keepSession() {
     return;
   }
   setBarStatus((result && result.msg) || 'Saved', result && result.msgType === 'error' ? 'warn' : '');
+  scheduleBarClose();
+}
+
+// The page area keeps itself: one transaction, its own preview cleared, and the save
+// flushed by the surface. A stale result touches nothing and says so on the bar.
+async function keepTarget(target) {
+  positionChrome();
+  showBar('saving');
+  setBarStatus('Saving\u2026');
+  const lifecycle = barLifecycle;
+  let result;
+  try {
+    result = await target.keep();
+  } catch (error) {
+    result = { status: 'failed', message: error?.message || SAVE_FAILED };
+  }
+  if (lifecycle !== barLifecycle) return;
+  if (!result || result.status !== 'kept') {
+    showBar('error');
+    setBarStatus((result && result.message) || SAVE_FAILED, 'warn');
+    return;
+  }
+  setBarStatus(result.message || 'Saved');
   scheduleBarClose();
 }
 
@@ -613,7 +712,7 @@ function buildChrome() {
 
   barStop = part(bevelButton('Stop', { extra: ['flex:none'] }), 'bar-stop');
   barKeep = part(bevelButton('Keep', { variant: 'primary', extra: ['flex:none'] }), 'bar-keep');
-  barRevert = part(bevelButton('Revert', { variant: 'quiet', extra: ['flex:none'] }), 'bar-revert');
+  barRevert = part(bevelButton('Discard', { variant: 'quiet', extra: ['flex:none'] }), 'bar-revert');
   barClose = part(bevelIconButton(GLYPHS.toastClose, { label: 'Dismiss error' }), 'bar-close');
   barClose.pin({ flex: 'none' });
   for (const control of [barStop, barKeep, barRevert, barClose]) setShown(control, false, 'inline-flex');
@@ -887,6 +986,10 @@ function closeBar(lifecycle) {
 // The ring follows the target while anything is on screen for it, which includes every
 // bar mode; the panel is placed only while it is the thing on screen.
 function positionChrome() {
+  // A Block document keeps a fixed bar of its own at the bottom on a phone, and the
+  // editor already reserves the room for it: the status bar sits above that.
+  const coarse = window.matchMedia?.('(pointer: coarse)')?.matches;
+  set(bar, 'bottom', pageAi()?.active() && coarse ? '112px' : '16px');
   if (!anchorEl) return;
   if (!anchorEl.isConnected) { abandonTarget(); return; }
   if (anchorEl === document.body) {
@@ -933,9 +1036,13 @@ function positionChrome() {
 }
 
 function openPanel(el, quote) {
-  // A composer already open on another target hands its text over as that target's draft
-  // before anything here replaces the target or the box.
-  if (!panel.hidden && anchorEl && anchorEl !== el) storeDraft();
+  // A composer already open on the same target keeps its box as it is. On another target
+  // its text travels with the person and the old target's draft is cleared.
+  const wasOpen = !panel.hidden;
+  const sameTarget = wasOpen && anchorEl === el;
+  const changedTarget = wasOpen && !!anchorEl && anchorEl !== el;
+  const carried = changedTarget ? textarea.value : null;
+  if (changedTarget) dropDraft(anchorEl);
   const range = quote ? liveRange() : null; // read before focus moves into the panel
   const active = document.activeElement;
   returnFocus = active && active !== document.body && !panel.contains(active) ? active : null;
@@ -944,10 +1051,12 @@ function openPanel(el, quote) {
   hideChip();
   setShown(panel, true);
   pendingSelection = quote;
-  const shown = quote ? (quote.text.trim().length > 400 ? quote.text.trim().slice(0, 400) + '\u2026' : quote.text.trim()) : '';
+  const shown = quote
+    ? (quote.text.trim().length > 400 ? quote.text.trim().slice(0, 400) + '\u2026' : quote.text.trim())
+    : (el.aiTarget ? el.label : '');
   panel.dataset.quote = shown;
   setStatus('');
-  textarea.value = drafts.get(el) || '';
+  if (!sameTarget) textarea.value = carried ? carried : (drafts.get(el) || '');
   highlight(anchorRange);
   applyHelperState();
   positionChrome();
@@ -975,6 +1084,7 @@ function closePanel() {
   returnFocus = null;
   pendingSelection = undefined;
   clearHighlight();
+  picker?.close();
   setShown(panel, false);
   setShown(ring, false);
   textarea.value = '';
@@ -985,6 +1095,7 @@ function closePanel() {
 // The send path closes the box without cancelling anything and without letting the
 // target go: the request is now about that element, and the ring stays on it.
 function closePanelForSend() {
+  picker?.close();
   anchorRange = null;
   returnFocus = null;
   pendingSelection = undefined;
@@ -1063,7 +1174,7 @@ function wireInteractions() {
     const startedInPanel = panelPointerDown;
     panelPointerDown = false;
     if (startedInPanel) return;
-    if (panel.contains(event.target) || bar.contains(event.target) || chip.contains(event.target) || docBubble.contains(event.target)) return;
+    if (panel.contains(event.target) || bar.contains(event.target) || chip.contains(event.target) || docBubble.contains(event.target) || picker?.contains(event.target)) return;
     if (session || barMode) return; // one edit at a time, and the bar owns the screen
     const section = event.target.closest?.('[data-edit-id]');
     const unit = section ? unitFrom(event.target) : null;
@@ -1093,6 +1204,17 @@ function wireInteractions() {
   document.addEventListener('keydown', (event) => {
     if (isShortcut(event)) {
       if (barMode || session || pageOwnsFocus()) return;
+      const ai = pageAi();
+      if (ai?.active()) {
+        const chosen = ai.targetFromSelection();
+        // Nothing chosen: leave the key to the browser.
+        if (!chosen) return;
+        event.preventDefault();
+        openPanel(chosen, chosen.quote);
+        return;
+      }
+      // A Block document whose surface is not ready has no DOM path to fall back on.
+      if (blockDocWithoutSurface()) return;
       if (anchorEl && !anchorEl.isConnected) closePanel();
       const range = liveRange();
       let target = range ? targetFromRange(range) : null;
@@ -1141,6 +1263,13 @@ function build() {
   wireInteractions();
 }
 
+// Whether this host lists an ai-edit helper at all, ready or turned off. The menu asks
+// before it offers Ask AI, so a page whose host cannot answer never shows the item.
+async function available() {
+  await (boot || loadHelper());
+  return helperState === 'ready' || helperState === 'unavailable';
+}
+
 async function init() {
   if (!startsAtImport() || panel) return;  // an owner/editor feature, built once
   if (!(await loadHelper())) return;
@@ -1164,18 +1293,68 @@ function canOpenTarget(el) {
 // are not valid targets. A listed but disabled helper opens the existing setup
 // explanation with Send unavailable, just like the keyboard shortcut.
 async function open(el, { prompt } = {}) {
+  // A Block document is rewritten through its own surface: only the whole document
+  // is a DOM entry point, and any element inside the editor is refused. This is the
+  // guard that keeps the morph path off the editor.
+  if (blockDocWithoutSurface()) return false;
+  if (pageAi()?.active() && el !== document.body) return false;
   if (!canOpenTarget(el)) return false;
   await init();
   // A click listener that calls this runs its microtasks before the same click reaches
   // the click-away handler, so the opening has to wait for that event to finish.
   await new Promise(resolve => setTimeout(resolve, 0));
-  if (!panel || session || barMode || !canOpenTarget(el)) return false;
-  if (!panel.hidden && anchorEl === el) {
+  if (!panel || session || barMode) return false;
+  const ai = pageAi();
+  const target = ai?.active() ? ai.wholePage() : el;
+  if (target === el ? !canOpenTarget(el) : !target.isConnected) return false;
+  if (!panel.hidden && anchorEl === target) {
     textarea.focus();
     return true;
   }
-  if (typeof prompt === 'string' && !drafts.has(el)) keepDraft(el, prompt);
-  openPanel(el, null);
+  if (typeof prompt === 'string' && !drafts.has(target)) keepDraft(target, prompt);
+  openPanel(target, null);
+  return true;
+}
+
+// `clay.aiEdit.openTarget(target)` opens the composer on a target the page built
+// itself, such as a tool block's Revise or the new tool `/ai` asked for. Returns true
+// when the composer is showing for it.
+async function openTarget(target) {
+  if (!target || target.aiTarget !== true) return false;
+  await init();
+  // The click or the key that asked is still travelling to the click-away handler, as
+  // in open().
+  await new Promise(resolve => setTimeout(resolve, 0));
+  if (!panel || session || barMode) return false;
+  if (!target.isConnected) return false;
+  if (!panel.hidden && anchorEl === target) {
+    textarea.focus();
+    return true;
+  }
+  openPanel(target, target.quote ?? null);
+  return true;
+}
+
+// `await clay.aiEdit.pick()` starts the area picker: the page under the pointer, one
+// click per block, and the composer on whatever is chosen. A Block document names its
+// own targets; anywhere else the picker hit-tests the page itself. Returns true when
+// the picker is up, false when there is nothing to pick with.
+async function pick() {
+  await init();
+  if (blockDocWithoutSurface()) return false;
+  // The click that called this is still travelling to the click-away handler, exactly
+  // as in open().
+  await new Promise(resolve => setTimeout(resolve, 0));
+  if (!panel || session || barMode) return false;
+  if (picker?.picking) return true;
+  const ai = pageAi();
+  picker = createPicker({
+    surface: ai?.active() ? ai : null,
+    onPicked: (target) => openPanel(target, target.quote),
+    onWholePage: () => openPanel(ai?.active() ? ai.wholePage() : document.body),
+    onCancel: () => { if (!panel.hidden) closePanel(); },
+  });
+  picker.open();
   return true;
 }
 
@@ -1206,6 +1385,8 @@ function teardown() {
   listeners = null;
   for (const observer of observers) observer.disconnect();
   observers = [];
+  picker?.close();
+  picker = null;
   for (const node of [styleEl, ring, panel, bar, chip, docBubble]) node?.remove();
   styleEl = ring = panel = textarea = statusEl = pointer = bar = barStatus = null;
   barStop = barKeep = barRevert = barClose = chip = docBubble = null;
@@ -1231,7 +1412,7 @@ function teardown() {
  * the committed mode is still view; the commit that enters edit builds the chrome, inert
  * until somebody opens it, exactly as `clay.aiEdit.init()` does. What a session adds is
  * everything still unresolved — a request on the wire, a preview waiting for Keep or
- * Revert, a comment typed and not sent — so `quiesce` refuses the exit and `resume`
+ * Discard, a comment typed and not sent — so `quiesce` refuses the exit and `resume`
  * leaves that same preview, comment and selection timer exactly as they were.
  * `dispose` (after the barrier) stops every editor-only handler and takes the chrome
  * down, so a save or selection event in view draws nothing. `initial: true` adopts the
@@ -1249,10 +1430,10 @@ export function aiEditParticipant() {
           if (!initial) build();
         },
         quiesce() {
-          const unsent = (panel && !panel.hidden && textarea.value.trim() !== '') ||
-            [...drafted].some((el) => el.isConnected);
+          const unsent = panel && !panel.hidden && textarea.value.trim() !== '';
           const pending = [];
           if (session) pending.push(session.id);
+          if (picker?.picking) pending.push('picker');
           if (barMode === 'saving') pending.push('save');
           if (unsent) pending.push('prompt');
           if (!pending.length) return;
@@ -1276,4 +1457,4 @@ onDomReady(() => { boot = init().then(() => {}, () => {}); });
 
 export { aiEditParticipant as modeParticipant };
 
-export const aiEdit = { init, open };
+export const aiEdit = { init, open, openTarget, pick, available };

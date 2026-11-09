@@ -5,6 +5,8 @@ import { resolveModules, MODULES } from "../../../src/loader-logic.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { blocksFromYValue } from "../../../src/page/ybind/decode.js";
 import { FEATURES } from "../../../src/page/features/registry.js";
+import * as Y from "../../../src/vendor/yjs.vendor.js";
+import { docFromValue, enc } from "../../../src/page/ybind/provider.js";
 
 /**
  * The page plugin: installs the real editor over a strict Yjs page store through
@@ -13,9 +15,12 @@ import { FEATURES } from "../../../src/page/features/registry.js";
  */
 
 let extensions = ["page"];
+// The per-document helper list the host offers this caller, which is how a new client
+// learns that page-tool can answer.
+let helpers = null;
 
 await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
-  hostMeta: async () => ({ spec: 1, extensions, document: null }),
+  hostMeta: async () => ({ spec: 1, extensions, document: helpers ? { helpers } : null }),
   hostSupports: async (name) => extensions.includes(name),
   hostMetaOutcome: () => "ok",
   querySaveOutcome: () => null,
@@ -46,7 +51,7 @@ await jest.unstable_mockModule("../../../src/live/local-lane.js", () => ({
 
 window.clayEditMode = true;
 
-const { live, storeOf } = await import("../../../src/plugins/live.js");
+const { live, storeOf, receiveFrame } = await import("../../../src/plugins/live.js");
 window.clay = { live };
 const { page } = await import("../../../src/plugins/page.js");
 await import("../../../src/plugins/indicator.js");
@@ -86,6 +91,7 @@ const tick = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms));
 afterEach(() => {
   page.dispose();
   extensions = ["page"];
+  helpers = null;
   document.head.innerHTML = "";
   document.body.innerHTML = "";
 });
@@ -164,14 +170,21 @@ test("an unsupported host keeps the article untouched and reports blocked", asyn
   document.removeEventListener("clay:page-save-state", onState);
 });
 
-test("the AI entry follows the host capability", async () => {
+test("the AI entry follows the host's helper list", async () => {
   setPage([{ id: "p", t: "paragraph", text: "" }]);
-  await page.install({ transport: { request: async () => ({}), cancel: () => {} } });
+  await page.install();
   page.view.dom.parentElement.querySelector(".page-plus").click();
   expect(page.view.dom.parentElement.querySelector(".page-menu").textContent).not.toContain("Make a tool with AI");
 
+  // An old-shape meta that still carries the page-tool extension offers nothing: no
+  // host adds it, so a dead /ai never shows.
   extensions = ["page", "page-tool/1"];
-  await page.install({ transport: { request: async () => ({}), cancel: () => {} } });
+  await page.install();
+  page.view.dom.parentElement.querySelector(".page-plus").click();
+  expect(page.view.dom.parentElement.querySelector(".page-menu").textContent).not.toContain("Make a tool with AI");
+
+  helpers = [{ name: "page-tool", state: "ready" }];
+  await page.install();
   page.view.dom.parentElement.querySelector(".page-plus").click();
   expect(page.view.dom.parentElement.querySelector(".page-menu").textContent).toContain("Make a tool with AI");
 });
@@ -487,4 +500,96 @@ test("view mode resolves without the page plugin and never calls its module thun
   expect(edit.plugins).toContain("plugins/live.js");
   expect(edit.plugins).toContain("sync/live-sync.js");
   expect(edit.plugins).toContain("plugins/page.js");
+});
+
+// A peer's edit as a frame the live store admits: the update alone, on top of the state
+// this tab's tag holds.
+const peerPage = (value, text) => {
+  const doc = docFromValue(value);
+  doc.clientID = 8123456;
+  const before = Y.encodeStateVector(doc);
+  const flow = doc.getText("flow");
+  flow.insert(flow.length, text);
+  const next = { ...value, y: { ...value.y, "u8123456-0": enc(Y.encodeStateAsUpdateV2(doc, before)) } };
+  doc.destroy();
+  return next;
+};
+
+test("the page's history tells the menu after its own edit and after an undo, and a peer's edit says nothing", async () => {
+  setPage([{ id: "p", t: "paragraph", text: "Hello" }]);
+  await page.install();
+  const view = page.view;
+
+  const said = [];
+  const onSaid = (event) => said.push({ canUndo: event.detail.canUndo, canRedo: event.detail.canRedo });
+  document.addEventListener("clay:undo-change", onSaid);
+
+  view.dispatch(view.state.tr.insertText("!", 6));
+  expect(said.at(-1)).toEqual({ canUndo: true, canRedo: false });
+  expect(page.history.canUndo).toBe(true);
+  expect(page.history.canRedo).toBe(false);
+
+  page.history.undo();
+  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello");
+  expect(said.at(-1)).toEqual({ canUndo: false, canRedo: true });
+  expect(page.history.canUndo).toBe(false);
+  expect(page.history.canRedo).toBe(true);
+
+  page.history.redo();
+  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello!");
+  expect(said.at(-1)).toEqual({ canUndo: true, canRedo: false });
+
+  // A new edit throws the redo away.
+  page.history.undo();
+  expect(page.history.canRedo).toBe(true);
+  view.dispatch(view.state.tr.insertText("?", 6));
+  expect(page.history.canRedo).toBe(false);
+  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello?");
+
+  // Someone else's typing is not this tab's to undo, so it says nothing at all.
+  const told = said.length;
+  const base = clone(storeOf("page").value);
+  receiveFrame(tagHtml(peerPage(base, " peer")));
+  for (let i = 0; i < 50 && !page.view.dom.textContent.includes("peer"); i++) await tick();
+  expect(page.view.dom.textContent).toContain("peer");
+  expect(said).toHaveLength(told);
+  expect(page.history.canUndo).toBe(true);
+
+  document.removeEventListener("clay:undo-change", onSaid);
+});
+
+test("the history reports nothing to undo or redo while a proposal is only a preview", async () => {
+  setPage([{ id: "p", t: "paragraph", text: "Hello" }]);
+  await page.install();
+  const view = page.view;
+  view.dispatch(view.state.tr.insertText("!", 6));
+  page.history.undo();
+  expect(page.history.canRedo).toBe(true);
+
+  const said = [];
+  const onSaid = (event) => said.push({ canUndo: event.detail.canUndo, canRedo: event.detail.canRedo });
+  document.addEventListener("clay:undo-change", onSaid);
+
+  const { showPreview, clearPreview } = await import("../../../src/page/ai-preview.js");
+  const preview = () => showPreview(view, { ids: ["p"], dom: document.createElement("div") });
+
+  // A redo is waiting, and a preview makes it not the next press.
+  preview();
+  expect(said.at(-1)).toEqual({ canUndo: false, canRedo: false });
+  expect(page.history.canUndo).toBe(false);
+  expect(page.history.canRedo).toBe(false);
+  clearPreview(view);
+  expect(page.history.canRedo).toBe(true);
+
+  // The same with an entry to undo waiting.
+  page.history.redo();
+  expect(page.history.canUndo).toBe(true);
+  preview();
+  expect(page.history.canUndo).toBe(false);
+  expect(page.history.canRedo).toBe(false);
+  clearPreview(view);
+  expect(page.history.canUndo).toBe(true);
+  expect(said.at(-1)).toEqual({ canUndo: true, canRedo: false });
+
+  document.removeEventListener("clay:undo-change", onSaid);
 });

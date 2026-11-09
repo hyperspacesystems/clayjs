@@ -226,8 +226,11 @@ test("after relaying both ways, two peers have the same projection", async () =>
 // only then; the saved tag does not depend on the view part having loaded.
 
 let extensions = ["page"];
+// The per-document helper list a host offers this caller; `/ai` needs page-tool in it,
+// and the old `page-tool/1` extension alone is not enough.
+let helpers = null;
 await jest.unstable_mockModule("../../../../src/core/host-meta.js", () => ({
-  hostMeta: async () => ({ spec: 1, extensions, document: null }),
+  hostMeta: async () => ({ spec: 1, extensions, document: helpers ? { helpers } : null }),
   hostSupports: async (name) => extensions.includes(name),
   hostMetaOutcome: () => "ok",
   querySaveOutcome: () => null,
@@ -306,6 +309,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 afterEach(() => {
   page.dispose();
   extensions = ["page"];
+  helpers = null;
+  delete window.clay.aiEdit;
+  delete window.clay.wire;
   liveCalls.length = 0;
   document.head.innerHTML = "";
   document.body.innerHTML = "";
@@ -458,10 +464,10 @@ test("after a load fails, selection moves and typing make no further load attemp
 });
 
 test("a hosted tool's menu offers Revise when the host advertises tool authoring", async () => {
-  extensions = ["page", "page-tool/1"];
+  helpers = [{ name: "page-tool", state: "ready" }];
   setPage([PARAGRAPH, TOOL]);
   setTools({ tally: { r1: { count: 3 } } });
-  await page.install({ transport: { request: async () => ({}), cancel: () => {} } });
+  await page.install();
   const settings = page.view.dom.querySelector('.page-tool-block[data-id="tally"] .page-tool-settings');
   expect(settings).not.toBe(null);
   settings.click();
@@ -470,24 +476,56 @@ test("a hosted tool's menu offers Revise when the host advertises tool authoring
   expect(menu.textContent).toContain("Revise\u2026");
 });
 
+// The one shared panel is ai-edit's, so this page answers /ai the way the plugin does:
+// it takes the target the page builds and drives it.
+function sharedPanel() {
+  const opened = [];
+  window.clay.aiEdit = {
+    openTarget(target) { opened.push(target); return true; },
+  };
+  return {
+    opened,
+    // What ai-edit does with a target: send the comment, take the reply, preview it,
+    // and let the bar's Keep keep it.
+    async generate(comment) {
+      const target = opened.at(-1);
+      const started = await target.start(comment);
+      expect(started.status).toBe("ok");
+      const handle = started.send({});
+      const outcome = await handle.done;
+      expect(outcome.state).toBe("done");
+      expect((await target.propose(outcome.result)).status).toBe("ready");
+      return target;
+    },
+  };
+}
+const toolWire = () => {
+  window.clay.wire = {
+    send(payload) {
+      return {
+        done: Promise.resolve({ state: "done", result: { requestId: payload.requestId, artifact: TALLY, state: { count: 2 } } }),
+        cancel() {},
+      };
+    },
+  };
+};
+
 test("Keep on a first AI tool in a document with no page.tools tag saves the tool", async () => {
-  extensions = ["page", "page-tool/1"];
+  helpers = [{ name: "page-tool", state: "ready" }];
   setPage([PARAGRAPH]);
   expect(toolsTag()).toBe(null);
-  const transport = {
-    request: async (request) => ({ requestId: request.requestId, artifact: TALLY, state: { count: 2 } }),
-    cancel: () => {},
-  };
-  await page.install({ transport, acceptState: async () => ({ ok: true }) });
+  toolWire();
+  const panel = sharedPanel();
+  await page.install({ acceptState: async () => ({ ok: true }) });
   page.view.dom.parentElement.querySelector(".page-plus").click();
   const entry = [...page.view.dom.parentElement.querySelectorAll(".page-menu-item")].find((item) => item.textContent.includes("Make a tool with AI"));
   expect(entry).toBeTruthy();
   entry.click();
-  expect(await waitFor(() => document.querySelector(".page-ai-panel"))).toBe(true);
-  document.querySelector(".page-ai-panel textarea").value = "make a counter";
-  [...document.querySelectorAll(".page-ai-panel button")].find((button) => button.textContent === "Generate").click();
-  expect(await waitFor(() => [...document.querySelectorAll(".page-ai-panel button")].some((button) => button.textContent === "Keep"))).toBe(true);
-  [...document.querySelectorAll(".page-ai-panel button")].find((button) => button.textContent === "Keep").click();
+  expect(await waitFor(() => panel.opened.length === 1)).toBe(true);
+  expect(panel.opened[0].aiTarget).toBe(true);
+  expect(panel.opened[0].label).toBe("New tool");
+  const target = await panel.generate("make a counter");
+  expect(await target.keep()).toEqual({ status: "kept" });
   expect(await waitFor(() => page.view.dom.querySelector(".page-tool-block"))).toBe(true);
   expect(toolsTag()).not.toBe(null);
   const block = page.view.dom.querySelector(".page-tool-block");
@@ -497,31 +535,27 @@ test("Keep on a first AI tool in a document with no page.tools tag saves the too
 });
 
 test("text typed before the slash while the tool loads is kept, and only the slash text is removed", async () => {
-  extensions = ["page", "page-tool/1"];
+  helpers = [{ name: "page-tool", state: "ready" }];
   setPage([PARAGRAPH]);
-  const transport = {
-    request: async (request) => ({ requestId: request.requestId, artifact: TALLY, state: { count: 2 } }),
-    cancel: () => {},
-  };
+  toolWire();
+  const panel = sharedPanel();
   const realLoad = FEATURES.tool.load;
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   let attempts = 0;
   FEATURES.tool.load = () => { attempts += 1; return gate.then(() => realLoad()); };
   try {
-    await page.install({ transport, acceptState: async () => ({ ok: true }) });
+    await page.install({ acceptState: async () => ({ ok: true }) });
     const view = page.view;
     const menu = slash(view);
     [...menu.querySelectorAll(".page-menu-item")].find((item) => item.textContent.includes("Make a tool with AI")).click();
     expect(attempts).toBe(1);
-    expect(document.querySelector(".page-ai-panel")).toBe(null);
+    expect(panel.opened).toHaveLength(0);
     view.dispatch(view.state.tr.insertText("AB", 1));
     release();
-    expect(await waitFor(() => document.querySelector(".page-ai-panel"))).toBe(true);
-    document.querySelector(".page-ai-panel textarea").value = "make a counter";
-    [...document.querySelectorAll(".page-ai-panel button")].find((button) => button.textContent === "Generate").click();
-    expect(await waitFor(() => [...document.querySelectorAll(".page-ai-panel button")].some((button) => button.textContent === "Keep"))).toBe(true);
-    [...document.querySelectorAll(".page-ai-panel button")].find((button) => button.textContent === "Keep").click();
+    expect(await waitFor(() => panel.opened.length === 1)).toBe(true);
+    const target = await panel.generate("make a counter");
+    expect(await target.keep()).toEqual({ status: "kept" });
     expect(await waitFor(() => view.dom.querySelector(".page-tool-block"))).toBe(true);
     expect(view.state.doc.child(0).textContent).toBe("ABHi ");
     expect(toolBlocks(view)).toHaveLength(1);

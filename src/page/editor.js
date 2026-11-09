@@ -27,6 +27,7 @@ import { checklistKeys } from "./checklist.js";
 import { csvImportPlugin } from "./csv-import.js";
 import { styleWithLegacyId } from "../lib/style.js";
 import { historyIntentPlugin } from "./history-intent.js";
+import { aiPreviewPlugin } from "./ai-preview.js";
 import { createFeatureLoader } from "./feature-loader.js";
 import { COMMAND_FEATURES, FEATURES, featureForNode } from "./features/registry.js";
 import { toolViews } from "./tool-views.js";
@@ -178,6 +179,8 @@ ${INDENTS.map((n) => `:where(article[data-page], .page-editor) .page-li[data-ind
 .page-editor.ProseMirror-hideselection { caret-color: transparent; }
 .page-editor.ProseMirror-hideselection *::selection { background: transparent; }
 .page-editor .page-block-selected { background: var(--page-block-selected, rgba(88, 120, 170, 0.12)); box-shadow: -6px 0 0 var(--page-block-selected, rgba(88, 120, 170, 0.12)), 6px 0 0 var(--page-block-selected, rgba(88, 120, 170, 0.12)); border-radius: 4px; }
+.page-ai-hidden { display: none; }
+.page-ai-preview { margin: var(--page-block-gap) 0; padding: 2px 8px; border-radius: 4px; background: var(--page-block-selected, rgba(88, 120, 170, 0.12)); }
 .page-editor .page-link-pending { background: var(--page-selection); }
 .page-link { position: absolute; z-index: 4; left: var(--page-pop-x, 0px); top: var(--page-pop-y, 0px); display: flex; align-items: center; gap: 2px; padding: 4px; max-width: min(420px, calc(100% - 32px)); background: var(--page-pop-bg); color: var(--page-pop-ink); border: 1px solid var(--page-pop-line); box-shadow: var(--page-pop-shadow); border-radius: var(--page-pop-radius); font-size: 14px; }
 .page-link-input { flex: 1; min-width: 220px; height: 30px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--page-pop-hover); color: inherit; font: inherit; outline: none; }
@@ -646,6 +649,7 @@ export function pagePlugins({ upload = defaultUpload, highlight, history: useHis
     mediaPlugin({ upload, features }),
     highlightSlot(),
     pastePlugin(),
+    aiPreviewPlugin(),
     historyIntentPlugin(),
     useHistory ? history.history() : null,
     gapcursor.gapCursor(),

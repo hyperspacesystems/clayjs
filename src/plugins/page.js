@@ -18,6 +18,8 @@ import { capabilityAdvertised } from "../page/tool-capability.js";
 import { startsAtImport } from "../core/is-edit-mode.js";
 import { toolViews } from "../page/tool-views.js";
 import { style } from "../lib/hostile-css.js";
+import { addViewHook } from "../page/view-hooks.js";
+import { previewShown } from "../page/ai-preview.js";
 
 const ARTICLE_SEL = "article[data-page]";
 const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
@@ -275,6 +277,43 @@ function listen(inst, type, handler) {
   inst.listeners.push([type, handler]);
 }
 
+// The page's own history, the one the editor's Cmd+Z already uses: nothing is undoable
+// while a proposal is only a preview, because Discard is the whole of that change and
+// Keep is the one step worth undoing.
+function pageHistory(inst) {
+  const binding = inst?.binding;
+  const um = binding?.bridge?.um;
+  if (!binding || !um) return null;
+  const showing = () => {
+    const view = inst.view;
+    return Boolean(view && !view.isDestroyed && previewShown(view.state));
+  };
+  const focus = () => inst.view?.focus?.();
+  return {
+    undo: () => {
+      if (binding.undo()) focus();
+    },
+    redo: () => {
+      if (binding.redo()) focus();
+    },
+    get canUndo() {
+      return um.undoStack.length > 0 && !showing();
+    },
+    get canRedo() {
+      return um.redoStack.length > 0 && !showing();
+    },
+  };
+}
+
+// One event for whatever presents the history, the same one plugins/undo.js emits: after
+// every entry the page's stack takes or replays, and whenever a preview comes up or goes.
+function notifyHistory(inst) {
+  const history = pageHistory(inst);
+  document.dispatchEvent(new CustomEvent("clay:undo-change", {
+    detail: { canUndo: !!history?.canUndo, canRedo: !!history?.canRedo },
+  }));
+}
+
 function listenForSaves(inst) {
   listen(inst, "clay:save-error", (event) => {
     const code = event.detail?.code ?? null;
@@ -387,8 +426,6 @@ function releaseMounted(inst) {
   inst.adoption = null;
   try { inst.recover?.destroy(); } catch (error) { console.error("clayjs: page plugin recover list failed to dispose", error); }
   inst.recover = null;
-  inst.aiTool?.dispose();
-  inst.aiTool = null;
   inst.awareness?.dispose();
   inst.awareness = null;
   inst.toolHost?.dispose();
@@ -591,7 +628,7 @@ export function createSteps(inst, options) {
   let featuresReady = null;
   let savedContent = [];
   let toolsStore = null;
-  let aiTool = null;
+  let pageAiReady = null;
   let toolsOpening = null;
   let chrome = null;
   let setEditorActive = null;
@@ -676,13 +713,6 @@ export function createSteps(inst, options) {
         tables: () => tablesFromDoc(editorView?.state.doc ?? binding.doc()).map(({ id, cols, rows }) => ({ id, cols, rows })),
       });
       inst.toolHost = toolHost;
-      if (capabilityAdvertised(meta)) {
-        const { createAiTool } = await import("../page/ai-tool.js");
-        if (!isCurrent(inst)) return null;
-        const transport = window.clay?.wire?.pageTool ?? options.transport ?? null;
-        aiTool = createAiTool({ getView: () => inst.view, store: toolsStore, transport, acceptState: options.acceptState });
-        inst.aiTool = aiTool;
-      }
       return toolHost;
     })().catch((error) => {
       toolsOpening = null;
@@ -786,13 +816,17 @@ export function createSteps(inst, options) {
     });
   };
   inst.notices = notices;
-  // Making or revising a tool opens the store and the host first, so the panel
-  // keeps what it makes.
+  // Making or revising a tool opens the store and the host first, so the panel keeps
+  // what it makes; the panel itself is ai-edit's, on a target this page builds.
   const openAi = async ({ target = null, remove = null } = {}) => {
     if (chrome && editorView && remove) chrome.holdSlashRange(editorView, remove);
     await features.ensure("tool").catch(() => {});
-    if (!isCurrent(inst) || !aiTool || !editorView) return;
-    aiTool.open({ target, remove: remove ? chrome.heldSlashRange(editorView.state) : null });
+    if (!isCurrent(inst) || !editorView) return;
+    const held = remove ? chrome.heldSlashRange(editorView.state) : null;
+    const surface = await (pageAiReady ?? Promise.resolve(null));
+    if (!surface || !isCurrent(inst)) return;
+    const aiTarget = target ? surface.reviseTool(target.toolId) : surface.newTool(held);
+    window.clay?.aiEdit?.openTarget?.(aiTarget);
   };
   const aiRequested = () => capabilityAdvertised(meta);
 
@@ -919,7 +953,7 @@ function mergeRepresentedPage(store, value) {
       install: async (id, mod) => {
         if (!editorView) await editorReady;
         if (!isCurrent(inst) || !editorView) return null;
-        const context = { view: editorView, upload: options.upload, board: binding.board, undo: binding.undo, redo: binding.redo, revise: aiRequested() ? (toolId, rev) => { openAi({ target: { toolId, rev } }); } : null };
+        const context = { view: editorView, upload: options.upload, board: binding.board, undo: binding.undo, redo: binding.redo, revise: aiRequested() ? (toolId) => { openAi({ target: { toolId } }); } : null };
         if (id === "tool") {
           context.toolHost = await openTools();
           if (!isCurrent(inst)) return null;
@@ -1139,7 +1173,7 @@ function mountAndAttach(inst, source, loaded) {
         editable: false,
         features,
         onAiTool: aiRequested() ? (_view, remove) => { openAi({ remove }); } : null,
-        reviseTool: aiRequested() ? (toolId, rev) => { openAi({ target: { toolId, rev } }); } : null,
+        reviseTool: aiRequested() ? (toolId) => { openAi({ target: { toolId } }); } : null,
         formatGate: inst.loadFormatGate,
       });
     } catch (error) {
@@ -1152,6 +1186,22 @@ function mountAndAttach(inst, source, loaded) {
     }
     editorView = view;
     inst.view = view;
+    // The AI surface is the page's own, and it arrives beside the editor rather than in
+    // the plugin chunk: nothing rewrites a page until a person asks it to.
+    pageAiReady = import("../page/ai-surface.js")
+      .then(({ createPageAi }) => {
+        if (!isCurrent(inst) || inst.view !== view) return null;
+        inst.pageAi = createPageAi({
+          getView: () => inst.view,
+          store: () => toolsStore,
+          acceptState: options.acceptState,
+        });
+        return inst.pageAi;
+      })
+      .catch((error) => {
+        console.warn("clayjs: page plugin could not load the AI surface", error);
+        return null;
+      });
     applySettings(readSettings());
     // A document that states settings opens their store so a peer's change reaches this
     // tab; one that states none opens it when a switch is first written.
@@ -1171,6 +1221,31 @@ function mountAndAttach(inst, source, loaded) {
     if (shell) article.appendChild(shell);
     loaded.refreshView?.(view);
     binding.attach(view);
+    // The page's history tells whoever presents it, once per entry it takes or replays. A
+    // peer's typing takes none of them: their work is not this tab's to undo.
+    const um = binding.bridge?.um;
+    if (um) {
+      const notify = () => notifyHistory(inst);
+      um.on("stack-item-added", notify);
+      um.on("stack-item-popped", notify);
+      um.on("stack-cleared", notify);
+      addDisposer(inst, () => {
+        um.off("stack-item-added", notify);
+        um.off("stack-item-popped", notify);
+        um.off("stack-cleared", notify);
+      });
+    }
+    // A proposal shown or cleared changes what the pair may do without touching the stack,
+    // so the change of that flag is what is told, not every transaction.
+    let previewWas = previewShown(view.state);
+    addDisposer(inst, addViewHook(view, {
+      update: (next) => {
+        const previewIs = previewShown(next.state);
+        if (previewIs === previewWas) return;
+        previewWas = previewIs;
+        notifyHistory(inst);
+      },
+    }));
     installAwareness(inst, view);
     editorReadyResolve();
     // The parts the saved article demands install onto the mounted view now, whether
@@ -1431,7 +1506,7 @@ function begin(options = {}, { activate = true, context = null } = {}) {
         options.onPhase?.(result);
       },
     }),
-    article: null, view: null, binding: null, adoption: null, source: null, store: null, toolHost: null, aiTool: null, bootHtml: "", bootRev: null, savedRev: null, staged: null, pageStore: null, releaseArticle: null, replaced: false, savesHeld: false, flush: null, loadFormatGate: null, listeners: [], retryTimer: null, retryShown: false, statusTimer: null, statusNote: null, notices: null, editorReadyResolve: null, context, inputOpen: false, sessionHeld: false, autosaveSuspended: false, staleRetry: false,
+    article: null, view: null, binding: null, adoption: null, source: null, store: null, toolHost: null, pageAi: null, bootHtml: "", bootRev: null, savedRev: null, staged: null, pageStore: null, releaseArticle: null, replaced: false, savesHeld: false, flush: null, loadFormatGate: null, listeners: [], retryTimer: null, retryShown: false, statusTimer: null, statusNote: null, notices: null, editorReadyResolve: null, context, inputOpen: false, sessionHeld: false, autosaveSuspended: false, staleRetry: false,
   };
   active = inst;
   const boot = run(inst, options, { activate }).catch((error) => {
@@ -1589,6 +1664,14 @@ export const page = {
   dispose,
   get view() {
     return active?.view ?? null;
+  },
+  // The page's chosen-area AI, read by ai-edit at use time: null until the editor is up.
+  get ai() {
+    return active?.pageAi ?? null;
+  },
+  // The document's history, for the Claygoo menu: null until its editor is up.
+  get history() {
+    return active ? pageHistory(active) : null;
   },
   // The document's settings, for the panel that switches them.
   get settings() {

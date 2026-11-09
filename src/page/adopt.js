@@ -85,7 +85,7 @@ const opaqueNode = (schema, id, block) => {
 
 // The editor’s blocks as the article and the record state them: an opaque node
 // stands for the record it carries, never for a block type of its own.
-const recordsOf = (blocks) => Object.fromEntries(Object.entries(blocks).map(([id, b]) => {
+export const recordsOf = (blocks) => Object.fromEntries(Object.entries(blocks).map(([id, b]) => {
   if (b.t !== "opaque_block") return [id, b];
   const { t: _t, raw, ...rest } = b;
   const { t, ...fields } = raw ?? {};

@@ -1,6 +1,9 @@
 import { jest } from "@jest/globals";
 import Mutation from "../../src/lib/mutation.js";
 import * as realVendor from "../../src/vendor/hyper-morph.vendor.js";
+import { previewShown } from "../../src/page/ai-preview.js";
+import { selectBlocks } from "../../src/page/blocksel.js";
+import { editor as pageEditor, posOf as pagePosOf, select as pageSelect } from "./page/view-helpers.js";
 
 /**
  * The ai-edit plugin, driven through a stubbed `clay.wire`.
@@ -68,6 +71,7 @@ const heading = () => document.querySelector("h1");
 const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 
 let aiEdit = null;
+let aiEditParticipant = null;
 let handle = null;
 
 function mountPage() {
@@ -97,7 +101,7 @@ beforeAll(async () => {
   window.clay.save = save;
   // No ready ai-edit yet: the plugin's boot has to find nothing and build nothing.
   fakeWire.helpers.mockResolvedValue([{ name: "search", state: "ready" }, { name: "ai-edit", state: "denied" }]);
-  ({ aiEdit } = await import("../../src/plugins/ai-edit.js"));
+  ({ aiEdit, aiEditParticipant } = await import("../../src/plugins/ai-edit.js"));
   // The plugin fetches the merge engine when it applies a reply, so the flush
   // helpers below stay microtask-sized only once the engine is in.
   await (await import("../../src/sync/merge-engine.js")).mergeEngine();
@@ -175,7 +179,7 @@ describe("with a ready ai-edit helper", () => {
   });
 
   afterEach(async () => {
-    // Leave no request in flight for the next test: the bar owns Stop, Keep and Revert.
+    // Leave no request in flight for the next test: the bar owns Stop, Keep and Discard.
     if (barShown()) {
       if (!barButton("stop").hidden) barButton("stop").click();
       else if (!barButton("revert").hidden) barButton("revert").click();
@@ -229,7 +233,7 @@ describe("with a ready ai-edit helper", () => {
     opts.onStatus({ text: "Writing, 1.8 KB" });
     expect(barStatus().textContent).toBe("Writing, 1.8 KB");
 
-    // The result is the element's own HTML, morphs in once, and offers Keep/Revert.
+    // The result is the element's own HTML, morphs in once, and offers Keep/Discard.
     handle.settle({ state: "done", result: { html: '<section data-edit-id="hero"><h1>New heading</h1><p>Old paragraph</p></section>', model: "claude-opus-4-6" } });
     await flush();
 
@@ -240,7 +244,7 @@ describe("with a ready ai-edit helper", () => {
     expect(barButton("close").hidden).toBe(true);
     expect(barButton("stop").hidden).toBe(true);
 
-    // Revert is the way back out, with the edit already applied, and it takes the bar
+    // Discard is the way back out, with the edit already applied, and it takes the bar
     // away with it.
     barButton("revert").click();
     await flush();
@@ -685,7 +689,7 @@ describe("with a ready ai-edit helper", () => {
     expect(saveModule.savesHeld()).toBe(false);
   });
 
-  test("a save asked for during the preview waits, and Revert lets it run", async () => {
+  test("a save asked for during the preview waits, and Discard lets it run", async () => {
     clickSection(mountPage());
     await submit("tighten");
     handle.settle({ state: "done", result: { html: '<section data-edit-id="hero"><h1>New heading</h1><p>Old paragraph</p></section>', model: "m" } });
@@ -836,16 +840,20 @@ describe("with a ready ai-edit helper", () => {
     expect(panel().hidden).toBe(true);
   });
 
-  test("switching from a section composer to the whole-page bubble keeps the section draft", () => {
+  test("switching from a section composer to the whole-page bubble carries the text with it", () => {
     const section = mountPage();
     clickSection(section);
     textarea().value = "Please preserve this unsent section comment";
 
     docBubble().click();
     expect(panel().hidden).toBe(false);
+    expect(textarea().value).toBe("Please preserve this unsent section comment");
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     clickSection(section);
+    expect(textarea().value).toBe("");
+
+    docBubble().click();
     expect(textarea().value).toBe("Please preserve this unsent section comment");
   });
 
@@ -933,7 +941,7 @@ describe("with a ready ai-edit helper", () => {
     expect(document.activeElement).toBe(barButton("close"));
   });
 
-  test("a reply with warnings and a model offers only Keep and Revert", async () => {
+  test("a reply with warnings and a model offers only Keep and Discard", async () => {
     clickSection(mountPage());
     await submit("tighten this");
     handle.settle({
@@ -1588,6 +1596,371 @@ describe("with a ready ai-edit helper", () => {
         delete window.Highlight;
         delete window.CSS.highlights;
       }
+    });
+  });
+
+  // A Block-based document hands ai-edit an AiTarget instead of a DOM element: the page
+  // surface owns the request, the preview and the keep, and nothing here morphs.
+  describe("a Block document, through clay.page.ai", () => {
+    const SECTION = '<section data-edit-id="hero"><h1>Old heading</h1><p>Old paragraph</p></section>';
+
+    function makeTarget(label = "2 blocks") {
+      const sends = [];
+      let settle;
+      const done = new Promise((resolve) => { settle = resolve; });
+      const target = {
+        aiTarget: true,
+        label,
+        isConnected: true,
+        sends,
+        settle: (outcome) => settle(outcome),
+        getBoundingClientRect: () => ({ left: 0, top: 0, right: 100, bottom: 20, width: 100, height: 20 }),
+        start: jest.fn(async () => ({
+          status: "ok",
+          id: "req-page",
+          send: (hooks = {}) => {
+            sends.push(hooks);
+            return { done, cancel: jest.fn() };
+          },
+        })),
+        propose: jest.fn(async () => ({ status: "ready" })),
+        keep: jest.fn(async () => ({ status: "kept" })),
+        discard: jest.fn(),
+      };
+      return target;
+    }
+
+    function fakePage(target) {
+      return {
+        active: () => true,
+        targetFromSelection: jest.fn(() => target),
+        targetAt: jest.fn(() => target),
+        between: jest.fn(() => target),
+        wholePage: jest.fn(() => target),
+      };
+    }
+
+    function mountBlockPage() {
+      document.querySelectorAll("[data-edit-id]").forEach((el) => el.remove());
+      document.body.insertAdjacentHTML("afterbegin", SECTION);
+      return document.querySelector("[data-edit-id]");
+    }
+
+    function ctrlJ(target = document.body) {
+      const event = new KeyboardEvent("keydown", { key: "j", code: "KeyJ", ctrlKey: true, bubbles: true, cancelable: true });
+      target.dispatchEvent(event);
+      return event;
+    }
+
+    afterEach(async () => {
+      if (barShown() && !barButton("revert").hidden) barButton("revert").click();
+      else if (barShown() && !barButton("close").hidden) barButton("close").click();
+      await flush();
+      delete window.clay.page;
+    });
+
+    test("Ctrl+J opens on the page's chosen blocks and never reads their HTML from the DOM", async () => {
+      const section = mountBlockPage();
+      // The DOM path would read this; the page path must not.
+      Object.defineProperty(section, "outerHTML", {
+        configurable: true,
+        get() { throw new Error("the editor's HTML was read"); },
+      });
+      const target = makeTarget();
+      window.clay.page = { ai: fakePage(target) };
+
+      const event = ctrlJ();
+      expect(event.defaultPrevented).toBe(true);
+      expect(panel().hidden).toBe(false);
+      expect(panel().dataset.quote).toBe("2 blocks");
+
+      await submit("make it shorter");
+      expect(target.start).toHaveBeenCalledWith("make it shorter", undefined);
+      expect(fakeWire.send).not.toHaveBeenCalled();
+      expect(barShown()).toBe(true);
+      expect(barStatus().textContent).toBe("Sending\u2026");
+
+      target.settle({ state: "done", result: { html: "<div data-clay-area></div>" } });
+      await flush();
+      expect(target.propose).toHaveBeenCalledTimes(1);
+      expect(barButton("keep").hidden).toBe(false);
+      expect(barButton("revert").hidden).toBe(false);
+      expect(barStatus().textContent).toBe("Edit ready.");
+    });
+
+    test("open(document.body) uses the page's whole-page target, and an element inside the editor is refused", async () => {
+      const section = mountBlockPage();
+      const target = makeTarget("This page");
+      const ai = fakePage(target);
+      window.clay.page = { ai };
+
+      expect(await aiEdit.open(document.body)).toBe(true);
+      expect(ai.wholePage).toHaveBeenCalledTimes(1);
+      expect(panel().hidden).toBe(false);
+      expect(panel().dataset.quote).toBe("This page");
+
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+
+      // The morph path must never open on the editor itself.
+      expect(await aiEdit.open(section.querySelector("h1"))).toBe(false);
+      expect(await aiEdit.open(section)).toBe(false);
+      expect(panel().hidden).toBe(true);
+      expect(ai.wholePage).toHaveBeenCalledTimes(1);
+    });
+
+    async function requestFor(target) {
+      ctrlJ();
+      await submit("make it shorter");
+      target.settle({ state: "done", result: { html: "<div data-clay-area></div>" } });
+      await flush();
+      expect(barButton("keep").hidden).toBe(false);
+    }
+
+    test("Keep is the page target's own keep, and the page never pauses its observers", async () => {
+      const pause = jest.spyOn(Mutation, "pause");
+      const target = makeTarget();
+      window.clay.page = { ai: fakePage(target) };
+      mountBlockPage();
+
+      await requestFor(target);
+      barButton("keep").click();
+      await flush();
+
+      expect(target.keep).toHaveBeenCalledTimes(1);
+      expect(target.discard).not.toHaveBeenCalled();
+      expect(barStatus().textContent).toBe("Saved");
+      expect(pause).not.toHaveBeenCalled();
+      await new Promise((resolve) => setTimeout(resolve, 1600));
+    });
+
+    test("a Block document whose surface is not ready stays off the DOM path", async () => {
+      document.body.insertAdjacentHTML("afterbegin", '<article data-page></article>');
+      window.clay.editPlugins = ["page"];
+      delete window.clay.page;
+      morphCalls.length = 0;
+      try {
+        expect(await aiEdit.open(document.body)).toBe(false);
+        expect(panel().hidden).toBe(true);
+        expect(morphCalls).toHaveLength(0);
+        expect(fakeWire.send).not.toHaveBeenCalled();
+        const event = ctrlJ();
+        expect(event.defaultPrevented).toBe(false);
+      } finally {
+        document.querySelector("article[data-page]")?.remove();
+        delete window.clay.editPlugins;
+      }
+    });
+
+    async function realPage(spec) {
+      aiEditParticipant().prepare({ initial: true }).dispose();
+      await aiEdit.init();
+      await flush();
+      const { createPageAi } = await import("../../src/page/ai-surface.js");
+      const view = pageEditor(spec);
+      const ai = createPageAi({ getView: () => view });
+      window.clay.page = { ai };
+      return { view, ai, posOf: pagePosOf, select: pageSelect };
+    }
+
+    test("typing then closing keeps the draft for the same block, and clearing lets edit mode go", async () => {
+      const { view, posOf, select } = await realPage([["p1", "paragraph", "Alpha one."], ["p2", "paragraph", "Beta two."]]);
+      select(view, posOf(view, "p1"));
+
+      ctrlJ();
+      expect(panel().hidden).toBe(false);
+      textarea().value = "Please shorten this";
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      expect(panel().hidden).toBe(true);
+
+      ctrlJ();
+      expect(panel().hidden).toBe(false);
+      expect(textarea().value).toBe("Please shorten this");
+
+      textarea().value = "";
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      expect(panel().hidden).toBe(true);
+      expect(() => aiEditParticipant().prepare({ initial: true }).quiesce()).not.toThrow();
+    });
+
+    test("a reply the area engine cannot apply reaches the error bar", async () => {
+      const { view, posOf, select } = await realPage([["p1", "paragraph", "Alpha one."], ["p2", "paragraph", "Beta two."]]);
+      const wire = window.clay.wire;
+      window.clay.wire = { send: () => ({ done: Promise.resolve({ state: "done", result: { html: "<table></table>" } }), cancel: jest.fn() }) };
+      try {
+        select(view, posOf(view, "p1"));
+        ctrlJ();
+        await submit("make it a table");
+        for (let i = 0; i < 50 && barButton("close").hidden; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(barShown()).toBe(true);
+        expect(barButton("close").hidden).toBe(false);
+        expect(barStatus().textContent).not.toBe("");
+
+        barButton("close").click();
+        await flush();
+        expect(barShown()).toBe(false);
+      } finally {
+        window.clay.wire = wire;
+      }
+    });
+
+    test("a rejected save flush ends at the error bar, which can be dismissed and leaves no hold", async () => {
+      const { view, posOf, select } = await realPage([["p1", "paragraph", "Alpha one."], ["p2", "paragraph", "Beta two."]]);
+      const wire = window.clay.wire;
+      window.clay.wire = { send: () => ({ done: Promise.resolve({ state: "done", result: { html: '<div data-clay-area><p data-id="p1">Alpha revised.</p></div>' } }), cancel: jest.fn() }) };
+      window.clay.save.flush = jest.fn().mockRejectedValue(new Error("Save timed out."));
+      try {
+        select(view, posOf(view, "p1"));
+        ctrlJ();
+        await submit("make it shorter");
+        for (let i = 0; i < 50 && barButton("keep").hidden; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(barButton("keep").hidden).toBe(false);
+        expect(previewShown(view.state)).toBe(true);
+
+        barButton("keep").click();
+        for (let i = 0; i < 50 && !barStatus().textContent.includes("saving failed"); i++) await new Promise((resolve) => setTimeout(resolve, 10));
+
+        expect(barStatus().textContent).toBe("Your change is in the document, but saving failed. It will be saved with your next edit.");
+        expect(barButton("close").hidden).toBe(false);
+        expect(previewShown(view.state)).toBe(false);
+        expect(view.state.doc.textContent).toContain("Alpha revised.");
+
+        barButton("close").click();
+        await flush();
+        expect(barShown()).toBe(false);
+        expect(() => aiEditParticipant().prepare({ initial: true }).quiesce()).not.toThrow();
+      } finally {
+        delete window.clay.save.flush;
+        window.clay.wire = wire;
+      }
+    });
+
+    test("Discard is the page target's discard, and the page never pauses its observers", async () => {
+      const pause = jest.spyOn(Mutation, "pause");
+      const target = makeTarget();
+      window.clay.page = { ai: fakePage(target) };
+      mountBlockPage();
+
+      await requestFor(target);
+      barButton("revert").click();
+      await flush();
+
+      expect(target.discard).toHaveBeenCalledTimes(1);
+      expect(target.keep).not.toHaveBeenCalled();
+      expect(barShown()).toBe(false);
+      expect(pause).not.toHaveBeenCalled();
+    });
+
+    test("openTarget opens the same composer on a target the page built, and the bar keeps it", async () => {
+      mountBlockPage();
+      const target = makeTarget("This tool");
+      window.clay.page = { ai: fakePage(target) };
+
+      expect(await aiEdit.openTarget(target)).toBe(true);
+      expect(panel().hidden).toBe(false);
+      expect(panel().dataset.quote).toBe("This tool");
+      // An element is not a page target, and an element that is gone is not either.
+      expect(await aiEdit.openTarget(document.body)).toBe(false);
+
+      await submit("make it bigger");
+      expect(target.start).toHaveBeenCalledTimes(1);
+      target.settle({ state: "done", result: { artifact: {}, state: {} } });
+      await flush();
+      expect(target.propose).toHaveBeenCalledTimes(1);
+      expect(barButton("keep").hidden).toBe(false);
+
+      barButton("keep").click();
+      await flush();
+      expect(target.keep).toHaveBeenCalledTimes(1);
+    });
+
+    test("a closed draft whose block was deleted does not block leaving edit mode", async () => {
+      const { view, ai, posOf } = await realPage([
+        ["p1", "paragraph", "Alpha one."],
+        ["p2", "paragraph", "Beta two."],
+        ["p3", "paragraph", "Gamma three."],
+      ]);
+      view.dispatch(view.state.tr.setSelection(selectBlocks(view.state.doc, 0, 1)));
+      expect(ai.targetFromSelection().ref).toEqual(["p1", "p2"]);
+      ctrlJ();
+      expect(panel().hidden).toBe(false);
+      textarea().value = "Shorten both of these";
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      expect(panel().hidden).toBe(true);
+
+      const at = posOf(view, "p2") - 1;
+      view.dispatch(view.state.tr.delete(at, at + view.state.doc.nodeAt(at).nodeSize));
+
+      expect(() => aiEditParticipant().prepare({ initial: true }).quiesce()).not.toThrow();
+    });
+
+    test("an open composer with text still blocks leaving edit mode", async () => {
+      const { view, posOf, select } = await realPage([["p1", "paragraph", "Alpha one."]]);
+      select(view, posOf(view, "p1"));
+      ctrlJ();
+      expect(panel().hidden).toBe(false);
+      textarea().value = "Still typing";
+
+      let refused = null;
+      try {
+        aiEditParticipant().prepare({ initial: true }).quiesce();
+      } catch (error) {
+        refused = error;
+      }
+      expect(refused?.code).toBe("pending-input");
+      expect(refused?.pending).toContain("prompt");
+
+      textarea().value = "";
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      expect(() => aiEditParticipant().prepare({ initial: true }).quiesce()).not.toThrow();
+    });
+
+    test("choosing Whole page again keeps the prompt already typed", async () => {
+      await realPage([["p1", "paragraph", "Alpha one."], ["p2", "paragraph", "Beta two."]]);
+      expect(await aiEdit.pick()).toBe(true);
+      const whole = document.querySelector('[data-clay-ai-edit-part="picker-whole"]');
+      whole.click();
+      expect(panel().hidden).toBe(false);
+
+      textarea().value = "Explain this for a new employee";
+      textarea().dispatchEvent(new Event("input", { bubbles: true }));
+      whole.click();
+
+      expect(panel().hidden).toBe(false);
+      expect(textarea().value).toBe("Explain this for a new employee");
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+
+    test("extending the picked block carries the typed prompt to the new target", async () => {
+      const { view, ai, posOf, select } = await realPage([
+        ["p1", "paragraph", "Alpha one."],
+        ["p2", "paragraph", "Beta two."],
+        ["p3", "paragraph", "Gamma three."],
+      ]);
+      select(view, posOf(view, "p1"));
+      const first = ai.targetFromSelection();
+      select(view, posOf(view, "p2"));
+      const second = ai.targetFromSelection();
+      ai.targetAt = jest.fn((x) => (x === 10 ? first : second));
+
+      expect(await aiEdit.pick()).toBe(true);
+      const overlay = document.querySelector('[data-clay-ai-edit="picker"]');
+      const press = (x, shift = false) => {
+        for (const type of ["pointerdown", "pointerup"]) {
+          overlay.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: 0, shiftKey: shift }));
+        }
+      };
+
+      press(10);
+      expect(panel().hidden).toBe(false);
+      expect(panel().dataset.quote).toBe("This block");
+      textarea().value = "Tighten these two";
+      textarea().dispatchEvent(new Event("input", { bubbles: true }));
+
+      press(20, true);
+      expect(panel().hidden).toBe(false);
+      expect(panel().dataset.quote).toBe("2 blocks");
+      expect(textarea().value).toBe("Tighten these two");
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
   });
 });
