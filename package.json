@@ -36,6 +36,7 @@
     "./tailwind": "./src/tailwind.js",
     "./page/yjs": "./src/page/ybind/external.js",
     "./dist/*": "./dist/*",
+    "./tool-generation/*": "./tool-generation/*",
     "./server/rooms": {
       "import": "./dist/server/rooms.mjs",
       "require": "./dist/server/rooms.cjs"
@@ -58,7 +59,8 @@
     "docs/guide.md",
     "compat/",
     "fonts/",
-    "src/"
+    "src/",
+    "tool-generation/"
   ],
   "publishConfig": {
     "access": "public"

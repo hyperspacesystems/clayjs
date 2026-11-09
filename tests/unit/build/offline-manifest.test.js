@@ -5,6 +5,7 @@ import { afterAll, beforeAll, expect, test } from "@jest/globals";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cp, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -15,7 +16,7 @@ const ROOT = path.resolve(new URL("../../..", import.meta.url).pathname);
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 const PACKAGE_FILES = ["build.js", "package.json", "packed-contract.json", "THIRD-PARTY-NOTICES.md"];
-const PACKAGE_DIRS = ["src", "entries", "scripts", "website", "docs", "fonts"];
+const PACKAGE_DIRS = ["src", "entries", "scripts", "website", "docs", "fonts", "tool-generation"];
 
 const AUTOSAVE_DEBUG = "https://esm.sh/diff@5.2.0";
 
@@ -115,6 +116,38 @@ test("a release path is relative POSIX with no way out of the prefix", () => {
   }
   expect(() => assertReleasePath("m/x.js")).not.toThrow();
 });
+
+test("the tool-generation prompts resolve through the package name to non-empty files here", async () => {
+  const require = createRequire(import.meta.url);
+  for (const name of ["system.md", "context.md"]) {
+    const resolved = require.resolve(`@panphora/clayjs/tool-generation/${name}`);
+    expect(path.relative(ROOT, resolved).startsWith("..")).toBe(false);
+    const text = await readFile(resolved, "utf8");
+    expect(text.trim().length).toBeGreaterThan(0);
+  }
+});
+
+test("the release carries both tool-generation prompts with their bytes", async () => {
+  for (const name of ["system.md", "context.md"]) {
+    const pub = `tool-generation/${name}`;
+    const bytes = await readFile(path.join(ROOT, pub));
+    expect(index.files[pub]).toEqual({
+      source: pub,
+      sha256: sha256(bytes),
+      bytes: bytes.length,
+      type: "text/markdown; charset=utf-8",
+    });
+  }
+});
+
+test("the tarball carries both tool-generation prompts", async () => {
+  const { stdout } = await run("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+    cwd: ROOT,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const shipped = JSON.parse(stdout)[0].files.map((file) => file.path);
+  for (const name of ["system.md", "context.md"]) expect(shipped).toContain(`tool-generation/${name}`);
+}, 120000);
 
 test("every online-only URL is one the published bytes really name", async () => {
   expect(Object.keys(index.onlineOnly)).toContain(AUTOSAVE_DEBUG);

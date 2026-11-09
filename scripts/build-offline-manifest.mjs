@@ -41,7 +41,7 @@ export async function releaseFiles(from, { dist = join(from, "dist"), allowMissi
   }
   // fonts/ is served under every prefix as fonts/, the same files fontSources() copies.
   // Tarballs from before the fonts folder have none, and their pins still rebuild.
-  for (const [name, sub, optional] of [["entries/", ""], ["src/", "src/"], ["fonts/", "fonts/", true], ["compat/", "compat/", true]]) {
+  for (const [name, sub, optional] of [["entries/", ""], ["src/", "src/"], ["fonts/", "fonts/", true], ["compat/", "compat/", true], ["tool-generation/", "tool-generation/", true]]) {
     const abs = join(from, name);
     if (!(await lstat(abs).catch(() => null))) {
       if (optional) continue;

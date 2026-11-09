@@ -20,7 +20,7 @@ const PREVIOUS = "1.15.0";
 const PREVIOUS_ONLY = "clay-previous-AAAAAAA.js";
 
 const COPIED_FILES = ["build.js", "package.json", "packed-contract.json", "THIRD-PARTY-NOTICES.md"];
-const COPIED_DIRS = ["src", "entries", "scripts", "website", "docs", "fonts", "compat", "tests/fixtures/offline-runtime"];
+const COPIED_DIRS = ["src", "entries", "scripts", "website", "docs", "fonts", "compat", "tool-generation", "tests/fixtures/offline-runtime"];
 
 // A string that exists nowhere in the tree, so the only way it reaches public/ is if
 // the build served the seed tarball the tests handed it.
