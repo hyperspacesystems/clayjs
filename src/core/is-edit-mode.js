@@ -54,10 +54,14 @@ const isViewOnlyDocument =
 const draftCandidate = typeof document !== "undefined" && draftEligible();
 const ownerCookie = Boolean(cookie.get("isAdminOfCurrentResource"));
 
+// A workspace shell's frame: the shell grants edit, the document picks how it opens. Unlike
+// ?editmode=true nobody at the keyboard asked, so viewonly and a stale host still refuse.
+const documentChooses = query.editmode === "document";
+
 const isDraftMode =
   draftCandidate &&
   query.editmode !== "false" &&
-  !(query.editmode === "true" && ownerCookie) &&
+  !((query.editmode === "true" || documentChooses) && ownerCookie) &&
   !isViewOnlyDocument &&
   !servedStaleToken() &&
   forcedEditMode == null &&
@@ -68,7 +72,9 @@ const opensInEdit =
   typeof document !== "undefined" && document.documentElement.getAttribute("opens-in") === "edit";
 
 // May this person edit here? The old rule, read as permission.
-const hostCanEdit = query.editmode
+const hostCanEdit = documentChooses
+  ? !isViewOnlyDocument && !servedStaleToken() && forcedEditMode !== false
+  : query.editmode
   ? query.editmode === "true" || (!isViewOnlyDocument && !servedStaleToken() && (forcedEditMode ?? (hasSaveToken() || ownerCookie)))
   : isViewOnlyDocument || servedStaleToken()
     ? false
@@ -112,7 +118,7 @@ export function learnedHostWritable() {
 // the person made leaves an internal receipt, and that one is kept.
 const startsEditing = receipt
   ? receipt.mode === "edit" || (opensInEdit && !receipt.internal)
-  : query.editmode
+  : query.editmode && !documentChooses
     ? query.editmode === "true"
     : forcedEditMode === true || opensInEdit;
 

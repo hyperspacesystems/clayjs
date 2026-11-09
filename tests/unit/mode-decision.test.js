@@ -332,3 +332,49 @@ test("setMode in draft mode is not-allowed", async () => {
   await expect(editMode.setMode("edit")).resolves.toEqual({ ok: false, mode: "draft", code: "not-allowed" });
   await expect(editMode.setMode("view")).resolves.toEqual({ ok: false, mode: "draft", code: "not-allowed" });
 });
+
+describe("?editmode=document: the shell grants edit and the document picks how it opens", () => {
+  const URL = "/notes.html?editmode=document";
+
+  test("a plain document opens in view and may edit, with no cookie or token", async () => {
+    prepare({ url: URL });
+    const { mode, isEditMode, canEdit } = await decide();
+    expect([mode, isEditMode, canEdit]).toEqual(["view", false, true]);
+  });
+
+  test("opens-in=\"edit\" opens in edit", async () => {
+    prepare({ url: URL, opensIn: "edit" });
+    const { mode, isEditMode, canEdit } = await decide();
+    expect([mode, isEditMode, canEdit]).toEqual(["edit", true, true]);
+  });
+
+  test("a receipt from a person's switch to edit is kept", async () => {
+    prepare({ url: URL, receipt: { mode: "edit", internal: true }, nav: "reload" });
+    const { mode } = await decide();
+    expect(mode).toBe("edit");
+  });
+
+  test("viewonly stays read-only, unlike ?editmode=true", async () => {
+    prepare({ url: URL, viewonly: true, opensIn: "edit" });
+    const { mode, canEdit } = await decide();
+    expect([mode, canEdit]).toEqual(["view", false]);
+  });
+
+  test("window.clayEditMode = false stays read-only", async () => {
+    prepare({ url: URL, clayEditMode: false });
+    const { mode, canEdit } = await decide();
+    expect([mode, canEdit]).toEqual(["view", false]);
+  });
+
+  test("the owner of a free document is the owner, not a draft visitor", async () => {
+    prepare({ url: URL, cookie: true, draft: true });
+    const { mode, isDraftMode, canEdit } = await decide({ draftPlugin: true });
+    expect([mode, isDraftMode, canEdit]).toEqual(["view", false, true]);
+  });
+
+  test("control: without the parameter, the same owner page opens as a draft", async () => {
+    prepare({ url: "/notes.html", cookie: true, draft: true });
+    const { isDraftMode } = await decide({ draftPlugin: true });
+    expect(isDraftMode).toBe(true);
+  });
+});
