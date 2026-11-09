@@ -177,14 +177,27 @@ describe("resolveModules", () => {
   // ai-edit is a consumer of clay.wire: it asks `clay.wire.helpers()` whether the
   // host runs it and sends through `clay.wire.send`. Asking for it has to bring the
   // wire, and the wire has to load first, or the plugin evaluates against nothing.
-  // Both ride the late tail, after the editor takes input, in that order.
+  // Without `page` they are ordinary plugins, in that order.
   test("plugins=ai-edit implies wire, which loads before it", () => {
     const { plugins, late } = resolveModules(params({ plugins: "ai-edit" }), true);
-    expect(plugins).not.toContain("plugins/wire.js");
-    expect(plugins).not.toContain("plugins/ai-edit.js");
-    expect(late).toContain("plugins/wire.js");
-    expect(late.indexOf("plugins/wire.js"))
-      .toBeLessThan(late.indexOf("plugins/ai-edit.js"));
+    expect(plugins).toContain("plugins/wire.js");
+    expect(plugins).toContain("plugins/ai-edit.js");
+    expect(plugins.indexOf("plugins/wire.js"))
+      .toBeLessThan(plugins.indexOf("plugins/ai-edit.js"));
+    expect(late).not.toContain("plugins/wire.js");
+    expect(late).not.toContain("plugins/ai-edit.js");
+  });
+
+  // Only a page with the editor half can wait for AI editing: every other page has
+  // its wire at `clay.ready`, exactly as before the late tail.
+  test("plugins=wire without page has the wire before clay.ready", () => {
+    const edit = resolveModules(params({ plugins: "wire" }), true);
+    expect(edit.plugins).toContain("plugins/wire.js");
+    expect(edit.late).not.toContain("plugins/wire.js");
+
+    const view = resolveModules(params({ plugins: "wire" }), false);
+    expect(view.plugins).toContain("plugins/wire.js");
+    expect(view.late).not.toContain("plugins/wire.js");
   });
 
   test("plugins=page implies live and sync, which load before it", () => {
@@ -260,17 +273,18 @@ describe("resolveModules", () => {
 
   test("plugins=ai-edit,wire in view mode has the wire", () => {
     const { plugins, late } = resolveModules(params({ plugins: "ai-edit,wire" }), false);
-    expect(plugins).not.toContain("plugins/wire.js");
-    expect(late).toContain("plugins/wire.js");
+    expect(plugins).toContain("plugins/wire.js");
+    expect(late).not.toContain("plugins/wire.js");
     expect(plugins).not.toContain("plugins/ai-edit.js");
     expect(late).not.toContain("plugins/ai-edit.js");
   });
 
   test("plugins=ai-edit in edit mode has both the wire and ai-edit", () => {
     const { plugins, late } = resolveModules(params({ plugins: "ai-edit" }), true);
-    expect(plugins).not.toContain("plugins/wire.js");
-    expect(late).toContain("plugins/wire.js");
-    expect(late).toContain("plugins/ai-edit.js");
+    expect(plugins).toContain("plugins/wire.js");
+    expect(plugins).toContain("plugins/ai-edit.js");
+    expect(late).not.toContain("plugins/wire.js");
+    expect(late).not.toContain("plugins/ai-edit.js");
   });
 
   // The editor half is editOnly, so in view mode `page` brings nothing with it:

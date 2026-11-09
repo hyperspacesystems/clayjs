@@ -15,6 +15,7 @@ export function createToolHost({ store = null, mode, tables = () => [] }) {
   };
 
   const fail = (item, error) => {
+    item.failed = true;
     warn(item.id, item.rev, error);
     item.readerOff?.();
     item.readerOff = null;
@@ -46,7 +47,7 @@ export function createToolHost({ store = null, mode, tables = () => [] }) {
   const host = {
     mount(root, { id, artifact, rev, seed = {} }) {
       if (disposed) throw new Error("tool host is disposed");
-      const item = { root, id, artifact, rev, seed, runtime: null, readerOff: null, disposed: false, signature: undefined };
+      const item = { root, id, artifact, rev, seed, runtime: null, readerOff: null, disposed: false, failed: false, signature: undefined };
       const note = (message) => {
         const line = root.ownerDocument.createElement("p");
         line.setAttribute("data-tool-note", "");
@@ -58,8 +59,10 @@ export function createToolHost({ store = null, mode, tables = () => [] }) {
         item.readerOff = null;
         try { item.runtime?.dispose(); } catch (error) { warn(item.id, item.rev, error); }
         item.runtime = null;
+        item.failed = false;
         root.removeAttribute("data-tool-scope");
         if (validateArtifact(item.artifact).ok === false) {
+          item.failed = true;
           root.textContent = "Tool unavailable";
           warn(item.id, item.rev, new Error("invalid artifact"));
           return;
@@ -75,6 +78,7 @@ export function createToolHost({ store = null, mode, tables = () => [] }) {
           ? scopedStateHandle(store, item.id, item.rev)
           : readerStateHandle(current ?? item.seed ?? {});
         item.runtime = mountTool({ root, artifact: item.artifact, mode, state, tables, onError: (error) => warn(item.id, item.rev, error) });
+        item.failed = item.runtime.failed === true;
         item.readerOff = state.on?.("change", () => {
           try { item.runtime?.notifyState(); } catch (error) { fail(item, error); }
         }) ?? null;
@@ -83,6 +87,7 @@ export function createToolHost({ store = null, mode, tables = () => [] }) {
       try { item.render(); } catch (error) { fail(item, error); }
       mounted.add(item);
       return {
+        get failed() { return item.failed; },
         update({ artifact: nextArtifact, rev: nextRev }) {
           if (item.disposed) return;
           if (nextRev === item.rev && nextArtifact === item.artifact) return;

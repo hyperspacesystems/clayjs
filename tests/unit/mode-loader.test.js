@@ -58,7 +58,7 @@ async function waitFor(predicate) {
   throw new Error("timed out waiting for the loader");
 }
 
-async function boot(params) {
+async function boot(params, onReady = () => {}) {
   jest.resetModules();
   imported.length = 0;
   document.documentElement.innerHTML = "<head><title>Document</title></head><body></body>";
@@ -79,7 +79,7 @@ async function boot(params) {
   document.addEventListener("clay:ready", () => events.push("clay:ready"));
   document.addEventListener("clay:plugin-ready", (event) => events.push(event.detail.plugin));
   const { boot: bootLoader } = await import("../../src/loader.js");
-  await bootLoader("https://clayjs.com/v1", new URLSearchParams(params), () => {});
+  await bootLoader("https://clayjs.com/v1", new URLSearchParams(params), onReady);
   const facts = await import("../../src/core/is-edit-mode.js");
   return { events, facts };
 }
@@ -105,6 +105,14 @@ test("an initial legacy boot starts each managed target, and starts it once", as
   const input = document.getElementById("who");
   input.value = "typed-value";
   expect(captureForSave({ emitForSync: false })).toContain('value="typed-value"');
+});
+
+test("a page without page has the wire when clay.ready resolves", async () => {
+  let atReady = null;
+  await boot("exclude=richclay,source&plugins=wire", (clay) => { atReady = clay.wire; });
+
+  expect(atReady?.on).toEqual(expect.any(Function));
+  expect(window.clay.wire?.on).toEqual(expect.any(Function));
 });
 
 test("the late tail drops the edit-only plugins once the page has left edit", async () => {

@@ -122,6 +122,22 @@ let ended = null;
 
 // Shorter than installAdoption's 10 s hold, so an unelected room still adopts.
 export const WRITER_WAIT_MS = 8_000;
+// ai-edit loads late, after the editor takes input, so the first /ai or Revise can
+// arrive before `clay.aiEdit` exists. The wait is bounded like the menu's own.
+const AI_EDIT_WAIT_MS = 8_000;
+const AI_UNAVAILABLE = "AI tool making isn't available on this page right now.";
+
+function whenPresent(get, ms) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const tick = () => {
+      const value = get();
+      if (value || Date.now() - start >= ms) resolve(value || null);
+      else setTimeout(tick, 50);
+    };
+    tick();
+  });
+}
 
 function scrollToHashBlock(view, loc = globalThis.location) {
   const raw = loc?.hash?.slice(1);
@@ -826,7 +842,13 @@ export function createSteps(inst, options) {
     const surface = await (pageAiReady ?? Promise.resolve(null));
     if (!surface || !isCurrent(inst)) return;
     const aiTarget = target ? surface.reviseTool(target.toolId) : surface.newTool(held);
-    window.clay?.aiEdit?.openTarget?.(aiTarget);
+    const ai = window.clay?.aiEdit || await whenPresent(() => window.clay?.aiEdit, AI_EDIT_WAIT_MS);
+    if (!isCurrent(inst)) return;
+    if (!ai?.openTarget) {
+      toast(AI_UNAVAILABLE, "warning");
+      return;
+    }
+    ai.openTarget(aiTarget);
   };
   const aiRequested = () => capabilityAdvertised(meta);
 

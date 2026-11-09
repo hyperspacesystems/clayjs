@@ -138,6 +138,30 @@ test("Generate previews without touching the document, then Keep saves state bef
   expect(view.state.doc.child(0).type.name).toBe("paragraph");
 });
 
+test("a tool whose script throws when it starts is refused instead of offered for Keep", async () => {
+  setup();
+  const target = ai.newTool(null);
+  const started = await target.start("make a counter");
+  expect(started.status).toBe("ok");
+  const handle = started.send({});
+  sent.at(-1).finish({ state: "done", result: {
+    requestId: started.id,
+    artifact: { ...artifact("Broken"), javascript: "function mount() { throw new Error('Cannot initialize'); }" },
+    state: {},
+  } });
+  const outcome = await handle.done;
+  expect(outcome.state).toBe("done");
+
+  const proposed = await target.propose(outcome.result);
+
+  expect(proposed).toEqual({ status: "refused", message: "AI did not make a usable tool. Try again." });
+  expect(previewShown(view.state)).toBe(false);
+  expect((await target.keep()).status).toBe("failed");
+  expect(view.state.doc.child(0).type.name).toBe("paragraph");
+  expect(ids(view)).toEqual(["p"]);
+  expect(live.data).toEqual({});
+});
+
 test("the preview reads the document\u0027s tables, as the kept tool would", async () => {
   setup({
     records: {

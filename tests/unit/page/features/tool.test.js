@@ -510,6 +510,26 @@ const toolWire = () => {
   };
 };
 
+test("the first Make a tool click opens the composer when ai-edit installs afterwards", async () => {
+  helpers = [{ name: "page-tool", state: "ready" }];
+  setPage([PARAGRAPH]);
+  toolWire();
+  delete window.clay.aiEdit;
+  await page.install({ acceptState: async () => ({ ok: true }) });
+  expect(window.clay.aiEdit).toBeUndefined();
+  page.view.dom.parentElement.querySelector(".page-plus").click();
+  const entry = [...page.view.dom.parentElement.querySelectorAll(".page-menu-item")].find((item) => item.textContent.includes("Make a tool with AI"));
+  expect(entry).toBeTruthy();
+  entry.click();
+  // The page AI surface is up without ai-edit: the old code checked here and dropped
+  // the click. The next click installs the plugin, and the waiting target opens it.
+  expect(await waitFor(() => page.ai)).toBe(true);
+  expect(window.clay.aiEdit).toBeUndefined();
+  const panel = sharedPanel();
+  expect(await waitFor(() => panel.opened.length === 1)).toBe(true);
+  expect(panel.opened[0].label).toBe("New tool");
+});
+
 test("Keep on a first AI tool in a document with no page.tools tag saves the tool", async () => {
   helpers = [{ name: "page-tool", state: "ready" }];
   setPage([PARAGRAPH]);

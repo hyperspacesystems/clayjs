@@ -201,7 +201,10 @@ const CANNOT_RUN_WITH = { page: ["undo"] };
 // No first paint or keystroke waits for these. source keeps the file's bytes outside
 // the edited parts stable; a save before it installs is the ordinary full serialization.
 // upgrade only asks the host for a newer version once `clay.ready` resolves.
-const LATE = new Set(["wire", "ai-edit", "source", "sortable", "menu", "upgrade"]);
+// The editor half of `page` owns AI editing, so only a page that asked for it can wait
+// for the wire and the composer; everywhere else they are ordinary plugins.
+const LATE = new Set(["source", "sortable", "menu", "upgrade"]);
+const LATE_WITH_PAGE = new Set(["wire", "ai-edit"]);
 
 function parseCsv(params, key, enabled, apply) {
   const raw = params.get(key);
@@ -296,7 +299,8 @@ export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap
     if (!enabled.has(name)) continue;
     const spec = PLUGIN_PATHS[name];
     if ((spec.editOnly && !isEditMode) || (spec.draft && !isDraftMode)) continue;
-    (LATE.has(name) ? late : plugins).push(spec.ownerPath && !isDraftMode ? spec.ownerPath : spec.path);
+    const lateHere = LATE.has(name) || (LATE_WITH_PAGE.has(name) && enabled.has("page"));
+    (lateHere ? late : plugins).push(spec.ownerPath && !isDraftMode ? spec.ownerPath : spec.path);
   }
   return { core, plugins, late };
 }

@@ -138,7 +138,7 @@ export function scopeCss(css, blockSelector) {
 export function mountTool({ root, artifact, mode, state, tables = () => [], onError = () => {}, setTimer = setTimeout, clearTimer = clearTimeout }) {
   const listeners = { change: new Set(), tables: new Set() };
   const timers = new Set();
-  let cleanup, disposed = false;
+  let cleanup, disposed = false, failed = false;
   const dispose = () => {
     if (disposed) return;
     disposed = true;
@@ -181,11 +181,12 @@ export function mountTool({ root, artifact, mode, state, tables = () => [], onEr
     if (typeof mount !== "function") throw new TypeError("tool script must define mount(tool)");
     cleanup = mount(tool);
   } catch (error) {
+    failed = true;
     try { dispose(); } catch (cleanupError) { onError(cleanupError); }
     onError(error);
     root.innerHTML = `${artifact.fallbackHtml}<p data-tool-error>Tool could not start</p>`;
   }
-  return { notifyState: () => notify("change"), notifyTables: () => notify("tables"), dispose };
+  return { notifyState: () => notify("change"), notifyTables: () => notify("tables"), dispose, failed };
 }
 
 function deepFreeze(value) {

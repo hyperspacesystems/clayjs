@@ -204,7 +204,9 @@ export function createToolTargets({
         const held = validateState(result.state);
         if (!held.ok) return { status: "refused", message: BAD_STATE };
         candidate = { id: toolId, rev: null, artifact: result.artifact, state: result.state };
-        return mountPreview(view);
+        const mounted = mountPreview(view);
+        if (mounted.status !== "ready") candidate = null;
+        return mounted;
       },
       async keep() {
         if (!candidate || kept) return failKeep(STALE_REVISION);
@@ -283,9 +285,14 @@ export function createToolTargets({
       });
       const dom = view.dom.ownerDocument.createElement("div");
       dom.className = "page-ai-preview";
+      let mounted = null;
       try {
-        host.mount(dom, { id: "preview", rev: "preview", artifact: candidate.artifact, seed: candidate.state });
+        mounted = host.mount(dom, { id: "preview", rev: "preview", artifact: candidate.artifact, seed: candidate.state });
       } catch (error) {
+        host.dispose();
+        return { status: "refused", message: BAD_ARTIFACT };
+      }
+      if (mounted.failed) {
         host.dispose();
         return { status: "refused", message: BAD_ARTIFACT };
       }
