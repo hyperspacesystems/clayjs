@@ -38,8 +38,8 @@ const ASSETS = [
 // (scripts/refresh-load-fixtures.mjs keeps it so), and tests/fixtures/legacy holds a
 // byte copy of the frozen old Journal that still names the legacy CDN scripts and fonts.
 const FIXTURES = {
-  "templates/00-journal/journal.html": "tests/fixtures/load/journal.html",
-  "templates/00-journal/tests/fixtures/field-pad-old-script.html": "tests/fixtures/legacy/field-pad-old-script.html",
+  "apps/unreleased/00-journal/journal.html": "tests/fixtures/load/journal.html",
+  "apps/unreleased/00-journal/tests/fixtures/field-pad-old-script.html": "tests/fixtures/legacy/field-pad-old-script.html",
 };
 
 function starter(rel) {
@@ -57,8 +57,8 @@ function starter(rel) {
   throw new Error(`no starter-templates checkout carries ${rel}; set STARTER_TEMPLATES`);
 }
 
-const JOURNAL = starter("templates/00-journal/journal.html");
-const OLD_JOURNAL = starter("templates/00-journal/tests/fixtures/field-pad-old-script.html");
+const JOURNAL = starter("apps/unreleased/00-journal/journal.html");
+const OLD_JOURNAL = starter("apps/unreleased/00-journal/tests/fixtures/field-pad-old-script.html");
 
 let site;
 let index;

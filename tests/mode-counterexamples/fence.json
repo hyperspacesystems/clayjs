@@ -243,15 +243,15 @@
   "templates": [
     {
       "repo": "starter-templates",
-      "path": "templates/00-journal/journal.html"
+      "path": "apps/unreleased/00-journal/journal.html"
     },
     {
       "repo": "starter-templates",
-      "path": "templates/01-kanban/kanban.html"
+      "path": "apps/unreleased/01-kanban/kanban.html"
     },
     {
       "repo": "starter-templates",
-      "path": "templates/02-page/page.html"
+      "path": "apps/unreleased/02-page/page.html"
     }
   ]
 }

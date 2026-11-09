@@ -19,8 +19,8 @@ const ref = value('--ref')
 const check = args.includes('--check')
 
 const COPIES = [
-  { source: 'templates/01-kanban/kanban.html', destination: 'tests/fixtures/load/kanban.html' },
-  { source: 'templates/00-journal/journal.html', destination: 'tests/fixtures/load/journal.html' },
+  { source: 'apps/unreleased/01-kanban/kanban.html', destination: 'tests/fixtures/load/kanban.html' },
+  { source: 'apps/unreleased/00-journal/journal.html', destination: 'tests/fixtures/load/journal.html' },
 ]
 
 let stale = false

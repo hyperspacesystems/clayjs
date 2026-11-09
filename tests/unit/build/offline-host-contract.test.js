@@ -30,7 +30,7 @@ if (!configured) {
 if (configured && !KANBAN) {
   test("CLAY_KANBAN_TEMPLATE names the real Kanban template", () => {
     throw new Error(
-      "offline-host-contract: CLAY_OFFLINE_HOSTS is set, so CLAY_KANBAN_TEMPLATE must name starter-templates/templates/01-kanban/kanban.html",
+      "offline-host-contract: CLAY_OFFLINE_HOSTS is set, so CLAY_KANBAN_TEMPLATE must name starter-templates/apps/unreleased/01-kanban/kanban.html",
     );
   });
 }
