@@ -520,7 +520,7 @@ describe("with a ready ai-edit helper", () => {
 
     expect(fakeWire.send).not.toHaveBeenCalled();
     expect(save).not.toHaveBeenCalled();
-    expect(statusEl().textContent).toBe("This section is too large for AI editing; select a smaller part.");
+    expect(statusEl().textContent).toBe("This section is too large for AI editing. Select a smaller part.");
     expect(statusEl().getAttribute("data-tone")).toBe("warn");
     expect(panel().hidden).toBe(false);
     expect(textarea().value).toBe("x".repeat(1000 * 1024));

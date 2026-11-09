@@ -195,7 +195,7 @@ test("a fine pointer's bar has no Continue button", () => {
   expect(part("picker-continue")).toBeNull();
   expect(part("picker-whole").textContent).toBe("Whole page");
   expect(part("picker-cancel").textContent).toBe("Cancel");
-  expect(part("picker-hint").textContent).toBe("Click a block, or drag across blocks");
+  expect(part("picker-hint").textContent).toBe("Click or drag blocks");
 });
 
 test("Whole page and Cancel are one press each", () => {

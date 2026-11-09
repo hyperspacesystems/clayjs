@@ -62,7 +62,7 @@ const UNIT_SELECTOR = "h1,h2,h3,h4,h5,h6,p,figure";
 const BLOCK_SELECTOR = "p,h1,h2,h3,h4,h5,h6,li,dt,dd,blockquote,pre,figcaption,td,th";
 const CONTAINER_SELECTOR = "section,article,aside,header,footer,nav,main,div,ul,ol,dl,table,figure,form";
 const NOT_TEXT = "script,style,template,textarea,input,select,button,iframe,svg,math";
-const TOO_LARGE = "This section is too large for AI editing; select a smaller part.";
+const TOO_LARGE = "This section is too large for AI editing. Select a smaller part.";
 const SAVE_FAILED = "The save did not finish; the edit is still on the page.";
 
 let requestCounter = 0;

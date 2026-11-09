@@ -12,7 +12,7 @@ import { createToolTargets } from "./ai-tool.js";
 const { TextSelection } = state;
 const HELPER = "ai-edit";
 const EDIT_ID = "page area";
-const TOO_LARGE = "This section is too large for AI editing; select a smaller part.";
+const TOO_LARGE = "This section is too large for AI editing. Select a smaller part.";
 const STALE = "Someone changed this area while AI was working, so nothing was changed.";
 const GONE = "This page is not open for editing any more.";
 const NO_WIRE = "AI editing isn't available on this page right now.";
@@ -159,7 +159,7 @@ export function createPageAi({ getView, store = () => null, acceptState } = {}) 
       },
       async propose(result) {
         const view = viewNow();
-        if (!view || !capture) return { status: "refused", message: "This area is no longer open for a reply." };
+        if (!view || !capture) return { status: "refused", message: "This area is no longer open for AI editing." };
         const { proposeArea } = await import("./ai-area.js");
         const ready = proposeArea(view.state, capture, result?.html ?? "", { seed: freshSeed() });
         if (ready.status !== "ready") return { status: "refused", message: ready.message };

@@ -255,7 +255,7 @@ test("schedule 1: A revises a tool while B increments its live state; A\u0027s K
 
   expect(await target.keep()).toEqual({
     status: "failed",
-    message: "This tool\u0027s data changed while the new version was being made, so it was not replaced. Ask again to include the latest data.",
+    message: "This tool\u0027s data changed while AI was working, so it was not replaced. Ask again to include the latest data.",
   });
   await sim.idle();
   const kept = toolOf(b, "t");

@@ -102,7 +102,7 @@ export function staleIds(doc, capture, dom = document) {
 
 export function proposeArea(state, capture, replyHtml, { seed = "", dom = document } = {}) {
   const stale = staleIds(state.doc, capture, dom);
-  if (stale.length) return refused("stale", "These blocks changed while the request was in flight.");
+  if (stale.length) return refused("stale", "These blocks changed while AI was working, so nothing was changed.");
 
   const template = dom.createElement("template");
   template.innerHTML = replyHtml ?? "";
@@ -112,12 +112,12 @@ export function proposeArea(state, capture, replyHtml, { seed = "", dom = docume
   const article = dom.createElement("article");
   article.append(...(wrapper ? wrapper.childNodes : template.content.childNodes));
   let items = parseArticle(article);
-  if (!items.length) return refused("empty", "The reply held no blocks.");
+  if (!items.length) return refused("empty", "AI did not write any blocks. Try again.");
 
   const inside = new Set(capture.ids);
   items = items.map((item) => (item.id && !inside.has(item.id) ? { ...item, id: null } : item));
   if (items.some((item) => !(item.id && capture.held.has(item.id)) && !REWRITE_TYPES.has(item.t))) {
-    return refused("active", "The reply held markup this editor cannot put in a document.");
+    return refused("active", "AI used formatting this editor cannot put in a document. Try again.");
   }
 
   const base = new Map(capture.span.map((item) => [item.id, item]));
@@ -149,7 +149,7 @@ export function proposeArea(state, capture, replyHtml, { seed = "", dom = docume
   for (let attempt = 0; attempt < 4 && reply.some((item) => taken.has(item.id)); attempt++) {
     reply = resolveIds(settled, { seed: freshSeed(), known: base, taken });
   }
-  if (reply.some((item) => taken.has(item.id))) return refused("active", "The reply's new blocks could not be given free ids.");
+  if (reply.some((item) => taken.has(item.id))) return refused("active", "The new blocks from AI could not be added to the document. Try again.");
   reply = reply.map((item) => (item.id && capture.held.has(item.id) ? { ...capture.held.get(item.id) } : item));
   reply = reply.map((item) => {
     const was = item.id ? base.get(item.id) : null;
@@ -158,9 +158,9 @@ export function proposeArea(state, capture, replyHtml, { seed = "", dom = docume
   if (capture.parent !== null) reply = reply.map((item) => (item.parent ? item : { ...item, parent: capture.parent }));
 
   const plan = planAdoption(capture.blocks, [...capture.before, ...reply, ...capture.after], capture.baseItems);
-  if (!plan) return refused("no-change", "The reply changes nothing.");
+  if (!plan) return refused("no-change", "AI did not change anything.");
   const tr = adoptionTransaction(state, plan);
-  if (!tr) return refused("no-change", "The reply changes nothing.");
+  if (!tr) return refused("no-change", "AI did not change anything.");
   const nodes = new Map();
   tr.doc.forEach((node) => nodes.set(node.attrs.id, node));
   return { status: "ready", plan, reply, nodes: reply.map((item) => nodes.get(item.id)).filter(Boolean) };

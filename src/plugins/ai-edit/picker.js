@@ -92,7 +92,7 @@ function defaultChrome({ coarse }) {
     "display:block", "flex:1", "min-width:0", "overflow:hidden", "text-overflow:ellipsis",
     "white-space:nowrap", `color:${TOKENS.muted}`, `font:12.5px/1.5 ${FONT_MONO}`,
   ]), "picker-hint");
-  hint.textContent = "Click a block, or drag across blocks";
+  hint.textContent = "Click or drag blocks";
 
   const whole = part(bevelButton("Whole page", { extra: ["flex:none"] }), "picker-whole");
   const cancel = part(bevelButton("Cancel", { variant: "quiet", extra: ["flex:none"] }), "picker-cancel");

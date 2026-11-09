@@ -16,12 +16,12 @@ const { Selection } = state;
 
 const GONE = "This page is not open for editing any more.";
 const NO_WIRE = "AI tool making isn't available on this page right now.";
-const NO_STORE = "This document can't save tool state.";
+const NO_STORE = "This document can't save tool data.";
 const MOVED = "The place for this tool moved. Close this and run /ai where you want the tool.";
 const STALE_REVISION = "This tool changed while you were revising, so nothing was replaced. Ask again.";
-const BAD_ARTIFACT = "The AI reply is not a usable tool.";
-const BAD_STATE = "The AI reply's tool state is too large or not data.";
-const CHANGED = "This tool's data changed while the new version was being made, so it was not replaced. Ask again to include the latest data.";
+const BAD_ARTIFACT = "AI did not make a usable tool. Try again.";
+const BAD_STATE = "The tool data from AI is too large or not usable. Try again.";
+const CHANGED = "This tool's data changed while AI was working, so it was not replaced. Ask again to include the latest data.";
 const SAVE_FAILED = "The tool could not be saved, so it was not added. Try again.";
 const UNSAVED = "Your tool is in the document, but saving failed. It will be saved with your next edit.";
 
@@ -147,7 +147,7 @@ export function createToolTargets({
       aiTarget: true,
       label: toolId ? "This tool" : "New tool",
       ref: toolId ? [toolId] : [],
-      placeholder: toolId ? "What should change?" : "Describe the tool you want",
+      placeholder: toolId ? "What should change?" : "Describe the tool",
       get isConnected() {
         const view = viewNow();
         if (!view) return false;
