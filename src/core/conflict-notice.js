@@ -1,4 +1,5 @@
 import onDomReady from "../lib/dom-ready.js";
+import { hostMeta } from "./host-meta.js";
 import { isEditMode } from "./is-edit-mode.js";
 import { isSaveConflicted } from "./save.js";
 import { storage } from "../lib/doc-storage.js";
@@ -104,6 +105,30 @@ function unresolved() {
   return isSaveConflicted() ? ["save"] : [];
 }
 
+let guard = null;
+let guardAsk = 0;
+
+function startDataGuard() {
+  const ask = ++guardAsk;
+  hostMeta().then((meta) => {
+    const href = meta.extensions.includes("data-guard-v1") ? meta.document?.dataGuard?.href : null;
+    if (ask !== guardAsk || typeof href !== "string" || !href) return null;
+    return import("../sync/data-guard-notice.js").then((module) => {
+      if (ask !== guardAsk) return;
+      guard = module;
+      module.start({ href });
+    });
+  }).catch((error) => {
+    console.error("clayjs: the data-loss notice could not start; it will try again on the next open", error);
+  });
+}
+
+function stopDataGuard() {
+  guardAsk++;
+  guard?.stop();
+  guard = null;
+}
+
 /**
  * The lazy notice as a mode lease.
  *
@@ -124,6 +149,7 @@ export function conflictNoticeParticipant() {
         enable() {
           if (context.initial === true) return;
           if (!notice && !loading) arm();
+          startDataGuard();
         },
         quiesce() {
           const pending = unresolved();
@@ -139,6 +165,7 @@ export function conflictNoticeParticipant() {
           loading = false;
           notice?.stop?.();
           notice = null;
+          stopDataGuard();
         },
       };
     },
@@ -153,6 +180,7 @@ onDomReady(() => {
     arm();
     keptFromEarlier();
   }
+  startDataGuard();
 });
 
 export { conflictNoticeParticipant as modeParticipant };

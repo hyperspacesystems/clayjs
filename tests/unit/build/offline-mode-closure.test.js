@@ -32,6 +32,7 @@ const DEMAND_ONLY = [
   ...Object.values(COMMAND_FEATURES).map(({ module }) => module),
   "source/session.js",
   "page/outline-cache.js",
+  "sync/data-guard-notice.js",
 ];
 const FIXTURES = path.join(ROOT, "tests/fixtures/load");
 

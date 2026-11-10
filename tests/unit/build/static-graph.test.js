@@ -24,6 +24,7 @@ const FORBIDDEN = [
   "src/sync/merge-tags.js",
   "src/vendor/parse5.vendor.js",
   "src/core/style-comparisons.js",
+  "src/sync/data-guard-notice.js",
 ];
 
 // A Document reads its JSON with the small relaxed parser, so the engine and its
