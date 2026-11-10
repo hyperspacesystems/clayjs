@@ -88,6 +88,7 @@ beforeEach(() => {
   document.documentElement.removeAttribute("savetoken");
   document.documentElement.removeAttribute("htmlclaytoken");
   sessionStorage.clear();
+  delete window.clay;
   toast.mockClear();
   toastPersistent.mockClear();
   dismissPersistent.mockClear();
@@ -131,7 +132,7 @@ test("a pending event draws the notice, in the order the choices are offered", a
   expect(actions.map((entry) => entry.label)).toEqual(["Restore", "Undo the change", "Keep as is"]);
   expect(detail).toContain("A change from outside this page removed 2 items.");
   expect(detail).toContain("title: Mine before, Theirs now.");
-  expect(detail).toContain("Restoring removes 1 item added since.");
+  expect(detail).toContain("Restoring removes 1 item added or changed since.");
 });
 
 test("no event draws nothing", async () => {
@@ -422,4 +423,164 @@ test("stop takes the listeners out", async () => {
 
   expect(toastPersistent).not.toHaveBeenCalled();
   expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("a read that says more items were added since redraws the notice", async () => {
+  fakeTimers = true;
+  jest.useFakeTimers();
+  await boot({ entries: [answer(200, { event: event({ droppedAdditions: 0 }) }), answer(200, { event: event({ droppedAdditions: 3 }) })] });
+
+  expect(toastPersistent).toHaveBeenCalledTimes(1);
+  expect(toastPersistent.mock.calls[0][2].detail).not.toContain("Restoring removes");
+
+  await jest.advanceTimersByTimeAsync(30000);
+  document.dispatchEvent(new Event("visibilitychange"));
+  await flush();
+
+  expect(toastPersistent).toHaveBeenCalledTimes(2);
+  expect(toastPersistent.mock.calls[1][2].detail).toContain("Restoring removes 3 items added or changed since.");
+});
+
+test("Restore over edits that cannot be saved posts nothing and asks for a save", async () => {
+  await boot({ entries: [answer(200, { event: event() })] });
+  window.clay = { hasUnsavedChanges: () => true, save: { flush: async () => {} } };
+
+  queue.push(answer(200, { ok: true }));
+  action("Restore").onClick();
+  await flush();
+
+  expect(fetchMock.mock.calls.filter(([, init]) => init.method === "POST")).toHaveLength(0);
+  expect(reload).not.toHaveBeenCalled();
+  expect(toast).toHaveBeenCalledWith("Save your changes first, then try again.", "warning");
+});
+
+test("Restore over edits saves them first, then posts once", async () => {
+  await boot({ entries: [answer(200, { event: event() })] });
+  let unsaved = true;
+  const flushEdits = jest.fn(async () => { unsaved = false; });
+  window.clay = { hasUnsavedChanges: () => unsaved, save: { flush: flushEdits } };
+
+  queue.push(answer(200, { ok: true }));
+  action("Restore").onClick();
+  await flush();
+
+  expect(flushEdits).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls.filter(([, init]) => init.method === "POST")).toHaveLength(1);
+  expect(reload).toHaveBeenCalledTimes(1);
+});
+
+test("Keep as is posts without saving first", async () => {
+  await boot({ entries: [answer(200, { event: event() })] });
+  const flushEdits = jest.fn(async () => {});
+  window.clay = { hasUnsavedChanges: () => true, save: { flush: flushEdits } };
+
+  queue.push(answer(200, { ok: true }));
+  action("Keep as is").onClick();
+  await flush();
+
+  expect(flushEdits).not.toHaveBeenCalled();
+  expect(fetchMock.mock.calls.filter(([, init]) => init.method === "POST")).toHaveLength(1);
+});
+
+test("a read in flight when Keep as is answers draws nothing afterwards", async () => {
+  fakeTimers = true;
+  jest.useFakeTimers();
+  const read = pending();
+  await boot({ entries: [answer(200, { event: event() }), () => read.promise] });
+
+  await jest.advanceTimersByTimeAsync(30000);
+  document.dispatchEvent(new Event("visibilitychange"));
+  await flush();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+
+  const keep = action("Keep as is");
+  toastPersistent.mockClear();
+  queue.push(answer(200, { ok: true }));
+  keep.onClick();
+  await flush();
+
+  read.release(answer(200, { event: event() }));
+  await flush();
+
+  expect(toastPersistent).not.toHaveBeenCalled();
+});
+
+test("a late 200 for an older event leaves the newer notice up", async () => {
+  const post = pending();
+  await boot({ entries: [answer(200, { event: event() })] });
+  queue.push(() => post.promise);
+  action("Keep as is").onClick();
+  await flush();
+
+  document.dispatchEvent(notification("raised", event({ id: "e2" })));
+  await flush();
+  expect(toastPersistent).toHaveBeenCalledTimes(2);
+  toastPersistent.mockClear();
+  dismissPersistent.mockClear();
+
+  post.release(answer(200, { ok: true }));
+  await flush();
+
+  expect(toastPersistent).not.toHaveBeenCalled();
+  expect(dismissPersistent).not.toHaveBeenCalled();
+});
+
+test("a late 404 for an older event leaves the newer notice up", async () => {
+  const post = pending();
+  await boot({ entries: [answer(200, { event: event() })] });
+  queue.push(() => post.promise);
+  action("Restore").onClick();
+  await flush();
+
+  document.dispatchEvent(notification("raised", event({ id: "e2" })));
+  await flush();
+  expect(toastPersistent).toHaveBeenCalledTimes(2);
+  toastPersistent.mockClear();
+  dismissPersistent.mockClear();
+
+  post.release(answer(404, {}));
+  await flush();
+
+  expect(toastPersistent).not.toHaveBeenCalled();
+  expect(dismissPersistent).not.toHaveBeenCalled();
+});
+
+test("a late 422 for an older event does not redraw it over the newer notice", async () => {
+  const post = pending();
+  await boot({ entries: [answer(200, { event: event() })] });
+  queue.push(() => post.promise);
+  action("Restore").onClick();
+  await flush();
+
+  document.dispatchEvent(notification("raised", event({ id: "e2" })));
+  await flush();
+  expect(toastPersistent).toHaveBeenCalledTimes(2);
+  toastPersistent.mockClear();
+
+  post.release(answer(422, { ok: false }));
+  await flush();
+
+  expect(toastPersistent).not.toHaveBeenCalled();
+});
+
+test("a 401 and a 403 ask for a reload", async () => {
+  await boot({ entries: [answer(200, { event: event() })] });
+
+  queue.push(answer(401, {}));
+  action("Restore").onClick();
+  await flush();
+  expect(toast).toHaveBeenCalledWith("Reload the page, then try again.", "error");
+
+  toast.mockClear();
+  queue.push(answer(403, {}));
+  action("Restore").onClick();
+  await flush();
+  expect(toast).toHaveBeenCalledWith("Reload the page, then try again.", "error");
+  expect(toast).not.toHaveBeenCalledWith(UNREACHED, "error");
+});
+
+test("a notice that can be undone says the undo takes later edits with it", async () => {
+  await boot({ entries: [answer(200, { event: event({ restorable: false, canRevert: true }) })] });
+
+  expect(toastPersistent.mock.calls[0][2].detail.endsWith("Undo the change also removes edits made since.")).toBe(true);
 });

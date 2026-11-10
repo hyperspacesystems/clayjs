@@ -8,7 +8,14 @@ import { jest } from "@jest/globals";
 
 const TITLE = "Saved data was overwritten";
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 20));
+let fakeTimers = false;
+const flush = async () => {
+  if (fakeTimers) {
+    await jest.advanceTimersByTimeAsync(20);
+    return;
+  }
+  await new Promise((resolve) => setTimeout(resolve, 20));
+};
 const answer = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 const stack = () => document.querySelector('clay-editor-ui[data-clay-ui="toasts"]')?.shadowRoot ?? null;
 const toasts = () => stack().querySelectorAll("[data-clay-toast]");
@@ -52,6 +59,7 @@ afterEach(() => {
   notice = null;
   delete global.fetch;
   jest.useRealTimers();
+  fakeTimers = false;
 });
 
 test("two reads of one event leave one toast, with the three choices in order", async () => {
@@ -73,4 +81,19 @@ test("two reads of one event leave one toast, with the three choices in order", 
   expect(labels()).toEqual(["Restore", "Undo the change", "Keep as is"]);
   expect(toasts()[0].textContent).toContain(TITLE);
   expect(toasts()[0].textContent).toContain("title: Mine before, Theirs now.");
+});
+
+test("a read that says more items were added since rewrites the one notice", async () => {
+  fakeTimers = true;
+  jest.useFakeTimers();
+  await boot([answer(200, { event }), answer(200, { event: { ...event, droppedAdditions: 3 } })]);
+  expect(toasts()).toHaveLength(1);
+
+  await jest.advanceTimersByTimeAsync(30000);
+  document.dispatchEvent(new Event("visibilitychange"));
+  await flush();
+
+  const notices = [...toasts()].filter((el) => el.querySelector("button:not([aria-label])"));
+  expect(notices).toHaveLength(1);
+  expect(notices[0].textContent).toContain("Restoring removes 3 items added or changed since.");
 });

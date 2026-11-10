@@ -9,6 +9,8 @@ const MIN_READ_GAP_MS = 5000;
 const VISIBLE_GAP_MS = 30000;
 const UNREACHED = "Could not reach the server. Try again.";
 const REFUSED = "That did not go through. Try again.";
+const SAVE_FIRST = "Save your changes first, then try again.";
+const RELOAD_FIRST = "Reload the page, then try again.";
 
 let session = null;
 let ui = null;
@@ -42,12 +44,13 @@ function describe(current, event) {
   const parts = [`${source} ${loss}.`];
   if (row) parts.push(`${row.key}: ${row.yours} before, ${row.now} now.`);
   if (canRestore(current, event)) {
-    if (event.droppedAdditions > 0) parts.push(`Restoring removes ${plural(event.droppedAdditions, "item")} added since.`);
+    if (event.droppedAdditions > 0) parts.push(`Restoring removes ${plural(event.droppedAdditions, "item")} added or changed since.`);
   } else if (canRevert(current, event)) {
     parts.push("This data no longer fits the page, but the whole change can be undone.");
   } else {
     parts.push("It cannot be restored from here.");
   }
+  if (canRevert(current, event)) parts.push("Undo the change also removes edits made since.");
   return parts.join(" ");
 }
 
@@ -60,7 +63,7 @@ function actionsFor(current, event) {
 }
 
 async function draw(current, event) {
-  const key = [event.id, canRestore(current, event), canRevert(current, event), event.lastWriteAt].join("|");
+  const key = [event.id, canRestore(current, event), canRevert(current, event), event.lastWriteAt, describe(current, event)].join("|");
   if (current.drawn === key) return true;
   current.drawn = key;
   current.eventId = event.id;
@@ -109,7 +112,8 @@ async function read(current) {
   }
   if (session !== current || turn !== current.turn) return;
   if (!body || typeof body !== "object" || !("event" in body)) return;
-  if (isPending(body.event) && !current.resolved.has(body.event.id)) {
+  if (isPending(body.event)) {
+    if (current.resolved.has(body.event.id)) return;
     if (await draw(current, body.event)) removeServerBar();
     return;
   }
@@ -117,8 +121,13 @@ async function read(current) {
   removeServerBar();
 }
 
-function finish(current, choice) {
-  clearNotice(current);
+function forget(current, event) {
+  current.resolved.add(event.id);
+  if (current.eventId === event.id) clearNotice(current);
+}
+
+function finish(current, event, choice) {
+  forget(current, event);
   if (choice === "dismiss") {
     say("Kept the page as it is.", "info");
     return;
@@ -130,9 +139,9 @@ function finish(current, choice) {
 function settle(current, event, choice, status, body) {
   if (session !== current) return;
   if (status === 200 && body?.ok === true) {
-    finish(current, choice);
+    finish(current, event, choice);
   } else if (status === 404) {
-    clearNotice(current);
+    forget(current, event);
     say("This was already taken care of somewhere else. Reload to see the current page.", "info");
   } else if (status === 409) {
     current.drawn = null;
@@ -140,17 +149,36 @@ function settle(current, event, choice, status, body) {
     read(current);
   } else if (status === 422) {
     current.refused.add(`${event.id}:${choice}`);
-    draw(current, event);
+    if (current.eventId === event.id && !current.resolved.has(event.id)) draw(current, event);
     say(choice === "restore" ? "That data no longer fits this page, so it could not be restored." : "That earlier version is no longer available.", "warning");
+  } else if (status === 401 || status === 403) {
+    say(RELOAD_FIRST, "error");
   } else {
     say(status === 400 ? REFUSED : UNREACHED, "error");
   }
+}
+
+async function saveFirst() {
+  const clay = window.clay;
+  if (!clay?.hasUnsavedChanges?.()) return true;
+  if (typeof clay.save?.flush !== "function") return false;
+  try {
+    await clay.save.flush();
+  } catch {
+    return false;
+  }
+  return !clay.hasUnsavedChanges();
 }
 
 async function choose(current, event, choice) {
   if (current.busy || session !== current) return;
   current.busy = true;
   try {
+    if (choice !== "dismiss" && !(await saveFirst())) {
+      if (session === current) say(SAVE_FIRST, "warning");
+      return;
+    }
+    if (session !== current) return;
     const res = await fetch(current.url, {
       method: "POST",
       credentials: credentials(),
