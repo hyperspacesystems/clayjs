@@ -1514,7 +1514,7 @@ The bounds come from `src/sync/presence-target.js`:
 
 An invalid target is refused, never repaired. Updates are coalesced to one every 250 ms, a stable target renews every 5 seconds, and it expires 15 seconds after the host receives it.
 
-**A record target from a focused control.** Publish a target only while the control that writes the record has focus, and publish `null` the moment it stops: on blur, when the open record changes, when the page is hidden, when the record goes to Trash, and when the tab leaves edit mode or enters draft mode. After a blur, check again on the next microtask, so focus moving inside the same control does not flash `null`. A record with one writing control sends the fieldless shape, `{ kind: "record", id }`, where `id` is the record's `data-id`. A target never carries a title, text or date. The Journal template does this in `RecordPresence` (`templates/00-journal/journal.html`):
+**A record target from a focused control.** Publish a target only while the control that writes the record has focus, and publish `null` the moment it stops: on blur, when the open record changes, when the page is hidden, when the record goes to Trash, and when the tab leaves edit mode or enters draft mode. After a blur, check again on the next microtask, so focus moving inside the same control does not flash `null`. A record with one writing control sends the fieldless shape, `{ kind: "record", id }`, where `id` is the record's `data-id`. A target never carries a title, text or date. The Journal template does this in `RecordPresence` (`apps/unreleased/00-journal/journal.html`):
 
 ```js
 function reconcile() {
@@ -2376,7 +2376,43 @@ The saved file is the data. Everyone who can download it can read everything in 
 - HTML Clay and Hyperclay Local report `local`, meaning their own file-serving rules, not a sharing ACL. A file there is as private as the folder on that machine.
 - Password inputs are never persisted. An authored `value` on them is still in the file.
 
-### 9.4 Offline in a local host
+### 9.4 Data-loss recovery
+
+When a browser save or an outside edit overwrites saved data, ClayJS shows a persistent `Saved data was overwritten` warning. It reports the write source, the removed items or erased values, and a preview of the first changed field. Only editors in edit mode see it. Readers and draft visitors never see it. An owner in view mode sees it on entering edit mode. HTML Clay also shows its own bar in view mode, and ClayJS replaces that bar when it draws the notice.
+
+The notice has three buttons:
+
+- `Restore`, when `restorable` is `true`, puts the lost data back into the current page and reloads. When `droppedAdditions` is above `0`, the notice says how many newer items this removes.
+- `Undo the change`, when `canRevert` is `true`, restores the whole earlier file and reloads.
+- `Keep as is` posts `"dismiss"` to adopt the current page as the baseline and closes the notice without reloading. The toast's `X` only hides it in this tab.
+
+A host announces `data-guard-v1` in `/_/meta` `extensions` and gives each editor a same-origin `document.dataGuard.href` per document. A client never builds that address.
+
+- `GET <href>` answers `200` with `Cache-Control: no-store` and `{"event": null}` or `{"event": {...}}`:
+
+```json
+{
+  "event": {
+    "id": "uuid",
+    "firstDetectedAt": 1762700000000,
+    "lastWriteAt": 1762700000000,
+    "lossSummary": { "provenance": "external", "destroyedAtoms": 4, "removedItems": 2, "modifiedAtoms": 0, "paths": ["api.items[2]"] },
+    "fieldCount": 1,
+    "preview": [{ "key": "items", "now": "2 items", "yours": "4 items" }],
+    "droppedAdditions": 0,
+    "restorable": true,
+    "canRevert": true,
+    "status": "pending"
+  }
+}
+```
+
+- `POST <href>` takes `{"id", "choice"}` (`"restore"`, `"revert"` or `"dismiss"`). It answers `200` `{"ok": true, "choice", "status"}`, or `{"error"}` with `400` for an unknown choice, `404` when no event is pending, `409` when another event id is current, and `422` when that choice cannot be applied to the page.
+- A host with `sync` also sends `{"type": "notification", "msgType": "data-loss", "action": "raised" | "resolved", "msg", "data"}` on the document's live lane, with the event in `data` for `"raised"` and `{"id"}` for `"resolved"`.
+
+A host should announce `data-guard-v1` only after the conformance rows for this capability pass.
+
+### 9.5 Offline in a local host
 
 Hyperclay Local and HTML Clay each bundle one exact, published ClayJS release, chosen in their `offline-runtime.lock.json`. They ship the whole release listed in `dist/offline-manifest.json` in the npm package, not only what one document boots with. That index lists about 550 files: every module, plugin, satellite such as `sap.js` and `clay-router.js`, vendored library, theme sheet and font, plus the exact library builds older Journals load from other CDNs. A plugin, the merge engine, a drag library or a font that a document uses for the first time offline still loads.
 
