@@ -237,6 +237,53 @@ describe("the conservation check", () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  // The new template's card at the same spot has no checklist and no link to clone, so the rows
+  // grow from the page's own seeds (#api-seeds), as they do when a draft is restored.
+  test("a Kanban card that gained a checklist and a link where the new template has none still upgrades", async () => {
+    loadKanban();
+    const bare = [...document.querySelectorAll("#board li.card[item]")]
+      .find((card) => !card.querySelector(":scope > section.checklist") && !card.querySelector("ul.attachments > li"));
+    expect(bare).toBeTruthy();
+    const fromSeed = (selector) => {
+      const row = document.querySelector(`#api-seeds ${selector}`).cloneNode(true);
+      row.removeAttribute("cms-template");
+      return row;
+    };
+    const checklist = fromSeed("section.checklist");
+    checklist.dataset.id = "k-own1";
+    checklist.querySelector("h4").textContent = "Owner steps";
+    const item = fromSeed("ul.checklist-items > li");
+    item.dataset.id = "i-own1";
+    item.textContent = "Owner item";
+    checklist.querySelector("ul.checklist-items").append(item);
+    bare.append(checklist);
+    const link = fromSeed("ul.attachments > li");
+    link.dataset.id = "a-own1";
+    link.querySelector("a").textContent = "Owner brief";
+    link.querySelector("a").setAttribute("href", "https://example.com/owner-brief");
+    link.querySelector("a").dataset.kind = "link";
+    bare.querySelector("ul.attachments").append(link);
+
+    const before = upgrade.extractAll(document).dataByName;
+    expect(JSON.stringify(before)).toContain("Owner item");
+    expect(JSON.stringify(before)).toContain("https://example.com/owner-brief");
+    const html = newerKanban();
+    const clay = setupClay();
+
+    const result = await apply(updateFor(html), {
+      clay,
+      fetchFn: sourceFetcher(html),
+      reload: jest.fn(),
+      doc: document,
+      loc: location,
+    });
+
+    expect(result).toEqual(expect.objectContaining({ ok: true }));
+    const savedDoc = new DOMParser().parseFromString(clay.save.replace.mock.calls[0][0], "text/html");
+    expect(upgrade.extractAll(savedDoc).dataByName).toEqual(before);
+    expect(savedDoc.querySelectorAll("#api-seeds section.checklist[cms-template]").length).toBe(1);
+  });
+
   test("a transform's declared rename passes the check", async () => {
     const oldHtml = miniPage({ version: "1.0.0", rules: { title: "#title", note: "#note" }, title: "Old title", note: "Keep me" });
     const newHtml = miniPage({
