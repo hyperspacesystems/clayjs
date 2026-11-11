@@ -113,7 +113,9 @@ test("an embedded owner that asks with clay-menu-looks gets the row and no pill"
 
   expect(rowOf()).not.toBeNull();
   expect(rowItemOf()).not.toBeNull();
-  expect(valueOf().textContent).toBe("Variant A 1/3");
+  expect(valueOf().textContent).toBe("Variant A");
+  expect(rowOf().textContent).toContain("Theme:");
+  expect(keepItemOf()).toBeNull();
   expect(pillOf()).toBeNull();
   expect(listOf().hidden).toBe(false);
 });
@@ -134,12 +136,14 @@ test("a floating owner keeps its pill and draws no row", async () => {
   expect(rowOf()).toBeNull();
 });
 
-test("an embedded visitor that asks with clay-menu-looks gets the row and no pill", async () => {
+// A visitor sees the page in its saved look and cannot switch it (David, Nov 11): the slot's
+// clay-menu-looks asks for the owner's Theme row, never a visitor's.
+test("an embedded visitor gets no look row and no pill, even when the slot asks with clay-menu-looks", async () => {
   await boot({ visitor: true, body: ROW_BODY });
   window.clay.menu.open();
 
-  expect(rowOf()).not.toBeNull();
-  expect(valueOf().textContent).toBe("Variant A 1/3");
+  expect(rowOf()).toBeNull();
+  expect(rowItemOf()).toBeNull();
   expect(pillOf()).toBeNull();
 });
 
@@ -158,33 +162,14 @@ test("an owner's arrows step both ways with wraparound and leave the menu open",
 
   click(stepsOf()[0]);
   await flush();
-  expect(valueOf().textContent).toBe("Variant C 3/3");
+  expect(valueOf().textContent).toBe("Variant C");
   expect(mediaOf("C")).toBe(null);
   expect(mediaOf("A")).toBe("not all");
   expect(listOf().hidden).toBe(false);
 
   click(stepsOf()[1]);
   await flush();
-  expect(valueOf().textContent).toBe("Variant A 1/3");
-  expect(mediaOf("A")).toBe(null);
-  expect(listOf().hidden).toBe(false);
-});
-
-test("a visitor's arrows step both ways with wraparound and leave the menu open", async () => {
-  await boot({ visitor: true, body: ROW_BODY });
-  window.clay.menu.open();
-
-  click(stepsOf()[0]);
-  await flush();
-  expect(valueOf().textContent).toBe("Variant C 3/3");
-  expect(look()).toBe("C");
-  expect(mediaOf("C")).toBe(null);
-  expect(listOf().hidden).toBe(false);
-
-  click(stepsOf()[1]);
-  await flush();
-  expect(valueOf().textContent).toBe("Variant A 1/3");
-  expect(look()).toBe("A");
+  expect(valueOf().textContent).toBe("Variant A");
   expect(mediaOf("A")).toBe(null);
   expect(listOf().hidden).toBe(false);
 });
@@ -193,8 +178,8 @@ test("a clay-variant-label reads where the row would say Variant A", async () =>
   await boot({ edit: true, body: ROW_BODY, looks: LOOKS("A", true) });
   window.clay.menu.open();
 
-  expect(valueOf().textContent).toBe("Ruled 1/3");
-  expect(keepItemOf().textContent).toBe("Keep Ruled, remove the others…");
+  expect(valueOf().textContent).toBe("Ruled");
+  expect(keepItemOf()).toBeNull();
 });
 
 test("clay.variants.list() carries the label for an owner", async () => {
@@ -309,7 +294,6 @@ test("a visitor's choose sets the attribute, flips media, asks for a save and an
   expect(soon).toHaveBeenCalled();
   expect(changes.length).toBeGreaterThan(0);
   expect(changes[changes.length - 1]).toEqual({ active: "B", shown: "B" });
-  expect(valueOf().textContent).toBe("Variant B 2/3");
 });
 
 test("clay:drafts-restored paints a new html[look] and takes the hint away", async () => {
@@ -327,7 +311,6 @@ test("clay:drafts-restored paints a new html[look] and takes the hint away", asy
   expect(mediaOf("A")).toBe("not all");
   expect(document.querySelector("style[clay-look-hint]")).toBeNull();
   expect(window.clay.variants.shown).toBe("C");
-  expect(valueOf().textContent).toBe("Variant C 3/3");
 });
 
 test("an owner's view-mode step previews this tab and offers Use this look", async () => {

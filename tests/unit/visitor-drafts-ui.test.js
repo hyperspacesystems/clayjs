@@ -524,6 +524,22 @@ test("the intro stands aside for a returning visitor, a draft and a deep link, a
   expect(intro()).not.toBeNull();
 });
 
+test("a manual intro stays open for a returning visitor with a draft until they hide it, and stays hidden after", async () => {
+  const MANUAL = '<template visitor-intro="manual"><p>Track your week.</p></template>';
+  const draft = { v: 1, savedAt: "2026-10-15T00:00:00.000Z", data: { title: "draft title", note: "typed note" } };
+  await bootPage({ slot: "ui-intro-manual-draft", template: MANUAL, draft });
+  expect(intro()).not.toBeNull();
+
+  const close = intro().querySelector('clay-editor-ui[data-clay-ui="intro-close"]').shadowRoot.querySelector(".clay-intro__close");
+  close.click();
+  expect(intro()).toBeNull();
+  const ui = JSON.parse(localStorage.getItem(keyFor("ui-intro-manual-draft")));
+  expect(ui.intro.done).toBe("closed");
+
+  await bootPage({ slot: "ui-intro-manual-draft", template: MANUAL, draft, ui });
+  expect(intro()).toBeNull();
+});
+
 test("the intro stands aside for the hash the page was served with, not for one the page writes", async () => {
   await bootPage({
     slot: "ui-intro-served-hash",

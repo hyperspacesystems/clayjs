@@ -16,41 +16,36 @@ function fire(state) {
   document.dispatchEvent(new CustomEvent("clay:save-" + state));
 }
 
-test("draws nothing until a save state arrives", async () => {
+test("draws nothing until a failure arrives", async () => {
   expect(document.querySelector("[data-clay-indicator]")).toBeNull();
 
-  fire("saved");
+  fire("saving");
+  await drawn();
+
+  expect(document.querySelector("[data-clay-indicator]")).toBeNull();
+
+  fire("error");
   await drawn();
 
   expect(document.querySelector("[data-clay-indicator]")).not.toBeNull();
 });
 
-test("shows the right label + clay markers on save events, hides after saved", async () => {
-  jest.useFakeTimers();
-
+test("shows the right label + clay markers on a failure, hides after saved", async () => {
   fire("saving");
   await drawn();
   let node = document.querySelector("[data-clay-indicator]");
   expect(node).not.toBeNull();
   expect(node.getAttribute("clay")).toBe("no-save no-watch no-snapshot");
   expect(node.getAttribute("role")).toBe("status");
-  expect(node.textContent).toBe("Saving…");
+  expect(node.textContent).toBe("Couldn't save");
+  expect(node.dataset.state).toBe("error");
   expect(node.style.opacity).toBe("1");
 
   fire("saved");
   await drawn();
-  expect(node.textContent).toBe("Saved");
-  expect(node.style.opacity).toBe("1");
-
-  jest.advanceTimersByTime(2200);
+  expect(node.textContent).toBe("");
   expect(node.style.opacity).toBe("0");
-
-  fire("error");
-  await drawn();
-  expect(node.textContent).toBe("Couldn't save");
-  expect(node.dataset.state).toBe("error");
-
-  jest.useRealTimers();
+  expect(node.dataset.state).toBeUndefined();
 });
 
 // core/conflict-notice.js owns the conflict state now, and it ships in every
@@ -62,14 +57,14 @@ test("shows the right label + clay markers on save events, hides after saved", a
 test("says nothing for journaled work, so typing alone draws no chip", async () => {
   document.body.innerHTML = "";
 
-  document.dispatchEvent(new CustomEvent("clay:page-save-state", { detail: { state: "journaled" } }));
+  document.dispatchEvent(new CustomEvent("clay:blockeditor-save-state", { detail: { state: "journaled" } }));
   await drawn();
 
   expect(document.querySelector("[data-clay-indicator]")).toBeNull();
 });
 
 test("says nothing on a conflict, leaving that to the core notice", async () => {
-  fire("saved");
+  fire("error");
   await drawn();
   const node = document.querySelector("[data-clay-indicator]");
   const before = node.textContent;

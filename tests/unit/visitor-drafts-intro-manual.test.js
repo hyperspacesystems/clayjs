@@ -1,7 +1,7 @@
 /**
  * A document that asks for `<template visitor-intro="manual">` gets an intro the
- * visitor can hide and bring back from the menu, and that never collapses on its
- * own. Every other document keeps the automatic strip: the x, the scroll collapse
+ * visitor can hide, which then stays hidden for them, and that never collapses on
+ * its own. Every other document keeps the automatic strip: the x, the scroll collapse
  * and no menu row.
  */
 import { jest } from "@jest/globals";
@@ -88,23 +88,19 @@ test("a fresh visitor sees the manual intro open, with a button that reads Hide 
   expect(menu.items.has("clay.intro")).toBe(false);
 });
 
-test("hiding removes the section, remembers it and offers the row; the row puts the same node back", async () => {
+test("hiding removes the section and remembers it, with no menu row, so it stays hidden", async () => {
   const menu = fakeMenu();
   const { uiKey } = await bootPage({ slot: "manual-hide", menu });
 
-  const section = intro();
   closeButton().click();
 
   expect(intro()).toBeNull();
   expect(uiMemory(uiKey).intro.done).toBe("closed");
-  expect(menu.items.get("clay.intro").label).toBe("Show intro");
+  expect(menu.items.size).toBe(0);
 
-  menu.run("clay.intro");
-
-  expect(intro()).toBe(section);
-  expect(document.body.firstElementChild).toBe(section);
-  expect(uiMemory(uiKey).intro.done).toBeNull();
-  expect(menu.items.has("clay.intro")).toBe(false);
+  await bootPage({ slot: "manual-hide", menu: fakeMenu(), keepStorage: true });
+  expect(intro()).toBeNull();
+  expect(document.getElementById("clay-intro-style")).toBeNull();
 });
 
 test("a closed intro starts closed with nothing built, and ?intro=1 opens it", async () => {
@@ -112,47 +108,31 @@ test("a closed intro starts closed with nothing built, and ?intro=1 opens it", a
   await bootPage({ slot: "manual-closed", menu, ui: { v: 1, prompt: {}, intro: { done: "closed" }, src: null } });
   expect(intro()).toBeNull();
   expect(document.getElementById("clay-intro-style")).toBeNull();
-  expect(menu.items.get("clay.intro").label).toBe("Show intro");
+  expect(menu.items.size).toBe(0);
 
-  const forcedMenu = fakeMenu();
-  await bootPage({ slot: "manual-closed", menu: forcedMenu, url: "/notes.html?intro=1", ui: { v: 1, prompt: {}, intro: { done: "closed" }, src: null }, keepStorage: true });
+  await bootPage({ slot: "manual-closed", menu: fakeMenu(), url: "/notes.html?intro=1", ui: { v: 1, prompt: {}, intro: { done: "closed" }, src: null }, keepStorage: true });
   expect(intro()).not.toBeNull();
   expect(closeButton().textContent).toBe("Hide intro");
-  expect(forcedMenu.items.has("clay.intro")).toBe(false);
 });
 
-test("a saved draft starts it closed with nothing built and the row present", async () => {
+test("a returning visitor with a saved draft still sees the intro until they hide it", async () => {
   const menu = fakeMenu();
-  const { uiKey } = await bootPage({
+  await bootPage({
     slot: "manual-draft",
     menu,
     draft: { v: 1, savedAt: "2026-10-15T00:00:00.000Z", data: { title: "draft title" } },
   });
 
-  expect(intro()).toBeNull();
-  expect(document.getElementById("clay-intro-style")).toBeNull();
-  expect(menu.items.get("clay.intro").label).toBe("Show intro");
-  expect(uiMemory(uiKey)).toBeNull();
+  expect(intro()).not.toBeNull();
+  expect(menu.items.size).toBe(0);
 });
 
-test("a menu that arrives later gets the row when closed, and none when open", async () => {
-  const { uiKey } = await bootPage({ slot: "manual-late-closed", ui: { v: 1, prompt: {}, intro: { done: "closed" }, src: null } });
-  expect(intro()).toBeNull();
-
+test("a menu that arrives later gets no intro row, open or closed", async () => {
+  await bootPage({ slot: "manual-late-closed", ui: { v: 1, prompt: {}, intro: { done: "closed" }, src: null } });
   const menu = fakeMenu();
   window.clay.menu = menu;
   document.dispatchEvent(new CustomEvent("clay:menu-ready"));
-  expect(menu.items.get("clay.intro").label).toBe("Show intro");
-  menu.run("clay.intro");
-  expect(intro()).not.toBeNull();
-  expect(uiMemory(uiKey).intro.done).toBeNull();
-
-  const openMenu = fakeMenu();
-  await bootPage({ slot: "manual-late-open", menu: openMenu });
-  expect(intro()).not.toBeNull();
-  openMenu.items.set("clay.intro", { label: "Show intro", run: null });
-  document.dispatchEvent(new CustomEvent("clay:menu-ready"));
-  expect(openMenu.items.has("clay.intro")).toBe(false);
+  expect(menu.items.size).toBe(0);
 });
 
 test("scrolling to the end leaves a manual intro alone", async () => {
@@ -185,21 +165,4 @@ test("a template with no value keeps the x, the scroll collapse and no row", asy
   expect(intro()).toBeNull();
   expect(uiMemory(uiKey).intro.done).toBe("scrolled");
   expect(menu.items.has("clay.intro")).toBe(false);
-});
-
-test("an inline script in the template runs once across hide and show", async () => {
-  delete window.__introRuns;
-  const menu = fakeMenu();
-  await bootPage({
-    slot: "manual-script",
-    menu,
-    template: '<template visitor-intro="manual"><p>Track your week.</p><script>window.__introRuns = (window.__introRuns || 0) + 1;<\/script></template>',
-  });
-
-  expect(window.__introRuns).toBe(1);
-  closeButton().click();
-  expect(intro()).toBeNull();
-  menu.run("clay.intro");
-  expect(intro()).not.toBeNull();
-  expect(window.__introRuns).toBe(1);
 });

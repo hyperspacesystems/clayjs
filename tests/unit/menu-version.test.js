@@ -80,7 +80,7 @@ function netFetch({ latest = manifest(), html = HTML, gate = null } = {}) {
   });
 }
 
-async function boot({ version = "1.4.0", copy = true, fetchFn = netFetch() } = {}) {
+async function boot({ version = "1.4.0", copy = true, fetchFn = netFetch(), body = BODY } = {}) {
   jest.resetModules();
   sessionStorage.clear();
   localStorage.clear();
@@ -91,7 +91,7 @@ async function boot({ version = "1.4.0", copy = true, fetchFn = netFetch() } = {
   clearRoot();
   window.history.replaceState({}, "", SLOT);
   page(copy ? { version } : { source: null, version: null });
-  document.body.innerHTML = BODY;
+  document.body.innerHTML = body;
   window.fetch = fetchFn;
   window.clay = {};
   const params = new URLSearchParams("plugins=menu,upgrade&exclude=richclay,source");
@@ -199,10 +199,20 @@ describe("what the menu's footer says", () => {
   test("current: the latest-version line, and no dot", async () => {
     await boot({ fetchFn: netFetch({ latest: manifest({ version: "1.4.0" }) }) });
 
-    await waitFor(() => versionLine() && versionLine().textContent === "This doc is at latest version (1.4.0)");
-    expect(versionLine().textContent).toBe("This doc is at latest version (1.4.0)");
+    await waitFor(() => versionLine() && versionLine().textContent === "File at latest version");
+    expect(versionLine().textContent).toBe("File at latest version");
     expect(versionLine().dataset.menuId).toBe("upgrade");
     expect(badgeLine()).toBeNull();
+  });
+
+  test("a divider stands between the Edit mode row and the version line", async () => {
+    await boot({ fetchFn: netFetch({ latest: manifest({ version: "1.4.0" }) }), body: `<header><div clay-menu-slot no-edit-switch></div></header>${BODY}` });
+    await waitFor(() => versionLine() && versionLine().textContent === "File at latest version");
+    window.clay.menu.open();
+
+    const before = versionLine().previousElementSibling;
+    expect(before.classList.contains("clay-menu-sep")).toBe(true);
+    expect(before.previousElementSibling.dataset.menuId).toBe("clay.mode");
   });
 
   test("unknown: the bare version line survives the answer, and there is no dot", async () => {
@@ -246,7 +256,7 @@ describe("what the menu's footer says", () => {
     expect(waiting.textContent).toBe("Version 1.4.0");
 
     release();
-    await waitFor(() => versionLine() && versionLine().textContent === "This doc is at latest version (1.4.0)");
-    expect(versionLine().textContent).toBe("This doc is at latest version (1.4.0)");
+    await waitFor(() => versionLine() && versionLine().textContent === "File at latest version");
+    expect(versionLine().textContent).toBe("File at latest version");
   });
 });

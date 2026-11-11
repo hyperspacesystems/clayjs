@@ -168,8 +168,7 @@ test("Keep asks first, then leaves the one look as an ordinary style block", asy
   click($(".clay-menu-goo", "menu"));
   await flush();
 
-  expect(keepItemOf()).not.toBeNull();
-  expect(keepItemOf().textContent).toBe("Keep Variant A, remove the others\u2026");
+  expect(keepItemOf()).toBeNull();
 
   const kept = window.clay.variants.keep();
   await flush();

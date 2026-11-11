@@ -2,7 +2,8 @@ export const MENU_SAFETY = `@layer clay-menu-safety {
   .clay-menu-dock [hidden], .clay-menu-spots[hidden], .clay-menu-dock[hidden] { display: none !important; }
   .clay-menu :focus-visible:not(.clay-menu-edit) { outline: 2px solid var(--bevel-brass) !important; outline-offset: -2px !important; }
   @media (pointer: coarse), (max-width: 680px) {
-    .clay-menu-goo, .clay-menu-list [part~="dismiss"], .clay-menu-list [part~="step"], .clay-menu-list [role^="menuitem"] { min-width: 44px !important; min-height: 44px !important; }
+    /* A dismissible row's message and Dismiss sit inline on one line; their reach comes from MENU_TOUCH's pseudo-elements. */
+    .clay-menu-goo, .clay-menu-list [part~="step"], .clay-menu-list [role^="menuitem"]:not(.clay-menu-row > *) { min-width: 44px !important; min-height: 44px !important; }
   }
   @media (prefers-reduced-motion: reduce) {
     .clay-menu-dock *, .clay-menu-dock *::before, .clay-menu-dock *::after { transition: none !important; animation: none !important; }
@@ -78,13 +79,20 @@ export const SHELL_C = `/* Popovers: the menu, the people panel, the status note
 .clay-menu-list [role^="menuitem"] { box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin: 0; border: 0; background: none; text-align: left; text-decoration: none; cursor: pointer; }
 .clay-menu-list [role^="menuitem"]:hover:not([aria-disabled="true"]), .clay-menu-list [role^="menuitem"]:focus-visible { outline: none; background: var(--bevel-sunk); }
 .clay-menu-list [role^="menuitem"][aria-disabled="true"] { cursor: default; }
-.clay-menu-pair { display: flex; gap: 12px; padding: 3px 9px; }
+.clay-menu-pair { display: flex; flex-wrap: wrap; gap: 12px; padding: 3px 9px; }
 .clay-menu-list .clay-menu-pair [role="menuitem"] { flex: none; width: auto; justify-content: flex-start; gap: 9px; }
 .clay-menu-list kbd { flex: none; white-space: nowrap; }
-.clay-menu-row { display: flex; align-items: center; gap: 2px; }
-.clay-menu-list .clay-menu-row > [part~="item"] { flex: 1; width: auto; min-width: 0; }
-.clay-menu-list .clay-menu-row > [part~="dismiss"] { flex: none; width: 28px; justify-content: center; padding: 0; }
-.clay-menu-row > [part~="dismiss"] svg { display: block; width: 10px; height: 10px; fill: currentColor; }
+/* The message, then a small Dismiss right after its last word (David, Nov 11). Both are inline, so
+   Dismiss follows the text wherever it wraps; the message reaches over the whole row, and Dismiss
+   sits above it with its own reach. */
+.clay-menu-row { position: relative; padding: 5px 9px; }
+.clay-menu-row:has(> [part~="item"]:hover, > [part~="item"]:focus-visible) { background: var(--bevel-sunk); }
+.clay-menu-list .clay-menu-row > [part~="item"], .clay-menu-list .clay-menu-row > [part~="item"]:is(:hover, :focus-visible) { display: inline; width: auto; padding: 0; background: none; }
+.clay-menu-list .clay-menu-row > [part~="item"]::before { content: ""; position: absolute; inset: 0; }
+.clay-menu-list .clay-menu-row > [part~="dismiss"], .clay-menu-list .clay-menu-row > [part~="dismiss"]:is(:hover, :focus-visible) { position: relative; z-index: 1; display: inline; width: auto; min-height: 0; margin-left: 6px; padding: 0; background: none; white-space: nowrap; }
+.clay-menu-list .clay-menu-row > [part~="dismiss"]::after { content: ""; position: absolute; inset: -6px -6px; }
+.clay-menu-row [part~="dismiss-label"] { display: inline-block; padding: 2px 7px; border-radius: 4px; background: var(--bevel-sunk); color: var(--bevel-ink-2); font: 500 11px/1.3 var(--bevel-font-sans); }
+.clay-menu-row > [part~="dismiss"]:hover [part~="dismiss-label"], .clay-menu-row > [part~="dismiss"]:focus-visible [part~="dismiss-label"] { color: var(--bevel-ink); }
 .clay-menu-upgrade { display: inline-flex; align-items: center; gap: 8px; }
 .clay-menu-upgrade::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--bevel-brass); }
 .clay-menu-toggle .clay-menu-track { flex: none; }
@@ -125,12 +133,23 @@ export const MENU_SKIN = `.clay-menu { height: 34px; padding: 0 4px 0 2px; borde
 .clay-menu-list kbd { font: 500 11px/1 var(--bevel-font-mono); padding: 3px 5px; border: 1px solid var(--bevel-line-2); background: var(--bevel-sunk); color: var(--bevel-muted); }
 .clay-menu-list [part~="quiet"] { font-size: 12px; color: var(--bevel-muted); }
 .clay-menu-sep { height: 1px; margin: 4px 2px; background: var(--bevel-line); }
-.clay-menu-version { font: 400 11.5px/1.4 var(--bevel-font-mono); color: var(--bevel-muted); }
+.clay-menu-version { font: 400 13px/1.35 var(--bevel-font-sans); color: var(--bevel-ink); }
 `;
 
 // Last, so no skin can shrink a touch target or bring motion back.
 export const MENU_TOUCH = `@media (pointer: coarse), (max-width: 680px) {
+  /* A phone menu fits the screen and never scrolls sideways: a little wider than on a desktop, long
+     labels wrap, and the shortcut keys a phone cannot press are hidden (David, Nov 11). */
+  .clay-menu-list { min-width: min(300px, calc(100vw - 16px)) !important; max-width: calc(100vw - 16px) !important; overflow-x: hidden !important; }
+  .clay-menu-list [role^="menuitem"], .clay-menu-list .clay-menu-version { white-space: normal; overflow-wrap: anywhere; }
+  .clay-menu-list kbd { display: none !important; }
+  .clay-menu-list .clay-menu-row { box-sizing: border-box; min-height: 44px; padding: 11px 9px; }
+  /* Dismiss sits inline after the message's last word, so its reach never goes up or left into the
+     message's own text: a taller label plus reach to the right and down makes the 44px. */
+  .clay-menu-row [part~="dismiss-label"] { padding: 7px 12px; font-size: 13px; }
+  .clay-menu-list .clay-menu-row > [part~="dismiss"]::after { inset: -2px -10px -11px 0; }
   .clay-menu-list [role^="menuitem"] { min-height: 44px; font-size: 15px; }
+  .clay-menu-list .clay-menu-version { display: flex; align-items: center; min-height: 44px; font-size: 15px; }
   .clay-menu-list .clay-menu-pair [role="menuitem"] { min-height: 44px; }
   .clay-menu-list .clay-menu-stepper [role="menuitem"] { width: 44px; min-height: 44px; }
   :is(.clay-menu-dock, .clay-seo) :is(input, textarea, select) { font-size: 16px; }

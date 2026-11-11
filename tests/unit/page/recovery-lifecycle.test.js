@@ -10,10 +10,10 @@ import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
 import { pageStateFor } from "../../../src/page/save-states.js";
 
-const recoveryRoots = () => [...document.querySelectorAll('clay-editor-ui[data-clay-ui="page-recovery"]')].map((host) => host.shadowRoot);
+const recoveryRoots = () => [...document.querySelectorAll('clay-editor-ui[data-clay-ui="blockeditor-recovery"]')].map((host) => host.shadowRoot);
 const rq = (selector) => recoveryRoots().map((root) => root.querySelector(selector)).find(Boolean) ?? null;
 const rqa = (selector) => recoveryRoots().flatMap((root) => [...root.querySelectorAll(selector)]);
-const recoveryHosts = () => document.querySelectorAll('clay-editor-ui[data-clay-ui="page-recovery"]');
+const recoveryHosts = () => document.querySelectorAll('clay-editor-ui[data-clay-ui="blockeditor-recovery"]');
 
 /**
  * Step 7: the save indicator says where the typing lives, and the recovery pieces live and
@@ -31,8 +31,8 @@ const BLOCKS = [
   { id: "h", t: "heading", text: "Notes" },
   { id: "p", t: "paragraph", text: "Hello" },
 ];
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
-const ARTICLE_SEL = "article[data-page]";
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
+const ARTICLE_SEL = "article[data-blockeditor]";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const tick = async (turns = 40) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
@@ -44,10 +44,10 @@ const until = async (done, timeout = 5000) => {
 
 const pageHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 const tagHtml = (value = seedValue(BLOCKS)) =>
-  `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+  `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 
 // One recovery service, as much of it as the page journal, its review and its copies use.
 // An append commits when the test releases it, or at once; a refusal names its code; a
@@ -158,7 +158,7 @@ async function load({ editMode = true, liveData = true, answer = STAMPED } = {})
   const saves = [];
   // `live-provenance` is what lets a capture carry the room position its ops came from,
   // so a page holding unconfirmed ops can still be saved to the file.
-  const extensions = liveData ? ["page", "live-data", "live-provenance", "conditional"] : ["page"];
+  const extensions = liveData ? ["blockeditor", "live-data", "live-provenance", "conditional"] : ["blockeditor"];
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
     hostMeta: async () => ({ spec: 1, extensions, document: { etag: "stamp-1" } }),
@@ -246,11 +246,11 @@ let onState = null;
 function watchStates() {
   states = [];
   onState = (event) => states.push(event.detail?.state);
-  document.addEventListener("clay:page-save-state", onState);
+  document.addEventListener("clay:blockeditor-save-state", onState);
 }
 
 afterEach(() => {
-  if (onState) document.removeEventListener("clay:page-save-state", onState);
+  if (onState) document.removeEventListener("clay:blockeditor-save-state", onState);
   onState = null;
   try { current?.dispose(); } catch {}
   current = null;
@@ -273,9 +273,9 @@ const settle = async (save, timeout = 5000) => {
   while (!save.baselineSettled() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
 };
 
-// The table, in the one order that never overstates the evidence, and the only texts the
-// indicator may draw for these five states.
-test("the five states answer to the table, and the indicator draws its texts", async () => {
+// The table, in the one order that never overstates the evidence, and the quiet the
+// indicator keeps for every one of these five states: where the typing lives is not a save.
+test("the five states answer to the table, and the indicator draws none of them", async () => {
   const facts = { pending: 1, journaled: 1, acknowledged: 1, checkpointed: true };
   expect(pageStateFor({ unavailable: true, ...facts })).toBe("unavailable");
   expect(pageStateFor(facts)).toBe("pending");
@@ -291,25 +291,22 @@ test("the five states answer to the table, and the indicator draws its texts", a
   window.clayEditMode = true;
   document.body.innerHTML = "";
   await import("../../../src/plugins/indicator.js");
-  const texts = {
-    pending: "Saving…",
-    acknowledged: "Saving…",
-    checkpointed: "Saved",
-    unavailable: "Can't store changes: download a copy",
-  };
-  for (const [state, text] of Object.entries(texts)) {
-    document.dispatchEvent(new CustomEvent("clay:page-save-state", { detail: { state } }));
+  const quiet = ["pending", "acknowledged", "checkpointed"];
+  for (const state of quiet) {
+    document.dispatchEvent(new CustomEvent("clay:blockeditor-save-state", { detail: { state } }));
     await drawn();
     const chip = document.querySelector("[data-clay-indicator]");
-    expect({ state, text: chip.textContent }).toEqual({ state, text });
-    expect(chip.dataset.state).toBe(state);
+    expect({ state, chip }).toEqual({ state, chip: null });
   }
-  // The journal is not a save: it draws no chip of its own, so typing stays quiet.
-  document.dispatchEvent(new CustomEvent("clay:page-save-state", { detail: { state: "journaled" } }));
+  // A page that cannot store its changes says so in its own notice, with Download copy, so the
+  // corner chip stands down instead of saying it twice.
+  document.dispatchEvent(new CustomEvent("clay:blockeditor-save-state", { detail: { state: "unavailable" } }));
   await drawn();
-  const chip = document.querySelector("[data-clay-indicator]");
-  expect(chip.textContent).not.toBe("Stored on this device");
-  expect(chip.dataset.state).not.toBe("journaled");
+  expect(document.querySelector("[data-clay-indicator]")).toBeNull();
+  // The journal is not a save: it draws no chip of its own, so typing stays quiet.
+  document.dispatchEvent(new CustomEvent("clay:blockeditor-save-state", { detail: { state: "journaled" } }));
+  await drawn();
+  expect(document.querySelector("[data-clay-indicator]")).toBeNull();
 });
 
 // The page's recovery pieces are its own children: the page participant prepares,
@@ -328,35 +325,35 @@ test("the recovery modules are page children, and the page stays an export", asy
   expect(Object.keys(MODULE_SUPPORT).filter((path) => path in PAGE_FEATURE_SUPPORT)).toEqual([]);
 });
 
-test("a page state stays on screen while the journal has nothing to report, and Saved fades", async () => {
+test("a failure stays on screen while the journal reports, and a checkpointed page hides it", async () => {
   jest.resetModules();
   window.clayEditMode = true;
   document.body.innerHTML = "";
   await import("../../../src/plugins/indicator.js");
   jest.useFakeTimers();
 
-  const fire = (state) => document.dispatchEvent(new CustomEvent("clay:page-save-state", { detail: { state } }));
+  const fire = (state) => document.dispatchEvent(new CustomEvent("clay:blockeditor-save-state", { detail: { state } }));
   fire("journaled");
   await drawn();
   expect(document.querySelector("[data-clay-indicator]")).toBeNull();
 
-  fire("pending");
+  document.dispatchEvent(new CustomEvent("clay:save-error"));
   await drawn();
   const chip = document.querySelector("[data-clay-indicator]");
-  expect(chip.textContent).toBe("Saving…");
+  expect(chip.textContent).toBe("Couldn't save");
   jest.advanceTimersByTime(10_000);
   expect(chip.style.opacity).toBe("1");
 
-  fire("unavailable");
+  fire("pending");
   await drawn();
+  expect(chip.textContent).toBe("Couldn't save");
   expect(chip.style.opacity).toBe("1");
-  expect(chip.dataset.state).toBe("unavailable");
 
   fire("checkpointed");
   await drawn();
-  expect(chip.textContent).toBe("Saved");
-  jest.advanceTimersByTime(2200);
+  expect(chip.textContent).toBe("");
   expect(chip.style.opacity).toBe("0");
+  expect(chip.dataset.state).toBeUndefined();
 });
 
 test("nothing is Stored before the transaction commits, and a room's word is not Saved", async () => {
@@ -383,7 +380,7 @@ test("nothing is Stored before the transaction commits, and a room's word is not
   expect(states).not.toContain("checkpointed");
 
   // The room's confirmation is metadata: Shared, still not Saved.
-  const store = storeOf("page");
+  const store = storeOf("blockeditor");
   store.confirm(store.mark);
   await tick();
   expect(states).toContain("acknowledged");
@@ -472,9 +469,9 @@ test("a journal that cannot write says so once, and the copy it offers holds the
   expect(states).not.toContain("saved");
   // Not silently evicted: the records the store did confirm are still there.
   expect(harness.recordsOf("page.yjs").length).toBeGreaterThan(0);
-  expect(storeOf("page").value).toBeTruthy();
+  expect(storeOf("blockeditor").value).toBeTruthy();
 
-  const action = await until(() => $$("button", "toasts").find((button) => button.textContent === "Download a copy"));
+  const action = await until(() => $$("button", "toasts").find((button) => button.textContent === "Download copy"));
   expect(action).toBeTruthy();
   action.click();
   expect(await until(() => downloads.length > 0)).toBe(true);
@@ -590,8 +587,8 @@ test("edit, view, edit leaves one observer and one panel", async () => {
     await first.ready;
     await settle(harness.save);
     first.enable();
-    expect(rqa(".page-recovery")).toHaveLength(1);
-    const firstPanel = rq(".page-recovery-panel");
+    expect(rqa(".blockeditor-recovery")).toHaveLength(1);
+    const firstPanel = rq(".blockeditor-recovery-panel");
     expect(firstPanel).toBeTruthy();
     const firstSurface = harness.page.view.dom;
     const staged = (channel) => harness.recordsOf(channel).filter((record) => String(record.id).startsWith(`${channel}:stage:`));
@@ -599,8 +596,8 @@ test("edit, view, edit leaves one observer and one panel", async () => {
     first.dispose();
     await tick(20);
     // The view is gone, and so is everything the session drew or listened to.
-    expect(rqa(".page-recovery")).toHaveLength(0);
-    expect(rqa(".page-recovery-panel")).toHaveLength(0);
+    expect(rqa(".blockeditor-recovery")).toHaveLength(0);
+    expect(rqa(".blockeditor-recovery-panel")).toHaveLength(0);
     expect(recoveryHosts()).toHaveLength(0);
     const before = staged("page.ime").length;
     firstSurface.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
@@ -613,9 +610,9 @@ test("edit, view, edit leaves one observer and one panel", async () => {
       await second.ready;
       await settle(harness.save);
       second.enable();
-      expect(rqa(".page-recovery")).toHaveLength(1);
-      expect(rqa(".page-recovery-panel")).toHaveLength(1);
-      expect(rq(".page-recovery-panel")).not.toBe(firstPanel);
+      expect(rqa(".blockeditor-recovery")).toHaveLength(1);
+      expect(rqa(".blockeditor-recovery-panel")).toHaveLength(1);
+      expect(rq(".blockeditor-recovery-panel")).not.toBe(firstPanel);
       // One shadow listens: a composition pair stages its text twice, not four times.
       const block = harness.page.view.dom.querySelector('[data-id="p"]');
       expect(block).toBeTruthy();
@@ -643,7 +640,7 @@ test("a refused exit resumes the same document and the same records", async () =
     await settle(harness.save);
     lease.enable();
     const view = page.view;
-    const panel = rq(".page-recovery-panel");
+    const panel = rq(".blockeditor-recovery-panel");
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
     expect(await until(() => states.includes("journaled"))).toBe(true);
     const records = harness.recordsOf("page.yjs").length;
@@ -652,13 +649,13 @@ test("a refused exit resumes the same document and the same records", async () =
     await lease.quiesce();
     expect(page.view).toBe(view);
     expect(view.dom.textContent).toContain("Hello there");
-    expect(rq(".page-recovery-panel")).toBe(panel);
+    expect(rq(".blockeditor-recovery-panel")).toBe(panel);
 
     lease.resume();
     expect(page.view).toBe(view);
     expect(view.editable).toBe(true);
     expect(view.dom.textContent).toContain("Hello there");
-    expect(rq(".page-recovery-panel")).toBe(panel);
+    expect(rq(".blockeditor-recovery-panel")).toBe(panel);
     // The records the refused exit kept are the records this session still holds.
     expect(harness.recordsOf("page.yjs").length).toBe(records);
   } finally {
@@ -686,7 +683,7 @@ test("a reader creates no channel and makes no IndexedDB request", async () => {
   expect(opened).toEqual([]);
   expect(await harness.page.ready).toBe(null);
   expect(states).toEqual([]);
-  expect(rq(".page-recovery")).toBe(null);
+  expect(rq(".blockeditor-recovery")).toBe(null);
   expect(recoveryHosts()).toHaveLength(0);
 });
 
@@ -711,8 +708,8 @@ test("a read that lands after the review is disposed draws nothing", async () =>
   await tick(20);
 
   expect(review.count).toBe(0);
-  expect(rq(".page-recovery")).toBe(null);
-  expect(rq(".page-recovery-panel")).toBe(null);
+  expect(rq(".blockeditor-recovery")).toBe(null);
+  expect(rq(".blockeditor-recovery-panel")).toBe(null);
   expect(recoveryHosts()).toHaveLength(0);
   expect(mount.children).toHaveLength(0);
 });

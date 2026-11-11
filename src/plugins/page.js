@@ -2,7 +2,7 @@ import { FEATURES, featureForNode, featureForType } from "../page/features/regis
 import { mergeEngine } from "../sync/merge-engine.js";
 import { registerUnsavedState } from "../lib/unsaved-state.js";
 import { hostMeta } from "../core/host-meta.js";
-import { savePageForce, holdAllSaves, releaseAllSaves, suspendAutosave, resumeAutosave, getLastSavedBytes, savesAdmitted } from "../core/save.js";
+import { savePageForce, holdAllSaves, releaseAllSaves, suspendAutosave, resumeAutosave, getLastSavedBytes, savesAdmitted, claimFailure } from "../core/save.js";
 import { setSaveHeader, onSaveAccepted } from "../core/save-core.js";
 import { lastSeenEtag, representedEtag, recordEtag } from "../core/etag.js";
 import { captureForSaveAndComparison } from "../core/snapshot.js";
@@ -21,13 +21,13 @@ import { style } from "../lib/hostile-css.js";
 import { addViewHook } from "../page/view-hooks.js";
 import { previewShown } from "../page/ai-preview.js";
 
-const ARTICLE_SEL = "article[data-page]";
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
+const ARTICLE_SEL = "article[data-blockeditor]";
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
 const BLOCKED = { state: "blocked", code: "unsupported-host", message: "This host does not support page editing" };
 const STORE_TEXT = "Changes cannot be stored on this device. Download a copy to keep them.";
 const RETRY_BOUND_MS = 45000;
 const GENERIC_ERROR = "Couldn't save";
-const GENERIC_OFFLINE = "Offline, not saved";
+const GENERIC_OFFLINE = "Offline, will retry";
 const REPLACED_TEXT = "This page was changed outside the editor. Reload to see it.";
 const TOO_LARGE_TEXT = "That change is too large to share, so it was not saved. Reload the page to keep editing.";
 const VISITOR_MEDIA = "Download your copy to add pictures and files.";
@@ -50,11 +50,11 @@ const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArr
 function unreadablePage(value) {
   if (!isPlainObject(value)) {
     console.warn("clayjs: page plugin: the page tag is not JSON, leaving the page as saved HTML");
-    return "invalid-page-json";
+    return "invalid-blockeditor-json";
   }
   if (value.v !== 1 || !isPlainObject(value.y) || Object.hasOwn(value, "blocks") || Object.hasOwn(value, "deleted")) {
     console.warn("clayjs: page plugin: the page tag is not a strict Yjs page, leaving the page as saved HTML");
-    return "unsupported-page-format";
+    return "unsupported-blockeditor-format";
   }
   return null;
 }
@@ -102,7 +102,7 @@ function armLoadingStatus(inst, article) {
     inst.statusTimer = null;
     if (!isCurrent(inst)) return;
     const note = article.ownerDocument.createElement("div");
-    note.className = "page-boot-status";
+    note.className = "blockeditor-boot-status";
     note.setAttribute("clay", "editor-ui");
     note.setAttribute("sap-ignore", "");
     note.setAttribute("role", "status");
@@ -153,7 +153,7 @@ function scrollToHashBlock(view, loc = globalThis.location) {
 }
 
 function dispatchState(state, code = null, message = "") {
-  document.dispatchEvent(new CustomEvent("clay:page-save-state", { detail: { state, code, message } }));
+  document.dispatchEvent(new CustomEvent("clay:blockeditor-save-state", { detail: { state, code, message } }));
 }
 
 function dismissGeneric() {
@@ -203,7 +203,7 @@ function showBlocked(inst, code, message, state = "blocked") {
   toastPersistent(state === "unavailable" ? STORE_TEXT : BLOCKED_TEXT, "error", {
     detail: message,
     actions: [
-      { label: "Download a copy", onClick: downloadPageCopy },
+      { label: "Download copy", onClick: downloadPageCopy },
       { label: "Copy text", onClick: copyPageText },
     ],
   });
@@ -333,15 +333,20 @@ function notifyHistory(inst) {
 }
 
 function listenForSaves(inst) {
+  // Retrying and blocked carry the editor's own notices, so core adds no generic one on
+  // top; a plain error is left to the generic "Couldn't save".
+  const reportFailure = (event, state) => {
+    if (state !== "error") claimFailure(event);
+    applySaveState(inst, state, event.detail?.code ?? null, event.detail?.msg ?? "");
+  };
   listen(inst, "clay:save-error", (event) => {
     const code = event.detail?.code ?? null;
     // The host holds exactly what this tab would have written: nothing to report.
-    if (code === "page-nothing-to-write") return;
-    applySaveState(inst, saveStateFor({ code }), code, event.detail?.msg ?? "");
+    if (code === "blockeditor-nothing-to-write") return claimFailure(event);
+    reportFailure(event, saveStateFor({ code }));
   });
   listen(inst, "clay:save-offline", (event) => {
-    const code = event.detail?.code ?? null;
-    applySaveState(inst, saveStateFor({ code, offline: true }), code, event.detail?.msg ?? "");
+    reportFailure(event, saveStateFor({ code: event.detail?.code ?? null, offline: true }));
   });
   listen(inst, "clay:save-conflict", (event) => {
     const code = event.detail?.code ?? null;
@@ -356,7 +361,7 @@ function listenForSaves(inst) {
     inst.adoption?.saved(getLastSavedBytes());
   });
   listen(inst, "clay:live-notice", (event) => {
-    if (event.detail?.name !== "page") return;
+    if (event.detail?.name !== "blockeditor") return;
     if (event.detail?.code === "op-too-large") return;
     if (event.detail?.code === "unknown-store") {
       showReplaced(inst);
@@ -393,7 +398,7 @@ async function retryFirstWrite(inst, event) {
   const staged = inst.staged;
   if (!staged || inst.staleRetry || inst.replaced) return;
   const refusal = event?.detail?.code ?? null;
-  if (refusal !== "page-lineage-stale" && refusal !== "conflict") return;
+  if (refusal !== "blockeditor-lineage-stale" && refusal !== "conflict") return;
   if (!inst.store || !staged.isPending()) return;
   inst.staleRetry = true;
   try {
@@ -451,7 +456,7 @@ function releaseMounted(inst) {
   inst.toolHost = null;
   if (inst.view) toolViews.delete(inst.view);
   if (inst.article) {
-    const shell = inst.article.querySelector(".page-shell");
+    const shell = inst.article.querySelector(".blockeditor-shell");
     if (shell) shell.remove();
   }
   try { inst.binding?.dispose(); } catch (error) { console.error("clayjs: page plugin binding failed to dispose", error); }
@@ -459,7 +464,7 @@ function releaseMounted(inst) {
   try { inst.staged?.close(); } catch (error) { console.error("clayjs: page plugin staged store failed to close", error); }
   inst.staged = null;
   if (inst.pageStore) {
-    try { closeStore("page", inst.pageStore); } catch (error) { console.error("clayjs: page plugin store failed to close", error); }
+    try { closeStore("blockeditor", inst.pageStore); } catch (error) { console.error("clayjs: page plugin store failed to close", error); }
     inst.pageStore = null;
   }
   inst.binding = null;
@@ -489,7 +494,7 @@ function dispose() {
   generation += 1;
   const inst = active;
   active = null;
-  setSaveHeader("Page-Write", null);
+  setSaveHeader("Blockeditor-Write", null);
   registerPageCheckpoints(null);
   if (!inst) return;
   disposeInstall(inst);
@@ -578,7 +583,7 @@ async function replayJournal(inst) {
 function installRecoveryReview(inst, ui) {
   if (inst.recoveryPanel) return inst.recoveryPanel;
   const view = inst.view;
-  const mount = view?.dom.closest(".page-shell") ?? inst.article;
+  const mount = view?.dom.closest(".blockeditor-shell") ?? inst.article;
   if (!mount) return null;
   const review = ui.createRecoveryReview({
     mount,
@@ -716,7 +721,7 @@ export function createSteps(inst, options) {
   // A document with a tool block, at boot or when one arrives, opens the store its
   // tools keep state in and the host that mounts them. A document with no tool
   // never waits for either.
-  const TOOLS_SEL = 'script[type="application/json"][merge="page.tools"][clay~="live"]';
+  const TOOLS_SEL = 'script[type="application/json"][merge="blockeditor.tools"][clay~="live"]';
   const openTools = () => {
     if (toolsOpening) return toolsOpening;
     toolsOpening = (async () => {
@@ -726,14 +731,14 @@ export function createSteps(inst, options) {
       if (!document.querySelector(TOOLS_SEL)) {
         const tools = document.createElement("script");
         tools.setAttribute("type", "application/json");
-        tools.setAttribute("merge", "page.tools");
+        tools.setAttribute("merge", "blockeditor.tools");
         tools.setAttribute("clay", "live");
         tools.textContent = "{}";
         document.head.appendChild(tools);
       }
       if (document.querySelector(TOOLS_SEL)) {
         try {
-          toolsStore = window.clay.live("page.tools");
+          toolsStore = window.clay.live("blockeditor.tools");
           await toolsStore.ready;
         } catch (error) {
           console.warn("clayjs: page plugin could not open the tool store", error);
@@ -761,7 +766,7 @@ export function createSteps(inst, options) {
   // The document's own switches travel with it: the gear panel writes them into the
   // page's live store, and a document that never touched one opens no store at all.
   // Turning a switch off hides a tag; the owner and due values stay in the file.
-  const SETTINGS_SEL = 'script[type="application/json"][merge="page.settings"][clay~="live"]';
+  const SETTINGS_SEL = 'script[type="application/json"][merge="blockeditor.settings"][clay~="live"]';
   const SETTING_KEYS = ["assignees", "dates"];
   let settingsOpening = null;
   let settingsValue = { assignees: true, dates: true };
@@ -796,14 +801,14 @@ export function createSteps(inst, options) {
       if (!document.querySelector(SETTINGS_SEL)) {
         const tag = document.createElement("script");
         tag.setAttribute("type", "application/json");
-        tag.setAttribute("merge", "page.settings");
+        tag.setAttribute("merge", "blockeditor.settings");
         tag.setAttribute("clay", "live");
         tag.textContent = "{}";
         document.head.appendChild(tag);
       }
       let handle = null;
       try {
-        handle = window.clay.live("page.settings");
+        handle = window.clay.live("blockeditor.settings");
         await handle.ready;
       } catch (error) {
         console.warn("clayjs: page plugin could not open the settings store", error);
@@ -886,7 +891,7 @@ export function createSteps(inst, options) {
       : null;
     const articles = represented ? represented.querySelectorAll(ARTICLE_SEL) : liveArticles;
     const tags = represented ? represented.querySelectorAll(TAG_SEL) : document.querySelectorAll(TAG_SEL);
-    if (!articles.length && !tags.length) return { ok: false, reason: "no-page" };
+    if (!articles.length && !tags.length) return { ok: false, reason: "no-blockeditor" };
     // A page saved without its merge state (HTML Clay, an outside edit, a download)
     // is booted from its article alone: the seed is deterministic, so every tab
     // rebuilding the same article holds the same state and their edits merge. The tag
@@ -895,11 +900,11 @@ export function createSteps(inst, options) {
     // the next install to read as a page the file already has.
     const seeded = articles.length === 1 && tags.length === 0;
     if (articles.length !== 1 || (!seeded && tags.length !== 1)) {
-      console.warn(`clayjs: page plugin needs exactly one article[data-page] and one merge="page" live tag; found ${articles.length} article(s) and ${tags.length} tag(s), leaving the page as saved HTML`);
-      return { ok: false, reason: "ambiguous-page" };
+      console.warn(`clayjs: page plugin needs exactly one article[data-blockeditor] and one merge="blockeditor" live tag; found ${articles.length} article(s) and ${tags.length} tag(s), leaving the page as saved HTML`);
+      return { ok: false, reason: "ambiguous-blockeditor" };
     }
     const element = liveArticles[0];
-    if (!element) return { ok: false, reason: "no-page" };
+    if (!element) return { ok: false, reason: "no-blockeditor" };
     // The file the reader represented is the page this session edits: its tag and the
     // article the seed is built from come off those bytes once, so a tag another tab
     // changed and a reader's own local state cannot reach what is staged. The live
@@ -921,7 +926,7 @@ export function createSteps(inst, options) {
       if (seeded) {
         try {
           const meta = await hostMeta();
-          const href = meta?.extensions?.includes("page-recovery-v1") && meta.document?.pageState?.href;
+          const href = meta?.extensions?.includes("blockeditor-recovery-v1") && meta.document?.blockeditorState?.href;
           const etag = inst.context?.represented ? inst.context.represented.etag : representedEtag() ?? lastSeenEtag();
           if (href && etag) {
             const { readPageState } = await import("../page/checkpoint-proof.js");
@@ -931,7 +936,7 @@ export function createSteps(inst, options) {
               if (stored.etag !== etag) return { ok: false, reason: "etag-mismatch" };
               value = parseJsonRelaxed(stored.tag);
               source.persisted = true;
-            } else if (stored.code !== "no-page-state") {
+            } else if (stored.code !== "no-blockeditor-state") {
               return { ok: false, reason: stored.code };
             }
           } else if (href) {
@@ -944,7 +949,7 @@ export function createSteps(inst, options) {
           value = source.seedValue = value ?? code.seedPageFromArticle(source.article.cloneNode(true));
         } catch (error) {
           console.warn("clayjs: page plugin could not rebuild the page it found, leaving the page as saved HTML", error);
-          return { ok: false, reason: "invalid-page-source" };
+          return { ok: false, reason: "invalid-blockeditor-source" };
         }
         const unreadable = unreadablePage(value);
         if (unreadable) return { ok: false, reason: unreadable };
@@ -954,7 +959,7 @@ export function createSteps(inst, options) {
         source.blocks = code.blocksFromYValue(value);
       } catch (error) {
         console.warn("clayjs: page plugin: the page tag is not a valid Yjs page, leaving the page as saved HTML", error);
-        return { ok: false, reason: "invalid-page-json" };
+        return { ok: false, reason: "invalid-blockeditor-json" };
       }
       return { ok: true };
     })();
@@ -1015,9 +1020,9 @@ export function createSteps(inst, options) {
     // its tag waits for it before the join. Nothing else on this path touches a vendor.
     const codePromise = pageCodeReady();
     // A visitor's draft never asks the host: the editor's only store is this browser's.
-    try { meta = isDraftMode ? { spec: null, extensions: ["page"], document: null } : await hostMeta(); } catch (error) { meta = null; }
+    try { meta = isDraftMode ? { spec: null, extensions: ["blockeditor"], document: null } : await hostMeta(); } catch (error) { meta = null; }
     if (!isCurrent(inst)) return { ok: false, cancelled: true };
-    if (!meta || !Array.isArray(meta.extensions) || !meta.extensions.includes("page")) {
+    if (!meta || !Array.isArray(meta.extensions) || !meta.extensions.includes("blockeditor")) {
       showBlocked(inst, BLOCKED.code, BLOCKED.message);
       return { ok: false, reason: "missing-capability" };
     }
@@ -1026,7 +1031,7 @@ export function createSteps(inst, options) {
     // is merged by the boot instead of being read as a replacement.
     inst.mergeTagless = !meta.extensions.includes("live-data");
     // The one declaration that lets a host answer a seed-only body with nothing-to-write.
-    setSaveHeader("Page-Write", "v1");
+    setSaveHeader("Blockeditor-Write", "v1");
     // A seeded page is the one boot whose join needs the page code, which rebuilds
     // the seed the article states.
     let read = null;
@@ -1046,7 +1051,7 @@ export function createSteps(inst, options) {
     let ownsStore = true;
     try {
       if (source.seeded) {
-        const staged = stageStore("page", {
+        const staged = stageStore("blockeditor", {
           value: source.seedValue,
           represented: options.represented ?? { bytes: source.article.outerHTML, etag: representedEtag() ?? lastSeenEtag() },
           persisted: source.persisted,
@@ -1054,14 +1059,14 @@ export function createSteps(inst, options) {
         inst.staged = staged;
         handle = staged.handle;
       } else {
-        const opened = storeOf("page") === null;
+        const opened = storeOf("blockeditor") === null;
         ownsStore = opened;
-        handle = window.clay.live("page");
-        if (opened) inst.pageStore = storeOf("page");
+        handle = window.clay.live("blockeditor");
+        if (opened) inst.pageStore = storeOf("blockeditor");
       }
     } catch (error) {
       console.warn("clayjs: page plugin could not open the page store", error);
-      return { ok: false, reason: "missing-page-store" };
+      return { ok: false, reason: "missing-blockeditor-store" };
     }
     try {
       await handle.ready;
@@ -1079,14 +1084,14 @@ export function createSteps(inst, options) {
     // file before anything mounts on it, and a store that cannot take it refuses the
     // entry rather than mounting a page the file does not state. A store that has joined
     // a room is the exception: the room is newer than any file, and its value stands.
-    const inRoom = storeOf("page")?.handle?.status?.mode === "fast";
-    if (!ownsStore && !inRoom && !mergeRepresentedPage(storeOf("page"), source.tags?.[0])) {
+    const inRoom = storeOf("blockeditor")?.handle?.status?.mode === "fast";
+    if (!ownsStore && !inRoom && !mergeRepresentedPage(storeOf("blockeditor"), source.tags?.[0])) {
       return { ok: false, reason: "stale-store" };
     }
     code ??= await codePromise;
     if (!isCurrent(inst)) return { ok: false, cancelled: true };
-    const store = storeOf("page");
-    if (!store) return { ok: false, reason: "missing-page-store" };
+    const store = storeOf("blockeditor");
+    if (!store) return { ok: false, reason: "missing-blockeditor-store" };
     inst.store = store;
 
     let flushFailed = false;
@@ -1108,9 +1113,9 @@ export function createSteps(inst, options) {
       onStopped: (reason) => {
         inst.tabValue = code.yValueOf(binding.ydoc);
         if (reason === "lineage") {
-          fastLane()?.abandon?.("page");
+          fastLane()?.abandon?.("blockeditor");
           showReplaced(inst);
-        } else if (reason === "page-full" || reason === "compaction-failed") {
+        } else if (reason === "blockeditor-full" || reason === "compaction-failed") {
           showFull(inst, reason);
         } else {
           showTooLarge(inst);
@@ -1238,7 +1243,7 @@ function mountAndAttach(inst, source, loaded) {
     else listen(inst, "clay:sync-applied", () => {
       if (!settingsOpening && document.querySelector(SETTINGS_SEL)) openSettings().catch(() => null);
     });
-    const shell = view.dom.closest(".page-shell");
+    const shell = view.dom.closest(".blockeditor-shell");
     // A shell still waiting for its boot takes no input of any kind: a control inside
     // a non-editable editor would otherwise write before the boot says ready. It is
     // cleared at the one place input is enabled.
@@ -1250,7 +1255,8 @@ function mountAndAttach(inst, source, loaded) {
     if (shell) article.appendChild(shell);
     loaded.refreshView?.(view);
     binding.attach(view);
-    // The page's history tells whoever presents it, once per entry it takes or replays. A
+    // The page's history tells whoever presents it once it exists (a menu opened before the
+    // editor came up gets its Undo row then), and once per entry it takes or replays. A
     // peer's typing takes none of them: their work is not this tab's to undo.
     const um = binding.bridge?.um;
     if (um) {
@@ -1263,6 +1269,7 @@ function mountAndAttach(inst, source, loaded) {
         um.off("stack-item-popped", notify);
         um.off("stack-cleared", notify);
       });
+      notify();
     }
     // A proposal shown or cleared changes what the pair may do without touching the stack,
     // so the change of that flag is what is told, not every transaction.
@@ -1284,7 +1291,7 @@ function mountAndAttach(inst, source, loaded) {
     scrollToHashBlock(view);
     inst.recover = loaded.code.createRecoverList({
       binding,
-      mount: view.dom.closest(".page-shell") ?? article,
+      mount: view.dom.closest(".blockeditor-shell") ?? article,
       ownTokens: [identity.token, ...identity.owned],
       onRestored: (id) => loaded.code.focusBlock(view, id),
       onStale: () => toast("That change was updated. The list now shows the latest version.", "warning"),
@@ -1373,7 +1380,7 @@ function mountAndAttach(inst, source, loaded) {
         inst.store.handle.set(["y", key], value);
         // The session is not admitted until the commit, so its ops stay in the tab: the
         // claim alone is framed now, before adoption writes anything, or no election runs.
-        lane.release("page");
+        lane.release("blockeditor");
       }
       // A lane that never reports a writer must not cost the hand edit: give up
       // before adoption's own bound, and adopt as the file-mode tab would.
@@ -1396,7 +1403,7 @@ function mountAndAttach(inst, source, loaded) {
       mergeTagless: inst.mergeTagless,
       seeded: source.seeded,
       writerReady: awaitWriter,
-      adopted: (rev) => fastLane()?.adopted?.("page", rev, inst.store.mark),
+      adopted: (rev) => fastLane()?.adopted?.("blockeditor", rev, inst.store.mark),
       notice: (counts) => {
         if (!counts.copy) return;
         toastPersistent(OVERWRITTEN_TEXT, "warning", {
@@ -1429,12 +1436,12 @@ function mountAndAttach(inst, source, loaded) {
   async function prepareInput(inst, mounted) {
     // A replacement that landed while the page was still booting keeps the editor
     // read-only: the notice is already up, and this tab must not edit the old article.
-    if (inst.replaced) return { ok: false, reason: "page-replaced" };
+    if (inst.replaced) return { ok: false, reason: "blockeditor-replaced" };
     await featuresReady;
     if (!isCurrent(inst)) return { ok: false, cancelled: true };
     // The gate: this installation's own view, still in the article it claimed, over
     // the binding the room accepted. Anything else is not something to type into.
-    const shell = mounted.view.dom.closest(".page-shell");
+    const shell = mounted.view.dom.closest(".blockeditor-shell");
     if (!ownsView(inst, mounted) || !shell || !shell.isConnected || mounted.view.isDestroyed) {
       return { ok: false, reason: "view-detached" };
     }
@@ -1454,7 +1461,7 @@ function mountAndAttach(inst, source, loaded) {
   // opens. It changes activation only, and only after preparation already passed, so
   // the commit that enters edit cannot fail here.
   function openInput(inst, mounted) {
-    const shell = mounted.view.dom.closest(".page-shell");
+    const shell = mounted.view.dom.closest(".blockeditor-shell");
     const showEditor = () => {
       for (const node of savedContent) node.remove();
       if (shell) shell.style.visibility = "";
@@ -1464,7 +1471,7 @@ function mountAndAttach(inst, source, loaded) {
     if (inst.replaced) {
       showEditor();
       stopEditing(inst);
-      return { ok: false, reason: "page-replaced" };
+      return { ok: false, reason: "blockeditor-replaced" };
     }
     if (inst.inputOpen) return { ok: true };
     if (!ownsView(inst, mounted) || !shell || !shell.isConnected || mounted.view.isDestroyed) {
@@ -1559,7 +1566,7 @@ function endSession(inst) {
     active = null;
     generation += 1;
   }
-  setSaveHeader("Page-Write", null);
+  setSaveHeader("Blockeditor-Write", null);
   disposeInstall(inst);
   dismissSaveStateToasts(inst, true);
   inst.titleObserver?.dispose();
@@ -1661,7 +1668,7 @@ export function preparePageSession(context = null, options = {}) {
  */
 export function pageParticipant(options = {}) {
   return {
-    id: "clay:page",
+    id: "clay:blockeditor",
     // After live (200) and upload (340): the page builds its stores over the admission
     // those two already opened.
     order: 400,
@@ -1721,7 +1728,7 @@ onSaveAccepted((html) => {
 if (isDraftMode) {
   // Another tab of this visitor's draft recorded its page: it joins this tab's in one Y
   // document, the same merge a represented page takes, and the next save records both.
-  document.addEventListener("clay:drafts-page-external", (event) => {
+  document.addEventListener("clay:drafts-blockeditor-external", (event) => {
     const { live, adopted } = event.detail || {};
     if (!live || typeof live !== "object") return;
     let merged = true;
@@ -1729,7 +1736,7 @@ if (isDraftMode) {
       const store = storeOf(name);
       if (!store) continue;
       try {
-        const ok = name === "page" ? mergeRepresentedPage(store, value) : store.rebase(value, { source: "state" });
+        const ok = name === "blockeditor" ? mergeRepresentedPage(store, value) : store.rebase(value, { source: "state" });
         if (ok === false) merged = false;
       } catch (error) {
         console.warn("clayjs: another tab's page could not join this one", error);
@@ -1741,7 +1748,7 @@ if (isDraftMode) {
     if (merged) active?.binding?.provider?.settle?.();
     if (merged) adopted?.();
   });
-  document.dispatchEvent(new CustomEvent("clay:drafts-page-listening"));
+  document.dispatchEvent(new CustomEvent("clay:drafts-blockeditor-listening"));
 }
 
 // A live entry imports this module while the committed mode is still view: the install

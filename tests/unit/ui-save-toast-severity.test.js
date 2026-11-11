@@ -13,6 +13,10 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
+afterEach(() => {
+  window.clay.saveToast = false;
+});
+
 function fireSaved(detail) {
   document.dispatchEvent(new CustomEvent("clay:save-saved", { detail }));
 }
@@ -31,6 +35,7 @@ test("warning msgType renders a warning toast carrying the server's text", () =>
 });
 
 test("success msgType renders a success toast", () => {
+  window.clay.saveToast = true;
   fireSaved({ msg: "Saved", msgType: "success" });
 
   const el = renderedToast();
@@ -39,6 +44,7 @@ test("success msgType renders a success toast", () => {
 });
 
 test("absent msgType renders a success toast", () => {
+  window.clay.saveToast = true;
   fireSaved({ msg: "Saved" });
 
   expect(renderedToast().getAttribute("data-clay-toast")).toBe("success");
@@ -60,6 +66,7 @@ test("markup in the server's message is rendered as text, never as HTML", () => 
 });
 
 test("absent detail falls back to a Saved success toast", () => {
+  window.clay.saveToast = true;
   fireSaved(undefined);
 
   const el = renderedToast();

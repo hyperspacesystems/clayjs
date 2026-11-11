@@ -1,6 +1,5 @@
-// clay-ui on a page with no indicator plugin: nothing else reports the save, so the
-// automatic "Saved" toast stays. The page carrying both is covered in
-// save-feedback.test.js.
+// clay-ui on a page with no indicator plugin: Saved stays silent unless the page asks for
+// it with clay.saveToast. The page carrying both is covered in save-feedback.test.js.
 
 import { $$ } from "./helpers/editor-ui.js";
 
@@ -12,12 +11,23 @@ beforeAll(async () => {
   await import("../../src/ui/index.js");
 });
 
-test("saved: with no chip on the page the toast is the only feedback", () => {
+test("saved: without clay.saveToast there is no toast, chip or not", () => {
   fire("saved", { msg: "Saved" });
 
-  const success = toasts("success");
-  expect(success).toHaveLength(1);
-  expect(success[0].textContent).toContain("Saved");
+  expect(toasts("success")).toHaveLength(0);
+});
+
+test("saved: with clay.saveToast the Saved toast is the feedback", () => {
+  window.clay.saveToast = true;
+  try {
+    fire("saved", { msg: "Saved" });
+
+    const success = toasts("success");
+    expect(success).toHaveLength(1);
+    expect(success[0].textContent).toContain("Saved");
+  } finally {
+    window.clay.saveToast = false;
+  }
 });
 
 test("a warning on a successful save is a toast here too", () => {

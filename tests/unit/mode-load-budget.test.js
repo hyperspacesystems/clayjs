@@ -29,7 +29,7 @@ const budget = JSON.parse(readFileSync(path.join(root, "scripts/load-budget.json
 let measureBuilt;
 let emitChunks;
 let emitBootstraps;
-const SEARCH = "?plugins=page";
+const SEARCH = "?plugins=blockeditor";
 const CEILING = 52992;
 
 const declared = (html) => html.replace(/<html\b([^>]*)>/, '<html$1 clay-mode-switch="live">');

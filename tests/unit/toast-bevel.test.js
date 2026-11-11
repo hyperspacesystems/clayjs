@@ -121,7 +121,7 @@ test("control: a toast stays 7099 ms and is gone at 7100 ms", () => {
 
 test("control: a toast dismisses on click, a persistent one only through its close button", () => {
   toast("Saved");
-  toastPersistent("Offline, not saved");
+  toastPersistent("Offline, will retry");
   jest.advanceTimersByTime(10);
   const [plain, sticky] = anyToasts();
 
@@ -156,13 +156,13 @@ test("scheme: a toast takes the page's declared scheme", () => {
 });
 
 test("control: closing a persistent toast never takes a newer one's place in the map", () => {
-  toastPersistent("Offline, not saved");
+  toastPersistent("Offline, will retry");
   jest.advanceTimersByTime(10);
   anyToasts()[0].querySelector("button").click();
   jest.advanceTimersByTime(100);
-  toastPersistent("Offline, not saved");
+  toastPersistent("Offline, will retry");
   jest.advanceTimersByTime(500);
-  toastPersistent("Offline, not saved");
+  toastPersistent("Offline, will retry");
   jest.advanceTimersByTime(500);
   expect(anyToasts()).toHaveLength(1);
 });
@@ -176,4 +176,25 @@ test("reduced motion: a toast moves without a transition", () => {
   } finally {
     window.matchMedia = original;
   }
+});
+
+test("a persistent toast's detail and buttons start where its title text does, not under the glyph", () => {
+  toastPersistent("Can't save here. Your edits are still in this tab.", "error", {
+    detail: "This host does not support page editing",
+    actions: [{ label: "Download copy", onClick: () => {} }, { label: "Copy text", onClick: () => {} }],
+  });
+  const el = toasts().at(-1);
+  const [body] = el.children;
+  const [head, detail, row] = body.children;
+  const [glyph] = head.children;
+  expect(glyph.style.getPropertyValue("padding-top")).toBe("1px");
+  expect(head.style.getPropertyValue("gap")).toBe("8px");
+  expect(detail.textContent).toBe("This host does not support page editing");
+  expect(detail.style.getPropertyValue("padding-inline-start")).toBe("24px");
+  // 24px less the quiet small button's 2px border and 8px padding, so its label lines up.
+  expect(row.style.getPropertyValue("padding-inline-start")).toBe("14px");
+  const button = row.querySelector("button");
+  expect(button.textContent).toBe("Download copy");
+  expect(button.style.getPropertyValue("padding")).toBe("4px 8px");
+  expect(button.style.getPropertyValue("border-width") || button.style.getPropertyValue("border-left-width") || "2px").toMatch(/^2px/);
 });

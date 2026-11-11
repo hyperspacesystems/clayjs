@@ -5,7 +5,7 @@
       "eventSources": 1,
       "listeners": {
         "window": 14,
-        "document": 81,
+        "document": 84,
         "Element": 38
       },
       "observers": 3,
@@ -15,6 +15,7 @@
         "addDocumentTransform",
         "aiEdit",
         "assets",
+        "blockeditor",
         "cacheBust",
         "canEdit",
         "conflicts",
@@ -35,7 +36,6 @@
         "modeLifecycle",
         "morph",
         "onSnapshot",
-        "page",
         "plugins",
         "presence",
         "readData",
@@ -61,7 +61,7 @@
         "upload",
         "sync",
         "live",
-        "page",
+        "blockeditor",
         "menu",
         "wire",
         "ai-edit",
@@ -144,7 +144,7 @@
         "writeData"
       ],
       "plugins": [
-        "page-view",
+        "blockeditor-view",
         "menu"
       ],
       "moduleCalls": {
@@ -168,8 +168,8 @@
       "eventSources": 1,
       "listeners": {
         "window": 19,
-        "document": 114,
-        "Element": 49
+        "document": 117,
+        "Element": 48
       },
       "observers": 3,
       "intervals": 0,
@@ -353,8 +353,8 @@
       "eventSources": 1,
       "listeners": {
         "window": 17,
-        "document": 81,
-        "Element": 12
+        "document": 84,
+        "Element": 11
       },
       "observers": 1,
       "intervals": 0,

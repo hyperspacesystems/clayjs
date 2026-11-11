@@ -13,7 +13,7 @@ import { HOST_CSS } from "../../src/ui/editor-ui.js";
 const SLOT = "/notes.html";
 const HEAD = '<title>Start title</title><meta name="description" content="Start description">';
 const BODY = '<div id="content">start</div>';
-const DOCUMENT_BODY = '<article data-page><h1>Heading title</h1><p>start</p></article>';
+const DOCUMENT_BODY = '<article data-blockeditor><h1>Heading title</h1><p>start</p></article>';
 const REOPEN_KEY = "clay:doc:/notes.html:reopen-seo";
 
 const settle = async () => {
@@ -289,4 +289,49 @@ test("the menu and the panel each sit in an open shadow root whose host stops th
   expect($(".clay-seo", "seo").parentNode).toBe(rootOf("seo"));
   expect(document.body.firstElementChild).toBe(hostOf("seo"));
   expect(document.querySelectorAll("#clay-menu-style, #clay-seo-style")).toHaveLength(0);
+});
+
+// Scenario: each look's SEO sheet matches the page (David, Nov 11). A page that skins its
+// menu with <style clay-menu-skin> gets the same dock rule on the sheet, so the page's own
+// tokens colour it; a page without one keeps the sheet's own surface.
+const SKIN = '<style clay-menu-skin="1" media="not all">[part~="dock"] { --bevel-surface: rgb(1, 2, 3); }</style>';
+
+test("a page's menu skin dresses the sheet, and its surface is not overridden", async () => {
+  await boot({ body: SKIN + BODY });
+  await openSheet();
+
+  expect(sheetRoot().getAttribute("part")).toBe("dock");
+  expect(sheetText("seo")).toContain("--bevel-surface: rgb(1, 2, 3)");
+  expect(sheetRoot().style.getPropertyValue("--bevel-surface")).toBe("");
+});
+
+test("a page with no menu skin keeps the sheet's own look", async () => {
+  await boot();
+  await openSheet();
+
+  expect(sheetRoot().hasAttribute("part")).toBe(false);
+  expect(sheetText("seo")).not.toContain("clay-menu-skin");
+});
+
+// Scenario: the Description and Preview description boxes grow to their text, or to the
+// placeholder while empty, so nobody scrolls inside them (David, Nov 11).
+test("description boxes are as tall as their text, and an empty one as tall as its placeholder", async () => {
+  const lines = (box) => Math.ceil((box.value.length || 1) / 40) * 20;
+  const spy = jest.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockImplementation(function () { return lines(this); });
+  try {
+    await boot();
+    await openSheet();
+
+    setValue("description", "x".repeat(150));
+    expect(fieldOf("description").style.height).toBe("80px");
+
+    setValue("ogDescription", "");
+    expect(fieldOf("ogDescription").value).toBe("");
+    expect(fieldOf("ogDescription").style.height).toBe("80px");
+
+    setValue("description", "short");
+    expect(fieldOf("description").style.height).toBe("20px");
+  } finally {
+    spy.mockRestore();
+  }
 });

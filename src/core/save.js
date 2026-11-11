@@ -111,6 +111,43 @@ function setSaveState(state, msg = '', msgType = '', extra = null) {
     detail: { msg, msgType, timestamp: Date.now(), ...(extra || {}) }
   });
   document.dispatchEvent(event);
+  reportIfUnheard(state, event.detail);
+}
+
+// A failed save is never silent. Every listener has seen the event by now; a listener
+// that put its own notice up (the block editor's retry and blocked notices) claimed it.
+// The rest goes to save-failure-notice.js, which shows a toast when nothing else on the
+// page reports failures and takes it down when a later save lands. The claim key is
+// save-feedback.js's FAILURE_CLAIMED.
+const FAILURE_CLAIMED = Symbol.for('clay.saveFailureClaimed');
+export const claimFailure = (event) => { if (event?.detail) event.detail[FAILURE_CLAIMED] = true; };
+
+let failureNotice = null;
+const loadFailureNotice = () => {
+  failureNotice ??= import('./save-failure-notice.js').catch((error) => {
+    failureNotice = null;
+    throw error;
+  });
+  return failureNotice;
+};
+
+// A save fails offline most of all, when nothing more can be downloaded. So the notice and
+// the toast stack it needs arrive at the person's first input, as the indicator's chip
+// does, never at boot.
+const warmFailureNotice = () => { loadFailureNotice().then((m) => m.warm(), () => {}); };
+for (const type of ['beforeinput', 'keydown', 'pointerdown']) {
+  document.addEventListener(type, warmFailureNotice, { once: true, capture: true });
+}
+
+function reportIfUnheard(state, detail) {
+  if (state === 'saved') {
+    failureNotice?.then((m) => m.clearFailures(), () => {});
+    return;
+  }
+  if ((state !== 'error' && state !== 'offline') || detail?.[FAILURE_CLAIMED]) return;
+  loadFailureNotice().then((m) => m.reportFailure(state), (error) => {
+    console.error('clayjs: a save failed and the notice for it could not be downloaded', error);
+  });
 }
 
 /**
@@ -931,7 +968,7 @@ function prepareInvalidation(ctx, epoch, morph) {
   if (!savesAdmitted(ctx.permit)) return 'session';
   if (refusesSave()) return 'refused';
   if (baselineRevision !== epoch.baselines) return 'newer save';
-  if (Math.max(knownPageFormatFloor(), ctx.pageFormatFloor) > epoch.floor) return 'floor';
+  if (Math.max(knownPageFormatFloor(), ctx.blockeditorFormatFloor) > epoch.floor) return 'floor';
   return null;
 }
 
@@ -969,7 +1006,7 @@ async function settleCaptured({
   captureId,
   gateToken,
   costMs,
-  pageFormatFloor = 0,
+  blockeditorFormatFloor = 0,
   quietConflict = false,
   laneHeld = false,
   lane = null,
@@ -1069,7 +1106,7 @@ async function settleCaptured({
       // lane busy and waits that request out, which is what its 'clean' answer describes.
       // A prepared save holds the lane itself, so its caller does the draining instead.
       if (!laneHeld) drainPendingSave();
-    }, { capture, pageFormatFloor, lane });
+    }, { capture, blockeditorFormatFloor, lane });
   });
 }
 
@@ -1092,7 +1129,7 @@ async function runSlicedSave(ctx, lane) {
       const epoch = {
         generation: saveGenerationAt,
         baselines: baselineRevision,
-        floor: Math.max(knownPageFormatFloor(), ctx.pageFormatFloor),
+        floor: Math.max(knownPageFormatFloor(), ctx.blockeditorFormatFloor),
       };
       const job = prepDriver.beginSaveCapture({
         requestRefresh: true,
@@ -1135,7 +1172,7 @@ async function runSlicedSave(ctx, lane) {
           captureId: captured.captureId,
           gateToken,
           costMs: prepared.activeMs,
-          pageFormatFloor: ctx.pageFormatFloor,
+          blockeditorFormatFloor: ctx.blockeditorFormatFloor,
           quietConflict: ctx.quietConflict,
           laneHeld: true,
           lane,
@@ -1374,7 +1411,7 @@ function attemptSaveNow({ kind, permit = null }, callback = () => {}) {
         explicit,
         forced: false,
         permit,
-        pageFormatFloor: 0,
+        blockeditorFormatFloor: 0,
         quietConflict: false,
         settleSoonQueued,
         callback,
@@ -1459,8 +1496,8 @@ function savePagePermitted(permit, callback = () => {}) {
  * @param {Function} callback - Optional callback for custom handling
  * @returns {Promise<{msg: string, msgType: string}>}
  */
-export function savePageForce(callback = () => {}, { quietConflict = false, pageFormatFloor = 0, permit = null } = {}) {
-  if (capabilityPending) return capabilityKnown.then(() => savePageForce(callback, { quietConflict, pageFormatFloor, permit }));
+export function savePageForce(callback = () => {}, { quietConflict = false, blockeditorFormatFloor = 0, permit = null } = {}) {
+  if (capabilityPending) return capabilityKnown.then(() => savePageForce(callback, { quietConflict, blockeditorFormatFloor, permit }));
   return new Promise((resolve) => {
     if (!isEditMode && !window.clay?.testMode) {
       const skipped = skipped_('Not in edit mode');
@@ -1514,7 +1551,7 @@ export function savePageForce(callback = () => {}, { quietConflict = false, page
     }
 
     const prepare = window.clay?.source?.ensureForSave?.();
-    if (prepare) return resolve(afterWait(prepare, () => savePageForce(callback, { quietConflict, pageFormatFloor, permit })));
+    if (prepare) return resolve(afterWait(prepare, () => savePageForce(callback, { quietConflict, blockeditorFormatFloor, permit })));
 
     const wasOffline = !navigator.onLine;
     if (wasOffline) {
@@ -1524,7 +1561,7 @@ export function savePageForce(callback = () => {}, { quietConflict = false, page
     // A forced save prepares like an ordinary one when the document is this big; it only
     // skips the dirty question, which `forced` says here.
     if (preparesSliced() && !prepDriver) {
-      resolve(afterWait(loadPreparer(), () => savePageForce(callback, { quietConflict, pageFormatFloor, permit })));
+      resolve(afterWait(loadPreparer(), () => savePageForce(callback, { quietConflict, blockeditorFormatFloor, permit })));
       return;
     }
 
@@ -1538,7 +1575,7 @@ export function savePageForce(callback = () => {}, { quietConflict = false, page
         explicit: true,
         forced: true,
         permit,
-        pageFormatFloor,
+        blockeditorFormatFloor,
         quietConflict,
         settleSoonQueued,
         callback,
@@ -1572,7 +1609,7 @@ export function savePageForce(callback = () => {}, { quietConflict = false, page
       captureId,
       gateToken,
       costMs: 0,
-      pageFormatFloor,
+      blockeditorFormatFloor,
       quietConflict,
       capture,
       noteRecovery: () => noteRecoveryCapture({ captureId, html: forSave }),

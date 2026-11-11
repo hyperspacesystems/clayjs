@@ -3,7 +3,7 @@ import { mountEditorUI } from "../../ui/editor-ui.js";
 
 const SKIN_VERSION = "1";
 const EDGE_GAP = 8;
-const DISMISS_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M1 0 5 4l4-4 1 1-4 4 4 4-1 1-4-4-4 4-1-1 4-4-4-4z"/></svg>';
+const DISMISS_TEXT = "Dismiss";
 const ARROW_PREV = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"/></svg>';
 const ARROW_NEXT = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg>';
 export const TRACK = '<span class="clay-menu-track" aria-hidden="true"><span class="clay-menu-thumb"></span></span>';
@@ -18,7 +18,7 @@ function findSlot() {
 
 // A skin the page wrote, in <style clay-menu-skin="1" media="not all">. The media keeps it
 // off the page itself. An unknown version means the default skin.
-function pageSkin() {
+export function pageSkin() {
   const style = document.querySelector("style[clay-menu-skin]");
   if (!style) return null;
   if (style.getAttribute("clay-menu-skin") !== SKIN_VERSION) {
@@ -28,7 +28,8 @@ function pageSkin() {
   return style.textContent;
 }
 
-export function createShell({ capsuleStart = "", sections = [null] } = {}) {
+// `icon` and `label` draw the button (the Claygoo by default); a slot's own icon and label still win.
+export function createShell({ capsuleStart = "", sections = [null], icon = CLAYGOO, label = "Clay menu" } = {}) {
   const slotted = new Set(sections.flat().filter(Boolean));
   const slot = findSlot();
   const embedded = Boolean(slot);
@@ -43,9 +44,9 @@ export function createShell({ capsuleStart = "", sections = [null] } = {}) {
   root.innerHTML =
     `<div class="clay-menu" part="capsule" clay="editor-ui">` +
     capsuleStart +
-    `<button type="button" class="clay-menu-goo" part="button" aria-haspopup="menu" aria-expanded="false" aria-label="Clay menu">${CLAYGOO}</button>` +
+    `<button type="button" class="clay-menu-goo" part="button" aria-haspopup="menu" aria-expanded="false" aria-label="${label}">${icon}</button>` +
     `</div>` +
-    `<div class="clay-menu-list" part="list" role="menu" aria-label="Clay menu" hidden></div>` +
+    `<div class="clay-menu-list" part="list" role="menu" aria-label="${label}" hidden></div>` +
     `<div class="clay-menu-note" part="note" role="status" hidden></div>`;
 
   const goo = root.querySelector(".clay-menu-goo");
@@ -177,6 +178,8 @@ export function createShell({ capsuleStart = "", sections = [null] } = {}) {
     return itemButton(item);
   }
 
+  // The item, then a small Dismiss right after its last word. An x at the row's end read as the
+  // close for the whole menu. The item's own dismiss label stays as the button's title.
   function dismissibleRow(item) {
     const row = document.createElement("div");
     row.className = "clay-menu-row";
@@ -186,9 +189,11 @@ export function createShell({ capsuleStart = "", sections = [null] } = {}) {
     dismiss.setAttribute("role", "menuitem");
     dismiss.setAttribute("part", "dismiss");
     dismiss.dataset.menuId = `${item.id}.dismiss`;
-    dismiss.setAttribute("aria-label", item.dismiss.label);
     dismiss.title = item.dismiss.label;
-    dismiss.innerHTML = DISMISS_ICON;
+    const text = document.createElement("span");
+    text.setAttribute("part", "dismiss-label");
+    text.textContent = DISMISS_TEXT;
+    dismiss.append(text);
     dismiss.addEventListener("click", async () => {
       dismiss.disabled = true;
       let result;

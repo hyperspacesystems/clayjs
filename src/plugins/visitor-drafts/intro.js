@@ -6,7 +6,6 @@ import { bootPhase } from "../../core/boot-phase.js";
 export const COPY = {
   close: "Hide this introduction",
   hide: "Hide intro",
-  show: "Show intro",
   label: (appName) => `About ${appName}`,
 };
 
@@ -86,7 +85,8 @@ export function mountIntro({ memory, template, appName, hadDraft }) {
   if (!template || !template.content.textContent.trim() && !template.content.querySelector("img, svg, video, canvas")) return null;
   if (template.getAttribute("visitor-intro") === "manual") {
     const printing = window.matchMedia && window.matchMedia("print").matches;
-    const open = forced() || !(memory.get().intro.done || hadDraft || bootPhase.servedHash || printing);
+    // A returning visitor keeps the intro until they hide it themselves; hiding it is remembered (David, Nov 11).
+    const open = forced() || !(memory.get().intro.done || bootPhase.servedHash || printing);
     return mountManual({ memory, template, appName, open });
   }
   if (!forced()) {
@@ -138,36 +138,19 @@ function mount({ memory, template, appName }) {
   return section;
 }
 
+// Hidden only by its own button, never by scrolling, and once hidden it stays hidden for this
+// visitor: there is no way back from a menu (David, Nov 11).
 function mountManual({ memory, template, appName, open }) {
-  let section = null;
-  const showRow = (wanted) => {
-    const menu = window.clay?.menu;
-    if (!menu) return;
-    if (wanted) menu.addItem({ id: "clay.intro", label: COPY.show, run: show });
-    else menu.removeItem("clay.intro");
-  };
-  function attach() {
-    section ??= buildSection({ template, appName, labelText: COPY.hide, onClose: hide });
-    document.body.prepend(section);
-    announceBottomUi();
-    showRow(false);
-  }
+  if (!open) return null;
+  const section = buildSection({ template, appName, labelText: COPY.hide, onClose: hide });
   function hide() {
     memory.get().intro.done = "closed";
     memory.save();
     section.remove();
     announceBottomUi();
-    showRow(true);
     focusApp();
   }
-  function show() {
-    memory.get().intro.done = null;
-    memory.save();
-    attach();
-    window.scrollTo(0, 0);
-  }
-  document.addEventListener("clay:menu-ready", () => showRow(!section?.isConnected));
-  if (open) attach();
-  else showRow(true);
+  document.body.prepend(section);
+  announceBottomUi();
   return section;
 }

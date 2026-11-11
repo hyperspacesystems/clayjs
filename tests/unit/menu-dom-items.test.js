@@ -48,7 +48,8 @@ test("a marked element becomes a quiet link row in the last section, with its x"
   expect(row.getAttribute("href")).toBe("mailto:creator@example.com?subject=Hi");
   expect(row.getAttribute("part")).toBe("item quiet");
   const x = xOf(shell, "dom.appreciation");
-  expect(x.getAttribute("aria-label")).toBe("Remove");
+  expect(x.textContent).toBe("Dismiss");
+  expect(x.title).toBe("Remove");
 });
 
 test("a cms-template row produces no item", () => {

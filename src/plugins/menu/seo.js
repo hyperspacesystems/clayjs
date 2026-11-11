@@ -5,6 +5,7 @@
 import { applyHead, FIELDS, readHead } from "./seo-head.js";
 import { lookAt } from "../../ui/page-colour.js";
 import MENU_CSS, { MENU_SURFACE } from "./style.js";
+import { pageSkin } from "./shell.js";
 import { mountEditorUI } from "../../ui/editor-ui.js";
 import { deepActiveElement } from "../../dom/active-element.js";
 import { hostMeta } from "../../core/host-meta.js";
@@ -60,7 +61,7 @@ const SHEET_CSS = `.clay-seo { box-sizing: border-box; width: 100%; border-botto
 .clay-seo-count[data-over] { color: var(--bevel-ox); }
 .clay-seo-derived { padding: 0; border: 0; background: none; color: var(--bevel-brass); font: 500 12px/1.3 var(--bevel-font-sans); text-decoration: underline; text-decoration-color: var(--bevel-line-3); text-underline-offset: 2px; cursor: pointer; }
 .clay-seo-input { box-sizing: border-box; width: 100%; min-height: 32px; padding: 6px 9px; border: 1px solid var(--bevel-line-2); background: var(--bevel-ground); color: var(--bevel-ink); font: 400 13px/1.45 var(--bevel-font-sans); }
-textarea.clay-seo-input { min-height: 52px; resize: vertical; }
+textarea.clay-seo-input { min-height: 52px; resize: none; overflow: hidden; }
 textarea.clay-seo-input.is-short { min-height: 32px; }
 .clay-seo-input::placeholder { color: var(--bevel-faint); opacity: 1; }
 .clay-seo-input:hover { border-color: var(--bevel-faint); }
@@ -114,6 +115,9 @@ textarea.clay-seo-input.is-short { min-height: 32px; }
 .clay-seo-title-mode { margin: 0; font-size: 12px; color: var(--bevel-muted); }
 @media (pointer: coarse), (max-width: 680px) { .clay-seo .clay-menu-btn { min-height: 40px; } .clay-seo :is(input, textarea, select) { font-size: 16px; } }
 @media (prefers-reduced-motion: reduce) { .clay-seo { animation: none; transition: none; } }`;
+
+// Fields on a skinned sheet sit on the page's own surface.
+const SKINNED_SHEET = `.clay-seo[part~="dock"] { --bevel-ground: var(--bevel-surface); }`;
 
 const text = (value) => (value == null ? "" : String(value));
 
@@ -176,7 +180,7 @@ function pageBase() {
 }
 
 function isDocumentPage() {
-  return document.querySelectorAll("article[data-page]").length === 1;
+  return document.querySelectorAll("article[data-blockeditor]").length === 1;
 }
 
 const ATOM = "\uFFFC";
@@ -199,7 +203,7 @@ function titleItems(view) {
     }
     return [];
   }
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   const heading = article && [...article.children].find((node) => node.tagName === "H1");
   if (!heading) return [];
   let c = "";
@@ -217,7 +221,7 @@ function titleItems(view) {
 // The same rule the runtime and the checkpoint use: the first root H1, and Untitled
 // when it is empty or missing.
 function firstHeadingText() {
-  const view = window.clay && window.clay.page && window.clay.page.view;
+  const view = window.clay && window.clay.blockeditor && window.clay.blockeditor.view;
   return documentTitle(titleItems(view));
 }
 
@@ -471,11 +475,25 @@ export function open({ returnFocus } = {}) {
     }
   }
 
+  // A description box is as tall as its text, or its placeholder while empty: no inner scroll
+  // (David, Nov 11).
+  function fitBoxes() {
+    for (const box of inputs.values()) {
+      if (box.localName !== "textarea" || !box.isConnected) continue;
+      const stand = !box.value && box.placeholder;
+      if (stand) box.value = box.placeholder;
+      box.style.height = "auto";
+      box.style.height = `${box.scrollHeight + box.offsetHeight - box.clientHeight}px`;
+      if (stand) box.value = "";
+    }
+  }
+
   function refresh() {
     const titleValue = text(readField("title")).trim();
     const descriptionValue = text(readField("description")).trim();
     inputs.get("ogTitle").placeholder = titleValue;
     inputs.get("ogDescription").placeholder = descriptionValue;
+    fitBoxes();
 
     for (const [key, entry] of counters) {
       const length = text(readField(key)).trim().length;
@@ -753,11 +771,19 @@ export function open({ returnFocus } = {}) {
   });
 
   document.addEventListener("clay:modechange", followMode);
+  // A page that skins its menu dresses this sheet the same way: its dock rule maps the page's own
+  // colours and fonts onto the sheet's tokens, so each look gets its own sheet.
+  const skin = pageSkin();
+  if (skin) root.setAttribute("part", "dock");
   lookAt(root, { x: 0, y: 0, width: innerWidth, height: Math.min(200, innerHeight) }, MENU_SURFACE);
-  ui = mountEditorUI({ name: "seo", content: root, css: [MENU_CSS, SHEET_CSS], before: document.body.firstChild });
+  if (skin) root.style.removeProperty("--bevel-surface");
+  ui = mountEditorUI({ name: "seo", content: root, css: skin ? [MENU_CSS, SHEET_CSS, skin, SKINNED_SHEET] : [MENU_CSS, SHEET_CSS], before: document.body.firstChild });
   writeHeight();
   if (typeof ResizeObserver === "function") {
-    heightObserver = new ResizeObserver(writeHeight);
+    heightObserver = new ResizeObserver(() => {
+      fitBoxes();
+      writeHeight();
+    });
     heightObserver.observe(root);
   }
   refresh();

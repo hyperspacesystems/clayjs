@@ -199,11 +199,11 @@ test("a pair renders two buttons and only the enabled half runs", async () => {
 test("a text item renders as a version line, not a menu item", async () => {
   await boot();
 
-  window.clay.menu.addItem({ id: "upgrade", label: "This doc is at latest version (1.4.0)", text: true });
+  window.clay.menu.addItem({ id: "upgrade", label: "File at latest version", text: true });
 
   const line = $("p.clay-menu-version", "menu");
   expect(line).not.toBeNull();
-  expect(line.textContent).toBe("This doc is at latest version (1.4.0)");
+  expect(line.textContent).toBe("File at latest version");
   expect(buttonOf("upgrade")).toBeNull();
 });
 

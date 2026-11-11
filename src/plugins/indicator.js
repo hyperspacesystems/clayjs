@@ -7,8 +7,16 @@ const SAVE_EVENTS = ["saving", "saved", "error", "offline", "retrying", "blocked
 // The drawing arrives on demand; states that come before it are shown in order once it has.
 let chip = null;
 const loadChip = () => (chip ??= import("./indicator-chip.js"));
-const show = (state) => {
-  loadChip().then((m) => { if (listeners) m.show(state); }, () => {});
+const show = (state, detail) => {
+  loadChip().then((m) => { if (listeners) m.show(state, detail); }, () => {});
+};
+
+// The page editor puts up its own notice, with Download and Copy text, whenever it cannot
+// save at all (plugins/page.js showBlocked and showFull), so the chip stands down for those.
+const PAGE_NOTICED = new Set(["blocked", "unavailable"]);
+const showPageState = (state) => {
+  if (!PAGE_NOTICED.has(state)) return show(state);
+  loadChip().then((m) => { if (listeners) m.standDown(); }, () => {});
 };
 
 let listeners = null;
@@ -25,9 +33,9 @@ function arm() {
     document.addEventListener(type, loadChip, { signal, once: true, capture: true });
   }
   for (const state of SAVE_EVENTS) {
-    document.addEventListener("clay:save-" + state, () => show(state), { signal });
+    document.addEventListener("clay:save-" + state, (event) => show(state, event.detail), { signal });
   }
-  document.addEventListener("clay:page-save-state", (event) => show(event.detail?.state), { signal });
+  document.addEventListener("clay:blockeditor-save-state", (event) => showPageState(event.detail?.state), { signal });
   document.addEventListener("clay:save-status", (event) => show(event.detail?.state), { signal });
 }
 

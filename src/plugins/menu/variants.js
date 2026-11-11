@@ -10,7 +10,6 @@ import { OFF, labelOf, looks, nameOf, paintLook, recordLook } from "./looks.js";
 export { looks };
 
 const RECEIPT = "variants-choose";
-const KEEP_ID = "clay.variants.keep";
 const CHOOSE_LABEL = "Change the page look";
 const KEEP_LABEL = "Keep one page look";
 
@@ -234,22 +233,23 @@ export function attachVariants({ root, capsule, addItem, removeItem, note, curre
       pill = null;
       removeItem("clay.look");
       removeItem("clay.look.use");
-      removeItem(KEEP_ID);
       return;
     }
     if (root.hasAttribute("data-embedded")) {
       const name = shown();
+      // "Theme: Dusk" and two arrows. While editing, each step is the choice and saves like any
+      // edit: no confirm, no Keep row (David, Nov 11).
       if (wantsRow) {
         addItem({
           id: "clay.look",
           section: "start",
           stepper: {
-            label: "Switch look",
-            value: `${labelFor(name)} ${all.indexOf(name) + 1}/${all.length}`,
+            label: "Theme:",
+            value: labelFor(name),
             prev: () => step(-1),
             next: () => step(1),
-            prevLabel: "Previous look",
-            nextLabel: "Next look",
+            prevLabel: "Previous theme",
+            nextLabel: "Next theme",
           },
         });
       } else {
@@ -257,8 +257,6 @@ export function attachVariants({ root, capsule, addItem, removeItem, note, curre
       }
       if (!isEdit() && previewing !== null) addItem({ id: "clay.look.use", section: "start", label: "Use this look", run: useShown });
       else removeItem("clay.look.use");
-      if (isEdit()) addItem({ id: KEEP_ID, label: `Keep ${labelFor(savedName())}, remove the others…`, run: () => keep() });
-      else removeItem(KEEP_ID);
       return;
     }
     if (!pill) pill = buildPill();
@@ -271,8 +269,6 @@ export function attachVariants({ root, capsule, addItem, removeItem, note, curre
     label.append(count);
     pill.querySelector(".clay-variants-use").hidden = isEdit() || previewing === null;
     pill.querySelector(".clay-variants-keep").hidden = !isEdit();
-    if (isEdit()) addItem({ id: KEEP_ID, label: `Keep ${labelFor(savedName())}, remove the others…`, run: () => keep() });
-    else removeItem(KEEP_ID);
   }
 
   function refresh() {

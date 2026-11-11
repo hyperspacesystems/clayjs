@@ -14,9 +14,9 @@ import { docFromValue, enc } from "../../../src/page/ybind/provider.js";
  * and leaves nothing behind on dispose.
  */
 
-let extensions = ["page"];
+let extensions = ["blockeditor"];
 // The per-document helper list the host offers this caller, which is how a new client
-// learns that page-tool can answer.
+// learns that blockeditor-tool can answer.
 let helpers = null;
 
 await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
@@ -42,6 +42,7 @@ await jest.unstable_mockModule("../../../src/core/save.js", () => ({
   getLastSavedDirty: () => false,
   setLastSavedBaselines: () => {},
   getLastSavedBytes: () => null,
+  claimFailure: () => {},
 }));
 
 await jest.unstable_mockModule("../../../src/live/local-lane.js", () => ({
@@ -60,20 +61,20 @@ const projection = await import("../../../src/page/save-projection.js");
 const { hasUnsavedState, pendingIds } = await import("../../../src/lib/unsaved-state.js");
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
-const tagText = (doc) => JSON.parse(doc.querySelector('script[merge="page"]').textContent);
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagText = (doc) => JSON.parse(doc.querySelector('script[merge="blockeditor"]').textContent);
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value) => {
   const { html, rev } = projection.renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 
 function setPage(blocks) {
   const value = seedValue(blocks);
   document.head.innerHTML = tagHtml(value);
   document.body.innerHTML = articleHtml(value);
-  if (!storeOf("page")) live("page");
-  const store = storeOf("page");
-  live("page").update((data) => {
+  if (!storeOf("blockeditor")) live("blockeditor");
+  const store = storeOf("blockeditor");
+  live("blockeditor").update((data) => {
     for (const key of Object.keys(data)) delete data[key];
     Object.assign(data, clone(value));
   });
@@ -90,7 +91,7 @@ const tick = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms));
 
 afterEach(() => {
   page.dispose();
-  extensions = ["page"];
+  extensions = ["blockeditor"];
   helpers = null;
   document.head.innerHTML = "";
   document.body.innerHTML = "";
@@ -103,33 +104,33 @@ test("a typed edit reaches the live store and the capture carries the projected 
   expect(view).toBeTruthy();
 
   view.dispatch(view.state.tr.insertText("!", 6));
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello!");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello!");
 
   const cap = snapshot.captureForSaveAndComparison({ flushUndo: false, emitForSync: false });
   const saved = new DOMParser().parseFromString(cap.forSave, "text/html");
-  const expected = projection.renderFromTags([JSON.stringify(storeOf("page").value)]);
+  const expected = projection.renderFromTags([JSON.stringify(storeOf("blockeditor").value)]);
   expect(saved.querySelector("article").innerHTML).toBe(expected.html);
   expect(saved.querySelector("article").getAttribute("data-rev")).toBe(expected.rev);
   expect(blocksFromYValue(tagText(saved)).p.c).toBe("Hello!");
-  expect(tagText(saved).y).toEqual(storeOf("page").value.y);
+  expect(tagText(saved).y).toEqual(storeOf("blockeditor").value.y);
 });
 
 test("a hand-edited boot article adopts once and stays adopted after a remount", async () => {
   setPage([{ id: "p", t: "paragraph", text: "Hello" }]);
-  document.querySelector('article[data-page] [data-id="p"]').textContent = "Hello, edited";
+  document.querySelector('article[data-blockeditor] [data-id="p"]').textContent = "Hello, edited";
   const adopted = [];
   const onAdopted = (event) => adopted.push(event.detail);
-  document.addEventListener("clay:page-adopted", onAdopted);
+  document.addEventListener("clay:blockeditor-adopted", onAdopted);
 
   await page.install();
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello, edited");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello, edited");
   expect(adopted).toEqual([{ edited: 1, created: 0, deleted: 0, moved: false }]);
 
   await page.install();
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello, edited");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello, edited");
   expect(adopted).toHaveLength(1);
-  expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
-  document.removeEventListener("clay:page-adopted", onAdopted);
+  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
+  document.removeEventListener("clay:blockeditor-adopted", onAdopted);
 });
 
 test("an outside edit to words the tab also changed offers a download of the tab's copy", async () => {
@@ -138,11 +139,11 @@ test("an outside edit to words the tab also changed offers a download of the tab
   const view = page.view;
   const end = view.state.doc.content.size - 1;
   view.dispatch(view.state.tr.insertText("!", end));
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello world!");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello world!");
 
   const value = seedValue([{ id: "p", t: "paragraph", text: "Hello world" }]);
   const { html, rev } = projection.renderFromTags([JSON.stringify(value)]);
-  const file = new DOMParser().parseFromString(`<!DOCTYPE html><html><head>${tagHtml(value)}</head><body><article data-page="1" data-rev="${rev}">${html}</article></body></html>`, "text/html");
+  const file = new DOMParser().parseFromString(`<!DOCTYPE html><html><head>${tagHtml(value)}</head><body><article data-blockeditor="1" data-rev="${rev}">${html}</article></body></html>`, "text/html");
   file.querySelector('[data-id="p"]').textContent = "Hello friend";
   document.dispatchEvent(new CustomEvent("clay:sync-applied", { detail: { html: "<!DOCTYPE html>" + file.documentElement.outerHTML } }));
 
@@ -157,36 +158,36 @@ test("an outside edit to words the tab also changed offers a download of the tab
 test("an unsupported host keeps the article untouched and reports blocked", async () => {
   extensions = [];
   setPage([{ id: "p", t: "paragraph", text: "Hello" }]);
-  const before = document.querySelector("article[data-page]").outerHTML;
+  const before = document.querySelector("article[data-blockeditor]").outerHTML;
   const states = [];
   const onState = (event) => states.push(event.detail);
-  document.addEventListener("clay:page-save-state", onState);
+  document.addEventListener("clay:blockeditor-save-state", onState);
 
   await page.install();
   expect(page.view).toBe(null);
-  expect(document.querySelectorAll(".page-shell")).toHaveLength(0);
-  expect(document.querySelector("article[data-page]").outerHTML).toBe(before);
+  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
+  expect(document.querySelector("article[data-blockeditor]").outerHTML).toBe(before);
   expect(states).toEqual([{ state: "blocked", code: "unsupported-host", message: "This host does not support page editing" }]);
-  document.removeEventListener("clay:page-save-state", onState);
+  document.removeEventListener("clay:blockeditor-save-state", onState);
 });
 
 test("the AI entry follows the host's helper list", async () => {
   setPage([{ id: "p", t: "paragraph", text: "" }]);
   await page.install();
-  page.view.dom.parentElement.querySelector(".page-plus").click();
-  expect(page.view.dom.parentElement.querySelector(".page-menu").textContent).not.toContain("Make a tool with AI");
+  page.view.dom.parentElement.querySelector(".blockeditor-plus").click();
+  expect(page.view.dom.parentElement.querySelector(".blockeditor-menu").textContent).not.toContain("Make a tool with AI");
 
-  // An old-shape meta that still carries the page-tool extension offers nothing: no
+  // An old-shape meta that still carries the blockeditor-tool extension offers nothing: no
   // host adds it, so a dead /ai never shows.
-  extensions = ["page", "page-tool/1"];
+  extensions = ["blockeditor", "blockeditor-tool/1"];
   await page.install();
-  page.view.dom.parentElement.querySelector(".page-plus").click();
-  expect(page.view.dom.parentElement.querySelector(".page-menu").textContent).not.toContain("Make a tool with AI");
+  page.view.dom.parentElement.querySelector(".blockeditor-plus").click();
+  expect(page.view.dom.parentElement.querySelector(".blockeditor-menu").textContent).not.toContain("Make a tool with AI");
 
-  helpers = [{ name: "page-tool", state: "ready" }];
+  helpers = [{ name: "blockeditor-tool", state: "ready" }];
   await page.install();
-  page.view.dom.parentElement.querySelector(".page-plus").click();
-  expect(page.view.dom.parentElement.querySelector(".page-menu").textContent).toContain("Make a tool with AI");
+  page.view.dom.parentElement.querySelector(".blockeditor-plus").click();
+  expect(page.view.dom.parentElement.querySelector(".blockeditor-menu").textContent).toContain("Make a tool with AI");
 });
 
 test("legacy hybrid and malformed page data warn and stay readable without mounting", async () => {
@@ -194,22 +195,22 @@ test("legacy hybrid and malformed page data warn and stay readable without mount
   const record = { blocks: { p: { t: "paragraph", pos: "1", c: "Hello" } }, deleted: {} };
   const hybrid = projection.renderFromTags([JSON.stringify(record)]);
   document.head.innerHTML = tagHtml(record);
-  document.body.innerHTML = `<article data-page="1" data-rev="${hybrid.rev}">${hybrid.html}</article>`;
-  const before = document.querySelector("article[data-page]").outerHTML;
+  document.body.innerHTML = `<article data-blockeditor="1" data-rev="${hybrid.rev}">${hybrid.html}</article>`;
+  const before = document.querySelector("article[data-blockeditor]").outerHTML;
 
   await page.install();
   expect(page.view).toBe(null);
-  expect(document.querySelector("article[data-page]").outerHTML).toBe(before);
+  expect(document.querySelector("article[data-blockeditor]").outerHTML).toBe(before);
   expect(warn).toHaveBeenCalled();
 
   warn.mockClear();
   document.head.innerHTML = tagHtml({ v: 1, y: { seed: "@@bad@@" } });
   await page.install();
-  expect(document.querySelectorAll(".page-shell")).toHaveLength(0);
+  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
   expect(warn).toHaveBeenCalled();
 
   warn.mockClear();
-  document.head.innerHTML = '<script type="application/json" merge="page" clay="live">{oops</script>';
+  document.head.innerHTML = '<script type="application/json" merge="blockeditor" clay="live">{oops</script>';
   await page.install();
   expect(page.view).toBe(null);
   expect(warn).toHaveBeenCalled();
@@ -222,16 +223,16 @@ test("duplicate tags or articles refuse and leave the page readable", async () =
   const { value } = setPage([{ id: "p", t: "paragraph", text: "Hello" }]);
 
   document.head.innerHTML = tagHtml(value) + tagHtml(value);
-  const before = document.querySelector("article[data-page]").outerHTML;
+  const before = document.querySelector("article[data-blockeditor]").outerHTML;
   await page.install();
   expect(page.view).toBe(null);
-  expect(document.querySelector("article[data-page]").outerHTML).toBe(before);
+  expect(document.querySelector("article[data-blockeditor]").outerHTML).toBe(before);
 
   document.head.innerHTML = tagHtml(value);
   document.body.innerHTML = articleHtml(value) + articleHtml(value);
   await page.install();
   expect(page.view).toBe(null);
-  expect(document.querySelectorAll("article[data-page]")).toHaveLength(2);
+  expect(document.querySelectorAll("article[data-blockeditor]")).toHaveLength(2);
   expect(warn).toHaveBeenCalled();
   warn.mockRestore();
 });
@@ -250,20 +251,20 @@ test("a remount leaves one shell, one binding writer, one adopted sync listener 
 
   await page.install();
   page.view.dispatch(page.view.state.tr.insertText("!", 6));
-  expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
-  expect(document.querySelectorAll(".page-editor")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(1);
   expect(counts.onLocal - counts.offLocal).toBe(1);
   expect(pendingIds()).toEqual(["page:live"]);
 
   await page.install();
-  expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
-  expect(document.querySelectorAll(".page-editor")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(1);
   expect(counts.onLocal).toBe(2);
   expect(counts.onLocal - counts.offLocal).toBe(1);
   expect(pendingIds()).toEqual(["page:live"]);
 
   page.dispose();
-  expect(document.querySelectorAll(".page-shell")).toHaveLength(0);
+  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
   expect(counts.onLocal - counts.offLocal).toBe(0);
   expect(pendingIds()).toEqual([]);
 
@@ -274,7 +275,7 @@ test("flush waits for the checkpoint, and a timeout keeps hasUnsavedState true",
   const { store } = setPage([{ id: "p", t: "paragraph", text: "Hello" }]);
   await page.install();
   page.view.dispatch(page.view.state.tr.insertText("!", 6));
-  expect(storeOf("page").pending.length).toBeGreaterThan(0);
+  expect(storeOf("blockeditor").pending.length).toBeGreaterThan(0);
 
   const asked = page.flush({ timeoutMs: 1000 });
   let settled = false;
@@ -290,7 +291,7 @@ test("flush waits for the checkpoint, and a timeout keeps hasUnsavedState true",
   page.view.dispatch(page.view.state.tr.insertText("?", 7));
   await expect(page.flush({ timeoutMs: 25 })).resolves.toEqual({ ok: false, code: "timeout" });
   store.confirm(store.mark);
-  expect(storeOf("page").pending).toEqual([]);
+  expect(storeOf("blockeditor").pending).toEqual([]);
   expect(hasUnsavedState()).toBe(true);
 
   await expect(page.flush({ timeoutMs: 500 })).resolves.toEqual({ ok: true });
@@ -302,18 +303,18 @@ test("dispose removes the adopted sync listener, the shell and the unsaved sourc
   const remove = jest.spyOn(document, "removeEventListener");
   await page.install();
   page.view.dispatch(page.view.state.tr.insertText("!", 6));
-  expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
   expect(pendingIds()).toEqual(["page:live"]);
 
   page.dispose();
   page.dispose();
   expect(remove.mock.calls.some(([type]) => type === "clay:sync-applied")).toBe(true);
-  expect(document.querySelectorAll(".page-shell")).toHaveLength(0);
-  expect(document.querySelectorAll(".page-editor")).toHaveLength(0);
+  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
+  expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(0);
   expect(pendingIds()).toEqual([]);
   expect(blocksFromYValue(store.value).p.c).toBe("Hello!");
-  expect(document.querySelector("article[data-page]").textContent).toContain("Hello!");
-  expect(document.querySelector("article[data-page]").getAttribute("data-rev")).toBeTruthy();
+  expect(document.querySelector("article[data-blockeditor]").textContent).toContain("Hello!");
+  expect(document.querySelector("article[data-blockeditor]").getAttribute("data-rev")).toBeTruthy();
   remove.mockRestore();
 });
 
@@ -339,20 +340,21 @@ test("a known code shows the blocked chip and toast, a retrying save waits out i
   await page.install();
   const states = [];
   const onState = (event) => states.push(event.detail);
-  document.addEventListener("clay:page-save-state", onState);
+  document.addEventListener("clay:blockeditor-save-state", onState);
   try {
     document.dispatchEvent(new CustomEvent("clay:save-error", {
       detail: { code: "too-large", msg: "This page is too large to save" },
     }));
     await drawn();
 
-    expect(chip().textContent).toBe("Can't save here");
+    // The toast says it, with Download copy and Copy text, so the corner chip stands down.
+    expect(chip()?.textContent ?? "").toBe("");
     expect(states.at(-1)).toEqual({ state: "blocked", code: "too-large", message: "This page is too large to save" });
     await untilToasts();
     const blocked = toasts().at(-1);
     expect(blocked.textContent).toContain("Can't save here. Your edits are still in this tab.");
     expect(blocked.textContent).toContain("This page is too large to save");
-    expect(actionLabels(blocked)).toEqual(["Download a copy", "Copy text"]);
+    expect(actionLabels(blocked)).toEqual(["Download copy", "Copy text"]);
 
     // Saved clears the blocked toast and the chip reports it.
     document.dispatchEvent(new CustomEvent("clay:save-saved"));
@@ -366,12 +368,12 @@ test("a known code shows the blocked chip and toast, a retrying save waits out i
     expect(states).toHaveLength(before);
     expect(toasts()).toEqual([]);
 
-    // Fake timers only for the 45-second bound: the chip holds at once and the
+    // Fake timers only for the 45-second bound: retrying leaves the chip hidden, and the
     // toast waits for the bound, survives a repeated failure, and clears on saved.
     jest.useFakeTimers();
     document.dispatchEvent(new CustomEvent("clay:save-error", { detail: { code: "busy", msg: "Busy" } }));
     await drawn();
-    expect(chip().textContent).toBe("Saving\u2026");
+    expect(chip()?.textContent ?? "").toBe("");
     expect(states.at(-1)).toEqual({ state: "retrying", code: "busy", message: "Busy" });
     expect(toasts()).toEqual([]);
 
@@ -390,7 +392,7 @@ test("a known code shows the blocked chip and toast, a retrying save waits out i
     expect(states.at(-1).state).toBe("saved");
     jest.runOnlyPendingTimers();
   } finally {
-    document.removeEventListener("clay:page-save-state", onState);
+    document.removeEventListener("clay:blockeditor-save-state", onState);
     jest.useRealTimers();
   }
 });
@@ -403,7 +405,7 @@ test("an unsupported host shows the blocked toast with both export actions", asy
   const toast = toasts().at(-1);
   expect(toast.textContent).toContain("Can't save here. Your edits are still in this tab.");
   expect(toast.textContent).toContain("This host does not support page editing");
-  expect(actionLabels(toast)).toEqual(["Download a copy", "Copy text"]);
+  expect(actionLabels(toast)).toEqual(["Download copy", "Copy text"]);
 
   page.dispose();
   await new Promise((resolve) => setTimeout(resolve, 520));
@@ -415,17 +417,17 @@ test("a retrying event with no code is retrying, and an unknown code never dispa
   await page.install();
   const states = [];
   const onState = (event) => states.push(event.detail);
-  document.addEventListener("clay:page-save-state", onState);
+  document.addEventListener("clay:blockeditor-save-state", onState);
   try {
     document.dispatchEvent(new CustomEvent("clay:save-offline", { detail: { msg: "Offline" } }));
     expect(states.at(-1)).toEqual({ state: "retrying", code: null, message: "Offline" });
 
     const before = states.length;
     document.dispatchEvent(new CustomEvent("clay:live-notice", { detail: { name: "other", code: "too-large", message: "x" } }));
-    document.dispatchEvent(new CustomEvent("clay:live-notice", { detail: { name: "page", code: "save-uncertain", message: "x" } }));
+    document.dispatchEvent(new CustomEvent("clay:live-notice", { detail: { name: "blockeditor", code: "save-uncertain", message: "x" } }));
     expect(states).toHaveLength(before);
   } finally {
-    document.removeEventListener("clay:page-save-state", onState);
+    document.removeEventListener("clay:blockeditor-save-state", onState);
   }
 });
 
@@ -444,9 +446,9 @@ test("dispose removes every save-state listener the plugin added", async () => {
 test("a text-only document's saved article gives way to the editor", async () => {
   setPage([{ id: "p", t: "paragraph", text: "Hello" }]);
   await page.install();
-  const article = document.querySelector("article[data-page]");
-  expect([...article.children].map((node) => node.className)).toEqual(["page-shell"]);
-  expect(article.querySelector('[data-id="p"]').closest(".page-shell")).not.toBe(null);
+  const article = document.querySelector("article[data-blockeditor]");
+  expect([...article.children].map((node) => node.className)).toEqual(["blockeditor-shell"]);
+  expect(article.querySelector('[data-id="p"]').closest(".blockeditor-shell")).not.toBe(null);
 });
 
 test("a saved tool's part starts loading before the room join, and its saved content stays on screen until it is here", async () => {
@@ -461,7 +463,7 @@ test("a saved tool's part starts loading before the room join, and its saved con
   const part = new Promise((resolve) => { partReady = resolve; });
   const liveNow = window.clay.live;
   // page.js only reads `ready` off the page handle, so a facade defers the join.
-  window.clay.live = (name) => (name === "page" ? { ready: join.then(() => liveNow(name).ready) } : liveNow(name));
+  window.clay.live = (name) => (name === "blockeditor" ? { ready: join.then(() => liveNow(name).ready) } : liveNow(name));
   const loadPart = FEATURES.tool.load;
   const loads = [];
   FEATURES.tool.load = () => { loads.push("tool"); return part.then(() => loadPart()); };
@@ -479,7 +481,7 @@ test("a saved tool's part starts loading before the room join, and its saved con
 
     partReady();
     await installing;
-    expect(page.view.dom.querySelector(".page-tool-block")).not.toBe(null);
+    expect(page.view.dom.querySelector(".blockeditor-tool-block")).not.toBe(null);
     expect(saved()).toBe(null);
   } finally {
     FEATURES.tool.load = loadPart;
@@ -488,7 +490,7 @@ test("a saved tool's part starts loading before the room join, and its saved con
 });
 
 test("view mode resolves without the page plugin and never calls its module thunk", async () => {
-  const view = resolveModules(params({ plugins: "page" }), false);
+  const view = resolveModules(params({ plugins: "blockeditor" }), false);
   expect(view.plugins).not.toContain("plugins/page.js");
   const spy = jest.spyOn(MODULES, "plugins/page.js");
   // live-sync opens its stream on evaluation, so it is the one implied module not run here.
@@ -496,7 +498,7 @@ test("view mode resolves without the page plugin and never calls its module thun
   expect(spy).not.toHaveBeenCalled();
   spy.mockRestore();
 
-  const edit = resolveModules(params({ plugins: "page" }), true);
+  const edit = resolveModules(params({ plugins: "blockeditor" }), true);
   expect(edit.plugins).toContain("plugins/live.js");
   expect(edit.plugins).toContain("sync/live-sync.js");
   expect(edit.plugins).toContain("plugins/page.js");
@@ -530,13 +532,13 @@ test("the page's history tells the menu after its own edit and after an undo, an
   expect(page.history.canRedo).toBe(false);
 
   page.history.undo();
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello");
   expect(said.at(-1)).toEqual({ canUndo: false, canRedo: true });
   expect(page.history.canUndo).toBe(false);
   expect(page.history.canRedo).toBe(true);
 
   page.history.redo();
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello!");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello!");
   expect(said.at(-1)).toEqual({ canUndo: true, canRedo: false });
 
   // A new edit throws the redo away.
@@ -544,11 +546,11 @@ test("the page's history tells the menu after its own edit and after an undo, an
   expect(page.history.canRedo).toBe(true);
   view.dispatch(view.state.tr.insertText("?", 6));
   expect(page.history.canRedo).toBe(false);
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello?");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello?");
 
   // Someone else's typing is not this tab's to undo, so it says nothing at all.
   const told = said.length;
-  const base = clone(storeOf("page").value);
+  const base = clone(storeOf("blockeditor").value);
   receiveFrame(tagHtml(peerPage(base, " peer")));
   for (let i = 0; i < 50 && !page.view.dom.textContent.includes("peer"); i++) await tick();
   expect(page.view.dom.textContent).toContain("peer");

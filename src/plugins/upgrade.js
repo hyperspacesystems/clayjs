@@ -154,7 +154,8 @@ async function showVersion(status, version) {
   const clay = window.clay;
   await whenMenuReady(clay);
   if (!menuReady(clay) || !version) return;
-  const label = status === "current" ? `This doc is at latest version (${version})` : `Version ${version}`;
+  // Short enough for one line in a phone menu (David, Nov 11); the number stays in the plain line.
+  const label = status === "current" ? "File at latest version" : `Version ${version}`;
   clay.menu.addItem({ id: "upgrade", label, text: true });
 }
 

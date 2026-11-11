@@ -19,6 +19,12 @@ const CLOSE_ICON = GLYPHS.toastClose;
 
 const HIDDEN = ["opacity:0", "transform:translateX(24px)"];
 
+// The detail line and the action row start where the title's text does: after the 16px
+// glyph and the 8px gap beside it. A quiet small button's label sits 10px inside the button
+// (a 2px border and 8px of padding), so its row starts that much earlier.
+const TEXT_INSET = 24;
+const BUTTON_LABEL_INSET = 10;
+
 function motion() {
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   return reduced ? "none" : "opacity .5s ease-in-out, transform .5s ease-in-out";
@@ -64,12 +70,12 @@ function build(message, type, { detail = "", actions = [] } = {}) {
   // Detail and actions are the same untrusted text as the title: textContent for
   // both, so a reason string can never become markup in the toast either.
   if (detail) {
-    body.append(bevelText("span", ["display:block", `color:${TOKENS.muted}`, "overflow-wrap:anywhere"], detail));
+    body.append(bevelText("span", ["display:block", `padding-inline-start:${TEXT_INSET}px`, `color:${TOKENS.muted}`, "overflow-wrap:anywhere"], detail));
   }
   if (actions.length) {
-    const row = bevelBox("div", ["display:flex", "flex-wrap:wrap", "gap:8px"]);
+    const row = bevelBox("div", ["display:flex", "flex-wrap:wrap", "gap:8px", `padding-inline-start:${TEXT_INSET - BUTTON_LABEL_INSET}px`]);
     for (const { label, onClick } of actions) {
-      row.append(bevelButton(label, { small: true, variant: "quiet", onClick }));
+      row.append(bevelButton(label, { small: true, variant: "quiet", onClick, extra: ["padding:4px 8px"] }));
     }
     body.append(row);
   }

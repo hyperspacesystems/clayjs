@@ -1,9 +1,9 @@
 import { jest } from "@jest/globals";
 import { hostOf, $, $$ } from "./helpers/editor-ui.js";
 
-// Scenario: a draft visitor with no account gets the same claygoo menu an owner sees,
-// in the document's slot, holding only "Download a copy", "Start over" and whatever the
-// document adds.
+// Scenario: a draft visitor with no account gets a settings gear, not the Claygoo, in the
+// document's slot, holding exactly Undo, Redo, Download copy and Make your own copy (David,
+// Nov 11): no theme row, no page items and no Start over.
 // It makes no host request and loads no owner code, and its download flushes the draft
 // first so the file it gives holds the latest text.
 
@@ -112,16 +112,53 @@ test("mounts nothing outside a draft", async () => {
   expect(window.clay.menu).toBeUndefined();
 });
 
-test("the list holds Download a copy, Start over and nothing the owner menu carries", async () => {
-  await boot();
+test("the list holds Download copy and Make your own copy, and nothing the owner menu or the page carries", async () => {
+  document.addEventListener("clay:menu-ready", () => {}, { once: true });
+  await boot({ body: BODY + '<a data-id="thanks" clay-menu-item href="mailto:x@example.com">Thanks</a>' });
 
   click(gooOf());
   expect(listOf().hidden).toBe(false);
 
-  expect(itemIds()).toEqual(["clay.download", "clay.start-over"]);
-  for (const id of ["clay.mode", "seo", "clay.people", "clay.versions", "clay.variants.keep"]) {
+  expect(itemIds()).toEqual(["clay.download", "clay.copy"]);
+  expect(listOf().querySelector('[data-menu-id="clay.download"]').textContent.trim()).toBe("Download copy");
+  for (const id of ["clay.mode", "seo", "clay.people", "clay.versions", "clay.variants.keep", "clay.start-over", "clay.look", "dom.thanks"]) {
     expect(listOf().querySelector(`[data-menu-id="${id}"]`)).toBeNull();
   }
+});
+
+test("Make your own copy links to this document's copy page on the host", async () => {
+  await boot();
+  click(gooOf());
+  const copy = listOf().querySelector('[data-menu-id="clay.copy"]');
+  expect(copy.textContent.trim()).toBe("Make your own copy");
+  expect(copy.closest("a, [href]")?.getAttribute("href") ?? copy.getAttribute("href")).toBe("/_/copy/notes.html");
+});
+
+test("the button is a gear named Settings, and a slot's own icon and label still win", async () => {
+  await boot();
+  expect(gooOf().getAttribute("aria-label")).toBe("Settings");
+  expect(gooOf().querySelector("svg path").getAttribute("d")).toMatch(/^M12 9a3 3/);
+
+  await boot({ body: '<div id="slot"><div clay-menu-slot clay-menu-label="Options"><template clay-menu-icon><svg id="own"></svg></template></div></div><h1 id="title">start</h1>' });
+  expect(gooOf().getAttribute("aria-label")).toBe("Options");
+  expect(gooOf().querySelector("#own")).not.toBeNull();
+});
+
+test("a page that loads undo gets Undo and Redo first, and they run the page's history", async () => {
+  await boot({ params: "plugins=visitor-drafts,visitor-menu,undo&exclude=richclay,source" });
+  click(gooOf());
+  const ids = itemIds();
+  expect(ids.slice(0, 3)).toEqual(["clay.undo", "clay.undo.undo", "clay.undo.redo"]);
+  expect(ids.slice(-2)).toEqual(["clay.download", "clay.copy"]);
+
+  expect(listOf().querySelector('[data-menu-id="clay.undo.undo"]').getAttribute("aria-disabled")).toBe("true");
+  document.dispatchEvent(new CustomEvent("clay:undo-change", { detail: { canUndo: true, canRedo: false } }));
+  await flush();
+  expect(listOf().querySelector('[data-menu-id="clay.undo.undo"]').hasAttribute("aria-disabled")).toBe(false);
+  const undo = jest.spyOn(window.clay.undo, "undo").mockImplementation(() => {});
+  click(listOf().querySelector('[data-menu-id="clay.undo.undo"]'));
+  await flush();
+  expect(undo).toHaveBeenCalled();
 });
 
 const dialog = () => document.querySelector('[role="dialog"]');
@@ -135,41 +172,6 @@ async function typeDraft() {
   window.clay.visitorDrafts.saveNow();
   expect(window.clay.visitorDrafts.hasDraft()).toBe(true);
 }
-
-test("Start over asks first, and Cancel keeps the draft", async () => {
-  await boot();
-  await typeDraft();
-  const reset = jest.spyOn(window.clay.visitorDrafts, "reset");
-
-  click(gooOf());
-  click(listOf().querySelector('[data-menu-id="clay.start-over"]'));
-  await flush();
-  expect(dialog()).not.toBeNull();
-  expect(dialog().textContent).toContain("Your changes in this browser are deleted");
-
-  dialog().querySelector('button[aria-label="Close"]').click();
-  await flush();
-  expect(reset).not.toHaveBeenCalled();
-  expect(window.clay.visitorDrafts.hasDraft()).toBe(true);
-});
-
-test("Start over, confirmed, deletes the draft and reloads the page as its owner saved it", async () => {
-  await boot();
-  await typeDraft();
-  const before = draftKeys();
-  expect(before.length).toBeGreaterThan(0);
-  const reset = jest.spyOn(window.clay.visitorDrafts, "reset");
-
-  click(gooOf());
-  click(listOf().querySelector('[data-menu-id="clay.start-over"]'));
-  await flush();
-  dialog().querySelector('button[type="submit"]').click();
-  await flush();
-
-  expect(reset).toHaveBeenCalledTimes(1);
-  expect(window.clay.visitorDrafts.hasDraft()).toBe(false);
-  expect(draftKeys()).toEqual(before.filter((key) => key !== window.clay.visitorDrafts.key));
-});
 
 test("with storage refusing, the download flushes first and gives a file with the latest text", async () => {
   const { ready } = await boot();

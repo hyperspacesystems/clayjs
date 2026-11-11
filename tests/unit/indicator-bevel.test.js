@@ -15,7 +15,7 @@ beforeAll(async () => {
   document.documentElement.style.colorScheme = "dark";
   calls = await captureAsync(async () => {
     await import("../../src/plugins/indicator.js");
-    document.dispatchEvent(new CustomEvent("clay:save-saving"));
+    document.dispatchEvent(new CustomEvent("clay:save-error"));
     await drawn();
   });
 });
@@ -33,42 +33,38 @@ test("hostile-proof: runtime-only, no class or id, every declaration !important 
 });
 
 test("material: a Bevel surface in the system font, square, in the page's scheme", () => {
-  expect(last(calls, chip(), "background")).toBe(TOKENS.surface);
-  expect(last(calls, chip(), "color")).toBe(TOKENS.ink);
+  const surface = calls.filter((call) => call.style === chip().style);
+  expect(surface.find((call) => call.name === "background").value).toBe(TOKENS.surface);
+  expect(surface.find((call) => call.name === "color").value).toBe(TOKENS.ink);
   expect(chip().style.getPropertyValue("font")).toContain(FONT_SANS);
   expect(chip().style.getPropertyValue("border-radius")).toBe("");
   expect(chip().style.getPropertyValue("color-scheme")).toBe("dark");
 });
 
-test("alarm: error and offline wear the ox tone, saved goes back to the surface", async () => {
+test("alarm: error and offline wear the ox tone, saved hides the chip", async () => {
   const error = await fire("error");
   expect(last(error, chip(), "background")).toBe(TOKENS["ox-soft"]);
   expect(last(error, chip(), "color")).toBe(TOKENS.ox);
   const offline = await fire("offline");
   expect(last(offline, chip(), "color")).toBe(TOKENS.ox);
-  const saved = await fire("saved");
-  expect(last(saved, chip(), "background")).toBe(TOKENS.surface);
-  expect(last(saved, chip(), "color")).toBe(TOKENS.ink);
+  await fire("saved");
+  expect(chip().textContent).toBe("");
+  expect(chip().style.opacity).toBe("0");
 });
 
 test("a status-only change moves the chip with no save event behind it", async () => {
-  const error = await fire("error");
-  expect(last(error, chip(), "color")).toBe(TOKENS.ox);
-  const settled = await captureAsync(async () => {
-    document.dispatchEvent(new CustomEvent("clay:save-status", { detail: { state: "saved" } }));
+  await fire("saved");
+  expect(chip().style.opacity).toBe("0");
+  const failed = await captureAsync(async () => {
+    document.dispatchEvent(new CustomEvent("clay:save-status", { detail: { state: "error" } }));
     await drawn();
   });
-  expect(last(settled, chip(), "background")).toBe(TOKENS.surface);
-  expect(last(settled, chip(), "color")).toBe(TOKENS.ink);
+  expect(last(failed, chip(), "background")).toBe(TOKENS["ox-soft"]);
+  expect(last(failed, chip(), "color")).toBe(TOKENS.ox);
 });
 
-test("fade: opacity writes are !important, so a page rule cannot pin the chip visible", async () => {
-  jest.useFakeTimers();
-  await fire("saved");
+test("opacity writes are !important, so a page rule cannot hide the chip", async () => {
+  await fire("error");
   expect(chip().style.getPropertyPriority("opacity")).toBe("important");
   expect(chip().style.opacity).toBe("1");
-  jest.advanceTimersByTime(2200);
-  expect(chip().style.opacity).toBe("0");
-  expect(chip().style.getPropertyPriority("opacity")).toBe("important");
-  jest.useRealTimers();
 });

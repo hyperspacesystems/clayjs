@@ -201,30 +201,26 @@ test("a typed comment is unresolved prompt state; dispose takes the box and its 
 
 // --- indicator ----------------------------------------------------------------
 
-test("the save chip owns no input, and dispose takes its chip, timer and handlers down", async () => {
+test("the save chip owns no input, and dispose takes its chip and handlers down", async () => {
   const lease = indicatorParticipant().prepare({ generation: 1, isCurrent: () => true });
   lease.enable();
 
-  document.dispatchEvent(new CustomEvent("clay:save-saving"));
+  document.dispatchEvent(new CustomEvent("clay:save-error"));
   await drawn();
   expect(chip()).not.toBeNull();
-  expect(chip().textContent).toBe("Saving\u2026");
+  expect(chip().textContent).toBe("Couldn't save");
 
-  // A save in flight is the barrier's, not the chip's: it never refuses an exit.
+  // A failure on screen is the barrier's, not the chip's: it never refuses an exit.
   expect(lease.quiesce()).toBeUndefined();
   lease.resume();
-  expect(chip().textContent).toBe("Saving\u2026");
-
-  // Saved leaves a fade timer behind, and it goes with the session.
-  document.dispatchEvent(new CustomEvent("clay:save-saved"));
-  await drawn();
-  expect(chip().textContent).toBe("Saved");
+  expect(chip().textContent).toBe("Couldn't save");
 
   lease.dispose();
   await flush();
   expect(chip()).toBeNull();
 
-  document.dispatchEvent(new CustomEvent("clay:save-saving"));
+  document.dispatchEvent(new CustomEvent("clay:save-error"));
+  await drawn();
   expect(chip()).toBeNull();
 });
 
@@ -247,7 +243,7 @@ test("a second arm adds no listener, and adoption takes the chip the boot alread
       "beforeinput", "keydown", "pointerdown",
       "clay:save-saving", "clay:save-saved", "clay:save-error",
       "clay:save-offline", "clay:save-retrying", "clay:save-blocked",
-      "clay:page-save-state", "clay:save-status",
+      "clay:blockeditor-save-state", "clay:save-status",
     ]);
     expect(adds.every((entry) => entry.target === document)).toBe(true);
 
@@ -261,15 +257,16 @@ test("a second arm adds no listener, and adoption takes the chip the boot alread
     adopted.enable();
     expect(adds).toHaveLength(armed);
 
-    document.dispatchEvent(new CustomEvent("clay:save-saving"));
+    document.dispatchEvent(new CustomEvent("clay:save-error"));
     await drawn();
-    expect(chip().textContent).toBe("Saving\u2026");
+    expect(chip().textContent).toBe("Couldn't save");
 
     adopted.dispose();
     await flush();
 
     expect(chip()).toBeNull();
-    document.dispatchEvent(new CustomEvent("clay:save-saving"));
+    document.dispatchEvent(new CustomEvent("clay:save-error"));
+    await drawn();
     expect(chip()).toBeNull();
     again.dispose();
     boot.dispose();

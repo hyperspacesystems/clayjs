@@ -22,14 +22,13 @@ clay.modal = themodal;
 if (typeof window.toast === "undefined") window.toast = toast;
 if (typeof window.toastPersistent === "undefined") window.toastPersistent = toastPersistent;
 
-// Automatic save feedback. clay:save-saving stays deliberately silent (a toast for
-// a sub-second transient is noise). With the indicator plugin loaded, saved belongs
-// to its chip; a failed or offline save stays up as a toast until the next save
-// lands. Keep your own toast lib? The events are public. clay.saveToast moves saved
-// from the chip to a toast.
+// Automatic save feedback says something only when a save does not go through: a
+// failed or offline save stays up as a toast until the next save lands. Saving and
+// saved stay silent unless the page asks for Saved with clay.saveToast. Keep your own
+// toast lib? The events are public.
 saveFeedback.toasts = true;
-// clay.saveToast = true shows Saved as a toast (with the host's message) instead of on
-// the chip. A page may set it before this loads (window.clay = { saveToast: true }).
+// clay.saveToast = true shows Saved as a toast, with the host's message. A page may set
+// it before this loads (window.clay = { saveToast: true }).
 saveFeedback.savedToast = !!clay.saveToast;
 Object.defineProperty(clay, "saveToast", {
   get: () => saveFeedback.savedToast,
@@ -39,12 +38,12 @@ Object.defineProperty(clay, "saveToast", {
 });
 document.addEventListener("clay:save-saved", (e) => {
   dismissPersistent("Couldn't save");
-  dismissPersistent("Offline, not saved");
+  dismissPersistent("Offline, will retry");
   if (e.detail?.msgType === "warning") toast(e.detail.msg || "Saved", "warning");
-  else if (!saveFeedback.chip || saveFeedback.savedToast) toast(e.detail?.msg || "Saved", "success");
+  else if (saveFeedback.savedToast) toast(e.detail?.msg || "Saved", "success");
 });
 document.addEventListener("clay:save-error", () => toastPersistent("Couldn't save", "error"));
-document.addEventListener("clay:save-offline", () => toastPersistent("Offline, not saved", "warning"));
+document.addEventListener("clay:save-offline", () => toastPersistent("Offline, will retry", "warning"));
 document.addEventListener("clay:live-notice", (e) => {
   if (e.detail?.code === "save-uncertain") toastPersistent(e.detail.message, "warning");
   if (e.detail?.code === "op-too-large") toast(e.detail.message, "warning");

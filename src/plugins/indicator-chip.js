@@ -3,7 +3,7 @@
 import { set, style } from "../lib/hostile-css.js";
 import { bevelSurface, pageScheme, paintLook } from "../ui/bevel-controls.js";
 import { TOKENS, FONT_SANS } from "../ui/bevel.js";
-import { saveFeedback } from "../core/save-feedback.js";
+import { saveFeedback, FAILURE_CLAIMED } from "../core/save-feedback.js";
 
 // No 'conflict' here on purpose. core/conflict-notice.js owns that state now,
 // and it ships in every document rather than only the ones that turned this chip on.
@@ -12,25 +12,20 @@ import { saveFeedback } from "../core/save-feedback.js";
 // leaves core unaware that this plugin exists, which is the direction that
 // dependency has to point.
 const LABELS = {
-  saving: "Saving…",
-  saved: "Saved",
   error: "Couldn't save",
-  offline: "Offline, not saved",
-  retrying: "Saving…",
+  offline: "Offline, will retry",
   blocked: "Can't save here",
-  pending: "Saving…",
-  acknowledged: "Saving…",
-  checkpointed: "Saved",
   unavailable: "Can't store changes: download a copy",
 };
 
-// States that stay on screen instead of fading: a save still in flight, one that keeps
-// trying, one the host will not take without help, and where the journal says the work is.
-const STICKY = new Set(["saving", "retrying", "blocked", "pending", "acknowledged", "unavailable"]);
+// The chip has words only for a save that did not go through. A save on its way says
+// nothing and leaves a standing failure up, and a save that landed takes the chip down.
+// The block editor's retrying takes down a plain "Couldn't save" (it keeps trying on its
+// own and raises its own notice if that runs long) but leaves "Offline, will retry" up,
+// which is still true.
+const QUIET = new Set(["saving", "pending", "acknowledged"]);
+const CLEARS = new Set(["saved", "checkpointed"]);
 
-const ALARMING = new Set(["error", "offline", "blocked", "unavailable"]);
-
-const REST = [`background:${TOKENS.surface}`, `color:${TOKENS.ink}`, `border-color:${TOKENS["line-2"]}`];
 const ALARM = [
   `background:${TOKENS["ox-soft"]}`,
   `color:${TOKENS.ox}`,
@@ -38,7 +33,6 @@ const ALARM = [
 ];
 
 let el = null;
-let hideTimer = null;
 
 function ensure() {
   // Looked up on every call, never trusted once detached: a live-sync morph or a
@@ -57,35 +51,46 @@ function ensure() {
   return el;
 }
 
-export function show(state) {
+function hide() {
+  if (!el) return;
+  set(el, "opacity", "0");
+  el.textContent = "";
+  delete el.dataset.state;
+}
+
+// Another notice is already saying this, so the chip says nothing: two save notices at once
+// read as one problem reported twice.
+export function standDown() {
+  hide();
+}
+
+export function show(state, detail) {
+  if (QUIET.has(state)) return;
+  if (CLEARS.has(state)) return hide();
+  if (state === "retrying") {
+    if (el?.dataset.state === "error") hide();
+    return;
+  }
   if (!LABELS[state]) return;
-  // A failed or offline save is the persistent toast's to report when clay-ui is loaded,
-  // and so is saved when the page turned on clay.saveToast. Blocked is the exception:
-  // the page cannot save at all, so the chip stays even beside the generic toast.
-  const ownedByToast = state !== "blocked" &&
-    (ALARMING.has(state) || (state === "saved" && saveFeedback.savedToast));
-  if (saveFeedback.toasts && ownedByToast) {
-    clearTimeout(hideTimer);
-    if (el) {
-      set(el, "opacity", "0");
-      el.textContent = "";
-      delete el.dataset.state;
-    }
+  // The block editor put its own notice up for this failure. Read here, after every
+  // listener has seen the event, so the order the two subscribed in does not matter.
+  if (state === "error" && detail?.[FAILURE_CLAIMED]) return;
+  // A failed or offline save is the persistent toast's to report when clay-ui is loaded.
+  // Blocked is the exception: the page cannot save at all, so the chip stays even beside
+  // the generic toast.
+  if (saveFeedback.toasts && state !== "blocked") {
+    hide();
     return;
   }
   const node = ensure();
   node.textContent = LABELS[state];
   node.dataset.state = state;
-  style(node, ALARMING.has(state) ? ALARM : REST);
-  paintLook(node, { background: ALARMING.has(state) ? null : TOKENS.surface });
+  style(node, ALARM);
+  paintLook(node, { background: null });
   set(node, "opacity", "1");
-  clearTimeout(hideTimer);
-  if (!STICKY.has(state)) hideTimer = setTimeout(() => { set(node, "opacity", "0"); }, 2200);
 }
 
 export function remove() {
-  clearTimeout(hideTimer);
-  hideTimer = null;
   el?.remove();
   el = null;
 }

@@ -399,7 +399,10 @@ describe("embedded in a clay-menu-slot", () => {
     window.clay.menu.addItem({ id: "thanks", label: "Thanks", href: "mailto:a@example.com", quiet: true, dismiss: { label: "Remove", run: () => { dismissed += 1; } } });
     window.clay.menu.open();
     const x = listOf().querySelector('[data-menu-id="thanks.dismiss"]');
-    expect(x.getAttribute("aria-label")).toBe("Remove");
+    expect(x.textContent).toBe("Dismiss");
+    expect(x.title).toBe("Remove");
+    expect(x.hasAttribute("aria-label")).toBe(false);
+    expect(x.previousElementSibling).toBe(listOf().querySelector('a[data-menu-id="thanks"]'));
     expect(listOf().querySelector('a[data-menu-id="thanks"]').getAttribute("part")).toBe("item quiet");
     x.click();
     await flush();
