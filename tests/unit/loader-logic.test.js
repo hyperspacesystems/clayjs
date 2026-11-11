@@ -445,10 +445,28 @@ describe("page-view, the reader half of page", () => {
     expect(plugins).not.toContain("plugins/page-view.js");
   });
 
-  test("draft mode drops page, so it gets no reader either", () => {
+  // The page is kept for a page document, but the editor half is edit-only: a call
+  // that says edit mode is off loads neither half.
+  test("draft mode without edit mode loads neither half of a page", () => {
     const { plugins } = resolveModules(params({ plugins: "page" }), false, { isDraftMode: true });
     expect(plugins).not.toContain("plugins/page.js");
     expect(plugins).not.toContain("plugins/page-view.js");
+  });
+
+  test("draft mode keeps page and live for a page document", () => {
+    const { plugins } = resolveModules(
+      params({ plugins: "page,visitor-drafts,visitor-menu,menu,indicator" }), true, { isDraftMode: true });
+    expect(plugins).toContain("plugins/page.js");
+    expect(plugins).toContain("plugins/live.js");
+    expect(plugins).not.toContain("plugins/sync.js");
+    expect(plugins).not.toContain("plugins/upload.js");
+    expect(plugins).not.toContain("plugins/menu.js");
+    expect(plugins).not.toContain("plugins/page-view.js");
+  });
+
+  test("draft mode still drops live for a document without page", () => {
+    const { plugins } = resolveModules(params({ plugins: "live,visitor-drafts" }), true, { isDraftMode: true });
+    expect(plugins).not.toContain("plugins/live.js");
   });
 
   test("plugins=page-view is unknown: a URL cannot ask for the reader half", () => {

@@ -222,7 +222,8 @@ function parseCsv(params, key, enabled, apply) {
 }
 
 // Each of these talks to the host or writes outside the visitor's own record, so a
-// page that keeps its edits in this browser cannot carry them.
+// page that keeps its edits in this browser cannot carry them. A page document keeps
+// page and live: the editor runs on a store this browser keeps.
 const DRAFT_DROPS = ["sync", "live", "page", "upload", "quickcrop", "cms", "people", "menu", "upgrade", "wire", "ai-edit", "demo", "source"];
 
 // The one core module a document asks for by what it declares: shared site values are
@@ -273,7 +274,10 @@ export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap
   if (excluded.has("wire")) enabled.delete("ai-edit");
   for (const name of excluded) enabled.delete(name);
   if (isDraftMode) {
-    for (const name of DRAFT_DROPS) enabled.delete(name);
+    // A page document keeps its editor and the store under it: a visitor edits the real
+    // page, and the save pipeline's draft transport is its only host.
+    const keepsPage = enabled.has("page");
+    for (const name of DRAFT_DROPS) if (!(keepsPage && (name === "page" || name === "live"))) enabled.delete(name);
     for (const path of DRAFT_DROPS_CORE) {
       const at = core.indexOf(path);
       if (at > -1) core.splice(at, 1);

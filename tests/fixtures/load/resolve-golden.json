@@ -311,8 +311,9 @@
       ],
       "plugins": [
         "plugins/visitor-drafts.js",
-        "plugins/richclay.js",
         "plugins/indicator.js",
+        "plugins/live.js",
+        "plugins/page.js",
         "plugins/derive.js"
       ],
       "late": []

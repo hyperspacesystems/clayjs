@@ -12,7 +12,7 @@ import { capturePageState, onSnapshot } from "../core/snapshot.js";
 import { onSaveAccepted, onSaveAttempt, onSaveOutcome, isSaveInProgress, saveFateIsUnknown, exitSave } from "../core/save-core.js";
 import { savePageForce, baselineSettled, isSaveConflicted, autosaveIsSuspended } from "../core/save.js";
 import { withKeepalive } from "../core/save-core.js";
-import { isEditMode } from "../core/is-edit-mode.js";
+import { isEditMode, isDraftMode } from "../core/is-edit-mode.js";
 import { registerUnsavedState } from "../lib/unsaved-state.js";
 import { createCheckpoints } from "../live/checkpoint.js";
 import { parseJsonRelaxed } from "../vendor/hyper-morph-json.vendor.js";
@@ -687,8 +687,10 @@ function endDomPin(maybeLanded, ownerId = null) {
 
 // A capture that sent nothing is definitely unsent. Otherwise only a 4xx proves
 // the host wrote nothing, and only when no attempt timed out. A lost answer, a
-// timeout, a 5xx or a historical duplicate may have landed.
+// timeout, a 5xx or a historical duplicate may have landed. A refusal from this
+// browser's draft store wrote nothing anywhere.
 function mayHaveLanded(result, sent) {
+  if (result?.code === "draft-storage" || result?.code === "draft-not-ready") return false;
   const code = result?.code;
   const precommit = code === "page-converting" || code === "page-capacity";
   return code === "save-already-applied" || result?.hadTimeout === true ||
@@ -765,6 +767,12 @@ function ensureLane() {
   laneGates();
   if (laneRequested || !(writerSession ? writerSession.admitted || writerSession.wantsLane : isEditMode)) return;
   laneRequested = true;
+  // A visitor's draft opens no lane: its tabs share the draft record, not a room.
+  if (isDraftMode) {
+    settleLane?.(null);
+    settleWriter?.(null);
+    return;
+  }
   const request = ++laneRequest;
   hostMeta.hostSupports("live-data").then(
     async (supported) => {

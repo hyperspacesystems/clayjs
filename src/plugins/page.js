@@ -15,7 +15,7 @@ import { claim } from "../page/runtime-owner.js";
 import { authorIdentity } from "../page/ybind/author.js";
 import { createInstall, disposeInstall, addDisposer, finishError, isCurrent, ownsView, runBoot, activateInput } from "../page/boot.js";
 import { capabilityAdvertised } from "../page/tool-capability.js";
-import { startsAtImport } from "../core/is-edit-mode.js";
+import { startsAtImport, isDraftMode } from "../core/is-edit-mode.js";
 import { toolViews } from "../page/tool-views.js";
 import { style } from "../lib/hostile-css.js";
 import { addViewHook } from "../page/view-hooks.js";
@@ -367,6 +367,7 @@ function listenForSaves(inst) {
 
 // The page the host stores now, including any merge state it keeps beside the file.
 async function readStoredArticle() {
+  if (isDraftMode) return null;
   const response = await fetch(new URL(globalThis.location.href).href, { cache: "no-store" });
   if (!response?.ok) return null;
   const html = await response.text();
@@ -532,11 +533,12 @@ function pageRecovery() {
   return recoveryModules;
 }
 
+// A visitor's draft has no recovery identity on this host: its record in this browser is the copy.
 // What this session journals under, or null when this page cannot pin an identity or this
 // host has no recovery service: the document is then edited with no local copy, as before.
 async function openJournal(meta, store) {
   const service = globalThis.window?.clay?.recovery ?? null;
-  if (!service || !store) return null;
+  if (isDraftMode || !service || !store) return null;
   const modules = await pageRecovery();
   if (!modules) return null;
   try {
@@ -1010,7 +1012,8 @@ function mergeRepresentedPage(store, value) {
     // download: it starts here, beside authority, and only a page that must rebuild
     // its tag waits for it before the join. Nothing else on this path touches a vendor.
     const codePromise = pageCodeReady();
-    try { meta = await hostMeta(); } catch (error) { meta = null; }
+    // A visitor's draft never asks the host: the editor's only store is this browser's.
+    try { meta = isDraftMode ? { spec: null, extensions: ["page"], document: null } : await hostMeta(); } catch (error) { meta = null; }
     if (!isCurrent(inst)) return { ok: false, cancelled: true };
     if (!meta || !Array.isArray(meta.extensions) || !meta.extensions.includes("page")) {
       showBlocked(inst, BLOCKED.code, BLOCKED.message);
