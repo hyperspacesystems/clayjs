@@ -1,4 +1,4 @@
-import { announceBottomUi, bottomBarHeight } from "./bottom-ui.js";
+import { BOTTOM_UI_CHANGED, announceBottomUi, bottomBarHeight } from "./bottom-ui.js";
 import { mountEditorUI } from "../../ui/editor-ui.js";
 const ASIDE = `<aside class="hcp" id="hcp" hidden aria-label="Download this app" data-hcp-state="tab" data-hcp-reason="open" sap-ignore clay="editor-ui">
   <section class="hcp-card" id="hcp-card" role="dialog" aria-modal="false" aria-labelledby="hcp-title">
@@ -92,6 +92,7 @@ export async function mountPrompt({ memory, appName, link }) {
   }
 
   let liftFrame = 0;
+  let announcing = false;
   function lift() {
     if (liftFrame) return;
     liftFrame = requestAnimationFrame(() => {
@@ -99,7 +100,9 @@ export async function mountPrompt({ memory, appName, link }) {
       const raise = bottomBarHeight(innerWidth - 24, (el) => root.contains(el) || el.closest("[data-hcp-preview], .clay-owner"));
       const next = raise + "px";
       if (root.style.getPropertyValue("--hcp-lift") !== next) root.style.setProperty("--hcp-lift", next);
+      announcing = true;
       announceBottomUi();
+      announcing = false;
     });
   }
 
@@ -157,6 +160,9 @@ export async function mountPrompt({ memory, appName, link }) {
   document.addEventListener("focusout", onFocusOut);
   addEventListener("scroll", lift, { passive: true });
   addEventListener("resize", lift);
+  // The intro leaving can bring a page's bottom bar into view with no scroll and no transition, so the
+  // prompt measures again when anything else says the bottom of the screen changed. Its own word is skipped.
+  document.addEventListener(BOTTOM_UI_CHANGED, () => { if (!announcing) lift(); });
   document.addEventListener("transitionend", lift, true);
   // Transition events stop at a shadow root, so the prompt's own slides are heard here.
   root.addEventListener("transitionend", lift);
