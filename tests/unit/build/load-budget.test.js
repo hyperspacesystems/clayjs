@@ -186,7 +186,8 @@ test("the visitor menu stays inside its budget and costs other documents nothing
     expect(named.js.brotli).toBe(plain.js.brotli);
     expect(named.js.requests).toBe(plain.js.requests);
   }
-  const kanban = await measureBuilt({ html: htmlOf("kanban.html"), mode: "draft", dir });
+  // The current Kanban names visitor-menu. The last shipped Kanban copy does not, so it must not pay for it.
+  const kanban = await measureBuilt({ html: htmlOf("kanban-hyperclay.html"), mode: "draft", dir });
   expect(kanban.js.files.filter((f) => /visitor-menu/.test(f.path))).toEqual([]);
 }, 180000);
 

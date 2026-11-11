@@ -19,7 +19,7 @@ Kanban: a board of lists and cards, Trello style, in one file.
   - People are recorded through ClayJS's people plugin: <div clay-people hidden> names them, and
     comments and members point at them by id.
 -->
-<html lang="en" autosave visitor-drafts="kanban-v1" clay-mode-switch="live">
+<html lang="en" autosave visitor-drafts="kanban-v1" clay-mode-switch="live" opens-in="edit">
 <head>
 <meta charset="utf-8">
 <meta name="hyper-source" content="https://hyperclay.com/templates/kanban/hosted/latest.html">
@@ -28,22 +28,37 @@ Kanban: a board of lists and cards, Trello style, in one file.
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0c2635">
 <title>Launch Plan · Kanban</title>
+<meta name="description" content="When tasks pile up, it's hard to see what's next. Move your work across lists on this free board, all in one HTML file you can download and keep.">
+<link rel="canonical" href="https://kanban.hyperclay.com/" clay="no-copy">
+<script type="application/ld+json" clay="no-copy">{"@context":"https://schema.org","@type":"WebApplication","name":"Kanban","url":"https://kanban.hyperclay.com/","description":"When tasks pile up, it's hard to see what's next. Move your work across lists on this free board, all in one HTML file you can download and keep.","applicationCategory":"BusinessApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://kanban.hyperclay.com/" clay="no-copy">
+<meta property="og:title" content="See where all your work stands">
+<meta property="og:description" content="Tasks pile up fast. Move your work across lists with checklists and due dates on this free board you can download and keep.">
+<meta property="og:image" content="https://kanban.hyperclay.com/_/uploads/apps/kanban/og.png" clay="no-copy">
+<meta name="twitter:card" content="summary_large_image" clay="no-copy">
+<meta name="twitter:title" content="See where all your work stands">
+<meta name="twitter:description" content="Tasks pile up fast. Move your work across lists with checklists and due dates on this free board you can download and keep.">
+<meta name="twitter:image" content="https://kanban.hyperclay.com/_/uploads/apps/kanban/og.png" clay="no-copy">
 <meta name="application-name" content="Kanban">
+<link rel="icon" href="https://kanban.hyperclay.com/_/uploads/apps/kanban/favicon.ico" sizes="48x48" clay="no-copy">
+<link rel="icon" href="https://kanban.hyperclay.com/_/uploads/apps/kanban/favicon.svg" type="image/svg+xml" clay="no-copy">
+<link rel="apple-touch-icon" href="https://kanban.hyperclay.com/_/uploads/apps/kanban/apple-touch-icon.png" clay="no-copy">
+<script src="https://signal.hyperclay.com/v1.js" defer clay="no-copy" data-profile="document" data-wait data-start="interaction"></script>
 <link rel="preload" href="https://clayjs.com/v1/fonts/work-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="https://clayjs.com/v1/fonts/work-sans.css">
 <style>
-:root{--navy:#0c2635;--navy-2:#183442;--ink:#263d4e;--muted:#536988;--subtle:#62748a;--page:#f8fafc;--paper:#fefefd;--well:#f2f6fa;--line:#e0e7ee;--violet:#7356ba;--violet-ink:#66469d;--violet-soft:#eee8f9;--danger:#9a4741;--shadow:0 2px 3px #30527405,0 5px 16px #30527408}
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--page);font-family:'Work Sans',system-ui,sans-serif;color:var(--ink);font-size:14px;line-height:1.5;overflow:hidden}
+body{margin:0;background:var(--page);font-family:var(--font);color:var(--ink);font-size:14px;line-height:1.5;overflow:hidden}
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none;border-radius:7px;min-height:36px}
 button:disabled{cursor:default;opacity:.5}
-button:hover:not(:disabled){background-color:#e9eef4}
-button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid #9775df;outline-offset:2px}
-input,textarea,select{background:var(--paper);border:1px solid #cbd6e2;border-radius:6px}
+button:hover:not(:disabled){background-color:var(--hover)}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+input,textarea,select{background:var(--paper);border:1px solid var(--field-line);border-radius:6px}
 input::placeholder,textarea::placeholder{color:var(--subtle);opacity:1}
-a{color:#6645a5;text-underline-offset:3px}
+a{color:var(--violet-ink);text-underline-offset:3px}
 svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
 h1,h2,h3,h4,p{margin:0}
 [hidden]{display:none!important}
@@ -51,77 +66,70 @@ h1,h2,h3,h4,p{margin:0}
 .icon-button{width:36px;height:36px;padding:9px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 
 /* top bar */
-.topbar{height:56px;background:var(--navy);color:#edf3f8;display:flex;align-items:center;padding:0 calc(20px + var(--clay-menu-width, 0px)) 0 20px;gap:14px}
-.brandmark{width:22px;height:22px;flex-shrink:0;fill:#8da5bb;display:block}
-.board-title{display:flex;align-items:center;gap:8px;min-width:0;padding:0 8px;margin-left:-4px;color:#edf3f8;font-size:17px;font-weight:600;letter-spacing:-.4px}
+.topbar{height:56px;background:var(--navy);color:var(--bar-ink);display:flex;align-items:center;padding:0 calc(20px + var(--clay-menu-width, 0px)) 0 20px;gap:14px}
+.brandmark{width:22px;height:22px;flex-shrink:0;fill:var(--bar-icon);display:block}
+.board-title{display:flex;align-items:center;gap:8px;min-width:0;padding:0 8px;margin-left:-4px;color:var(--bar-ink);font-size:17px;font-weight:600;letter-spacing:-.4px}
 .board-title span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.board-title svg{color:#96afc2;width:14px;height:14px}
-.topbar .board-title:hover{background:#1d3a4a}
+.board-title svg{color:var(--bar-icon);width:14px;height:14px}
+.topbar .board-title:hover{background:var(--bar-title-hover)}
 .top-actions{display:flex;gap:8px;align-items:center;margin-left:auto}
-.search{height:36px;width:230px;border:1px solid #3c5361;background:var(--navy-2);border-radius:7px;display:flex;align-items:center;gap:8px;padding:0 10px;color:#b6c7d5}
+.search{height:36px;width:230px;border:1px solid var(--bar-line);background:var(--navy-2);border-radius:7px;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--bar-muted)}
 .search svg{width:16px;height:16px}
-.search input{padding:0;width:100%;min-width:0;border:0;background:none;color:#f0f5f8;outline:none!important}
-.search input::placeholder{color:#becbd6}
-.search kbd{font-size:11px;font-family:inherit;border:1px solid #526876;border-radius:4px;padding:0 5px}
-.search:focus-within{outline:2px solid #ba9beb;outline-offset:2px}
-.nav-button{display:flex;align-items:center;gap:7px;padding:0 11px;color:#e6edf3;border:1px solid #435b6a;min-height:36px}
-.topbar .nav-button:hover:not(:disabled){background:#274556}
-.nav-button[aria-expanded="true"],.nav-button.filtering{background:#405068;border-color:#6d7f95}
-.nav-button.primary{background:#eaf0f5;color:#193646;border-color:#eaf0f5;font-weight:550}
-.topbar .nav-button.primary:hover{background:#d9e5ef}
+.search input{padding:0;width:100%;min-width:0;border:0;background:none;color:var(--bar-ink);outline:none!important}
+.search input::placeholder{color:var(--bar-muted)}
+.search kbd{font-size:11px;font-family:inherit;border:1px solid var(--bar-line-2);border-radius:4px;padding:0 5px}
+.search:focus-within{outline:2px solid var(--bar-focus);outline-offset:2px}
+.nav-button{display:flex;align-items:center;gap:7px;padding:0 11px;color:var(--bar-ink);border:1px solid var(--bar-line);min-height:36px}
+.topbar .nav-button:hover:not(:disabled){background:var(--bar-hover)}
+.nav-button[aria-expanded="true"],.nav-button.filtering{background:var(--bar-active);border-color:var(--bar-active-line)}
+.nav-button.primary{background:var(--bar-primary);color:var(--bar-primary-ink);border-color:var(--bar-primary);font-weight:550}
+.topbar .nav-button.primary:hover{background:var(--bar-primary-hover)}
 .faces{display:flex;align-items:center}
 .faces .avatar{width:28px;height:28px;border:2px solid var(--navy);font-size:10px}
 .faces .avatar+.avatar{margin-left:-7px}
 .me-button{border:0;background:none;padding:0;cursor:pointer;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
 .me-button[hidden]{display:none}
-.me-button .avatar{width:28px;height:28px;border:2px solid #9775df;font-size:10px}
-.me-button:focus-visible{outline:3px solid #9775df;outline-offset:2px}
-.save-chip{font-size:11px;color:#b6c7d5;white-space:nowrap;display:flex;align-items:center;gap:6px}
-.save-chip::before{content:"";width:7px;height:7px;border-radius:50%;background:#7f95a8}
-.save-chip[data-state="saved"]::before{background:#6fbf9a}
-.save-chip[data-state="saving"]::before{background:#d8b56c}
-.save-chip[data-state="error"]::before,.save-chip[data-state="conflict"]::before,.save-chip[data-state="offline"]::before{background:#e48a7f}
+.me-button .avatar{width:28px;height:28px;border:2px solid var(--focus);font-size:10px}
+.me-button:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.save-chip{font-size:11px;color:var(--bar-muted);white-space:nowrap;display:flex;align-items:center;gap:6px}
+.save-chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--status-idle)}
+.save-chip[data-state="saved"]::before{background:var(--status-ok)}
+.save-chip[data-state="saving"]::before{background:var(--status-busy)}
+.save-chip[data-state="error"]::before,.save-chip[data-state="conflict"]::before,.save-chip[data-state="offline"]::before{background:var(--status-error)}
 
 /* avatars: full colour, near-white initials */
-.avatar{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:26px;height:26px;border-radius:50%;font-size:10px;font-weight:600;letter-spacing:-.2px;color:#fbfaf7;background:#4f6178;border:2px solid var(--paper);line-height:1}
-.avatar[data-c="0"]{background:#6b4fa8}.avatar[data-c="1"]{background:#2f6a9e}.avatar[data-c="2"]{background:#9a6a1c}.avatar[data-c="3"]{background:#a8463d}
-.avatar[data-c="4"]{background:#2f7a69}.avatar[data-c="5"]{background:#4f6178}.avatar[data-c="6"]{background:#3f7d3a}.avatar[data-c="7"]{background:#a2457a}
+.avatar{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:26px;height:26px;border-radius:50%;font-size:10px;font-weight:600;letter-spacing:-.2px;color:var(--avatar-ink);background:var(--avatar-5);border:2px solid var(--paper);line-height:1}
+.avatar[data-c="0"]{background:var(--avatar-0)}.avatar[data-c="1"]{background:var(--avatar-1)}.avatar[data-c="2"]{background:var(--avatar-2)}.avatar[data-c="3"]{background:var(--avatar-3)}
+.avatar[data-c="4"]{background:var(--avatar-4)}.avatar[data-c="5"]{background:var(--avatar-5)}.avatar[data-c="6"]{background:var(--avatar-6)}.avatar[data-c="7"]{background:var(--avatar-7)}
 .avatars{display:flex;align-items:center}.avatars .avatar+.avatar{margin-left:-6px}
 
 /* label and cover colours */
-[data-color="violet"]{--label-bg:#eee7f9;--label-ink:#684398;--solid:#a68bcf}
-[data-color="blue"]{--label-bg:#e4edf9;--label-ink:#376397;--solid:#7fa3cf}
-[data-color="amber"]{--label-bg:#f8edda;--label-ink:#866020;--solid:#d6b67d}
-[data-color="red"]{--label-bg:#f7e4e1;--label-ink:#a03e39;--solid:#d9897f}
-[data-color="teal"]{--label-bg:#dff0ea;--label-ink:#326e61;--solid:#7dbbab}
-[data-color="slate"]{--label-bg:#e5eaf0;--label-ink:#53617a;--solid:#9aa8ba}
-[data-color="green"]{--label-bg:#e3f0dc;--label-ink:#3d6a2c;--solid:#93bf7f}
-[data-color="pink"]{--label-bg:#f7e3ee;--label-ink:#8f3d68;--solid:#d991b6}
-.chip{display:inline-flex;align-items:center;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:550;line-height:1.7;color:var(--label-ink,#53617a);background:var(--label-bg,#e5eaf0);white-space:nowrap}
+.chip{display:inline-flex;align-items:center;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:550;line-height:1.7;color:var(--label-ink,var(--chip-ink));background:var(--label-bg,var(--chip-bg));white-space:nowrap}
 
 /* board and lists (the saved markup) */
-.board{height:calc(100dvh - var(--clay-seo-height, 0px) - 56px);padding:18px 20px 18px;display:flex;gap:14px;overflow-x:auto;align-items:flex-start;scrollbar-color:#c2cedc transparent;scrollbar-width:thin}
+.board{height:calc(100dvh - var(--clay-seo-height, 0px) - 56px);padding:18px 20px 18px;display:flex;gap:14px;overflow-x:auto;align-items:flex-start;scrollbar-color:var(--dashed) transparent;scrollbar-width:thin}
 .board-app{display:contents}
 .chip-slot,.filter-slot,.me-slot,.pop-slot{display:contents}
+.menu-slot{flex:none;display:inline-flex}
+.menu-slot:not(:has(> :not(template))){display:none}
 .board-data,.label-defs{display:none}
-.list{flex:0 0 272px;background:var(--well);border:1px solid #e4eaf0;border-radius:11px;padding:4px 8px 6px;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-rows:auto minmax(0,1fr) auto;align-items:center}
+.list{flex:0 0 272px;background:var(--well);border:1px solid var(--line);border-radius:11px;padding:4px 8px 6px;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-rows:auto minmax(0,1fr) auto;align-items:center}
 .list-title{grid-column:2;font-size:13px;font-weight:650;padding:12px 4px;min-width:0;overflow-wrap:anywhere;cursor:default}
 .list-handle{grid-column:1;width:24px;height:36px;display:grid;place-items:center;cursor:grab;touch-action:none}
 html:not([editmode="true"]) .list-handle{cursor:default}
-.list-handle i{width:8px;height:8px;border-radius:50%;background:var(--dot,#9ba8b9);box-shadow:0 0 0 3px var(--dot-ring,#e6ecf2)}
-:is(.list,.tone-swatch)[data-tone="1"]{--dot:#698ba6}:is(.list,.tone-swatch)[data-tone="2"]{--dot:#8d70c8;--dot-ring:#e9e2f5}:is(.list,.tone-swatch)[data-tone="3"]{--dot:#b18a48;--dot-ring:#f1e9dc}:is(.list,.tone-swatch)[data-tone="4"]{--dot:#488d7d;--dot-ring:#dcece6}:is(.list,.tone-swatch)[data-tone="5"]{--dot:#a8635d;--dot-ring:#f3e2df}
-.count{grid-column:3;font-size:11px;font-weight:500;color:#566a80;background:#e6ecf2;padding:0 6px;min-width:20px;text-align:center;border-radius:5px;margin-right:2px}
-.list-menu{grid-column:4;color:#6b7d91}
+.list-handle i{width:8px;height:8px;border-radius:50%;background:var(--dot,var(--dot-none));box-shadow:0 0 0 3px var(--dot-ring,var(--chip-bg))}
+.count{grid-column:3;font-size:11px;font-weight:500;color:var(--muted);background:var(--chip-bg);padding:0 6px;min-width:20px;text-align:center;border-radius:5px;margin-right:2px}
+.list-menu{grid-column:4;color:var(--faint)}
 .cards{grid-column:1/-1;align-self:stretch;list-style:none;margin:0;padding:2px 2px 4px;overflow-y:auto;min-height:6px;scrollbar-width:thin}
 .add-card{grid-column:1/-1;display:flex;gap:8px;align-items:center;width:100%;padding:0 10px;font-size:12px;color:var(--muted);text-align:left}
 .add-card svg{width:15px}
-.add-list-tile{flex:0 0 272px;display:flex;align-items:center;gap:8px;justify-content:center;border:1px dashed #c3cfdc;border-radius:11px;min-height:48px;color:var(--muted);font-size:13px}
-.capture-form{grid-column:1/-1;background:var(--paper);border:1px solid #d5dfea;border-radius:8px;box-shadow:var(--shadow);padding:8px;margin:0 0 6px;display:flex;flex-direction:column;gap:6px}
+.add-list-tile{flex:0 0 272px;display:flex;align-items:center;gap:8px;justify-content:center;border:1px dashed var(--dashed);border-radius:11px;min-height:48px;color:var(--muted);font-size:13px}
+.capture-form{grid-column:1/-1;background:var(--paper);border:1px solid var(--line-2);border-radius:8px;box-shadow:var(--shadow);padding:8px;margin:0 0 6px;display:flex;flex-direction:column;gap:6px}
 .capture-form label{display:block;font-size:11px;color:var(--muted)}
-.capture-form textarea{display:block;width:100%;margin-top:4px;padding:6px 8px;min-height:46px;font:inherit;font-size:13px;color:var(--ink);background:var(--paper);border:1px solid #cbd6e2;border-radius:6px;resize:vertical}
+.capture-form textarea{display:block;width:100%;margin-top:4px;padding:6px 8px;min-height:46px;font:inherit;font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--field-line);border-radius:6px;resize:vertical}
 .capture-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .capture-actions button{font-size:12px;padding:0 10px}
-.capture-actions button[type="submit"]{background:var(--navy);color:#eef3f7}
+.capture-actions button[type="submit"]{background:var(--navy);color:var(--on-primary)}
 .capture-message{font-size:11px;color:var(--muted);margin:0}
 .capture-message:empty{display:none}
 .capture-preview{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:6px}
@@ -132,19 +140,19 @@ html:not([editmode="true"]) .list-handle{cursor:default}
 #board>.capture-form{flex:0 0 272px;margin:0}
 .list-empty{grid-column:1/-1;padding:6px 4px;font-size:12px;color:var(--muted);margin:0}
 .list-empty[hidden]{display:none}
-.no-lists{flex:0 0 272px;min-height:48px;display:flex;align-items:center;gap:8px;padding:12px;font-size:13px;color:var(--muted);background:var(--paper);border:1px dashed #c3cfdc;border-radius:11px}
+.no-lists{flex:0 0 272px;min-height:48px;display:flex;align-items:center;gap:8px;padding:12px;font-size:13px;color:var(--muted);background:var(--paper);border:1px dashed var(--dashed);border-radius:11px}
 
 /* cards: the saved data is hidden, the face is drawn */
-.card{position:relative;background:var(--paper);border:1px solid #e1e7ee;border-radius:8px;box-shadow:var(--shadow);margin-bottom:9px;overflow:hidden;transition:border-color 160ms,box-shadow 160ms}
+.card{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);margin-bottom:9px;overflow:hidden;transition:border-color 160ms,box-shadow 160ms}
 .card:has(>.card-face)>:not(.card-face){display:none}
 .card:not(:has(>.card-face))>.card-title{font-size:13px;font-weight:500;padding:12px 13px;margin:0}
 .card:not(:has(>.card-face))>:not(.card-title){display:none}
-.card:hover{border-color:#a8b7c8;box-shadow:0 4px 14px #30527413}
+.card:hover{border-color:var(--card-hover-line);box-shadow:0 4px 14px var(--shade-hover)}
 .card.sortable-ghost{opacity:.4}
 .card-open{padding:12px 13px;width:100%;text-align:left;display:block;border-radius:7px;min-height:0}
 .card-open:hover{background:transparent!important}
 .card-open:focus-visible{outline-offset:-3px}
-.cover{display:block;height:28px;margin:-12px -13px 11px;background:var(--solid,#c9d3df)}
+.cover{display:block;height:28px;margin:-12px -13px 11px;background:var(--solid,var(--field-line))}
 .cover-img{display:block;width:calc(100% + 26px);height:120px;background:var(--img) center/cover;margin:-12px -13px 11px}
 .face-title{display:block;font-size:13px;line-height:1.55;font-weight:500;letter-spacing:-.1px;overflow-wrap:anywhere;white-space:pre-line}
 .face-chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px}
@@ -152,38 +160,36 @@ html:not([editmode="true"]) .list-handle{cursor:default}
 .face-bottom:empty{display:none}
 .face-bottom>.avatars{margin-left:auto}
 .due-slot:empty,.avatars:empty{display:none}
-.badges{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:#62748a;font-size:10px}
+.badges{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--subtle);font-size:10px}
 .badge{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
 .badge svg{width:13px;height:13px}
-.badge.all-done{color:#2e6e55}
-.due{padding:2px 5px;border-radius:4px;background:#edf1f5;color:#53657b}
-.due[data-state="soon"]{background:#faf0d9;color:#875b16}
-.due[data-state="overdue"]{background:#f9e6e3;color:#a13f37}
-.due[data-state="done"]{background:#e4f0e9;color:#2e6e55}
+.badge.all-done{color:var(--ok-ink)}
+.due{padding:2px 5px;border-radius:4px;background:var(--sunken);color:var(--muted)}
+.due[data-state="soon"]{background:var(--warn-bg);color:var(--warn-ink)}
+.due[data-state="overdue"]{background:var(--bad-bg);color:var(--bad-ink)}
+.due[data-state="done"]{background:var(--ok-bg);color:var(--ok-ink)}
 
 /* popovers, menus and dialogs */
-.popup{position:fixed;width:280px;border:1px solid #d5dfea;border-radius:11px;box-shadow:0 12px 36px #12304422;background:var(--paper);padding:14px;z-index:20;max-height:calc(100dvh - 80px);overflow:auto}
+.popup{position:fixed;width:280px;border:1px solid var(--line-2);border-radius:11px;box-shadow:0 12px 36px var(--shade-pop);background:var(--paper);padding:14px;z-index:20;max-height:calc(100dvh - 80px);overflow:auto}
 .popup h2{font-size:13px;font-weight:650;margin-bottom:8px}
 .popup .group{margin-top:10px}
 .popup .group-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
 .check-option{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12px;cursor:pointer;padding:0 4px;border-radius:5px}
-.check-option:hover{background:#f1f4f8}
-.check-option input{min-height:0;width:15px;height:15px;margin:0;accent-color:#7856ac}
+.check-option:hover{background:var(--sunken)}
+.check-option input{min-height:0;width:15px;height:15px;margin:0;accent-color:var(--violet-2)}
 .popup-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:11px;color:var(--muted);gap:8px}
 .popup-bottom button{padding:0 9px;font-size:11px;text-decoration:underline;text-underline-offset:3px;min-height:30px}
-.popup .feedback{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
-.popup .feedback a{display:inline-flex;align-items:center;gap:6px;color:inherit;text-decoration:underline;text-underline-offset:2px}.feedback-icon{width:1.15em;height:1.15em;flex:none}
-.menu{position:fixed;min-width:190px;border:1px solid #d5dfea;border-radius:9px;box-shadow:0 12px 30px #12304422;background:var(--paper);padding:5px;z-index:25;display:flex;flex-direction:column}
+.menu{position:fixed;min-width:190px;border:1px solid var(--line-2);border-radius:9px;box-shadow:0 12px 30px var(--shade-pop);background:var(--paper);padding:5px;z-index:25;display:flex;flex-direction:column}
 .menu button{display:flex;align-items:center;gap:9px;padding:0 10px;font-size:12px;text-align:left;min-height:34px}
 .menu button svg{width:15px;height:15px;color:var(--muted)}
 .menu .danger{color:var(--danger)}.menu .danger svg{color:var(--danger)}
-.menu-tones{display:flex;flex-wrap:wrap;gap:2px;margin-top:4px;padding:4px 2px 0;border-top:1px solid #e4eaf0}
+.menu-tones{display:flex;flex-wrap:wrap;gap:2px;margin-top:4px;padding:4px 2px 0;border-top:1px solid var(--line)}
 .menu .tone-swatch{width:32px;height:32px;min-height:0;padding:0;justify-content:center;border-radius:8px}
-.menu .tone-swatch::before{content:"";width:12px;height:12px;border-radius:50%;background:var(--dot,#9ba8b9);box-shadow:0 0 0 3px var(--dot-ring,#e6ecf2)}
-.menu .tone-swatch[aria-checked="true"]{background:#eef3f8}
-.menu .tone-swatch[aria-checked="true"]::before{box-shadow:0 0 0 3px var(--dot-ring,#e6ecf2),0 0 0 5px var(--dot,#9ba8b9)}
-.small-dialog{border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);width:380px;max-width:calc(100% - 32px);padding:22px;box-shadow:0 20px 65px #12304430}
-.small-dialog::backdrop{background:#17304440}
+.menu .tone-swatch::before{content:"";width:12px;height:12px;border-radius:50%;background:var(--dot,var(--dot-none));box-shadow:0 0 0 3px var(--dot-ring,var(--chip-bg))}
+.menu .tone-swatch[aria-checked="true"]{background:var(--hover)}
+.menu .tone-swatch[aria-checked="true"]::before{box-shadow:0 0 0 3px var(--dot-ring,var(--chip-bg)),0 0 0 5px var(--dot,var(--dot-none))}
+.small-dialog{border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);width:380px;max-width:calc(100% - 32px);padding:22px;box-shadow:0 20px 65px var(--shade-dialog)}
+.small-dialog::backdrop{background:var(--backdrop)}
 .small-dialog h2{font-size:17px;letter-spacing:-.4px;margin-bottom:12px}
 .small-dialog p{font-size:13px;color:var(--muted);margin-bottom:14px}
 .small-dialog label{display:block;font-size:12px;color:var(--muted);margin-bottom:12px}
@@ -193,35 +199,37 @@ html:not([editmode="true"]) .list-handle{cursor:default}
 .help-keys{display:grid;grid-template-columns:max-content 1fr;gap:7px 14px;margin:0 0 14px;font-size:13px}
 .help-keys dt{color:var(--muted);white-space:nowrap}
 .help-keys dd{margin:0}
-.help-keys kbd{font-family:inherit;font-size:12px;border:1px solid #cfd9e4;border-radius:4px;padding:0 5px;background:#f4f7fa}
+.help-keys kbd{font-family:inherit;font-size:12px;border:1px solid var(--field-line);border-radius:4px;padding:0 5px;background:var(--sunken)}
 .move-note{margin:0;padding:0 16px 8px;font-size:12px;color:var(--muted)}
 .form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
 .form-actions button{padding:0 14px;font-size:12px}
-.primary-button{background:var(--navy);color:#eef3f7}
-.primary-button:hover:not(:disabled){background:#25475b!important}
-.danger-button{background:#a8463d;color:#fdf6f4}
-.danger-button:hover:not(:disabled){background:#8f3b33!important}
-.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:6px 6px 6px 16px;background:var(--navy);color:#edf3f8;z-index:40;border:1px solid #486273;border-radius:8px;font-size:12px;box-shadow:0 8px 25px #14334725;display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px)}
-.toast button{color:#d9c7f6;font-weight:600;padding:0 10px;min-height:32px}
-.toast button:hover{background:#274556!important}
+.primary-button{background:var(--navy);color:var(--on-primary)}
+.primary-button:hover:not(:disabled){background:var(--primary-hover)!important}
+.danger-button{background:var(--danger-bg);color:var(--on-danger)}
+.danger-button:hover:not(:disabled){background:var(--danger-hover)!important}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:6px 6px 6px 16px;background:var(--navy);color:var(--bar-ink);z-index:40;border:1px solid var(--bar-line-2);border-radius:8px;font-size:12px;box-shadow:0 8px 25px var(--shade-toast);display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px)}
+.toast button{color:var(--bar-accent);font-weight:600;padding:0 10px;min-height:32px}
+.toast button:hover{background:var(--bar-hover)!important}
 .toast:not(:has(button)){padding:10px 16px}
-.toast .toast-text{width:240px;max-width:40vw;height:56px;padding:6px 8px;border-radius:6px;border:1px solid #486273;background:#0f2233;color:#edf3f8;font:inherit}
+.toast .toast-text{width:240px;max-width:40vw;height:56px;padding:6px 8px;border-radius:6px;border:1px solid var(--bar-line-2);background:var(--bar-deep);color:var(--bar-ink);font:inherit}
 .history-controls{display:flex;align-items:center;gap:8px}
-.history-note{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:41;display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px);padding:6px 6px 6px 16px;background:#fdf6f4;color:#7a3730;border:1px solid #e0b9b3;border-radius:8px;font-size:12px;box-shadow:0 8px 25px #14334725}
-.history-note button{color:#7a3730;font-weight:600;padding:0 10px;min-height:32px;border:1px solid #e0b9b3;border-radius:6px;background:transparent}
-.history-note button:hover:not(:disabled){background:#f7e7e3!important}
-[ephemeral~="history-hit"]{outline:3px solid #9775df;outline-offset:2px;border-radius:8px;animation:history-hit 1600ms ease-out}
-@keyframes history-hit{from{box-shadow:0 0 0 8px #9775df55}to{box-shadow:0 0 0 0 transparent}}
+.card-detail .history-button{color:var(--ink);border-color:var(--line-2)}
+.card-detail .history-button:hover:not(:disabled){background:var(--hover)}
+.history-note{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:41;display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px);padding:6px 6px 6px 16px;background:var(--note-bg);color:var(--note-ink);border:1px solid var(--note-line);border-radius:8px;font-size:12px;box-shadow:0 8px 25px var(--shade-toast)}
+.history-note button{color:var(--note-ink);font-weight:600;padding:0 10px;min-height:32px;border:1px solid var(--note-line);border-radius:6px;background:transparent}
+.history-note button:hover:not(:disabled){background:var(--note-hover)!important}
+[ephemeral~="history-hit"]{outline:3px solid var(--focus);outline-offset:2px;border-radius:8px;animation:history-hit 1600ms ease-out}
+@keyframes history-hit{from{box-shadow:0 0 0 8px var(--focus-glow)}to{box-shadow:0 0 0 0 transparent}}
 .empty-note{padding:14px 8px;font-size:12px;text-align:center;color:var(--muted)}
 .no-results{position:fixed;left:50%;top:84px;transform:translateX(-50%);background:var(--paper);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);z-index:10;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px}
 .no-results[hidden]{display:none}
 
 /* card detail */
-.detail-cover{height:7px;background:var(--solid,#d7deea);flex-shrink:0}
+.detail-cover{height:7px;background:var(--solid,var(--line-2));flex-shrink:0}
 .detail-cover.has-image{height:120px;background:none}
-.card-detail{width:940px;max-width:calc(100% - 32px);height:min(718px,calc(100dvh - 64px));max-height:calc(100dvh - 64px);padding:0;border:1px solid #d8e0e8;border-radius:13px;background:var(--paper);color:var(--ink);box-shadow:0 32px 90px #142d4240;display:flex;flex-direction:column;overflow:hidden;animation:appear 160ms ease-out}
+.card-detail{width:940px;max-width:calc(100% - 32px);height:min(718px,calc(100dvh - 64px));max-height:calc(100dvh - 64px);padding:0;border:1px solid var(--line-2);border-radius:13px;background:var(--paper);color:var(--ink);box-shadow:0 32px 90px var(--shade-detail);display:flex;flex-direction:column;overflow:hidden;animation:appear 160ms ease-out}
 .card-detail:not([open]){display:none}
-.card-detail::backdrop{background:#17304432}
+.card-detail::backdrop{background:var(--backdrop-detail)}
 .card-detail .detail-top{flex-shrink:0}
 .card-detail .detail-label{margin:0;padding:12px 26px 16px;border-bottom:1px solid var(--line);font-size:23px;font-weight:600;line-height:1.3;letter-spacing:-.7px;overflow-wrap:anywhere;white-space:pre-line}
 html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
@@ -236,23 +244,23 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
 .breadcrumb{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;margin-bottom:4px;flex-wrap:wrap}
 .breadcrumb svg{height:12px;width:12px}
 .breadcrumb b{font-weight:500;color:var(--violet-ink)}
-.breadcrumb .num{margin-left:4px;color:#607086}
+.breadcrumb .num{margin-left:4px;color:var(--subtle)}
 .detail-scroll{display:grid;grid-template-columns:minmax(0,1fr) 300px;overflow-y:auto;flex:1;min-height:0;scrollbar-width:thin}
 .detail-main{padding:22px 26px 26px;min-width:0}
-.detail-side{border-left:1px solid var(--line);background:#f7f9fc;padding:20px 20px;min-width:0}
+.detail-side{border-left:1px solid var(--line);background:var(--paper-2);padding:20px 20px;min-width:0}
 .section{margin-bottom:24px}
 .section-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.section-head svg{color:#62748a;width:16px;height:16px}
+.section-head svg{color:var(--subtle);width:16px;height:16px}
 .section-head h3{font-size:13px;font-weight:600}
 .section-head .spacer{margin-left:auto}
-.small-button{padding:0 10px;min-height:30px;font-size:11px;color:var(--muted);border:1px solid #dbe3ec;background:var(--paper)}
-.description{font-size:13px;color:#4a5b71;line-height:1.7;overflow-wrap:anywhere}
+.small-button{padding:0 10px;min-height:30px;font-size:11px;color:var(--muted);border:1px solid var(--line-2);background:var(--paper)}
+.description{font-size:13px;color:var(--ink-2);line-height:1.7;overflow-wrap:anywhere}
 .description h1,.description h2,.description h3,.description h4{font-size:14px;font-weight:600;color:var(--ink);margin:4px 0 6px}
 .description p{margin:0 0 8px}
 .description ul,.description ol{margin:6px 0 8px;padding-left:20px}
-.description code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;color:#615276;background:#eeedf3;padding:1px 5px;border-radius:4px}
-.description pre{background:#f1f3f7;padding:10px;border-radius:6px;overflow:auto}
-.description blockquote{margin:6px 0;padding-left:10px;border-left:3px solid #d8dfe8}
+.description code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--code-ink);background:var(--code-bg);padding:1px 5px;border-radius:4px}
+.description pre{background:var(--sunken);padding:10px;border-radius:6px;overflow:auto}
+.description blockquote{margin:6px 0;padding-left:10px;border-left:3px solid var(--line-2)}
 .placeholder{color:var(--subtle);font-size:12px;font-style:italic}
 .desc-editor{width:100%;min-height:160px;padding:10px;font-size:13px;line-height:1.6;resize:vertical}
 .row-actions{display:flex;gap:8px;margin-top:8px}
@@ -260,16 +268,16 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
 .checklist{margin-bottom:16px}
 .checklist-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .checklist-head h4{font-size:12px;font-weight:600;flex:1;min-width:0;overflow-wrap:anywhere}
-.track{height:5px;background:#e9e8ee;border-radius:5px;overflow:hidden;margin-bottom:6px}
-.fill{height:100%;width:var(--w,0%);background:#9c83c8;border-radius:5px}
+.track{height:5px;background:var(--track);border-radius:5px;overflow:hidden;margin-bottom:6px}
+.fill{height:100%;width:var(--w,0%);background:var(--fill);border-radius:5px}
 .progress-label{font-size:10px;color:var(--muted)}
 .check-row{display:flex;gap:8px;align-items:center;min-height:34px;font-size:12px;padding:0 4px;border-radius:5px;margin-left:-4px}
-.check-row:hover{background:#f0edf6}
+.check-row:hover{background:var(--violet-soft)}
 .check-hit{display:grid;place-items:center;flex-shrink:0;cursor:pointer}
-.check-row input[type=checkbox]{min-height:0;width:15px;height:15px;margin:0;accent-color:#8362b7;flex-shrink:0}
+.check-row input[type=checkbox]{min-height:0;width:15px;height:15px;margin:0;accent-color:var(--violet-2);flex-shrink:0}
 .check-row button.check-text{text-align:left;font:inherit;color:inherit;background:none;min-height:0;border-radius:4px}
 .check-row .check-text{flex:1;min-width:0;overflow-wrap:anywhere;cursor:text;padding:4px 0}
-.check-row.done .check-text{text-decoration:line-through;color:#657486}
+.check-row.done .check-text{text-decoration:line-through;color:var(--subtle)}
 .check-row .avatar{width:22px;height:22px;font-size:9px;border:0}
 .check-row .row-tool{opacity:0;width:28px;height:28px;min-height:28px;padding:6px}
 .check-row:hover .row-tool,.check-row:focus-within .row-tool{opacity:1}
@@ -277,8 +285,8 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
 .add-item input{flex:1;min-width:0;padding:6px 9px;font-size:12px;min-height:32px}
 .attachment-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .attachment{border:1px solid var(--line);border-radius:7px;padding:8px;display:flex;align-items:center;gap:9px;min-width:0;background:var(--paper)}
-.attachment .thumb{width:44px;height:36px;border-radius:5px;object-fit:cover;flex-shrink:0;background:#eef2f6}
-.attachment .file-icon{width:36px;height:36px;border-radius:5px;display:grid;place-items:center;flex-shrink:0;background:var(--violet-soft);color:#7854ac}
+.attachment .thumb{width:44px;height:36px;border-radius:5px;object-fit:cover;flex-shrink:0;background:var(--sunken)}
+.attachment .file-icon{width:36px;height:36px;border-radius:5px;display:grid;place-items:center;flex-shrink:0;background:var(--violet-soft);color:var(--violet-2)}
 .attachment .meta{min-width:0;flex:1}
 .attachment a{display:block;font-size:12px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink);text-decoration:none}
 .attachment a:hover{text-decoration:underline}
@@ -289,19 +297,19 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
 .prop-label{font-size:10px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
 .prop-line{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
 .prop .chip{font-size:11px;padding:3px 9px}
-.add-pill{width:30px;min-height:28px;border:1px dashed #b5c0d0;border-radius:6px;display:grid;place-items:center;color:var(--muted);padding:0}
+.add-pill{width:30px;min-height:28px;border:1px dashed var(--line-strong);border-radius:6px;display:grid;place-items:center;color:var(--muted);padding:0}
 .add-pill svg{width:13px;height:13px}
-.member-pill{display:inline-flex;gap:5px;align-items:center;border:1px solid #e0e5ee;border-radius:6px;padding:2px 7px 2px 2px;background:var(--paper);font-size:11px}
+.member-pill{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:2px 7px 2px 2px;background:var(--paper);font-size:11px}
 .member-pill .avatar{width:22px;height:22px;font-size:9px;border:0}
 .dates{display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;font-size:11px}
 .dates input[type=date]{padding:3px 6px;font-size:12px;min-height:30px;width:100%}
 .complete{display:flex;align-items:center;gap:8px;font-size:12px;margin-top:6px;cursor:pointer;color:var(--muted)}
-.complete input{min-height:0;width:15px;height:15px;margin:0;accent-color:#7856ac}
+.complete input{min-height:0;width:15px;height:15px;margin:0;accent-color:var(--violet-2)}
 .swatches{display:flex;flex-wrap:wrap;gap:6px}
-.swatch{width:30px;height:22px;min-height:22px;border-radius:5px;background:var(--solid,#fefefd);border:1px solid #d6dee8;padding:0}
+.swatch{width:30px;height:22px;min-height:22px;border-radius:5px;background:var(--solid,var(--paper));border:1px solid var(--line-2);padding:0}
 .swatch[aria-pressed="true"]{outline:2px solid var(--violet);outline-offset:2px}
-.swatch.none{background:repeating-linear-gradient(135deg,#fefefd 0 5px,#e7ecf2 5px 7px)}
-.picker{border:1px solid #dbe3ec;border-radius:8px;background:var(--paper);padding:6px;margin-top:6px}
+.swatch.none{background:repeating-linear-gradient(135deg,var(--paper) 0 5px,var(--chip-bg) 5px 7px)}
+.picker{border:1px solid var(--line-2);border-radius:8px;background:var(--paper);padding:6px;margin-top:6px}
 .activity{border-top:1px solid var(--line);padding-top:16px;margin-top:4px}
 .comment{display:flex;gap:8px;margin-bottom:14px}
 .comment-avatar{display:flex;flex-shrink:0}
@@ -310,7 +318,7 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
 .comment-head{display:flex;gap:6px;align-items:baseline;font-size:11px;flex-wrap:wrap}
 .comment-head strong{font-weight:600}
 .comment-head time{color:var(--subtle);font-size:10px}
-.comment-text{font-size:12px;color:#4d5f75;line-height:1.6;margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere}
+.comment-text{font-size:12px;color:var(--ink-2);line-height:1.6;margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere}
 .comment-tools{display:flex;gap:10px;margin-top:2px}
 .comment-tools button{min-height:0;padding:0;font-size:10px;color:var(--muted);text-decoration:underline}
 .comment-tools button:hover{background:none!important;color:var(--ink)}
@@ -331,18 +339,35 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
 /* phone tabs, hidden on desktop */
 .mobile-tabs{display:none}
 
+/* A tablet or a narrow window: the top bar keeps one row. Its buttons show their icons, Undo and Redo their short word, and search gives way first, so the board's name and the gear stay on screen. */
+@media (min-width:761px) and (max-width:1100px){
+  .nav-button .label,.history-what{display:none}
+  /* The actions take the room the name leaves, down to their smallest size. Only then does the name shorten. */
+  .top-actions{flex:1 1 0;justify-content:flex-end;margin-left:0}
+  .search{flex:0 1 230px;width:auto;min-width:110px}
+  .search kbd{display:none}
+}
+/* Narrower still, the save state keeps its dot and drops its words, as on a phone. */
+@media (min-width:761px) and (max-width:900px){
+  .save-chip span{display:none}
+}
+
 @media (max-width:760px){
   .topbar{height:auto;padding:10px calc(14px + var(--clay-menu-width, 0px)) 10px 14px;gap:8px 10px;flex-wrap:wrap}
   .board-title{flex:1;font-size:17px}
   .save-chip span{display:none}
   .top-actions{order:3;width:100%;gap:8px;margin:0}
-  .search{flex:1;width:auto;height:44px}
+  .search{flex:1;width:auto;height:44px;min-width:72px}
+  .history-what{display:none}
+  /* Help lists keyboard shortcuts only. A phone has no keyboard, and the search field needs the room. */
+  [data-act="show-help"]{display:none}
   .search kbd{display:none}
   .nav-button{min-height:44px;min-width:44px;justify-content:center;padding:0 10px}
   .nav-button .label{display:none}
   .faces .avatar:nth-child(n+4){display:none}
   .me-button{min-width:44px;min-height:44px}
   .board{display:block;height:calc(100dvh - var(--clay-seo-height, 0px) - 116px - 70px);padding:12px 14px 16px;overflow-x:hidden;overflow-y:auto}
+  body:has(>.clay-intro){padding-bottom:70px}
   .list{width:100%;max-height:none;padding:4px 10px 8px}
   .list-handle{display:none}
   .list-title{grid-column:1/3;font-size:15px;padding:12px 4px}
@@ -353,17 +378,17 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
   .chip{font-size:11px}
   .add-card{min-height:44px;font-size:13px}
   .add-list-tile{width:100%;min-height:52px;margin-top:4px}
-  .mobile-tabs{position:fixed;bottom:0;left:0;right:0;height:70px;display:flex;align-items:stretch;border-top:1px solid #dce4ed;background:var(--paper);padding:8px 8px max(8px,env(safe-area-inset-bottom));gap:3px;overflow-x:auto;z-index:15}
+  .mobile-tabs{position:fixed;bottom:0;left:0;right:0;height:70px;display:flex;align-items:stretch;border-top:1px solid var(--line-2);background:var(--paper);padding:8px 8px max(8px,env(safe-area-inset-bottom));gap:3px;overflow-x:auto;z-index:15}
   .mobile-tabs button{flex:1 0 64px;min-width:64px;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:10px;gap:1px;color:var(--muted);min-height:48px;line-height:1.5;padding:0 4px}
   .mobile-tabs button b{font-size:11px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .mobile-tabs button[aria-pressed="true"]{background:#ede7f7;color:#69459d}
+  .mobile-tabs button[aria-pressed="true"]{background:var(--violet-soft);color:var(--violet-ink)}
   .board-app:has(#tab-style:empty) #board>.list:not(:first-of-type):not(:has(.card[route-active])){display:none}
   .toast{bottom:82px}
   .history-note{bottom:146px}
   .popup{left:14px!important;right:14px!important;width:auto}
   .menu button{min-height:44px}
   .menu .tone-swatch{width:44px;height:44px}
-  .card-detail{width:100%;max-width:100%;height:100dvh;max-height:100dvh;border:0;border-radius:0}
+  .card-detail{width:100%;max-width:100%;height:100%;max-height:100%;border:0;border-radius:0}
   .card-detail .detail-label,.card-detail .detail-title-field{padding-left:18px;padding-right:14px}
   .card-detail .detail-label,.card-detail .detail-title-field textarea{font-size:21px}
   .card-detail .detail-top{padding-top:env(safe-area-inset-top)}
@@ -401,9 +426,654 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
 :root[draftmode="true"] :is([data-act="add-file"],[data-act="panel"][data-panel="members"],[data-act="add-me"],[data-act="assign-item"],#me){display:none!important}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 html:not([ephemeral~="board-editable"]) .edit-only{display:none!important}
+[data-look-switch] {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 12px 12px;
+  padding: 7px 8px 8px 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font: 400 12.5px/1.2 var(--font);
+}
+
+[data-look-switch] :focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 2px;
+}
+
+[data-look-switch] .look-switch-lead {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+[data-look-switch] .look-switch-title {
+  font: 600 12.5px/1.2 var(--font);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+[data-look-switch] .look-switch-phone-label {
+  display: none;
+}
+
+[data-look-switch] .look-switch-dismiss {
+  grid-column: 2;
+  grid-row: 1;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: -4px -5px -2px 0;
+  border-radius: 5px;
+  color: var(--muted);
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+[data-look-switch] .look-switch-dismiss:focus-visible {
+  outline-offset: 0;
+}
+
+[data-look-switch] .look-switch-dismiss:hover {
+  color: var(--ink);
+  background: var(--well);
+}
+
+[data-look-switch] .look-switch-dismiss svg {
+  width: 12px;
+  height: 12px;
+}
+
+[data-look-switch] .look-switch-controls {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+[data-look-switch] .look-switch-stepper {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  height: 30px;
+}
+
+[data-look-switch] .look-switch-step {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--page);
+  border: 1px solid var(--line);
+  transition: background 0.14s ease;
+}
+
+[data-look-switch] .look-switch-step:hover {
+  background: var(--well);
+}
+
+[data-look-switch] .look-switch-step svg {
+  width: 13px;
+  height: 13px;
+}
+
+[data-look-switch] .look-switch-status {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+[data-look-switch] .look-switch-name {
+  font: 600 12.5px/1 var(--font);
+  color: var(--ink);
+}
+
+[data-look-switch] .look-switch-count {
+  font: 400 11px/1 var(--font);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-look-switch] .look-switch-choose {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font: 600 12.5px/1 var(--font);
+  white-space: nowrap;
+  transition: opacity 0.14s ease;
+}
+
+[data-look-switch] .look-switch-choose:hover {
+  opacity: 0.88;
+}
+
+@media (forced-colors: active) {
+  [data-look-switch] .look-switch-choose {
+    background: ButtonFace;
+    color: ButtonText;
+    border: 1px solid ButtonText;
+  }
+}
+
+@media (max-width: 760px) {
+  [data-look-switch] {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 52px;
+    margin: 10px 12px;
+    padding: 3px 3px 3px 12px;
+    border-radius: 8px;
+  }
+
+  [data-look-switch] .look-switch-lead {
+    flex: none;
+    margin-right: auto;
+  }
+
+  [data-look-switch] .look-switch-title {
+    display: none;
+  }
+
+  [data-look-switch] .look-switch-phone-label {
+    display: inline;
+    font: 600 12.5px/1 var(--font);
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  [data-look-switch] .look-switch-controls {
+    flex: none;
+    gap: 4px;
+  }
+
+  [data-look-switch] [data-look-prev],
+  [data-look-switch] .look-switch-count {
+    display: none;
+  }
+
+  [data-look-switch] .look-switch-stepper {
+    flex: none;
+    height: 44px;
+    gap: 4px;
+  }
+
+  [data-look-switch] .look-switch-status {
+    padding: 0 2px;
+  }
+
+  [data-look-switch] .look-switch-name {
+    font: 600 12.5px/1 var(--font);
+  }
+
+  [data-look-switch] [data-look-next],
+  [data-look-switch] .look-switch-dismiss {
+    width: 44px;
+    height: 44px;
+    margin: 0;
+    border-radius: 6px;
+  }
+
+  [data-look-switch] [data-look-next] svg,
+  [data-look-switch] .look-switch-dismiss svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  [data-look-switch] .look-switch-choose {
+    min-width: 44px;
+    height: 44px;
+    padding: 0 14px;
+    border-radius: 6px;
+    font: 600 13px/1 var(--font);
+  }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  [data-look-switch],
+  [data-look-switch] * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+@media print {
+  [data-look-switch] {
+    display: none !important;
+  }
+}
+
+/* Hidden until the script names the theme (a reader, an owner in view, a runtime with no
+   clay.variants), and for good once the picker ends. Neither changes an attribute on the root. */
+[data-look-switch]:has(.look-switch-name:empty),
+html[theme-picker="done"] [data-look-switch] {
+  display: none !important;
+}
+/* At 320px the second row of the top bar holds the search, the filter, Add list, Undo and Redo. Keyboard help has no use there and leaves, so the row fits. */
+@media (max-width:360px){
+  .top-actions,.history-controls{gap:6px}
+  .history-button{padding:0 6px}
+}
+/* Kanban's board fills the screen, so the theme picker is one slim row above the board, and the board gives up that height while the row shows. */
+/* Kanban draws its own icons as lines. The picker's are filled shapes. */
+[data-look-switch] svg{fill:currentColor;stroke:none}
+@media (min-width:761px){
+  [data-look-switch]{display:flex;align-items:center;gap:10px;height:42px;margin:10px 20px 0;padding:5px 8px 5px 12px}
+  [data-look-switch] .look-switch-lead{flex:none;margin-right:auto}
+  [data-look-switch] .look-switch-controls{flex:none}
+  [data-look-switch] .look-switch-stepper{flex:none;min-width:210px}
+  [data-look-switch] .look-switch-dismiss{margin:0 0 0 2px}
+  html:not([theme-picker="done"]) body:has(.look-switch-name:not(:empty)) .board{height:calc(100dvh - var(--clay-seo-height, 0px) - 56px - 52px)}
+}
+@media (max-width:760px){
+  [data-look-switch]{margin:10px 14px 0}
+  html:not([theme-picker="done"]) body:has(.look-switch-name:not(:empty)) .board{height:calc(100dvh - var(--clay-seo-height, 0px) - 116px - 70px - 62px)}
+}
+/* With JavaScript off, or when ClayJS never arrives (a script beside the loader then marks the page no-clay), the board is a page to read: every list shows, the page scrolls, and controls that need scripts are gone. */
+@media (scripting:none){
+  .search,#filter-toggle,[data-act="show-help"],.faces,.menu-slot,.mobile-tabs,[data-look-switch]{display:none!important}
+  .board-title,.card-open{pointer-events:none}
+  html,body{height:auto}
+  body{overflow:auto}
+  .board{height:auto;min-height:calc(100dvh - 56px)}
+  .list{max-height:none}
+  #board>.list:not([cms-template]){display:grid!important}
+}
+html[no-clay] :is(.search,#filter-toggle,[data-act="show-help"],.faces,.menu-slot,.mobile-tabs,[data-look-switch]){display:none!important}
+html[no-clay] :is(.board-title,.card-open){pointer-events:none}
+html[no-clay],html[no-clay] body{height:auto}
+html[no-clay] body{overflow:auto}
+html[no-clay] .board{height:auto;min-height:calc(100dvh - 56px)}
+html[no-clay] .list{max-height:none}
+html[no-clay] #board>.list:not([cms-template]){display:grid!important}
 </style>
-<script type="application/json" data-rules-name="api" data-rules-version="1">{"boardName":"#board-meta > h1#board-name","nextCard":"#board-meta@data-next-card","labelDefs":["#board-meta ul.label-defs > li",{"id":"@data-id","color":"@data-color","name":"."}],"lists":["#board > section.list[item]",{"id":"@data-id","title":"h2.list-title","tone":"@data-tone","cards":["ol.cards > li.card[item]",{"id":"@data-id","num":"@data-num","title":"h3.card-title","desc":"div.card-desc","labels":"@data-labels","cover":"@data-cover","coverImage":"@data-cover-image","due":"@data-due","start":"@data-start","complete":"@data-complete","members":"@data-members","checklists":[":scope > section.checklist",{"id":"@data-id","name":"h4","items":[":scope > ul.checklist-items > li",{"id":"@data-id","text":".","done":"@data-done","member":"@data-member"}]}],"comments":["ol.comments > li",{"id":"@data-id","by":"@data-by","at":"@data-at","edited":"@data-edited","text":"."}],"attachments":["ul.attachments > li",{"id":"@data-id","name":"a","href":"a@href","kind":"a@data-kind"}]}]}],"people":["[clay-people] > data",{"id":"@value","name":"."}]}</script>
+<style clay-variant="look-1" clay-variant-label="Harbor">
+:root {
+  color-scheme: light;
+  --navy: #0c2635;
+  --navy-2: #183442;
+  --ink: #263d4e;
+  --muted: #536988;
+  --subtle: #62748a;
+  --page: #f8fafc;
+  --paper: #fefefd;
+  --well: #f2f6fa;
+  --line: #e0e7ee;
+  --violet: #7356ba;
+  --violet-ink: #66469d;
+  --violet-soft: #eee8f9;
+  --danger: #9a4741;
+  --shadow: 0 2px 3px #30527405,0 5px 16px #30527408;
+  --bar-ink: #edf3f8;
+  --bar-muted: #b6c7d5;
+  --bar-icon: #92aabf;
+  --bar-line: #405869;
+  --bar-line-2: #4d6574;
+  --bar-hover: #274556;
+  --bar-title-hover: #1d3a4a;
+  --bar-active: #405068;
+  --bar-active-line: #6d7f95;
+  --bar-primary: #eaf0f5;
+  --bar-primary-ink: #193646;
+  --bar-primary-hover: #d9e5ef;
+  --bar-deep: #0f2233;
+  --bar-accent: #d9c7f6;
+  --bar-focus: #ba9beb;
+  --status-idle: #7f95a8;
+  --status-busy: #d8b56c;
+  --status-ok: #6fbf9a;
+  --status-error: #e48a7f;
+  --on-primary: #eef3f7;
+  --primary-hover: #25475b;
+  --paper-2: #f7f9fc;
+  --sunken: #f1f4f8;
+  --hover: #e9eef4;
+  --chip-bg: #e6ecf2;
+  --chip-ink: #53617a;
+  --track: #e9e8ee;
+  --fill: #9c83c8;
+  --code-bg: #eeedf3;
+  --code-ink: #615276;
+  --line-2: #d8e0e9;
+  --violet-2: #7a58b0;
+  --field-line: #cbd6e2;
+  --dashed: #c3cfdc;
+  --line-strong: #b5c0d0;
+  --card-hover-line: #a8b7c8;
+  --faint: #6b7d91;
+  --ink-2: #4d5f75;
+  --focus: #9775df;
+  --focus-glow: #9775df55;
+  --dot-none: #9ba8b9;
+  --warn-bg: #faf0d9;
+  --warn-ink: #875b16;
+  --ok-bg: #e4f0e9;
+  --ok-ink: #2e6e55;
+  --bad-bg: #f9e6e3;
+  --bad-ink: #a13f37;
+  --danger-bg: #a8463d;
+  --danger-hover: #8f3b33;
+  --on-danger: #fdf6f4;
+  --note-bg: #fdf6f4;
+  --note-line: #e0b9b3;
+  --note-ink: #7a3730;
+  --note-hover: #f7e7e3;
+  --avatar-ink: #fbfaf7;
+  --avatar-0: #6b4fa8;
+  --avatar-1: #2f6a9e;
+  --avatar-2: #9a6a1c;
+  --avatar-3: #a8463d;
+  --avatar-4: #2f7a69;
+  --avatar-5: #4f6178;
+  --avatar-6: #3f7d3a;
+  --avatar-7: #a2457a;
+  --shade-hover: #30527413;
+  --shade-pop: #12304422;
+  --shade-dialog: #12304430;
+  --shade-detail: #142d4240;
+  --shade-toast: #14334725;
+  --backdrop: #17304440;
+  --backdrop-detail: #17304432;
+  --font: 'Work Sans',system-ui,sans-serif;
+}
+
+/* Data colours: a person picks these for labels, covers and lists. Optional in a look. */
+[data-color="violet"] { --label-bg:#eee7f9; --label-ink:#684398; --solid:#a68bcf; }
+[data-color="blue"] { --label-bg:#e4edf9; --label-ink:#376397; --solid:#7fa3cf; }
+[data-color="amber"] { --label-bg:#f8edda; --label-ink:#866020; --solid:#d6b67d; }
+[data-color="red"] { --label-bg:#f7e4e1; --label-ink:#a03e39; --solid:#d9897f; }
+[data-color="teal"] { --label-bg:#dff0ea; --label-ink:#326e61; --solid:#7dbbab; }
+[data-color="slate"] { --label-bg:#e5eaf0; --label-ink:#53617a; --solid:#9aa8ba; }
+[data-color="green"] { --label-bg:#e3f0dc; --label-ink:#3d6a2c; --solid:#93bf7f; }
+[data-color="pink"] { --label-bg:#f7e3ee; --label-ink:#8f3d68; --solid:#d991b6; }
+:is(.list,.tone-swatch)[data-tone="1"] { --dot:#698ba6; }
+:is(.list,.tone-swatch)[data-tone="2"] { --dot:#8d70c8; --dot-ring:#e9e2f5; }
+:is(.list,.tone-swatch)[data-tone="3"] { --dot:#b18a48; --dot-ring:#f1e9dc; }
+:is(.list,.tone-swatch)[data-tone="4"] { --dot:#488d7d; --dot-ring:#dcece6; }
+:is(.list,.tone-swatch)[data-tone="5"] { --dot:#a8635d; --dot-ring:#f3e2df; }
+</style>
+<style clay-variant="look-2" clay-variant-label="Paper" media="not all">
+@import url("https://clayjs.com/v1/fonts/newsreader.css");
+:root {
+  color-scheme: light;
+  --navy: #ebe6dd;
+  --navy-2: #f8f5ef;
+  --ink: #2a2620;
+  --muted: #655c4f;
+  --subtle: #6d6457;
+  --page: #ebe6dd;
+  --paper: #fdfcf9;
+  --well: #f5f2ec;
+  --line: #e1dacd;
+  --violet: #3a5a9a;
+  --violet-ink: #2f4d88;
+  --violet-soft: #e6eaf1;
+  --danger: #a3402f;
+  --shadow: 0 1px 0 #dcd4c6,0 2px 5px #4a3a2209;
+  --bar-ink: #2a2620;
+  --bar-muted: #5f5649;
+  --bar-icon: #56709f;
+  --bar-line: #d4ccbe;
+  --bar-line-2: #c9c0b0;
+  --bar-hover: #e2dcd0;
+  --bar-title-hover: #e3ddd1;
+  --bar-active: #dcd4c6;
+  --bar-active-line: #b3a997;
+  --bar-primary: #2f4d88;
+  --bar-primary-ink: #f8f5ef;
+  --bar-primary-hover: #284277;
+  --bar-deep: #fdfcf9;
+  --bar-accent: #2f4d88;
+  --bar-focus: #4a6db0;
+  --status-idle: #998f7e;
+  --status-busy: #c3923a;
+  --status-ok: #4f9466;
+  --status-error: #c25f48;
+  --on-primary: #2f4d88;
+  --primary-hover: #e2dcd0;
+  --paper-2: #f8f5ef;
+  --sunken: #f1ede6;
+  --hover: #ebe6dc;
+  --chip-bg: #ebe6dc;
+  --chip-ink: #5c5447;
+  --track: #e8e2d7;
+  --fill: #5f7fb8;
+  --code-bg: #f0ebe2;
+  --code-ink: #6a4a2e;
+  --line-2: #dbd4c7;
+  --violet-2: #36569a;
+  --field-line: #d0c8b9;
+  --dashed: #c3baa9;
+  --line-strong: #b9af9e;
+  --card-hover-line: #b5aa97;
+  --faint: #756c5f;
+  --ink-2: #4c453b;
+  --focus: #4a6db0;
+  --focus-glow: #4a6db04d;
+  --dot-none: #a99f8e;
+  --warn-bg: #f6ead0;
+  --warn-ink: #7a5313;
+  --ok-bg: #e3ecd9;
+  --ok-ink: #3a6630;
+  --bad-bg: #f5e2da;
+  --bad-ink: #9e3b2b;
+  --danger-bg: #a8432f;
+  --danger-hover: #8f3826;
+  --on-danger: #fcf6ef;
+  --note-bg: #fcf3ea;
+  --note-line: #e3bfa8;
+  --note-ink: #7a3a22;
+  --note-hover: #f5e4d6;
+  --avatar-ink: #fbf8f2;
+  --avatar-0: #5e4f92;
+  --avatar-1: #2f5f8f;
+  --avatar-2: #8a611f;
+  --avatar-3: #a24a36;
+  --avatar-4: #2f6c60;
+  --avatar-5: #5d5446;
+  --avatar-6: #477233;
+  --avatar-7: #934367;
+  --shade-hover: #4a3a221c;
+  --shade-pop: #3a2c1a24;
+  --shade-dialog: #3a2c1a30;
+  --shade-detail: #33261638;
+  --shade-toast: #3a2c1a26;
+  --backdrop: #3a2d1c40;
+  --backdrop-detail: #3a2d1c33;
+  --font: 'Newsreader',Georgia,serif;
+}
+
+[data-color="violet"] { --label-bg:#ece6f2; --label-ink:#5f4489; --solid:#a08cc4; }
+[data-color="blue"] { --label-bg:#e3e9f2; --label-ink:#335a8a; --solid:#86a3c8; }
+[data-color="amber"] { --label-bg:#f4e8cf; --label-ink:#7a5416; --solid:#d4b277; }
+[data-color="red"] { --label-bg:#f5e1da; --label-ink:#9a3b2d; --solid:#d48b78; }
+[data-color="teal"] { --label-bg:#deebe4; --label-ink:#2e6758; --solid:#82b8a6; }
+[data-color="slate"] { --label-bg:#e9e3d8; --label-ink:#5a5144; --solid:#a99d8a; }
+[data-color="green"] { --label-bg:#e2ebd7; --label-ink:#40632e; --solid:#99bb84; }
+[data-color="pink"] { --label-bg:#f4e1e6; --label-ink:#893c5c; --solid:#d395ae; }
+:is(.list,.tone-swatch)[data-tone="1"] { --dot:#6f88a1; }
+:is(.list,.tone-swatch)[data-tone="2"] { --dot:#8670b5; --dot-ring:#e8e2ef; }
+:is(.list,.tone-swatch)[data-tone="3"] { --dot:#b08540; --dot-ring:#efe5d2; }
+:is(.list,.tone-swatch)[data-tone="4"] { --dot:#4b8a77; --dot-ring:#dae8e0; }
+:is(.list,.tone-swatch)[data-tone="5"] { --dot:#b06552; --dot-ring:#f2dfd7; }
+</style>
+<style clay-variant="look-3" clay-variant-label="Dusk" media="not all">
+@import url("https://clayjs.com/v1/fonts/inter.css");
+
+:root {
+  color-scheme: dark;
+  --navy: #26423d;
+  --navy-2: #182a27;
+  --ink: #e4e9f0;
+  --muted: #98a6b8;
+  --subtle: #8897ab;
+  --page: #111419;
+  --paper: #1d222b;
+  --well: #161a21;
+  --line: #28303c;
+  --violet: #5ec2a6;
+  --violet-ink: #79d6bc;
+  --violet-soft: #1b312d;
+  --danger: #f08d84;
+  --shadow: 0 2px 4px #080a0e45,0 6px 18px #080a0e55;
+  --bar-ink: #eef6f4;
+  --bar-muted: #b0c7c3;
+  --bar-icon: #90b6af;
+  --bar-line: #3d5d58;
+  --bar-line-2: #486b65;
+  --bar-hover: #30504a;
+  --bar-title-hover: #2c4a44;
+  --bar-active: #345650;
+  --bar-active-line: #669089;
+  --bar-primary: #7cd2ba;
+  --bar-primary-ink: #102420;
+  --bar-primary-hover: #90dbc6;
+  --bar-deep: #162623;
+  --bar-accent: #96e6ce;
+  --bar-focus: #75d6bb;
+  --status-idle: #849e9a;
+  --status-busy: #dfb868;
+  --status-ok: #68c99e;
+  --status-error: #ea887e;
+  --on-primary: #eef6f4;
+  --primary-hover: #31524c;
+  --paper-2: #181d25;
+  --sunken: #252c37;
+  --hover: #28303c;
+  --chip-bg: #262e3a;
+  --chip-ink: #b2bfd0;
+  --track: #2a323e;
+  --fill: #55b89d;
+  --code-bg: #242d37;
+  --code-ink: #8adbc4;
+  --line-2: #2f3846;
+  --violet-2: #68cbb0;
+  --field-line: #364050;
+  --dashed: #384354;
+  --line-strong: #465368;
+  --card-hover-line: #49576d;
+  --faint: #8493a8;
+  --ink-2: #c2cbd8;
+  --focus: #63c7ab;
+  --focus-glow: #63c7ab50;
+  --dot-none: #738296;
+  --warn-bg: #382b16;
+  --warn-ink: #f0c678;
+  --ok-bg: #193329;
+  --ok-ink: #80dab7;
+  --bad-bg: #3b2022;
+  --bad-ink: #f5aba4;
+  --danger-bg: #b3423a;
+  --danger-hover: #c74d44;
+  --on-danger: #faf2f0;
+  --note-bg: #331f21;
+  --note-line: #693b3e;
+  --note-ink: #f5b8b2;
+  --note-hover: #402629;
+  --avatar-ink: #131820;
+  --avatar-0: #b29df0;
+  --avatar-1: #82b8ee;
+  --avatar-2: #e0b365;
+  --avatar-3: #e89289;
+  --avatar-4: #76ccb9;
+  --avatar-5: #a3b3c7;
+  --avatar-6: #8ece88;
+  --avatar-7: #e496bf;
+  --shade-hover: #080a0e66;
+  --shade-pop: #080a0e78;
+  --shade-dialog: #080a0e88;
+  --shade-detail: #080a0e94;
+  --shade-toast: #080a0e7a;
+  --backdrop: #090b1085;
+  --backdrop-detail: #090b1075;
+  --font: 'Inter',system-ui,sans-serif;
+}
+
+[data-color="violet"] { --label-bg:#2d2442; --label-ink:#d4c2fa; --solid:#6d569e; }
+[data-color="blue"] { --label-bg:#1e3046; --label-ink:#b3d2f8; --solid:#4972a3; }
+[data-color="amber"] { --label-bg:#382b17; --label-ink:#f2cf8d; --solid:#9e793c; }
+[data-color="red"] { --label-bg:#3c2123; --label-ink:#f7b4ae; --solid:#a4534d; }
+[data-color="teal"] { --label-bg:#1a3430; --label-ink:#9ee3d4; --solid:#428578; }
+[data-color="slate"] { --label-bg:#262f3c; --label-ink:#c4d0e0; --solid:#5d6d82; }
+[data-color="green"] { --label-bg:#1f3423; --label-ink:#ace0b4; --solid:#4f8556; }
+[data-color="pink"] { --label-bg:#3a2132; --label-ink:#f4b8d8; --solid:#9c537b; }
+:is(.list,.tone-swatch)[data-tone="1"] { --dot:#759ab8; }
+:is(.list,.tone-swatch)[data-tone="2"] { --dot:#9d82d6; --dot-ring:#2d2542; }
+:is(.list,.tone-swatch)[data-tone="3"] { --dot:#c99c55; --dot-ring:#382d1c; }
+:is(.list,.tone-swatch)[data-tone="4"] { --dot:#5cb39e; --dot-ring:#1c342f; }
+:is(.list,.tone-swatch)[data-tone="5"] { --dot:#c4746d; --dot-ring:#3a2325; }
+</style>
+<script>
+(() => {
+  const root = document.documentElement;
+  const blocks = [...document.head.querySelectorAll('style[clay-variant]')];
+  const named = (name) => blocks.find((style) => style.getAttribute('clay-variant') === name);
+  const saved = named(root.getAttribute('look'));
+  if (saved) for (const style of blocks) style === saved ? style.removeAttribute('media') : style.setAttribute('media', 'not all');
+  const slot = root.getAttribute('visitor-drafts');
+  if (!slot) return;
+  try {
+    const file = location.pathname.replace(/\/{2,}/g, '/').match(/^(.*?\/[^/]+\.(?:html|htmlclay))(?:\/|$)/i);
+    const path = file && file[1].toLowerCase() !== '/index.html' ? file[1] : '/';
+    const hinted = named(JSON.parse(localStorage.getItem(`clay:visitor-drafts:${slot}@${path}`))?.data?.look);
+    if (!hinted || hinted.getAttribute('media') !== 'not all') return;
+    const hint = document.createElement('style');
+    hint.setAttribute('clay', 'editor-ui');
+    hint.setAttribute('clay-look-hint', '');
+    hint.textContent = hinted.textContent;
+    document.head.append(hint);
+    setTimeout(() => hint.remove(), 4000);
+  } catch {}
+})();
+</script>
+<script type="application/json" data-rules-name="api" data-rules-version="1">{"boardName":"#board-meta > h1#board-name","nextCard":"#board-meta@data-next-card","labelDefs":["#board-meta ul.label-defs > li",{"id":"@data-id","color":"@data-color","name":"."}],"lists":["#board > section.list[item]",{"id":"@data-id","title":"h2.list-title","tone":"@data-tone","cards":["ol.cards > li.card[item]",{"id":"@data-id","num":"@data-num","title":"h3.card-title","desc":"div.card-desc","labels":"@data-labels","cover":"@data-cover","coverImage":"@data-cover-image","due":"@data-due","start":"@data-start","complete":"@data-complete","members":"@data-members","checklists":[":scope > section.checklist",{"id":"@data-id","name":"h4","items":[":scope > ul.checklist-items > li",{"id":"@data-id","text":".","done":"@data-done","member":"@data-member"}]}],"comments":["ol.comments > li",{"id":"@data-id","by":"@data-by","at":"@data-at","edited":"@data-edited","text":"."}],"attachments":["ul.attachments > li",{"id":"@data-id","name":"a","href":"a@href","kind":"a@data-kind"}]}]}],"people":["[clay-people] > data",{"id":"@value","name":"."}],"thanks":["a[clay-menu-item]",{"id":"@data-id"}],"look":"html@look","themePicker":"html@theme-picker"}</script>
 <style>[cms-template]{display:none!important}</style>
+<style clay-menu-skin="1" media="not all">
+[part~="dock"] { --bevel-surface: var(--paper); --bevel-sunk: var(--well); --bevel-ink: var(--ink); --bevel-ink-2: var(--muted); --bevel-muted: var(--subtle); --bevel-faint: var(--subtle); --bevel-line: var(--line); --bevel-line-2: var(--line); --bevel-line-3: var(--line); --bevel-brass: var(--violet); --bevel-font-sans: var(--font); --bevel-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace; --clay-shadow: var(--shadow); }
+[part~="button"] { width: 36px; height: 36px; border: 1px solid var(--bar-line); border-radius: 7px; background: none; color: var(--bar-ink); }
+[part~="button"]:hover { background: var(--bar-hover); }
+[part~="button"][aria-expanded="true"] { background: var(--bar-active); border-color: var(--bar-active-line); }
+[part~="button"] svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+[part~="list"] { width: 270px; padding: 5px; background: var(--paper); border: 1px solid var(--line); border-radius: 9px; box-shadow: var(--shadow); }
+[part~="item"], [part~="dismiss"], [part~="text"] { min-height: 32px; padding: 7px 9px; border-radius: 6px; font: 400 13.5px/1.3 var(--font); color: var(--ink); }
+[part~="item"] kbd { padding-left: 14px; font: 400 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--subtle); }
+[part~="quiet"] { font-size: 12px; color: var(--subtle); text-decoration: underline; text-underline-offset: 2px; }
+[part~="dismiss"] { color: var(--subtle); }
+[part~="dismiss"]:hover { color: var(--ink); }
+[part~="separator"] { height: 1px; margin: 5px 4px; background: var(--line); }
+@media (max-width: 760px) { [part~="button"] { width: 44px; height: 44px; } }
+</style>
 </head>
 <body>
 <svg hidden xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -438,11 +1108,12 @@ html:not([ephemeral~="board-editable"]) .edit-only{display:none!important}
   <div class="top-actions">
     <label class="search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="search" type="search" bind="q" transient placeholder="Search cards" aria-label="Search cards" autocomplete="off"><kbd>/</kbd></label>
     <span class="filter-slot" clay="freeze"><button class="nav-button" id="filter-toggle" data-act="toggle-filters" aria-label="Filter" aria-expanded="false" aria-controls="filters" class:filtering="Board.chosen(state)"><svg aria-hidden="true"><use href="#i-filter"/></svg><span class="label">Filter</span></button></span>
-    <button class="nav-button" data-act="show-help" aria-label="Keyboard shortcuts" aria-haspopup="dialog" title="Keyboard shortcuts"><svg aria-hidden="true"><use href="#i-help"/></svg><span class="label">Help</span></button>
+    <button class="nav-button" data-act="show-help" aria-label="Help, keyboard shortcuts" aria-haspopup="dialog" title="Keyboard shortcuts"><svg aria-hidden="true"><use href="#i-help"/></svg><span class="label">Help</span></button>
     <button class="nav-button primary edit-only" data-act="add-list" aria-label="Add list"><svg aria-hidden="true"><use href="#i-plus"/></svg><span class="label">Add list</span></button>
   </div>
-  <div class="faces" id="faces" aria-label="People on this board" clay="freeze" effect="Board.paintFaces(el)"></div>
+  <div class="faces" id="faces" role="group" aria-label="People on this board" clay="freeze" effect="Board.paintFaces(el)"></div>
   <span class="me-slot" clay="freeze" effect="Board.paintMe(el)"><button class="me-button edit-only" id="me" data-act="change-my-name" title="Change my name" aria-label="Change my name" hidden></button></span>
+  <div class="menu-slot" clay-menu-slot no-edit-switch clay-menu-label="Settings" clay="freeze"><template clay-menu-icon><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6M10 3h4l1.5 3 3.5-.5 2 4-2 2.5 2 2.5-2 4-3.5-.5-1.5 3h-4l-1.5-3-3.5.5-2-4 2-2.5-2-2.5 2-4 3.5.5Z"/></svg></template></div>
 </header>
 <div id="board-meta" class="board-data" data-next-card="15" merge-max="data-next-card">
 <h1 id="board-name">Launch Plan</h1>
@@ -456,6 +1127,90 @@ html:not([ephemeral~="board-editable"]) .edit-only{display:none!important}
 <li data-id="" data-color="" cms-template></li>
 </ul>
 </div>
+<aside class="look-switch" data-look-switch clay="freeze" aria-label="Theme picker">
+  <div class="look-switch-lead">
+    <span class="look-switch-title">Theme picker</span>
+    <span class="look-switch-phone-label">Theme</span>
+  </div>
+  <div class="look-switch-controls">
+    <div class="look-switch-stepper">
+      <button type="button" class="look-switch-step" data-look-prev aria-label="Previous theme">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"></path></svg>
+      </button>
+      <span class="look-switch-status" aria-live="polite">
+        <span class="look-switch-name"></span>
+        <span class="look-switch-count"></span>
+      </span>
+      <button type="button" class="look-switch-step" data-look-next aria-label="Next theme">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"></path></svg>
+      </button>
+    </div>
+    <button type="button" class="look-switch-choose" data-look-choose aria-label="Confirm theme">Confirm</button>
+  </div>
+  <button type="button" class="look-switch-dismiss" data-look-dismiss aria-label="Dismiss theme picker">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"></path></svg>
+  </button>
+</aside>
+<script>
+(() => {
+  const root = document.querySelector('[data-look-switch]');
+  if (!root) return;
+  const html = document.documentElement;
+  const name = root.querySelector('.look-switch-name');
+  const count = root.querySelector('.look-switch-count');
+  const variants = () => window.clay?.variants;
+  const looks = () => variants()?.list() ?? [];
+  const saves = () => window.clay?.mode === 'edit' || window.clay?.mode === 'draft';
+  const at = (list) => list.findIndex((look) => look.name === variants().shown);
+  let start = null;
+  const paint = () => {
+    const list = looks();
+    const ended = html.getAttribute('theme-picker') === 'done';
+    const index = list.length > 1 && saves() && !ended ? at(list) : -1;
+    if (index >= 0 && start === null) start = variants().active;
+    name.textContent = index < 0 ? '' : list[index].label;
+    count.textContent = index < 0 ? '' : `(${index + 1} of ${list.length})`;
+    const menu = window.clay?.menu;
+    if (list.length > 1 && saves() && ended) menu?.addItem?.({ id: 'look.picker', label: 'Change theme', run: reopen });
+    else menu?.removeItem?.('look.picker');
+  };
+  const step = (by) => {
+    const list = looks();
+    if (list.length < 2) return;
+    variants().preview(list[(at(list) + by + list.length) % list.length].name);
+  };
+  const end = () => {
+    html.setAttribute('theme-picker', 'done');
+    window.clay?.save?.soon?.();
+    paint();
+  };
+  const confirm = () => {
+    variants().choose(variants().shown);
+    html.setAttribute('look', variants().shown);
+    end();
+  };
+  const dismiss = () => {
+    const back = window.clay.mode === 'edit' ? variants().active : start;
+    if (back && back !== variants().shown) variants().preview(back);
+    end();
+  };
+  // Once ended, the gear menu's Change theme brings the picker back, starting from the theme on screen.
+  const reopen = () => {
+    html.setAttribute('theme-picker', 'open');
+    start = null;
+    window.clay?.save?.soon?.();
+    paint();
+  };
+  for (const [selector, run] of [['[data-look-prev]', () => step(-1)], ['[data-look-next]', () => step(1)], ['[data-look-choose]', confirm], ['[data-look-dismiss]', dismiss]]) {
+    const button = root.querySelector(selector);
+    button.addEventListener('mousedown', (event) => event.preventDefault());
+    button.addEventListener('click', run);
+  }
+  document.addEventListener('clay:drafts-restored', (event) => { if (event.detail?.external) start = null; });
+  for (const type of ['clay:menu-ready', 'clay:variant-change', 'clay:drafts-restored', 'clay:modechange', 'clay:sync-applied']) document.addEventListener(type, paint);
+  paint();
+})();
+</script>
 <main id="board" class="board" sortable="lists" sortable-label="Move list" items="lists" aria-label="Board" merge-tokens="data-labels data-members">
 <section class="list" item data-id="l-ideas" data-tone="0">
 <h2 class="list-title">Ideas</h2>
@@ -471,7 +1226,7 @@ html:not([ephemeral~="board-editable"]) .edit-only{display:none!important}
 <span class="count" text="item.cards.length">4</span>
 <ol class="cards" sortable="cards" sortable-label="Move card" items="cards" route="card">
 <li class="card" item data-id="c-b6h1r8" data-num="4" data-labels="marketing"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-b6h1r8"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Write onboarding emails</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Write onboarding emails</h3><div class="card-desc">A friendly three-email welcome sequence. Help people reach their first useful board.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
-<li class="card" item data-id="c-f2x5j9" data-num="5" data-labels="backend"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-f2x5j9"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Rate limit the public API</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone"><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text">0/4</span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Rate limit the public API</h3><section class="checklist" data-id="k-r1"><h4>Implementation</h4><ul class="checklist-items"><li data-id="i-s01">Choose per-token limits</li><li data-id="i-s02">Add the request counter</li><li data-id="i-s03">Return rate limit headers</li><li data-id="i-s04">Test the retry behavior</li></ul></section><ul class="attachments"></ul><ol class="comments"></ol></li>
+<li class="card" item data-id="c-f2x5j9" data-num="5" data-labels="backend"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-f2x5j9"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Rate limit the public API</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone"><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text">0/4</span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Rate limit the public API</h3><div class="card-desc"></div><section class="checklist" data-id="k-r1"><h4>Implementation</h4><ul class="checklist-items"><li data-id="i-s01">Choose per-token limits</li><li data-id="i-s02">Add the request counter</li><li data-id="i-s03">Return rate limit headers</li><li data-id="i-s04">Test the retry behavior</li></ul></section><ul class="attachments"></ul><ol class="comments"></ol></li>
 <li class="card" item data-id="c-q9s3e6" data-num="6" data-labels="research"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-q9s3e6"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Interview five churned users</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Interview five churned users</h3><div class="card-desc">Find out what people needed when they decided to leave. Bring three clear themes back to the team.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
 <li class="card" item data-id="c-m7c4u2" data-num="7" data-labels="bug" data-cover="red"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-m7c4u2"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" data-color="red"></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Fix Safari upload bug</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Fix Safari upload bug</h3><div class="card-desc">The file picker sometimes resets before an upload finishes on Safari. Reproduce with a large image.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
 </ol>
@@ -493,7 +1248,7 @@ Give teams a useful starting point, with less noise and a little more room to th
 <h2 class="list-title">Review</h2>
 <span class="count" text="item.cards.length">2</span>
 <ol class="cards" sortable="cards" sortable-label="Move card" items="cards" route="card">
-<li class="card" item data-id="c-h8r2v7" data-num="10" data-labels="backend design"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-h8r2v7"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Invite flow for teams</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge all-done" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone"><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text">4/4</span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Invite flow for teams</h3><section class="checklist" data-id="k-i1"><h4>Ready for review</h4><ul class="checklist-items"><li data-id="i-s10" data-done="">Design the invite screen</li><li data-id="i-s11" data-done="">Create invitation tokens</li><li data-id="i-s12" data-done="">Send the invite email</li><li data-id="i-s13" data-done="">Handle expired links</li></ul></section><ul class="attachments"></ul><ol class="comments"></ol></li>
+<li class="card" item data-id="c-h8r2v7" data-num="10" data-labels="backend design"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-h8r2v7"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Invite flow for teams</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge all-done" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone"><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text">4/4</span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Invite flow for teams</h3><div class="card-desc"></div><section class="checklist" data-id="k-i1"><h4>Ready for review</h4><ul class="checklist-items"><li data-id="i-s10" data-done="">Design the invite screen</li><li data-id="i-s11" data-done="">Create invitation tokens</li><li data-id="i-s12" data-done="">Send the invite email</li><li data-id="i-s13" data-done="">Handle expired links</li></ul></section><ul class="attachments"></ul><ol class="comments"></ol></li>
 <li class="card" item data-id="c-e3u9k1" data-num="11" data-labels="bug"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-e3u9k1"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Fix CSV export timezone</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Fix CSV export timezone</h3><div class="card-desc">The export should use the same timezone as the board.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
 </ol>
 </section>
@@ -518,12 +1273,15 @@ Give teams a useful starting point, with less noise and a little more room to th
     <div class="popup-bottom"><span id="filter-results" text="Board.results(state)">14 cards</span><span><button class="edit-only" data-act="edit-labels">Edit labels</button><button data-act="clear-filters">Clear</button></span></div>
   </section>
   <p class="empty-note no-results" id="no-results" role="status" show="Board.noResults(state)" hidden>No cards match. <button class="small-button" data-act="clear-filters">Clear filters</button></p>
-  <p class="feedback"><a href="mailto:david@hyperclay.com?subject=Kanban"><svg class="feedback-icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48Zm-96,85.15L52.57,64H203.43ZM98.71,128,40,181.81V74.19Zm11.84,10.85,12,11.05a8,8,0,0,0,10.82,0l12-11.05,58,53.15H52.57ZM157.29,128,216,74.18V181.82Z"/></svg>Send an appreciation email to the creator of this file</a></p>
 </div>
 <style clay="freeze" id="filter-style" text="Board.hideCss(state.hiddencards)"></style>
 <style clay="freeze" id="tab-style" text="Board.tabCss(state)"></style>
 </div>
 <div clay-people hidden><data value="" cms-template></data></div>
+<div class="doc-links" hidden>
+<a cms-template data-id="" clay-menu-item clay-menu-section="end" clay-menu-quiet clay-menu-dismiss="Remove this suggestion" href="mailto:david@hyperclay.com?subject=Kanban">Send an appreciation email to the creator of this file</a>
+<a data-id="appreciation" clay-menu-item clay-menu-section="end" clay-menu-quiet clay-menu-dismiss="Remove this suggestion" href="mailto:david@hyperclay.com?subject=Kanban">Send an appreciation email to the creator of this file</a>
+</div>
 
 <!-- Runtime UI. Cloned at startup and marked clay="editor-ui" as it is inserted, so no clone is ever saved. -->
 <template id="chrome">
@@ -697,11 +1455,20 @@ Give teams a useful starting point, with less noise and a little more room to th
   const day = iso => { const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
   const isoDay = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   const shortDate = iso => day(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  // A stored date is a real calendar day written YYYY-MM-DD, and a time after it is ignored. Anything else (free text,
+  // another order, a day that does not exist) counts as no date: a file edited by hand or through the data API can hold one.
+  const dateOf = (card, field) => {
+    const iso = (card.getAttribute(`data-${field}`) || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+    const [y, m, d] = iso.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return y >= 1000 && date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d ? iso : '';
+  };
   function dueState(card) {
-    if (!card.dataset.due) return null;
+    if (!dateOf(card, 'due')) return null;
     if (card.hasAttribute('data-complete')) return 'done';
     const today = day(isoDay(new Date()));
-    const due = day(card.dataset.due);
+    const due = day(dateOf(card, 'due'));
     const days = Math.round((due - today) / 86400000);
     return days < 0 ? 'overdue' : days <= 1 ? 'soon' : 'normal';
   }
@@ -844,7 +1611,7 @@ Give teams a useful starting point, with less noise and a little more room to th
     cover: card => (card && card.dataset.cover) || '',
     coverImage: card => (card && card.dataset.coverImage) || '',
     coverImageCss: card => (card && card.dataset.coverImage ? `url(${JSON.stringify(card.dataset.coverImage)})` : ''),
-    due: card => !!card && !!card.dataset.due,
+    due: card => !!card && !!dateOf(card, 'due'),
     hasDesc: card => !!card && !!Data.desc(card).trim(),
     checklist(card) {
       const items = Data.checklists(card).flatMap(Data.items);
@@ -857,7 +1624,7 @@ Give teams a useful starting point, with less noise and a little more room to th
     hasBottom: card => Face.due(card) || Face.hasDesc(card) || Face.checklist(card).total > 0 || Face.comments(card) > 0 || Face.files(card) > 0 || Face.members(card).length > 0,
     paintDue(slot, card) {
       const state = dueState(card);
-      const html = state ? `<span class="badge due" data-state="${state}">${icon('clock')}${esc(shortDate(card.dataset.due))}</span>` : '';
+      const html = state ? `<span class="badge due" data-state="${state}">${icon('clock')}${esc(shortDate(dateOf(card, 'due')))}</span>` : '';
       if (slot.innerHTML !== html) slot.innerHTML = html;
     },
     paintAvatars(slot, card) {
@@ -995,10 +1762,14 @@ Give teams a useful starting point, with less noise and a little more room to th
     }
   };
   // Show one list on a phone: the tab is transient state, painted into #tab-style.
-  function showList(id) {
+  // A card link opens its card before that state is mounted. It is mounted once ClayJS has started,
+  // so the list waits for that, however slow the connection, and then two seconds at most.
+  function showList(id, wait = 'start') {
     if (!window.Sap) return;
-    window.Sap(app).tab = id;
-    window.Sap.refresh();
+    const state = window.Sap(app);
+    if (state) { state.tab = id; window.Sap.refresh(); return; }
+    if (wait === 'start') (window.clay?.ready || Promise.resolve()).then(() => showList(id, 120), () => {});
+    else if (wait > 0) requestAnimationFrame(() => showList(id, wait - 1));
   }
   function clearFilters() {
     if (!window.Sap) return;
@@ -1270,7 +2041,15 @@ Give teams a useful starting point, with less noise and a little more room to th
       const direction = button.dataset.act === 'undo-main' ? 'undo' : 'redo';
       const name = direction === 'undo' ? 'Undo' : 'Redo';
       const entry = historyNext(direction);
-      button.textContent = entry ? `${name} ${entry.label}` : name;
+      const text = entry ? `${name} ${entry.label}` : name;
+      // The action's name is its own part: a phone shows the short word, so the search field keeps its room.
+      if (button.textContent !== text || !button.firstElementChild) {
+        const what = document.createElement('span');
+        what.className = 'history-what';
+        what.textContent = entry ? ` ${entry.label}` : '';
+        button.replaceChildren(name, what);
+      }
+      button.title = entry ? text : '';
       button.disabled = !entry;
       button.hidden = readOnly;
     }
@@ -2045,7 +2824,8 @@ Give teams a useful starting point, with less noise and a little more room to th
     const titleDraft = title && draftOf(title);
     if (title) { title.value = Data.title(card); clearTitleNote(); applyDraft(title); }
     detail.baseTitle = titleDraft ? titleDraft.base : Data.title(card);
-    detail.editingDesc = !!editor && !!editor.value && editor.value !== Data.desc(card);
+    // Editing resumes when this tab left a draft that differs from the card, an emptied one included.
+    detail.editingDesc = !!editor && !!draftOf(editor) && editor.value !== Data.desc(card);
     for (const input of $$('[unsent]', detailEl)) if (input !== title) syncDraftNote(input);
   }
   function openDetail(card) {
@@ -2103,6 +2883,7 @@ Give teams a useful starting point, with less noise and a little more room to th
     detail.removed = gone;
     hideCard({ replace: true });
     if (!drafts.length) { toast(`“${saved.title}” was deleted in another tab`); return; }
+    if (!canReview()) { lostDraftToast(drafts, window.clay.unsent); return; }
     toast(`“${saved.title}” was deleted in another tab. Your writing is kept for review.`);
     keepGoneWriting({ id, saved, listId, drafts }).then(kept => {
       if (kept) return;
@@ -2126,11 +2907,15 @@ Give teams a useful starting point, with less noise and a little more room to th
   const draftsFor = id => (window.clay?.unsent?.list?.() || []).filter(d => d.record === id || String(d.record).startsWith(id + ':'));
   const checklistDrafts = drafts => drafts.filter(d => d.name === 'item').map(d => d.text);
   const plainText = (title, drafts) => [title, ...drafts.map(d => `${DRAFT_LABELS[d.name] || d.name}: ${d.text}`)].join('\n');
+  // The notice that lists kept copies is the editor's. A visitor's draft has no such place, so there
+  // the writing is offered to copy instead.
+  const canReview = () => window.clay?.mode === 'edit' && typeof window.clay?.undo?.keep === 'function';
   // Only a copy the store wrote is a copy: until it answers, the drafts stay exactly where they are.
   async function keepGoneWriting({ id, saved, listId, drafts }) {
-    const typed = name => drafts.find(d => d.name === name)?.text || '';
+    const draft = name => drafts.find(d => d.name === name);
+    const typed = name => draft(name)?.text || '';
     const keep = window.clay?.undo?.keep;
-    if (typeof keep !== 'function') return false;
+    if (!canReview()) return false;
     let written;
     try {
       written = await keep({
@@ -2141,7 +2926,8 @@ Give teams a useful starting point, with less noise and a little more room to th
           text: plainText(saved.title, drafts),
           card: {
             title: typed('title') || saved.title,
-            desc: typed('desc') || saved.desc,
+            // An emptied description is a choice. Only a description nobody was editing takes the saved one.
+            desc: draft('desc') ? draft('desc').text : saved.desc,
             comment: typed('comment'),
             listId,
             ...(checklistDrafts(drafts).length ? { checklistItems: checklistDrafts(drafts) } : {}),
@@ -2341,7 +3127,13 @@ Give teams a useful starting point, with less noise and a little more room to th
     const listId = captureListOf(record);
     if (listId !== null) return listId === 'board' || !!Data.list(listId) || held.some(el => heldBy(el, listId));
     const id = recordCard(record);
-    return !!board.querySelector(`[data-id="${CSS.escape(id)}"]`) || held.some(el => heldBy(el, id));
+    const card = board.querySelector(`[data-id="${CSS.escape(id)}"]`) || held.find(el => heldBy(el, id));
+    if (!card) return false;
+    // A checklist item's draft is named for its card and its checklist: it is here while that checklist is.
+    // In an older file a checklist has no id and the draft is named by its place, which a later save may
+    // renumber, so such a draft stays with its card.
+    const part = record.slice(id.length + 1);
+    return !part || /^\d+$/.test(part) || Data.checklists(card).some(k => k.dataset.id === part);
   };
   function draftsKept() {
     const unsent = window.clay?.unsent;
@@ -2361,14 +3153,17 @@ Give teams a useful starting point, with less noise and a little more room to th
     const seen = lastSeen.get(id);
     const saved = { title: baseOf('title').trim() || seen?.title || '', desc: baseOf('desc') };
     const kept = drafts.filter(d => d.text !== savedValue(d.name, saved));
-    if (!kept.length) return;
+    if (!kept.length) return [];
+    // A page with no review hands the writing back for the caller's one offer.
+    if (!canReview()) return kept;
     const said = saved.title ? `“${saved.title}” was deleted in another tab` : 'A card you were writing in was deleted in another tab';
     toast(`${said}. Your writing is kept for review.`);
     keepGoneWriting({ id, saved, listId: seen?.listId || '', drafts: kept }).then(written => {
-      if (!written) lostDraftToast(kept, window.clay?.unsent);
+      if (!written) lostDraftToast(kept, window.clay?.unsent, { stay: true });
     });
+    return [];
   }
-  function reportLostDrafts({ peer = false } = {}) {
+  function reportLostDrafts({ peer = false, stay = false } = {}) {
     const unsent = window.clay?.unsent;
     if (!unsent || !unsent.size) return;
     for (const id of deletedHere) if (Data.card(id)) deletedHere.delete(id);
@@ -2390,25 +3185,57 @@ Give teams a useful starting point, with less noise and a little more room to th
       if (!cards.has(id)) cards.set(id, []);
       cards.get(id).push(d);
     }
+    // The toast is one place, so everything that needs an answer goes into one offer: an offer
+    // per card would leave only the last card's buttons on screen.
+    const offer = [];
     for (const [id, drafts] of cards) {
-      if (peer && !deletedHere.has(id)) keepLostCardDrafts(id, drafts);
-      else lostDraftToast(drafts, unsent);
+      // A card that is still here lost one of its checklists: there is no card to keep a copy of.
+      const cardHere = !!Data.card(id) || held.some(el => heldBy(el, id));
+      if (peer && !deletedHere.has(id) && !cardHere) offer.push(...keepLostCardDrafts(id, drafts));
+      else offer.push(...drafts);
     }
-    if (rest.length) lostDraftToast(rest, unsent);
+    offer.push(...rest);
+    if (offer.length) lostDraftToast(offer, unsent, { stay });
   }
   // This may be the only copy of the text left, so the drafts go only once the clipboard has it.
   // With no clipboard, or a host that refuses, the text stays on screen to select or discard.
-  function lostDraftToast(lost, unsent) {
+  // An offer made as the page starts stays until it is answered: the text it names holds the page in edit.
+  // That text is owed an answer. Whatever joins a standing offer is shown with it, and when another
+  // message has used the toast and gone, the standing offer comes back.
+  let owed = [];
+  const sameDraft = (a, b) => a.record === b.record && a.name === b.name;
+  const stillLost = (drafts, unsent) => {
+    const held = holding();
+    const stored = unsent.list();
+    return drafts.filter(d => stored.some(s => sameDraft(s, d)) && !recordHere(d.record, held));
+  };
+  function offerOwed() {
+    const unsent = window.clay?.unsent;
+    if (!owed.length || !unsent || readOnly) return;
+    owed = stillLost(owed, unsent);
+    if (owed.length) lostDraftToast([], unsent, { stay: true });
+  }
+  function lostDraftToast(lost, unsent, { stay = false } = {}) {
     const el = $('#toast');
-    const text = lost.map(d => d.text).join('\n');
-    const drop = () => { for (const d of lost) unsent.drop(d.record, d.name); };
-    const hide = () => { el.hidden = true; clearTimeout(toastTimer); };
+    if (stay) owed = [...owed.filter(d => !lost.some(l => sameDraft(l, d))), ...lost];
+    // A standing offer may be answered long after it was made, and an Undo may have brought a card
+    // back since: only text that is still lost is copied or dropped.
+    const items = () => (stay ? stillLost(owed, unsent) : lost);
+    const shown = items();
+    if (!shown.length) return;
+    const text = () => items().map(d => d.text).join('\n');
+    const drop = () => { for (const d of items()) unsent.drop(d.record, d.name); };
+    const hide = () => { clearTimeout(toastTimer); el.hidden = true; };
     clearTimeout(toastTimer);
     // The delete that lost this text keeps its own Undo beside it, as long as its entry is still
     // the one the history would take back.
     const entryId = pendingEntry && topEntryId() === pendingEntry ? pendingEntry : null;
     if (!entryId) pendingEntry = null;
-    const subject = lost.every(d => captureListOf(d.record) !== null) ? 'A list you were writing in was deleted' : 'A card you were writing in was deleted';
+    const inList = d => captureListOf(d.record) !== null;
+    const inChecklist = d => !inList(d) && !!Data.card(recordCard(d.record));
+    const kind = shown.every(inList) ? 'list' : shown.every(inChecklist) ? 'checklist' : 'card';
+    const many = new Set(shown.map(d => (kind === 'card' ? recordCard(d.record) : d.record))).size > 1;
+    const subject = many ? `${kind[0].toUpperCase()}${kind.slice(1)}s you were writing in were deleted` : `A ${kind} you were writing in was deleted`;
     el.innerHTML = `<span>${esc(subject)}</span>${entryId ? '<button data-act="undo">Undo</button>' : ''}<button type="button">${esc('Copy text')}</button><button type="button">${esc('Discard')}</button>`;
     placeToast();
     el.hidden = false;
@@ -2418,7 +3245,7 @@ Give teams a useful starting point, with less noise and a little more room to th
       const box = document.createElement('textarea');
       box.readOnly = true;
       box.className = 'toast-text';
-      box.value = text;
+      box.value = text();
       el.append(box);
       box.focus();
       box.select();
@@ -2428,12 +3255,14 @@ Give teams a useful starting point, with less noise and a little more room to th
     copy.addEventListener('click', async () => {
       const clipboard = navigator.clipboard;
       if (!clipboard || typeof clipboard.writeText !== 'function') { showText(); return; }
-      try { await clipboard.writeText(text); } catch { showText(); return; }
+      try { await clipboard.writeText(text()); } catch { showText(); return; }
       drop();
       hide();
     });
-    toastTimer = setTimeout(hide, 8000);
+    if (!stay) toastTimer = setTimeout(hide, 8000);
   }
+  // Every message hides the toast when it is done, whichever code showed it, so that is where the standing offer returns.
+  new MutationObserver(() => { if ($('#toast')?.hidden) offerOwed(); }).observe($('#toast'), { attributes: true, attributeFilter: ['hidden'] });
   // Escape is the dialog's own: cancel closes the card the way the Close button does.
   detailEl.addEventListener('cancel', e => { e.preventDefault(); hideCard(); });
 
@@ -2589,14 +3418,15 @@ Give teams a useful starting point, with less noise and a little more room to th
       if (!card) return;
       const due = dueState(card);
       const parts = [];
-      if (card.dataset.start) parts.push(`Starts ${esc(shortDate(card.dataset.start))}`);
-      if (card.dataset.due) parts.push(`<span class="badge due" data-state="${due}">${icon('clock')}Due ${esc(shortDate(card.dataset.due))}</span>`);
+      const start = dateOf(card, 'start');
+      if (start) parts.push(`Starts ${esc(shortDate(start))}`);
+      if (due) parts.push(`<span class="badge due" data-state="${due}">${icon('clock')}Due ${esc(shortDate(dateOf(card, 'due')))}</span>`);
       const html = parts.join(' ') || '<span class="placeholder">None</span>';
       if (el.innerHTML !== html) el.innerHTML = html;
     },
     fillDate(el, card) {
       if (!card || document.activeElement === el) return;
-      const value = (card.getAttribute(`data-${el.dataset.field}`) || '').slice(0, 10);
+      const value = dateOf(card, el.dataset.field);
       if (el.value !== value) el.value = value;
     },
     paintDueFlag(el, card) {
@@ -2707,12 +3537,14 @@ Give teams a useful starting point, with less noise and a little more room to th
         const set = new Set(words(card.dataset.members));
         if (adding) set.add(person.id); else set.delete(t.value);
         Data.setWords(card, 'data-members', [...set]);
+        // A person nothing names any more leaves the file in the same step, so Undo brings the name back with the assignment.
+        if (!adding && typeof window.clay?.people?.remove === 'function' && !Data.cards().some(c => words(c.dataset.members).includes(t.value) || Data.comments(c).some(m => m.dataset.by === t.value) || Data.checklists(c).flatMap(Data.items).some(i => i.dataset.member === t.value))) window.clay.people.remove(t.value);
       });
-      if (!adding && typeof window.clay?.people?.remove === 'function' && !Data.cards().some(c => words(c.dataset.members).includes(t.value) || Data.comments(c).some(m => m.dataset.by === t.value) || Data.checklists(c).flatMap(Data.items).some(i => i.dataset.member === t.value))) window.clay.people.remove(t.value);
     } else if (act === 'set-date') {
       commitAction('Set date', () => {
         if (t.value) card.setAttribute(`data-${t.dataset.field}`, t.value); else card.removeAttribute(`data-${t.dataset.field}`);
-        if (!card.dataset.due) card.removeAttribute('data-complete');
+        // Complete belongs to the due date: it ends only when the due date is taken away.
+        if (t.dataset.field === 'due' && !t.value) card.removeAttribute('data-complete');
       });
     } else if (act === 'toggle-complete') {
       commitAction('Toggle complete', () => {
@@ -3472,7 +4304,11 @@ Give teams a useful starting point, with less noise and a little more room to th
         if (baselineSettled) repairNumbers();
         paintHistory();
         syncDetail();
-        setTimeout(reportLostDrafts, 0);
+        // What the store of unsent text holds for a card, checklist or list that is gone is offered as
+        // editing starts, and the offer stays until answered. After a reload that store arrives with
+        // ClayJS's start, later than this, so the same pass runs again then.
+        setTimeout(() => reportLostDrafts({ stay: true }), 0);
+        window.clay?.ready?.then?.(() => setTimeout(() => { if (!readOnly) reportLostDrafts({ stay: true }); }, 0), () => {});
       },
       // A refusal keeps the dialog, the exact text and the selection where they are.
       quiesce() {
@@ -3514,22 +4350,22 @@ Give teams a useful starting point, with less noise and a little more room to th
 </script>
 <script>
 window.clayTheme = {
-  colorScheme: 'light',
+  colorScheme: 'page',
   tokens: {
-    font: "'Work Sans', system-ui, sans-serif",
-    headingFont: "'Work Sans', system-ui, sans-serif",
+    font: "var(--font, 'Work Sans', system-ui, sans-serif)",
+    headingFont: "var(--font, 'Work Sans', system-ui, sans-serif)",
     text: 'var(--ink, #263d4e)',
     mutedText: 'var(--muted, #536988)',
     background: 'var(--well, #f2f6fa)',
     surface: 'var(--paper, #fefefd)',
     border: 'var(--line, #e0e7ee)',
     accent: 'var(--navy, #0c2635)',
-    accentText: '#eef3f7',
-    danger: '#a8463d',
-    dangerText: '#fdf6f4',
+    accentText: 'var(--on-primary, #eef3f7)',
+    danger: 'var(--danger-bg, #a8463d)',
+    dangerText: 'var(--on-danger, #fdf6f4)',
     radius: '7px',
-    shadow: '0 20px 65px #12304430',
-    overlay: '#17304440',
+    shadow: '0 20px 65px var(--shade-dialog, #12304430)',
+    overlay: 'var(--backdrop, #17304440)',
     buttonHeight: '36px'
   },
   parts: {
@@ -3540,31 +4376,40 @@ window.clayTheme = {
     'dialog.footer': { base: { 'border-top': '0', padding: '18px 22px 22px', gap: '8px' } },
     'dialog.close': {
       base: { top: '12px', right: '12px', width: '36px', height: '36px', 'inline-size': '36px', 'block-size': '36px', 'border-left': '0', 'border-bottom': '0', 'border-radius': '7px', background: 'transparent', color: 'var(--muted, #536988)' },
-      hover: { background: '#e9eef4' },
-      focus: { outline: '3px solid #9775df', 'outline-offset': '2px' }
+      hover: { background: 'var(--hover, #e9eef4)' },
+      focus: { outline: '3px solid var(--focus, #9775df)', 'outline-offset': '2px' }
     },
     button: {
       base: { border: '0', 'border-radius': '7px', padding: '0 14px', 'font-size': '12px', 'font-weight': '400', 'box-shadow': 'none', background: 'transparent', color: 'var(--ink, #263d4e)' },
-      hover: { background: '#e9eef4' },
-      focus: { outline: '3px solid #9775df', 'outline-offset': '2px' },
+      hover: { background: 'var(--hover, #e9eef4)' },
+      focus: { outline: '3px solid var(--focus, #9775df)', 'outline-offset': '2px' },
       disabled: { opacity: '.5' }
     },
     'button.primary': {
-      base: { background: 'var(--navy, #0c2635)', color: '#eef3f7' },
-      hover: { background: '#25475b' },
-      active: { background: '#25475b' }
+      base: { background: 'var(--navy, #0c2635)', color: 'var(--on-primary, #eef3f7)' },
+      hover: { background: 'var(--primary-hover, #25475b)' },
+      active: { background: 'var(--primary-hover, #25475b)' }
     },
     buttonLabel: { active: { transform: 'none', translate: 'none' } },
     input: {
-      base: { border: '1px solid #cbd6e2', 'border-radius': '6px', padding: '8px 10px', 'min-height': '38px', 'font-size': '14px', 'box-shadow': 'none' },
-      focus: { outline: '3px solid #9775df', 'outline-offset': '2px', 'border-color': '#cbd6e2' }
+      base: { border: '1px solid var(--field-line, #cbd6e2)', 'border-radius': '6px', padding: '8px 10px', 'min-height': '38px', 'font-size': '14px', 'box-shadow': 'none' },
+      focus: { outline: '3px solid var(--focus, #9775df)', 'outline-offset': '2px', 'border-color': 'var(--field-line, #cbd6e2)' }
     },
     'people.hint': { base: { 'font-size': '12px', opacity: '1' } },
     'people.choiceLabel': { base: { 'font-size': '12px' } }
   }
 };
 </script>
-<script src="https://clayjs.com/v1/clay.js?plugins=sortable,people,upload,sync,visitor-drafts,unsent,menu,undo&exclude=richclay"></script>
+<script>
+// The board needs both ClayJS scripts. If one never arrives, the page is marked no-clay and reads as a plain page.
+(() => {
+  const missing = () => document.documentElement.setAttribute('no-clay', '');
+  addEventListener('error', (event) => { if (event.target instanceof HTMLScriptElement && /^https:\/\/clayjs\.com\/v1\/(clay|sap)\.js/.test(event.target.src)) missing(); }, true);
+  addEventListener('DOMContentLoaded', () => { if (typeof window.clay?.ready?.then !== 'function') missing(); });
+})();
+</script>
+<script src="https://clayjs.com/v1/clay.js?plugins=sortable,people,upload,sync,visitor-drafts,visitor-menu,unsent,menu,undo&exclude=richclay"></script>
+<script>/* The first script arrived but could not start the rest (its ready promise rejects): the same plain page. */ window.clay?.ready?.catch?.(() => document.documentElement.setAttribute('no-clay', ''));</script>
 <script src="https://clayjs.com/v1/sap.js"></script>
 <script src="https://clayjs.com/v1/clay-router.js"></script>
 <div id="api-seeds" cms-template sap-ignore hidden>
@@ -3572,9 +4417,11 @@ window.clayTheme = {
 <li class="card" item data-id="" data-num="" cms-template><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)"></span><span class="cover" show="Face.cover(item.$el) && !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)"></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)"></span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)"></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"/></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone"><svg aria-hidden="true"><use href="#i-checklist"/></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)"><svg aria-hidden="true"><use href="#i-comment"/></svg><span text="Face.comments(item.$el)"></span></span><span class="badge" title="Attachments" show="Face.files(item.$el)"><svg aria-hidden="true"><use href="#i-attachment"/></svg><span text="Face.files(item.$el)"></span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)"></span></span></button></div><h3 class="card-title" editmode:contenteditable contenteditable="plaintext-only"></h3><div class="card-desc"></div><section class="checklist" data-id="" cms-template><h4></h4><ul class="checklist-items"><li data-id="" cms-template></li></ul></section><ul class="attachments"><li data-id="" cms-template><a href="" data-kind=""></a></li></ul><ol class="comments"><li data-id="" data-at="" cms-template></li></ol></li>
 </ol>
 </div>
-<template visitor-intro clay="no-copy">
+<template visitor-intro="manual" clay="no-copy">
       <div class="strip-kanban">
         <style>
+          /* The Hide intro button sits beside the strip and takes this section's text colour. The strip keeps its own light colours in every theme, so the section keeps the strip's ink. */
+          .clay-intro { color: #263d4e; }
           .strip-kanban {
             container-type: inline-size; container-name: kanban-strip;
             --navy: #0c2635; --ink: #263d4e; --muted: #536988; --subtle: #62748a;
@@ -3590,14 +4437,17 @@ window.clayTheme = {
             -webkit-font-smoothing: antialiased;
           }
           .strip-kanban *, .strip-kanban *::before, .strip-kanban *::after { box-sizing: border-box; }
+          .strip-kanban .kb-series { margin: 0; padding: 10px 130px 0 20px; font-size: 13px; line-height: 1.5; font-weight: 500; color: var(--muted); }
+          .strip-kanban .kb-series span { display: inline-block; padding: 6px 12px; border-radius: 8px; background: var(--violet-soft); }
+          .strip-kanban .kb-series a { color: var(--violet-ink); font-weight: 600; text-underline-offset: 3px; }
           .strip-kanban .kb-inner {
             display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px;
-            padding: 26px 20px 24px;
+            padding: 18px 20px 24px;
           }
 
-          .strip-kanban .kb-name { display: flex; align-items: center; gap: 8px; margin: 0 40px 12px 0; font-size: 14px; font-weight: 650; letter-spacing: 0.01em; color: var(--navy); }
+          .strip-kanban .kb-name { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 14px; font-weight: 650; letter-spacing: 0.01em; color: var(--navy); }
           .strip-kanban .kb-name svg { width: 18px; height: 18px; flex: none; }
-          .strip-kanban .kb-headline { margin: 0 40px 10px 0; font-size: clamp(26px, 2.75cqi, 36px); line-height: 1.12; font-weight: 650; letter-spacing: -0.022em; color: var(--navy); text-wrap: balance; }
+          .strip-kanban .kb-headline { margin: 0 0 10px; font-size: clamp(26px, 2.75cqi, 36px); line-height: 1.12; font-weight: 650; letter-spacing: -0.022em; color: var(--navy); text-wrap: balance; }
           .strip-kanban .kb-sub { margin: 0 0 18px; max-width: 520px; font-size: 15px; line-height: 1.5; color: var(--muted); text-wrap: pretty; }
 
           .strip-kanban .kb-benefits { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 22px; }
@@ -3703,17 +4553,19 @@ window.clayTheme = {
           .strip-kanban .kb-foot-hint svg { width: 12px; height: 12px; }
 
           @container kanban-strip (min-width: 640px) {
-            .strip-kanban .kb-inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px; padding: 28px 48px 24px 32px; align-items: center; }
+            .strip-kanban .kb-inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px; padding: 18px 48px 24px 32px; align-items: center; }
+            .strip-kanban .kb-series { padding-left: 32px; }
             .strip-kanban .kb-foot { padding: 10px 48px 10px 32px; }
-            .strip-kanban .kb-name, .strip-kanban .kb-headline { margin-right: 0; }
           }
           @container kanban-strip (min-width: 1040px) {
-            .strip-kanban .kb-inner { grid-template-columns: minmax(0, 1fr) minmax(0, 600px); gap: 56px; padding: 26px 48px 24px 56px; }
+            .strip-kanban .kb-inner { grid-template-columns: minmax(0, 1fr) minmax(0, 600px); gap: 56px; padding: 18px 48px 24px 56px; }
+            .strip-kanban .kb-series { padding-left: 56px; }
             .strip-kanban .kb-foot { padding: 10px 48px 10px 56px; }
             .strip-kanban .kb-fit { --view: 600; --x: 0; }
           }
         </style>
 
+        <p class="kb-series"><span>Part of <a href="https://onehtmlfile.com" target="_blank" rel="noopener">Starter apps</a>, our collection of free apps, each in one HTML file. A new release every two weeks.</span></p>
         <div class="kb-inner">
           <div class="kb-copy">
             <p class="kb-name">
@@ -3890,5 +4742,20 @@ if (stages.length) {
         </script>
       </div>
 </template>
+<template data-hyperclay-bar><style>
+.bar { --k-paper: #fefefd; --k-ink: #263d4e; --k-ink-2: #536988; --k-line: #e0e7ee; --k-accent: #7356ba; --k-accent-soft: #eee8f9;
+  background: var(--k-paper); color: var(--k-ink); border-color: var(--k-line);
+  font: 13.5px/1.45 "Work Sans", system-ui, sans-serif; }
+@media (prefers-color-scheme: dark) { .bar { --k-paper: #17212b; --k-ink: #dbe4ec; --k-ink-2: #9db0c4; --k-line: #2b3a48; --k-accent: #a68bcf; --k-accent-soft: rgba(166, 139, 207, 0.16); } }
+.bar[data-kind="trial"] { border-top: 1px solid var(--k-line); box-shadow: 0 -10px 30px -22px rgba(12, 38, 53, 0.45); }
+.bar[data-kind="temp"] { border-bottom: 1px solid var(--k-line); }
+.text { color: var(--k-ink-2); }
+.text strong { color: var(--k-ink); font-weight: 600; }
+.time { background: var(--k-accent-soft); color: var(--k-accent); border-radius: 999px; font: 12px/1 ui-monospace, SFMono-Regular, monospace; padding: 5px 10px; }
+.btn { font: 500 13px/1 "Work Sans", system-ui, sans-serif; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--k-line); background: transparent; color: var(--k-ink); box-shadow: none; }
+.btn:hover { background: var(--k-accent-soft); }
+.primary { background: var(--k-accent); border-color: var(--k-accent); color: var(--k-paper); }
+.primary:hover { background: var(--k-accent); filter: brightness(1.06); }
+</style></template>
 </body>
 </html>

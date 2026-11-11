@@ -12,9 +12,9 @@
     "edit": { "requests": 162, "depth": 50, "brotli": 729088, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 10, "depth": 2, "raw": 464896 } }
   },
   "kanban.html": {
-    "view": { "requests": 64, "depth": 23, "brotli": 229376, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } },
-    "edit": { "requests": 96, "depth": 45, "brotli": 372736, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } },
-    "draft": { "requests": 88, "depth": 38, "brotli": 319488, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } }
+    "view": { "requests": 65, "depth": 23, "brotli": 229376, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } },
+    "edit": { "requests": 97, "depth": 45, "brotli": 372736, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } },
+    "draft": { "requests": 91, "depth": 40, "brotli": 319488, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } }
   },
   "journal.html": {
     "view": { "requests": 63, "depth": 21, "brotli": 221184, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 8, "depth": 2 } },
@@ -49,9 +49,9 @@
       "edit": { "requests": 102, "depth": 3, "brotli": 417792, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 10, "depth": 2, "raw": 464896 } }
     },
     "kanban.html": {
-      "view": { "requests": 50, "depth": 3, "brotli": 110592, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } },
-      "edit": { "requests": 81, "depth": 3, "brotli": 172032, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } },
-      "draft": { "requests": 73, "depth": 3, "brotli": 167936, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } }
+      "view": { "requests": 51, "depth": 3, "brotli": 110592, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } },
+      "edit": { "requests": 82, "depth": 3, "brotli": 172032, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } },
+      "draft": { "requests": 76, "depth": 3, "brotli": 167936, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 1, "depth": 1 } }
     },
     "journal.html": {
       "view": { "requests": 49, "depth": 3, "brotli": 106496, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 8, "depth": 2 } },
