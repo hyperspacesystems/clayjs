@@ -1,5 +1,5 @@
 // GENERATED from bevel/bevel.css and bevel/icons by scripts/build-bevel-subset.mjs. Run `npm run build:bevel`.
-export const SOURCE_SHA256 = "0b54b9f2165dcd7d79a4b9749fe4ea5666f14b6f83461d952f5f6c034d224ab9";
+export const SOURCE_SHA256 = "dc3a7565b5ab18780f812c6ce4fa5f4d73a7b1911a5d6f661f1e651bb973d515";
 export const FONT_SANS = "system-ui,-apple-system,\"Segoe UI\",sans-serif";
 export const FONT_MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
 export const SHADOW = "0 1px 2px rgba(0,0,0,.12),0 10px 28px -12px rgba(0,0,0,.35)";
