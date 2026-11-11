@@ -220,10 +220,18 @@ export function adoptLegacy(slot, { path = draftPath(), storage = safeStorage() 
   }
 }
 
+// The `site` key holds values the server writes into every page of a multi-page site from its
+// site.json. A draft must never capture or replay them, or a returning visitor would see stale ones.
+function withoutSiteKey(value) {
+  if (!isPlain(value) || !("site" in value)) return value;
+  const { site, ...rest } = value;
+  return rest;
+}
+
 export function createStore({ doc = document, storage = safeStorage(), now = () => new Date(), path = draftPath(), fallback = null } = {}) {
   const slot = draftSlot(doc);
   const key = draftKey(slot, path);
-  const rules = engine.findRulesIn(doc, "api").rules;
+  const rules = withoutSiteKey(engine.findRulesIn(doc, "api").rules);
 
   let lastRaw = null;
   let base = null;

@@ -4,7 +4,7 @@
  * of anything unreadable, and the storage failures the save lane reports as 507.
  */
 import { jest } from "@jest/globals";
-import { extractData } from "../../src/vendor/hyper-html-api-data.vendor.js";
+import { applyData, extractData } from "../../src/vendor/hyper-html-api-data.vendor.js";
 import { draftStoreFailed } from "../../src/core/draft-mode.js";
 import { createStore, draftKey, safeStorage } from "../../src/plugins/visitor-drafts/store.js";
 
@@ -24,6 +24,18 @@ function setPage(rows) {
   document.documentElement.setAttribute("visitor-drafts", SLOT);
   document.head.innerHTML = `<script type="application/json" data-rules-name="api" data-rules-version="1">${RULES}</script>`;
   document.body.innerHTML = pageBody(rows);
+}
+
+const SITE_RULES = '{"name":".site-name[*]"}';
+
+function sitePage() {
+  document.documentElement.setAttribute("visitor-drafts", SLOT);
+  document.head.innerHTML = `<script type="application/json" data-rules-name="api" data-rules-version="1">${SITE_RULES}</script>`;
+  document.body.innerHTML = '<span class="site-name">Old</span><span class="site-name">Old</span>';
+}
+
+function siteNames() {
+  return [...document.querySelectorAll(".site-name")].map((el) => el.textContent);
 }
 
 function savedPage({ title = "typed title", note = "typed note", rows = row("r1", "First") + row("r2", "Second") } = {}) {
@@ -307,4 +319,50 @@ test("a key that cannot be applied is dropped and the rest of the draft restores
   expect(visibleRows()).toEqual([["r1", "First"]]);
   expect(storage.getItem(KEY)).toBe(raw);
   expect(storage.getItem(KEY + ":unreadable:" + SAVED_AT)).toBe(raw);
+});
+
+test("an api rules tag with an all-matches selector reads the first .site-name and writes every one", () => {
+  sitePage();
+  const store = createStore({ doc: document, storage: fakeStorage() });
+
+  expect(extractData(document, store.rules)).toEqual({ name: "Old" });
+
+  applyData(document, { name: "New" }, store.rules);
+
+  expect(siteNames()).toEqual(["New", "New"]);
+});
+
+const SHARED_RULES = '{"site":{"name":".site-name"},"title":"#title@value"}';
+
+function sharedPage(name = "owner site", title = "owner title") {
+  return `<span class="site-name">${name}</span><input id="title" value="${title}">`;
+}
+
+function setSharedPage() {
+  document.documentElement.setAttribute("visitor-drafts", SLOT);
+  document.head.innerHTML = `<script type="application/json" data-rules-name="api" data-rules-version="1">${SHARED_RULES}</script>`;
+  document.body.innerHTML = sharedPage();
+}
+
+test("a draft never captures the site key the server owns", () => {
+  setSharedPage();
+  const storage = fakeStorage();
+  const store = createStore({ doc: document, storage, now: () => new Date(SAVED_AT) });
+
+  store.write(`<!DOCTYPE html><html><head><script type="application/json" data-rules-name="api" data-rules-version="1">${SHARED_RULES}</script></head><body>${sharedPage("visitor site", "typed title")}</body></html>`);
+
+  expect(JSON.parse(storage.getItem(KEY)).data).toEqual({ title: "typed title" });
+});
+
+test("a draft saved with a site key replays everything but the site key", () => {
+  setSharedPage();
+  const storage = fakeStorage({ [KEY]: record({ site: { name: "visitor site" }, title: "typed title" }) });
+  const store = createStore({ doc: document, storage });
+
+  const result = store.restore();
+
+  expect(result.restored).toBe(true);
+  expect(result.data).toEqual({ title: "typed title" });
+  expect(document.querySelector(".site-name").textContent).toBe("owner site");
+  expect(document.getElementById("title").value).toBe("typed title");
 });
