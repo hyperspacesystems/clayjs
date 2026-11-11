@@ -46,7 +46,7 @@ export async function replace(html, { etag } = {}) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const { url, options } = buildSaveRequest(html, true, controller.signal, mintSaveId(), stamp);
+    const { url, options } = buildSaveRequest(html, true, controller.signal, mintSaveId(), stamp, false, null, false);
     const res = await fetch(url, options);
     const text = await res.text();
     let data = {};

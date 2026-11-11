@@ -118,6 +118,7 @@ export const MODULES = {
   "core/snapshot.js":           () => import("./core/snapshot.js"),
   "core/save-core.js":          () => import("./core/save-core.js"),
   "core/save.js":               () => import("./core/save.js"),
+  "core/site-edits.js":         () => import("./core/site-edits.js"),
   "core/conflict-notice.js":     () => import("./core/conflict-notice.js"),
   "core/recovery.js":           () => import("./core/recovery.js"),
   "core/unsaved-warning.js":    () => import("./core/unsaved-warning.js"),
@@ -224,6 +225,12 @@ function parseCsv(params, key, enabled, apply) {
 // page that keeps its edits in this browser cannot carry them.
 const DRAFT_DROPS = ["sync", "live", "page", "upload", "quickcrop", "cms", "people", "menu", "upgrade", "wire", "ai-edit", "demo", "source"];
 
+// The one core module a document asks for by what it declares: shared site values are
+// tracked only on a page whose rules tag names them, and only where a save reaches the
+// host (a visitor's draft is saved into this browser). It goes after the save modules,
+// which it registers with. No other document ever fetches it.
+export const SITE_EDITS = "core/site-edits.js";
+
 // [refetch-on-save] swaps its element for a fresh GET of the same URL after every
 // save, which on a visitor's own draft is a request to the host. The conflict notice
 // answers a host's 412, which a save into this browser never returns.
@@ -232,9 +239,10 @@ const DRAFT_DROPS_CORE = ["attrs/refetch-on-save.js", "core/conflict-notice.js"]
 // Only that host's copies auto-add the update check; another source names it.
 const TEMPLATE_SOURCE_PREFIX = "https://hyperclay.com/templates/";
 
-export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap = false, hasVariants = false, canEdit = false, templateSource = null } = {}) {
+export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap = false, hasVariants = false, hasSite = false, canEdit = false, templateSource = null } = {}) {
   const core = [...CORE_WAVES.always];
   if (isEditMode) core.push(...CORE_WAVES.editOnly);
+  if (isEditMode && !isDraftMode && hasSite) core.splice(core.indexOf("core/save.js") + 1, 0, SITE_EDITS);
 
   const explicit = new Set();
   parseCsv(params, "plugins", explicit, (set, name) => set.add(name));

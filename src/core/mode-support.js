@@ -37,6 +37,9 @@ export const MODULE_SUPPORT = {
   "core/persist.js": "neutral",
   "attrs/add-from.js": "neutral",
   "core/etag.js": "neutral",
+  // Shared site values: one page-lifetime baseline, a header computed from the bytes of
+  // each save and a hook on an accepted save. All three act only when a save happens.
+  "core/site-edits.js": "neutral",
   // The modules that keep a session and hand the controller a lease.
   "core/save.js": "export",
   "core/conflict-notice.js": "export",

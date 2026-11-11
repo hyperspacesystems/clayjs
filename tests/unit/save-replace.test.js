@@ -194,3 +194,18 @@ test("view mode with canEdit saves: an upgrade is not an editing gesture", async
   expect(calls.save[0].options.body).toBe(HTML);
   expect(calls.save[0].options.headers["If-Match"]).toBe("stamp-before");
 });
+
+test("replace sends no per-save header: bytes this tab did not type declare nothing", async () => {
+  const { core, replace } = await fresh();
+  const remove = core.addSaveHeaderSource(() => ({ "Site-Data": "keys=nav" }));
+  try {
+    const result = await replace(HTML, { etag: "stamp-before" });
+
+    expect(result).toEqual({ ok: true, etag: "stored-1" });
+    expect(calls.save).toHaveLength(1);
+    expect(calls.save[0].options.headers["Site-Data"]).toBeUndefined();
+    expect(core.buildSaveRequest(HTML, true, undefined, "probe", "stamp-before").options.headers["Site-Data"]).toBe("keys=nav");
+  } finally {
+    remove();
+  }
+});

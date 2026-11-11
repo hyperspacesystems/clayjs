@@ -15,15 +15,14 @@ export function onSaveAccepted(callback) {
   saveAcceptedHooks.push(callback);
 }
 
-export function notifySaveAccepted(html, captureId, artifact = null) {
+export function notifySaveAccepted(html, captureId, artifact = null, siteData = null) {
   for (const hook of saveAcceptedHooks) {
     try {
-      // The artifact is the capture's own private model of these bytes, and it is
-      // offered only when it exists: a raw save and a capture without one keep the
-      // shape they had.
-      const accepted = artifact
-        ? { captureId: captureId ?? null, artifact }
-        : { captureId: captureId ?? null };
+      const accepted = {
+        captureId: captureId ?? null,
+        ...(artifact ? { artifact } : {}),
+        ...(siteData ? { siteData } : {}),
+      };
       hook(html, accepted);
     } catch (err) {
       console.error('clayjs: onSaveAccepted hook failed:', err);

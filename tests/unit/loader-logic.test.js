@@ -623,3 +623,14 @@ test("only draft mode loads the draft store; readers and owners editing get the 
   expect(resolveModules(tag, true).plugins).toContain("plugins/visitor-drafts-owner.js");
   expect(resolveModules(params({ plugins: "sync" }), true, { isDraftMode: true }).plugins[0]).toBe("plugins/visitor-drafts.js");
 });
+
+test("the shared site tracker loads only for an edit of a page that declares shared values", () => {
+  const none = new URLSearchParams();
+  const editing = resolveModules(none, true, { hasSite: true, canEdit: true });
+  expect(editing.core[editing.core.indexOf("core/save.js") + 1]).toBe("core/site-edits.js");
+  expect(editing.core.filter((path) => path === "core/site-edits.js")).toHaveLength(1);
+
+  expect(resolveModules(none, true, { canEdit: true }).core).not.toContain("core/site-edits.js");
+  expect(resolveModules(none, false, { hasSite: true, canEdit: true }).core).not.toContain("core/site-edits.js");
+  expect(resolveModules(none, true, { hasSite: true, isDraftMode: true }).core).not.toContain("core/site-edits.js");
+});

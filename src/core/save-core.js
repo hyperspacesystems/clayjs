@@ -85,6 +85,20 @@ export function setSaveHeader(name, value) {
   else extraSaveHeaders.set(name, String(value));
 }
 
+// Headers that depend on the bytes of one save. Each source gets the exact string being
+// sent and returns `{ name: value }` or null. A source that throws is skipped: a save
+// must not fail because a header could not be computed.
+const saveHeaderSources = new Set();
+
+/**
+ * @param {(content: string) => (Object<string, string>|null)} source
+ * @returns {() => void} removes the source
+ */
+export function addSaveHeaderSource(source) {
+  saveHeaderSources.add(source);
+  return () => saveHeaderSources.delete(source);
+}
+
 /**
  * Send the next save with `keepalive`, so a request whose page is going away (a tab
  * closing, a navigation) is still finished by the transport.
@@ -229,7 +243,10 @@ function successResult(data) {
     msg: data.msg ?? 'Saved',
     msgType: data.msgType || 'success',
     code: data.code ?? null,
-    etag: data.etag ?? null
+    etag: data.etag ?? null,
+    // A multi-page host's answer about shared values: which declared keys it stored,
+    // which it refused, and which values this tab is behind on. Absent on every other save.
+    ...(data.siteData ? { siteData: data.siteData } : {})
   };
 }
 
@@ -519,9 +536,10 @@ function formatConversionHeader(conversion) {
  * @param {?string} etag - the stamp to send as If-Match, or null
  * @param {boolean} keepalive - whether to ask the transport to see the request through
  * @param {?string} conversionHeader - the `Page-Conversion` value for this logical save, or null
+ * @param {boolean} perSaveHeaders - false for a lane that sends bytes this tab did not edit (replace), which declares nothing about them
  * @returns {{url: string, options: Object}}
  */
-export function buildSaveRequest(content, userDriven, signal, saveId, etag, keepalive = false, conversionHeader = null) {
+export function buildSaveRequest(content, userDriven, signal, saveId, etag, keepalive = false, conversionHeader = null, perSaveHeaders = true) {
   const token = saveToken();
   const path = token ? `${SAVE_PATH}/${token}` : SAVE_PATH;
   const options = {
@@ -551,6 +569,18 @@ export function buildSaveRequest(content, userDriven, signal, saveId, etag, keep
   };
 
   for (const [name, value] of extraSaveHeaders) options.headers[name] = value;
+
+  if (perSaveHeaders) {
+    for (const source of saveHeaderSources) {
+      let extra = null;
+      try {
+        extra = source(content);
+      } catch (err) {
+        console.error('clayjs: a save header source failed:', err);
+      }
+      if (extra) for (const [name, value] of Object.entries(extra)) options.headers[name] = String(value);
+    }
+  }
 
   // Set after the process-global headers so the type describing THESE bytes is the one
   // that goes out, the same rule the conversion header below follows.
@@ -1021,7 +1051,7 @@ function runSave(html, captureId, callback, conversion, capture = null, pageForm
         // same measurement. Its own answer about the size wins over nothing: the bytes
         // are this attempt's, and the limit is still only what discovery advertised.
         if (result.code === 'save-too-large' && !result.size) result.size = size;
-        if (result.ok) notifySaveAccepted(html, captureId ?? null, artifact);
+        if (result.ok) notifySaveAccepted(html, captureId ?? null, artifact, result.siteData ?? null);
         finished(result);
       });
   });

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { CORE_WAVES, PLUGIN_PATHS, MODULES } from "../../src/loader-logic.js";
+import { CORE_WAVES, PLUGIN_PATHS, MODULES, SITE_EDITS } from "../../src/loader-logic.js";
 
 /**
  * The loader imports every module through MODULES, a table of literal imports,
@@ -17,6 +17,7 @@ const wanted = [
   ...direct,
   ...CORE_WAVES.always,
   ...CORE_WAVES.editOnly,
+  SITE_EDITS,
   ...Object.values(PLUGIN_PATHS).map((spec) => spec.path),
   ...Object.values(PLUGIN_PATHS).map((spec) => spec.ownerPath).filter(Boolean),
 ];
