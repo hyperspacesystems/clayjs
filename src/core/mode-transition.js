@@ -102,7 +102,9 @@ export async function runSaveBarrier({ generation = saveGeneration(), keepalive 
         if (err?.state === "conflict") return refusal("conflict");
         if (err?.state === "blocked") return refusal("pending-input", { pending: pendingIds() });
         if (saveFateIsUnknown()) return refusal("save-unknown");
-        if (Date.now() >= deadline) return refusal("timeout");
+        // The flush's own timer is this deadline. Node can fire it a few milliseconds
+        // before the wall clock reaches `deadline`, so the timer's word counts.
+        if (err?.timedOut || Date.now() >= deadline) return refusal("timeout");
         return refusal("save-failed");
       }
 

@@ -28,6 +28,7 @@ function arm() {
     document.addEventListener("clay:save-" + state, () => show(state), { signal });
   }
   document.addEventListener("clay:page-save-state", (event) => show(event.detail?.state), { signal });
+  document.addEventListener("clay:save-status", (event) => show(event.detail?.state), { signal });
 }
 
 function disarm() {

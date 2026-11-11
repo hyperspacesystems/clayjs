@@ -198,7 +198,7 @@ test('a stream with a startup check flags the first direct open, once', () => {
   sources[0].onopen();
   expect(cursors).toEqual([{ resync: false, startup: true }]);
   sources[0].onopen();
-  expect(cursors).toHaveLength(1);
+  expect(cursors).toEqual([{ resync: false, startup: true }, { resync: true, startup: false }]);
 });
 
 test('without a startup check a direct open is a subscription and nothing else', () => {

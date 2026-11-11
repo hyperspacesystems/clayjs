@@ -48,7 +48,11 @@ afterEach(() => {
 test.each([
   [['sync', 'sync-worker'], 'v1'],
   [['sync', 'live-data', 'sync-worker-data'], 'v2'],
-  [['sync', 'live-data', 'sync-worker-data', 'presence'], 'direct'],
+  [['sync', 'live-data', 'sync-worker-data', 'presence'], 'v2'],
+  [['conditional','data-guard-v1','data-read','data-write','format','live-data','live-provenance','page','page-awareness-v1','page-format-v1','page-recovery-v1','people','presence','receipts','record-awareness-v1','scoped-stylesheet','sync','sync-worker','upload','wire'], 'direct'],
+  [['conditional','data-guard-v1','data-read','data-write','format','live-data','live-provenance','page','page-awareness-v1','page-format-v1','page-recovery-v1','people','presence','receipts','record-awareness-v1','scoped-stylesheet','sync','sync-worker','sync-worker-data','upload','wire'], 'v2'],
+  [['conditional','copy-policy-v1','data-guard-v1','data-read','format','live-data','live-provenance','page','page-awareness-v1','page-recovery-v1','people','presence','presence-editing','receipts','record-awareness-v1','save-history','scoped-stylesheet','sync','upload','page-format-v1'], 'direct'],
+  [['conditional','data-guard-v1','data-read','data-write','page','page-awareness-v1','page-format-v1','page-recovery-v1','receipts','record-awareness-v1','sync','sync-worker','upload','wire'], 'v1'],
   [['sync', 'live-data', 'sync-worker'], 'direct'],
   [['sync', 'sync-worker-data'], 'direct'],
   [['live-data', 'sync-worker-data'], 'direct'],
@@ -78,7 +82,7 @@ test.each([
       });
       const apply = jest.spyOn(sync, 'applyUpdate').mockImplementation(() => {});
       const send = data => workers[0].port.onmessage({ data: { v: transport === 'v2' ? 2 : 1, ...data } });
-      if (transport === 'v2') send({ type: 'hello', features: ['live-data'] });
+      if (transport === 'v2') send({ type: 'hello', features: ['live-data', 'presence'] });
       send({ type: 'cursor', seq: 42, resync: false });
       send({ type: 'frame', data: JSON.stringify({ seq: 42, html: 'peer', sender: 'peer' }) });
       expect(apply).toHaveBeenCalledTimes(1);
@@ -88,6 +92,36 @@ test.each([
     } else {
       expect(new URL(sync.sse.url).searchParams.get('client-id')).toBe(sync.clientId);
       expect(new URL(sync.sse.url).searchParams.get('resume-id')).toBe(sync.resumeId);
+    }
+  } finally { sync.stop(); }
+});
+
+// The roster rides the data worker only if the worker says it carries one. A worker
+// that predates presence answers a hello without it, and a presence host's page must
+// then keep its own stream rather than join and get no roster.
+test.each([
+  [['sync', 'live-data', 'sync-worker-data', 'presence'], ['live-data', 'presence']],
+  [['sync', 'live-data', 'sync-worker-data'], ['live-data']],
+])('a data-worker host %j makes the stream require %j in the hello', async (extensions, features) => {
+  const workers = [];
+  global.SharedWorker = class {
+    constructor(url, name) {
+      this.url = url; this.name = name;
+      this.port = { start() {}, close() {}, postMessage: jest.fn() };
+      workers.push(this);
+    }
+  };
+  const sync = await startedAgainst(host({ meta: { spec: 1, extensions } }));
+  try {
+    expect(workers).toHaveLength(1);
+    expect(sync.sse._source).toBe(null);
+    workers[0].port.onmessage({ data: { v: 2, type: 'hello', features: ['live-data'] } });
+    if (features.includes('presence')) {
+      expect(sync.sse._source).toBeInstanceOf(FakeEventSource);
+      expect(new URL(sync.sse._source.url).searchParams.get('client-id')).toBe(sync.clientId);
+    } else {
+      expect(sync.sse._source).toBe(null);
+      expect(sync.sse._worker).toBe(workers[0]);
     }
   } finally { sync.stop(); }
 });

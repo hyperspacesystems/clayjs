@@ -1225,6 +1225,32 @@ function attemptSave(options, callback = () => {}) {
   return adoptionQueue.then(() => attemptSaveNow(options, callback));
 }
 
+// A save waiting on something it needs before its capture: the source map's install, or
+// the preparer loaded on demand. The chip moves only on save events, so without this it
+// kept its last word, usually "Saved", for the whole wait, which on a host whose every
+// connection was held open lasted until a tab closed. Past the usual 500 ms it says
+// 'saving'; if the attempt then sends nothing and the page has nothing left to save, it
+// goes back to 'saved' through `clay:save-status`, never `clay:save-saved`, which would
+// run every [onaftersave] handler as though a save had happened.
+function afterWait(wait, attempt) {
+  let shown = false;
+  const timer = setTimeout(() => {
+    shown = true;
+    setSaveState('saving');
+  }, 500);
+  return wait.then(() => {
+    clearTimeout(timer);
+    return attempt();
+  }).then((result) => {
+    if (shown && !isSaveInProgress() && !pageMaybeDirty()
+        && document.documentElement.getAttribute('savestatus') === 'saving') {
+      document.documentElement.setAttribute('savestatus', 'saved');
+      document.dispatchEvent(new CustomEvent('clay:save-status', { detail: { state: 'saved' } }));
+    }
+    return result;
+  });
+}
+
 function attemptSaveNow({ kind, permit = null }, callback = () => {}) {
   const explicit = kind === 'explicit';
 
@@ -1321,10 +1347,10 @@ function attemptSaveNow({ kind, permit = null }, callback = () => {}) {
 
     // The source map asks a save to wait here: after the gates, before the capture.
     const prepare = window.clay?.source?.ensureForSave?.();
-    if (prepare) return prepare.then(() => resolve(attemptSaveNow({ kind, permit }, callback)));
+    if (prepare) return resolve(afterWait(prepare, () => attemptSaveNow({ kind, permit }, callback)));
 
     if (preparesSliced() && !prepDriver) {
-      loadPreparer().then(() => resolve(attemptSaveNow({ kind, permit }, callback)));
+      resolve(afterWait(loadPreparer(), () => attemptSaveNow({ kind, permit }, callback)));
       return;
     }
 
@@ -1488,7 +1514,7 @@ export function savePageForce(callback = () => {}, { quietConflict = false, page
     }
 
     const prepare = window.clay?.source?.ensureForSave?.();
-    if (prepare) return prepare.then(() => resolve(savePageForce(callback, { quietConflict, pageFormatFloor, permit })));
+    if (prepare) return resolve(afterWait(prepare, () => savePageForce(callback, { quietConflict, pageFormatFloor, permit })));
 
     const wasOffline = !navigator.onLine;
     if (wasOffline) {
@@ -1498,7 +1524,7 @@ export function savePageForce(callback = () => {}, { quietConflict = false, page
     // A forced save prepares like an ordinary one when the document is this big; it only
     // skips the dirty question, which `forced` says here.
     if (preparesSliced() && !prepDriver) {
-      loadPreparer().then(() => resolve(savePageForce(callback, { quietConflict, pageFormatFloor, permit })));
+      resolve(afterWait(loadPreparer(), () => savePageForce(callback, { quietConflict, pageFormatFloor, permit })));
       return;
     }
 
@@ -1627,7 +1653,7 @@ export async function flushSave({ keepalive = false, timeoutMs = 15000, permit =
   const run = { over: false };
   let timer = null;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(flushError('Save timed out.', 'failed')), Math.max(0, timeoutMs));
+    timer = setTimeout(() => reject(Object.assign(flushError('Save timed out.', 'failed'), { timedOut: true })), Math.max(0, timeoutMs));
   });
   try {
     return await Promise.race([flushBytes(keepalive, deadline, held, run), timeout]);

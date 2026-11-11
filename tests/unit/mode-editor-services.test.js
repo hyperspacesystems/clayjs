@@ -247,7 +247,7 @@ test("a second arm adds no listener, and adoption takes the chip the boot alread
       "beforeinput", "keydown", "pointerdown",
       "clay:save-saving", "clay:save-saved", "clay:save-error",
       "clay:save-offline", "clay:save-retrying", "clay:save-blocked",
-      "clay:page-save-state",
+      "clay:page-save-state", "clay:save-status",
     ]);
     expect(adds.every((entry) => entry.target === document)).toBe(true);
 

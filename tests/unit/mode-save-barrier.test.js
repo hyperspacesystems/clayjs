@@ -315,7 +315,14 @@ test("a write that never answers times out, and keeps its own outcome on the wir
     const barrier = transition.runSaveBarrier({ timeoutMs: 80 });
     expect(await until(() => held.length === 1)).toBe(true);
 
-    expect(await barrier).toMatchObject({ ok: false, code: "timeout" });
+    // On a loaded machine the flush's timer can fire before the wall clock reaches the
+    // barrier's deadline. Frozen here, the clock never reaches it.
+    const clock = jest.spyOn(Date, "now").mockReturnValue(Date.now());
+    try {
+      expect(await barrier).toMatchObject({ ok: false, code: "timeout" });
+    } finally {
+      clock.mockRestore();
+    }
     expect(save.getLastSavedDirty()).toBe(dirty);
 
     // The request was not aborted to manufacture an answer: the host's answer still

@@ -52,15 +52,63 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-test('v2 uses its own worker and the live editor identity; saved viewers omit it', () => {
+test('v2 uses its own worker and the live editor identity; saved readers stay direct', () => {
   make();
-  make({ lane: 'saved' });
+  const reader = make({ lane: 'saved' });
   expect(workers.map(({ url, name }) => [url, name])).toEqual([
-    ['http://localhost/_/sync/data-worker.js', 'clay-sync-data'],
     ['http://localhost/_/sync/data-worker.js', 'clay-sync-data'],
   ]);
   expect(workers[0].sent[1]).toEqual({ v: 2, type: 'subscribe', document: 'http://localhost/file.htmlclay', lane: 'live', since: 0, clientId: 'editor_A' });
-  expect(workers[1].sent[1]).toEqual({ v: 2, type: 'subscribe', document: 'http://localhost/file.htmlclay', lane: 'saved', since: 0 });
+  expect(sources).toHaveLength(1);
+  expect(sources[0].url).toBe(reader.url);
+  expect(sources[0].url).not.toContain('data-worker.js');
+});
+
+test('a presence host needs a worker that says it carries presence', () => {
+  make({ workerFeatures: ['live-data', 'presence'] });
+  workers[0].send({ type: 'hello', features: ['live-data'] });
+  expect(sources).toHaveLength(1);
+  expect(sources[0].url).toBe('http://localhost/_/sync?client-id=editor_A&resume-id=resume_A');
+});
+
+test('presence from the data worker reaches the page as a named event', () => {
+  make({ workerFeatures: ['live-data', 'presence'] });
+  const presence = [];
+  const stream = streams[0];
+  stream.addEventListener('presence', event => presence.push(JSON.parse(event.data)));
+  workers[0].send({ type: 'hello', features: ['live-data', 'presence'] });
+  workers[0].send({ type: 'status', state: 'open' });
+  expect(stream.readyState).toBe(1);
+  workers[0].send({ type: 'event', event: 'presence', data: { people: [], selfSession: { id: 's1', token: 't1' } } });
+  expect(presence).toEqual([{ people: [], selfSession: { id: 's1', token: 't1' } }]);
+});
+
+test('a throttled hidden page keeps its worker while pings are answered', () => {
+  make({ keepAliveWhenHidden: true });
+  hello(workers[0]);
+  workers[0].send({ type: 'status', state: 'open' });
+  hidden(true);
+  for (let i = 0; i < 5; i++) {
+    jest.setSystemTime(Date.now() + 45000);
+    jest.advanceTimersByTime(15000);
+    workers[0].send({ type: 'pong' });
+  }
+  expect(workers).toHaveLength(1);
+  expect(sources).toHaveLength(0);
+});
+
+test('a page that was suspended reopens its worker at its first tick after waking', () => {
+  make({ keepAliveWhenHidden: true });
+  hello(workers[0]);
+  workers[0].send({ type: 'status', state: 'open' });
+  jest.advanceTimersByTime(15000);
+  workers[0].send({ type: 'pong' });
+  expect(workers).toHaveLength(1);
+  // The laptop slept for an hour: the clock moved on and no timer ran meanwhile. The
+  // worker may have swept this page's port without telling it.
+  jest.setSystemTime(Date.now() + 3600000);
+  jest.advanceTimersByTime(15000);
+  expect(workers).toHaveLength(2);
 });
 
 test('only a valid hello completes startup; readiness follows each open transition', () => {
@@ -127,7 +175,7 @@ test.each(['heartbeat', 'load error'])('%s closes the data bridge before its rep
   }
 });
 
-test.each(transcript.ports)('replays the $role golden transcript and resumes its snapshot cursor', port => {
+test.each(transcript.ports.filter(port => port.subscribe.lane === 'live'))('replays the $role golden transcript and resumes its snapshot cursor', port => {
   const stream = make({ lane: port.subscribe.lane, clientId: port.subscribe.clientId, documentURL: port.subscribe.document });
   const received = [], frames = [], opened = jest.fn();
   for (const type of ['data', 'data-state', 'data-writer']) {
@@ -144,13 +192,14 @@ test.each(transcript.ports)('replays the $role golden transcript and resumes its
   expect(workers[1].sent[1]).toEqual(port.reconnectSubscribe);
 });
 
-test.each(['wrong feature', 'unsupported', 'timeout', 'load error', 'construction error', 'missing worker'])(
+test.each(['wrong feature', 'unsupported', 'capacity', 'timeout', 'load error', 'construction error', 'missing worker'])(
   '%s falls back once to the original direct URL', failure => {
     if (failure === 'construction error') global.SharedWorker = class { constructor() { throw new Error('load'); } };
     if (failure === 'missing worker') delete global.SharedWorker;
     const stream = make();
     if (failure === 'wrong feature') workers[0].send({ type: 'hello', features: ['snapshots'] });
     if (failure === 'unsupported') workers[0].send({ type: 'unsupported' });
+    if (failure === 'capacity') { hello(workers[0]); workers[0].send({ type: 'capacity' }); }
     if (failure === 'timeout') {
       workers[0].send({ v: 1, type: 'pong' });
       workers[0].send({ type: 'status', state: 'open' });

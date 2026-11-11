@@ -9,19 +9,23 @@ document.addEventListener('clay:workspace-foreground', () => { workspaceBackgrou
 const pageHidden = () => document.hidden || workspaceBackground;
 
 export class SyncStream extends EventTarget {
-  constructor(url, { shared = false, sharedData = false, documentURL, lane, clientId, startupCheck = false, keepAliveWhenHidden = false } = {}) {
+  constructor(url, { shared = false, sharedData = false, documentURL, lane, clientId, startupCheck = false, keepAliveWhenHidden = false, workerFeatures = ['live-data'] } = {}) {
     super();
     this.url = url;
     this.readyState = 0;
     this.onopen = null;
     this.onmessage = null;
     this.onerror = null;
-    this._shared = shared && typeof SharedWorker === 'function';
+    // Readers keep their own stream on a data-worker host: a reader already lets go
+    // of it five seconds after it is hidden, and joining the shared stream would
+    // rebuild it under every editor each time a reader tab is shown or hidden.
+    this._shared = shared && typeof SharedWorker === 'function' && (!sharedData || lane === 'live');
     this._sharedData = sharedData;
     this._documentURL = documentURL;
     this._lane = lane;
     this._clientId = clientId;
     this._keepAliveWhenHidden = keepAliveWhenHidden;
+    this._workerFeatures = workerFeatures;
     this._since = 0;
     this._closed = false;
     this._suspended = false;
@@ -91,7 +95,9 @@ export class SyncStream extends EventTarget {
       worker.port.onmessage = ({ data }) => {
         if (this._worker !== worker || data?.v !== (this._sharedData ? 2 : 1)) return;
         if (this._sharedData) {
-          if (data.type === 'unsupported') {
+          // `capacity`: the worker already carries as many documents as one stream
+          // may, so this page keeps a stream of its own rather than none.
+          if (data.type === 'unsupported' || data.type === 'capacity') {
             worker.onerror();
             return;
           }
@@ -103,7 +109,7 @@ export class SyncStream extends EventTarget {
           }
           if (!greeted) {
             if (data.type !== 'hello') return;
-            if (!Array.isArray(data.features) || !data.features.includes('live-data')) {
+            if (!Array.isArray(data.features) || !this._workerFeatures.every((feature) => data.features.includes(feature))) {
               worker.onerror();
               return;
             }
@@ -137,7 +143,7 @@ export class SyncStream extends EventTarget {
         } else if (data.type === 'frame' && typeof data.data === 'string') {
           this._remember(data.data);
           this._emit('message', data.data);
-        } else if (this._sharedData && data.type === 'event' && ['data', 'data-state', 'data-writer'].includes(data.event)
+        } else if (this._sharedData && data.type === 'event' && ['data', 'data-state', 'data-writer', 'presence'].includes(data.event)
           && data.data !== null && typeof data.data === 'object' && !Array.isArray(data.data)) {
           try { this._emit(data.event, JSON.stringify(data.data)); } catch {}
         } else if (data.type === 'gone') {
@@ -151,12 +157,27 @@ export class SyncStream extends EventTarget {
       const subscription = { document: this._documentURL, lane: this._lane, since: this._since };
       if (this._sharedData && this._lane === 'live') subscription.clientId = this._clientId;
       this._postWorker(worker, 'subscribe', subscription);
+      // A worker is dead when a ping goes unanswered for three intervals, not when
+      // three intervals pass between replies: Chrome runs a hidden tab's timers once
+      // a minute, so a healthy hidden page sees a minute between its own pings.
+      // A tick far later than even that means the page itself was suspended (a
+      // sleeping laptop, a frozen tab), and the worker may have swept its port
+      // meanwhile without a word: reopen at once rather than wait out the pings.
+      let awaitingSince = 0;
+      let lastTick = Date.now();
       this._pingTimer = setInterval(() => {
         if (this._worker !== worker) return;
-        if (Date.now() - lastReply > PING_INTERVAL * 3) {
+        const now = Date.now();
+        const resumed = now - lastTick > PING_INTERVAL * 6;
+        lastTick = now;
+        if (lastReply >= awaitingSince) awaitingSince = 0;
+        if (resumed || (awaitingSince && now - awaitingSince >= PING_INTERVAL * 3)) {
           this._repair = true;
           this._reopen();
-        } else this._postWorker(worker, 'ping');
+          return;
+        }
+        if (!awaitingSince) awaitingSince = now;
+        this._postWorker(worker, 'ping');
       }, PING_INTERVAL);
     } catch {
       this._shared = false;
@@ -167,8 +188,15 @@ export class SyncStream extends EventTarget {
   _openDirect() {
     const source = new EventSource(this.url);
     this._source = source;
+    let opened = false;
+    let hostSentCursor = false;
     source.onopen = () => {
       if (this._source !== source) return;
+      // The browser reconnected this stream on its own. A host that keeps no frames
+      // never sends a cursor, so nothing says the gap was covered: repair as if it
+      // had said `resync`. A host that sends cursors decides that itself.
+      if (opened && !hostSentCursor) this._repair = true;
+      opened = true;
       this.readyState = 1;
       this._emit('open');
       if (this._repair || this._startup) {
@@ -192,7 +220,9 @@ export class SyncStream extends EventTarget {
     // `data`, `data-state` and `data-writer` are clay.live's fast lane (stream-bridge.js).
     for (const type of ['cursor', 'presence', 'data', 'data-state', 'data-writer']) {
       source.addEventListener(type, event => {
-        if (this._source === source) this._emit(type, event.data);
+        if (this._source !== source) return;
+        if (type === 'cursor') hostSentCursor = true;
+        this._emit(type, event.data);
       });
     }
   }

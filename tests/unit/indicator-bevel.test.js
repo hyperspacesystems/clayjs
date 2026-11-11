@@ -51,6 +51,17 @@ test("alarm: error and offline wear the ox tone, saved goes back to the surface"
   expect(last(saved, chip(), "color")).toBe(TOKENS.ink);
 });
 
+test("a status-only change moves the chip with no save event behind it", async () => {
+  const error = await fire("error");
+  expect(last(error, chip(), "color")).toBe(TOKENS.ox);
+  const settled = await captureAsync(async () => {
+    document.dispatchEvent(new CustomEvent("clay:save-status", { detail: { state: "saved" } }));
+    await drawn();
+  });
+  expect(last(settled, chip(), "background")).toBe(TOKENS.surface);
+  expect(last(settled, chip(), "color")).toBe(TOKENS.ink);
+});
+
 test("fade: opacity writes are !important, so a page rule cannot pin the chip visible", async () => {
   jest.useFakeTimers();
   await fire("saved");

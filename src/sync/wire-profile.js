@@ -54,7 +54,7 @@ export const WIRE_PROFILES = {
  * without advertising anything, and refusing them would regress every published
  * version. A malformed answer, a 404 or a timeout all land on legacy too.
  *
- * @returns {Promise<{profile: Object, sharedSync: boolean, sharedData: boolean, liveData: boolean}>}
+ * @returns {Promise<{profile: Object, sharedSync: boolean, sharedData: boolean, liveData: boolean, workerFeatures: string[]}>}
  */
 export function resolveWireProfile() {
   return hostMeta()
@@ -63,13 +63,17 @@ export function resolveWireProfile() {
       const hasSync = extensions.includes('sync');
       const hasLiveData = extensions.includes('live-data');
       const hasPresence = extensions.includes('presence');
-      const sharedData = hasSync && hasLiveData && extensions.includes('sync-worker-data') && !hasPresence;
-      const sharedSync = hasSync && !hasPresence && (sharedData || (extensions.includes('sync-worker') && !hasLiveData));
+      // The data worker carries the roster too, so presence no longer keeps a
+      // live-data host on one connection per tab. It must say so in its hello:
+      // a worker that predates that would leave the page with no roster.
+      const sharedData = hasSync && hasLiveData && extensions.includes('sync-worker-data');
+      const sharedSync = hasSync && (sharedData || (extensions.includes('sync-worker') && !hasLiveData && !hasPresence));
       return {
         profile: hasSync ? WIRE_PROFILES.spec : WIRE_PROFILES.legacy,
         sharedSync,
         sharedData,
         liveData: hasLiveData,
+        workerFeatures: hasPresence ? ['live-data', 'presence'] : ['live-data'],
       };
     })
     .catch(() => ({
@@ -77,5 +81,6 @@ export function resolveWireProfile() {
       sharedSync: false,
       sharedData: false,
       liveData: false,
+      workerFeatures: ['live-data'],
     }));
 }

@@ -364,6 +364,7 @@ class LiveSync {
     this._profilePromise = null;
     this._sharedData = false;
     this._sharedSync = false;
+    this._workerFeatures = ['live-data'];
     this._liveData = false;
     this._editing = null;
     this._presenceLease = null;
@@ -848,6 +849,7 @@ class LiveSync {
         this._sharedData = resolved.sharedData;
         this._sharedSync = resolved.sharedSync;
         this._liveData = resolved.liveData;
+        this._workerFeatures = resolved.workerFeatures;
         this._profile = resolved.profile;
         this._log(`Wire profile: ${resolved.profile.name}`);
         return resolved.profile;
@@ -930,6 +932,7 @@ class LiveSync {
     this.sse = new SyncStream(new URL(path, window.location.origin).href, {
       shared: this._sharedSync,
       sharedData: this._sharedData,
+      workerFeatures: this._workerFeatures,
       documentURL: window.location.href,
       lane: this.lane,
       clientId: this.clientId,
