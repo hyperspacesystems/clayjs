@@ -115,8 +115,15 @@ export function effect(fn) {
     for (const type of undoEvents) clay.undo?.on?.(type, schedule);
   };
 
+  // Shared values the host sent back are applied with observers paused, to keep them out of
+  // undo, so this event is the only sign they changed the page.
+  const onSiteData = (event) => {
+    if (event.detail?.applied?.length) schedule();
+  };
+
   const offMutation = Mutation.onAnyChange({ debounce: 0, require: "observed" }, schedule);
   document.addEventListener("clay:sync-applied", schedule);
+  document.addEventListener("clay:site-data", onSiteData);
   document.addEventListener("clay:modechange", bindUndo);
   bindUndo();
 
@@ -124,6 +131,7 @@ export function effect(fn) {
     stopped = true;
     offMutation();
     document.removeEventListener("clay:sync-applied", schedule);
+    document.removeEventListener("clay:site-data", onSiteData);
     document.removeEventListener("clay:modechange", bindUndo);
     for (const type of undoEvents) clay.undo?.off?.(type, schedule);
   };

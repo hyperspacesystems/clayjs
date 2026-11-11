@@ -66,6 +66,24 @@ test("clay:sync-applied causes a run", async () => {
   stop();
 });
 
+test("clay:site-data runs it only when shared values were applied, and not after stop", async () => {
+  await setBody("");
+  const fn = jest.fn();
+  const stop = effect(fn);
+  await tick();
+  expect(fn).toHaveBeenCalledTimes(1);
+  document.dispatchEvent(new CustomEvent("clay:site-data", { detail: { written: ["nav"], refused: [], applied: [] } }));
+  await tick();
+  expect(fn).toHaveBeenCalledTimes(1);
+  document.dispatchEvent(new CustomEvent("clay:site-data", { detail: { written: [], refused: [], applied: ["footerLines"] } }));
+  await tick();
+  expect(fn).toHaveBeenCalledTimes(2);
+  stop();
+  document.dispatchEvent(new CustomEvent("clay:site-data", { detail: { written: [], refused: [], applied: ["footerLines"] } }));
+  await tick();
+  expect(fn).toHaveBeenCalledTimes(2);
+});
+
 test("after stop, neither a change nor clay:sync-applied runs it", async () => {
   await setBody('<div id="b"></div>');
   const fn = jest.fn();
