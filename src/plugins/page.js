@@ -638,6 +638,23 @@ function installJournalStatus(inst, modules) {
   return inst.pageStatus;
 }
 
+// The page store the session mounts, brought to the file the reader holds. A page store's
+// value is a set of Yjs updates and this tab's own unsaved ops are updates of their own, so
+// installing the file's value as the store's own leaves the unconfirmed work replayed over
+// the page the file states; the binding that mounts next applies both sets in one Y
+// document, which is the merge. False when the store cannot take the value, and the entry
+// refuses rather than mounting a page the file does not state.
+function mergeRepresentedPage(store, value) {
+  if (unreadablePage(value)) return false;
+  if (serializeLive(store.authoritative) === serializeLive(value)) return true;
+  try {
+    return store.rebase(value, { source: "state" });
+  } catch (error) {
+    console.warn("clayjs: page plugin could not reconcile the open page store with the saved file", error);
+    return false;
+  }
+}
+
 export function createSteps(inst, options) {
   let meta = null;
   let binding = null;
@@ -944,23 +961,6 @@ export function createSteps(inst, options) {
     armLoadingStatus(inst, element);
     return { ok: true, source };
   }
-
-// The page store the session mounts, brought to the file the reader holds. A page store's
-// value is a set of Yjs updates and this tab's own unsaved ops are updates of their own, so
-// installing the file's value as the store's own leaves the unconfirmed work replayed over
-// the page the file states; the binding that mounts next applies both sets in one Y
-// document, which is the merge. False when the store cannot take the value, and the entry
-// refuses rather than mounting a page the file does not state.
-function mergeRepresentedPage(store, value) {
-  if (unreadablePage(value)) return false;
-  if (serializeLive(store.authoritative) === serializeLive(value)) return true;
-  try {
-    return store.rebase(value, { source: "state" });
-  } catch (error) {
-    console.warn("clayjs: page plugin could not reconcile the open page store with the saved file", error);
-    return false;
-  }
-}
 
   // The page's own code, the editor it starts and the feature views the saved article
   // demands are separate downloads, and the page's own starts here beside the room join.
@@ -1717,6 +1717,28 @@ onSaveAccepted((html) => {
   const state = pageCode?.acceptedPageState(html);
   if (state) binding.acceptFile(state);
 });
+
+if (isDraftMode) {
+  // Another tab of this visitor's draft recorded its page: it joins this tab's in one Y
+  // document, the same merge a represented page takes, and the next save records both.
+  document.addEventListener("clay:drafts-page-external", (event) => {
+    const { live, adopted } = event.detail || {};
+    if (!live || typeof live !== "object") return;
+    let merged = true;
+    for (const [name, value] of Object.entries(live)) {
+      const store = storeOf(name);
+      if (!store) continue;
+      try {
+        const ok = name === "page" ? mergeRepresentedPage(store, value) : store.rebase(value, { source: "state" });
+        if (ok === false) merged = false;
+      } catch (error) {
+        console.warn("clayjs: another tab's page could not join this one", error);
+        merged = false;
+      }
+    }
+    if (merged) adopted?.();
+  });
+}
 
 // A live entry imports this module while the committed mode is still view: the install
 // belongs to the explicit edit boot alone, and a managed session starts its own.

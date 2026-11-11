@@ -623,6 +623,19 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     return true;
   }
 
+  // The page another tab recorded since this tab last read or wrote one, or null.
+  function externalUnit() {
+    if (stopped) return null;
+    const raw = getRaw();
+    const theirs = raw == null ? null : unitOf(parse(raw));
+    return theirs && !sameUnit(theirs, seenUnit) ? theirs : null;
+  }
+
+  // This tab's editor took that page in beside its own: it is no longer another tab's.
+  function adoptedUnit(unit) {
+    seenUnit = unit;
+  }
+
   function clear() {
     stopped = true;
     unparked = null;
@@ -631,5 +644,5 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     try { storage.setItem(resetKey, newId()); } catch {}
   }
 
-  return { slot, key, rules, read, restore, write, writeLive, flush, changed, adoptExternal, park, clear, snapshot };
+  return { slot, key, rules, read, restore, write, writeLive, flush, changed, adoptExternal, externalUnit, adoptedUnit, park, clear, snapshot };
 }

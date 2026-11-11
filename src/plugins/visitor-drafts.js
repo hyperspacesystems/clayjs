@@ -60,7 +60,14 @@ if (isDraftMode && slot && rulesTag) {
   };
   document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", start, { once: true }) : start();
   setDraftFlush(() => store.flush());
-  window.addEventListener("storage", (event) => { if (event.key === store.key) store.adoptExternal(); });
+  window.addEventListener("storage", (event) => {
+    if (event.key !== store.key) return;
+    // Read before adopting: adopting reads the record as this tab's own.
+    const unit = store.externalUnit();
+    // A page another tab wrote goes to the page editor, which merges it into its own.
+    if (unit) document.dispatchEvent(new CustomEvent("clay:drafts-page-external", { detail: { live: unit.live, adopted: () => store.adoptedUnit(unit) } }));
+    store.adoptExternal();
+  });
   const flush = () => store.flush();
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
   window.addEventListener("pagehide", flush);

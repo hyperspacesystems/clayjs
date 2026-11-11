@@ -178,6 +178,27 @@ test("both tabs changed the page: mine is written and theirs is kept aside", () 
   expect(storage.getItem(KEY + ":conflict")).toBe(recordB);
 });
 
+test("externalUnit names a page another tab recorded, and adoptedUnit makes it this tab's", () => {
+  setPage();
+  const recordA = pageRecord({ id: "a", rev: "r1" });
+  const storage = fakeStorage({ [KEY]: recordA });
+  const store = createStore({ doc: document, storage, now });
+  expect(store.restore().restored).toBe(true);
+  const recordB = pageRecord({ id: "b", rev: "r2", title: "owner" });
+  storage.setItem(KEY, recordB);
+
+  expect(store.externalUnit().page.rev).toBe("r2");
+  store.adoptedUnit(store.externalUnit());
+  expect(store.externalUnit()).toBeNull();
+
+  store.write(savedBytes({ rev: "r3", title: "Typed", article: "<p>mine</p>" }));
+
+  const stored = JSON.parse(storage.getItem(KEY));
+  expect(stored.page.rev).toBe("r3");
+  expect(stored.page.html).toContain("mine");
+  expect(storage.getItem(KEY + ":conflict")).toBeNull();
+});
+
 test("a Journal record is unchanged", () => {
   setPage({ withArticle: false });
   const storage = fakeStorage();

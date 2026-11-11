@@ -204,6 +204,82 @@ test("a reload finds the visitor's page from the record alone", async () => {
   expect(second.fetchMock.mock.calls.length).toBe(0);
 }, 40000);
 
+test("two tabs typing different paragraphs both keep their words", async () => {
+  const slot = "page-draft-two-tabs";
+  const key = `clay:visitor-drafts:${slot}@/page.html`;
+  const recordOf = () => {
+    try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+  };
+
+  const b = await bootPage({ slot });
+  await b.clay.page.ready;
+  const bView = b.clay.page.view;
+  bView.dispatch(bView.state.tr.insertText("bravo", firstParagraph(bView)));
+  await waitFor(() => recordOf()?.page?.html?.includes("bravo"));
+  const rawB = localStorage.getItem(key);
+  expect(rawB).toBeTruthy();
+
+  const a = await bootPage({ slot });
+  await a.clay.page.ready;
+  const bytes = await tapDraftTransport();
+  const aView = a.clay.page.view;
+  aView.dispatch(aView.state.tr.insertText("alpha", firstParagraph(aView)));
+  await waitFor(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.page?.html?.includes("alpha"));
+  expect(aView.state.doc.textContent).not.toContain("bravo");
+
+  localStorage.setItem(key, rawB);
+  window.dispatchEvent(new StorageEvent("storage", { key }));
+
+  const both = () => aView.state.doc.textContent.includes("alpha") && aView.state.doc.textContent.includes("bravo");
+  await waitFor(both);
+  expect(aView.state.doc.textContent).toContain("alpha");
+  expect(aView.state.doc.textContent).toContain("bravo");
+
+  aView.dispatch(aView.state.tr.insertText("!", firstParagraph(aView)));
+  await waitFor(() => recordOf()?.page?.html?.includes("!") && recordOf()?.page?.html?.includes("alpha") && recordOf()?.page?.html?.includes("bravo"));
+  const record = recordOf();
+  expect(record.page.html).toContain("alpha");
+  expect(record.page.html).toContain("bravo");
+  expect(localStorage.getItem(key + ":conflict")).toBeNull();
+
+  const third = await bootPage({ slot, storage: { [key]: localStorage.getItem(key) } });
+  await third.clay.page.ready;
+  expect(third.clay.page.view.state.doc.textContent).toContain("alpha");
+  expect(third.clay.page.view.state.doc.textContent).toContain("bravo");
+}, 60000);
+
+test("without the page editor's merge, the other tab's page is kept aside", async () => {
+  const slot = "page-draft-two-tabs-unmerged";
+  const key = `clay:visitor-drafts:${slot}@/page.html`;
+  const recordOf = () => {
+    try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+  };
+
+  const b = await bootPage({ slot });
+  await b.clay.page.ready;
+  const bView = b.clay.page.view;
+  bView.dispatch(bView.state.tr.insertText("bravo", firstParagraph(bView)));
+  await waitFor(() => recordOf()?.page?.html?.includes("bravo"));
+  const rawB = localStorage.getItem(key);
+  expect(rawB).toBeTruthy();
+
+  const a = await bootPage({ slot });
+  await a.clay.page.ready;
+  const bytes = await tapDraftTransport();
+  const aView = a.clay.page.view;
+  aView.dispatch(aView.state.tr.insertText("alpha", firstParagraph(aView)));
+  await waitFor(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.page?.html?.includes("alpha"));
+
+  localStorage.setItem(key, rawB);
+  aView.dispatch(aView.state.tr.insertText("!", firstParagraph(aView)));
+  await waitFor(() => recordOf()?.id && localStorage.getItem(key) !== rawB && recordOf()?.page?.html?.includes("!"));
+
+  expect(localStorage.getItem(key + ":conflict")).toBe(rawB);
+  const record = recordOf();
+  expect(record.page.html).toContain("alpha");
+  expect(record.page.html).not.toContain("bravo");
+}, 60000);
+
 test("a visitor's slash menu has no Image or File, and shows the note", async () => {
   const { clay } = await bootPage();
   await clay.page.ready;
