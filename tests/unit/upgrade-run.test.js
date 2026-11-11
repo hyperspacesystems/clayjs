@@ -284,6 +284,43 @@ describe("the conservation check", () => {
     expect(savedDoc.querySelectorAll("#api-seeds section.checklist[cms-template]").length).toBe(1);
   });
 
+  // An owner's card is written over the new template's card at its place. A mark the owner removed
+  // reads as empty, and an empty field must end up empty, not keep that sample card's mark.
+  test("a Kanban card's removed label, cover, Complete mark and item tick stay removed through an upgrade", async () => {
+    loadKanban();
+    const first = (selector) => document.querySelector(`#board li.card[item]${selector}`);
+    const marked = { complete: first("[data-complete]"), cover: first("[data-cover]"), labels: first("[data-labels]") };
+    const ticked = document.querySelector("#board li.card[item] ul.checklist-items > li[data-done]");
+    expect(Object.values(marked).every(Boolean) && ticked).toBeTruthy();
+    const ids = Object.fromEntries(Object.entries(marked).map(([name, card]) => [name, card.dataset.id]));
+    marked.complete.removeAttribute("data-complete");
+    marked.cover.removeAttribute("data-cover");
+    marked.labels.removeAttribute("data-labels");
+    ticked.removeAttribute("data-done");
+    const tickedId = ticked.dataset.id;
+
+    const before = upgrade.extractAll(document).dataByName;
+    const html = newerKanban();
+    const clay = setupClay();
+
+    const result = await apply(updateFor(html), {
+      clay,
+      fetchFn: sourceFetcher(html),
+      reload: jest.fn(),
+      doc: document,
+      loc: location,
+    });
+
+    expect(result).toEqual(expect.objectContaining({ ok: true }));
+    const savedDoc = new DOMParser().parseFromString(clay.save.replace.mock.calls[0][0], "text/html");
+    const saved = (id) => savedDoc.querySelector(`#board [data-id="${id}"]`);
+    expect(saved(ids.complete).hasAttribute("data-complete")).toBe(false);
+    expect(saved(ids.cover).hasAttribute("data-cover")).toBe(false);
+    expect(saved(ids.labels).hasAttribute("data-labels")).toBe(false);
+    expect(saved(tickedId).hasAttribute("data-done")).toBe(false);
+    expect(upgrade.extractAll(savedDoc).dataByName).toEqual(before);
+  });
+
   test("a transform's declared rename passes the check", async () => {
     const oldHtml = miniPage({ version: "1.0.0", rules: { title: "#title", note: "#note" }, title: "Old title", note: "Keep me" });
     const newHtml = miniPage({
