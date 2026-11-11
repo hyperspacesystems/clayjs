@@ -9,10 +9,10 @@ import * as realRecoveryUi from "../../../src/page/recovery-ui.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
 
-const recoveryRoots = () => [...document.querySelectorAll('clay-editor-ui[data-clay-ui="page-recovery"]')].map((host) => host.shadowRoot);
+const recoveryRoots = () => [...document.querySelectorAll('clay-editor-ui[data-clay-ui="blockeditor-recovery"]')].map((host) => host.shadowRoot);
 const rq = (selector) => recoveryRoots().map((root) => root.querySelector(selector)).find(Boolean) ?? null;
 const rqa = (selector) => recoveryRoots().flatMap((root) => [...root.querySelectorAll(selector)]);
-const recoveryHosts = () => document.querySelectorAll('clay-editor-ui[data-clay-ui="page-recovery"]');
+const recoveryHosts = () => document.querySelectorAll('clay-editor-ui[data-clay-ui="blockeditor-recovery"]');
 
 /**
  * Step 6b: the review a page draws for work its journal may not replay, and the
@@ -28,7 +28,7 @@ const BLOCKS = [
   { id: "h", t: "heading", text: "Notes" },
   { id: "p", t: "paragraph", text: "Hello" },
 ];
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const flushAsync = async () => { for (let i = 0; i < 60; i++) await Promise.resolve(); };
@@ -40,10 +40,10 @@ const until = async (done, timeout = 4000) => {
 
 const pageHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 const tagHtml = (value) =>
-  `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+  `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 
 // The update a page value decodes to, which is what a capsule carries as its work.
 const updateOf = (value) => {
@@ -148,8 +148,8 @@ async function load({ html = pageHtml(), head = tagHtml(seedValue(BLOCKS)), edit
   const requested = [];
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
-    hostMeta: async () => ({ spec: 1, extensions: ["page"], document: { etag: "stamp-1" } }),
-    hostSupports: async (name) => name === "page",
+    hostMeta: async () => ({ spec: 1, extensions: ["blockeditor"], document: { etag: "stamp-1" } }),
+    hostSupports: async (name) => name === "blockeditor",
     hostMetaOutcome: () => "ok",
     querySaveOutcome: () => null,
     resetHostMeta: () => ({}),
@@ -209,7 +209,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-const reviewButton = () => rq(".page-recovery");
+const reviewButton = () => rq(".blockeditor-recovery");
 
 test("a capsule this page may not replay is shown as a review after boot", async () => {
   const capsule = foreignCapsule();
@@ -228,8 +228,8 @@ test("a capsule this page may not replay is shown as a review after boot", async
   expect(button.closest('[clay="editor-ui"]')).toBeTruthy();
 
   button.click();
-  expect(rq(".page-recovery-panel").hidden).toBe(false);
-  expect(rq(".page-recovery-panel").textContent).toContain("another page's words");
+  expect(rq(".blockeditor-recovery-panel").hidden).toBe(false);
+  expect(rq(".blockeditor-recovery-panel").textContent).toContain("another page's words");
   // Nothing of it was applied to the page.
   expect(page.view.state.doc.textContent).toContain("Hello");
   expect(page.view.state.doc.textContent).not.toContain("another page's words");
@@ -245,7 +245,7 @@ test("a journal with nothing to review draws no review", async () => {
   expect(requested).toEqual(["recovery-ui"]);
   expect(reviewButton()).toBeTruthy();
   expect(reviewButton().hidden).toBe(true);
-  expect(rq(".page-recovery-panel").hidden).toBe(true);
+  expect(rq(".blockeditor-recovery-panel").hidden).toBe(true);
 });
 
 test("view mode asks for no recovery module and draws no review", async () => {
@@ -272,7 +272,7 @@ test("mode exit removes the review and its listeners", async () => {
   await flushAsync();
 
   expect(reviewButton()).toBe(null);
-  expect(rq(".page-recovery-panel")).toBe(null);
+  expect(rq(".blockeditor-recovery-panel")).toBe(null);
   expect(recoveryHosts()).toHaveLength(0);
 
   // The composition listeners went with it: a composition on the old surface stages

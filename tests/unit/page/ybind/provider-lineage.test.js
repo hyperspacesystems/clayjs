@@ -19,11 +19,11 @@ const expect_match = (a, re) => expect(a).toMatch(re);
 async function run(control, { compactOriginal = false, compactReplacement = false } = {}) {
   const clone = (v) => JSON.parse(JSON.stringify(v));
   const seed = (c) => { const blocks = { p: { t: 'paragraph', pos: '00000001', c } }; return buildPageValue([{ blocks }], seedClientId(blocks)); };
-  const html = (value) => { const p = renderBlocks(blocksFromYValue(value)); return `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script><article data-page="1" data-rev="${p.rev}">${p.html}</article>`; };
+  const html = (value) => { const p = renderBlocks(blocksFromYValue(value)); return `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script><article data-blockeditor="1" data-rev="${p.rev}">${p.html}</article>`; };
   const pause = () => new Promise((resolve) => setTimeout(resolve, 80));
   // A page whose history was folded into one merged update: no `seed` key is left to compare.
   const folded = (value) => {
-    const store = createStore({ name: 'page', value });
+    const store = createStore({ name: 'blockeditor', value });
     const doc = docFromValue(value);
     const provider = createYProvider({ store, ydoc: doc, compact: { keys: 0 }, setTimer: () => 1, clearTimer: () => {} });
     store.onLocal(() => store.rebase(clone(store.value), { source: 'state', through: store.mark }));
@@ -38,20 +38,20 @@ async function run(control, { compactOriginal = false, compactReplacement = fals
   const replacement = control ? original : compactReplacement ? folded(seed('NEW ARTICLE 1')) : seed('NEW ARTICLE 1');
   const rooms = createRooms();
   let room = rooms.open('fixture', html(original), { nodeId: 1 });
-  const store = createStore({ name: 'page', value: original });
+  const store = createStore({ name: 'blockeditor', value: original });
   const ydoc = docFromValue(original, { strict: true });
   let lost = 0;
   let laneRef;
-  const provider = createYProvider({ store, ydoc, onStopped: (reason) => { lost++; expect(reason).toBe('lineage'); laneRef.abandon('page'); } });
+  const provider = createYProvider({ store, ydoc, onStopped: (reason) => { lost++; expect(reason).toBe('lineage'); laneRef.abandon('blockeditor'); } });
   const notices = [];
   const posted = [];
   let handlers;
-  const lane = createFastLane({ entries: new Map([['page', { store }]]), transport: {
+  const lane = createFastLane({ entries: new Map([['blockeditor', { store }]]), transport: {
     start(h) { handlers = h; return () => {}; },
     async fetchState(id, since) { return clone(rooms.state(room, id, since)); },
     async send(id, frame) {
       const result = rooms.apply(room, id, frame);
-      posted.push({ generation: frame.pageGeneration, result: clone(result) });
+      posted.push({ generation: frame.blockeditorGeneration, result: clone(result) });
       if (result.seq) handlers.frame({ ...clone(result), from: id, n: frame.n });
       return { status: result.error ? 422 : 200, body: result };
     },
@@ -59,21 +59,21 @@ async function run(control, { compactOriginal = false, compactReplacement = fals
 
   laneRef = lane;
   store.onDelivery((status) => notices.push(status));
-  store.onLocal((ops) => lane.local('page', ops, store.mark));
+  store.onLocal((ops) => lane.local('blockeditor', ops, store.mark));
   lane.start();
   try {
     handlers.open({ clientId: 'offline-tab', lane: 'live' });
     await pause();
-    const oldTransition = room.pageTransition.id;
+    const oldTransition = room.blockeditorTransition.id;
     handlers.close();
     ydoc.getText('flow').insert(ydoc.getText('flow').length, ' UNSAVED');
     room = rooms.reset('fixture', html(replacement));
-    const newTransition = room.pageTransition.id;
+    const newTransition = room.blockeditorTransition.id;
     handlers.open({ clientId: 'offline-tab', lane: 'live' });
     await pause();
     provider.settle();
     await pause();
-    const savedValue = room.stores.get('page').value;
+    const savedValue = room.stores.get('blockeditor').value;
     const serverDoc = docFromValue(savedValue, { strict: true });
     const serverText = serverDoc.getText('flow').toString();
     const output = { oldTransition, newTransition, serverText, tabText: ydoc.getText('flow').toString(), projectedBlocks: blocksFromYValue(savedValue), serverRecovery: reduceRecovery(createPageDoc(serverDoc)).list.map((entry) => ({ blockId: entry.blockId, text: entry.blocks.flatMap((block) => block.runs.map((run) => run.text ?? '')).join('') })), tabRecoveryCount: reduceRecovery(createPageDoc(ydoc)).list.length, posted: posted.map(({generation, result}) => ({ generation, seq: result.seq, error: result.error })), notices };

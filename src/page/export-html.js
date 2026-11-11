@@ -122,11 +122,11 @@ const escText = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt
 
 const READER_CSS = `:root { color-scheme: light dark; }
 body { margin: 0; background: #ffffff; color: #37352f; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.6; }
-article[data-page] { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 6rem; }
-article[data-page] > * { margin: 0.7em 0; }
-header[data-page-heading] { position: relative; margin-bottom: 1.6em; }
-header[data-page-heading] img[data-page-cover] { display: block; width: 100%; max-height: 18rem; object-fit: cover; border-radius: 6px; margin-bottom: 1em; }
-header[data-page-heading] span[data-page-icon] { display: block; font-size: 2.6em; line-height: 1.2; }
+article[data-blockeditor] { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 6rem; }
+article[data-blockeditor] > * { margin: 0.7em 0; }
+header[data-blockeditor-heading] { position: relative; margin-bottom: 1.6em; }
+header[data-blockeditor-heading] img[data-blockeditor-cover] { display: block; width: 100%; max-height: 18rem; object-fit: cover; border-radius: 6px; margin-bottom: 1em; }
+header[data-blockeditor-heading] span[data-blockeditor-icon] { display: block; font-size: 2.6em; line-height: 1.2; }
 h1, h2, h3, h4, h5, h6 { line-height: 1.25; font-weight: 650; margin: 1.2em 0 0.3em; }
 h1 { font-size: 2em; }
 h2 { font-size: 1.5em; }
@@ -134,7 +134,7 @@ h3 { font-size: 1.2em; }
 p, li { max-width: 100%; }
 a { color: #0b6bcb; }
 blockquote { margin-left: 0; padding-left: 1em; border-left: 3px solid rgba(55, 53, 47, 0.2); color: #5b5952; }
-aside.page-callout { border: 1px solid rgba(55, 53, 47, 0.14); border-radius: 6px; padding: 0.8em 1em; background: rgba(55, 53, 47, 0.04); }
+aside.blockeditor-callout { border: 1px solid rgba(55, 53, 47, 0.14); border-radius: 6px; padding: 0.8em 1em; background: rgba(55, 53, 47, 0.04); }
 pre { overflow-x: auto; padding: 0.9em 1em; border-radius: 6px; background: rgba(55, 53, 47, 0.06); font-size: 0.9em; }
 code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; }
 pre code { font-size: inherit; }
@@ -160,7 +160,7 @@ li > input[type="checkbox"] { margin-right: 0.4em; }
 [data-type="file"] a { display: inline-block; padding: 0.4em 0.7em; border: 1px solid rgba(55, 53, 47, 0.18); border-radius: 4px; }
 @media (prefers-color-scheme: dark) {
   body { background: #191919; color: #d4d4d4; }
-  aside.page-callout, th, pre { background: rgba(255, 255, 255, 0.06); }
+  aside.blockeditor-callout, th, pre { background: rgba(255, 255, 255, 0.06); }
   th, td, section[data-type="board"] > div, section[data-type="board"] li, [data-type="file"] a { border-color: rgba(255, 255, 255, 0.16); }
   a { color: #6cb0f5; }
 }`;
@@ -177,7 +177,7 @@ ${READER_CSS}
 </style>
 </head>
 <body>
-<article data-page="1">
+<article data-blockeditor="1">
 ${body}
 </article>
 </body>

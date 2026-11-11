@@ -18,7 +18,7 @@ const htmlOf = async (name) => readFile(path.join(fixtures, name), "utf8");
 // edit request: the boot still resolves to view unless something explicit says edit.
 const OWNER = "isAdminOfCurrentResource=1";
 // A path only an editor's plan can name, so its entry lives in the supplement.
-const EDIT_ONLY = PLUGIN_PATHS.page.path;
+const EDIT_ONLY = PLUGIN_PATHS.blockeditor.path;
 const CEILING = 52992;
 
 let outdir;
@@ -90,11 +90,11 @@ afterAll(async () => {
 test("the bootstrap asks for the supplement only for an explicit ?editmode=true", async () => {
   const likelyEdit = predicateOf(await read("clay.js"));
 
-  expect(likelyEdit("?plugins=page", OWNER)).toBe(false);
-  expect(likelyEdit("?plugins=page&editmode=false", OWNER)).toBe(false);
-  expect(likelyEdit("?plugins=page", "")).toBe(false);
-  expect(likelyEdit("?plugins=page&editmode=true", OWNER)).toBe(true);
-  expect(likelyEdit("?plugins=page&editmode=true", "")).toBe(true);
+  expect(likelyEdit("?plugins=blockeditor", OWNER)).toBe(false);
+  expect(likelyEdit("?plugins=blockeditor&editmode=false", OWNER)).toBe(false);
+  expect(likelyEdit("?plugins=blockeditor", "")).toBe(false);
+  expect(likelyEdit("?plugins=blockeditor&editmode=true", OWNER)).toBe(true);
+  expect(likelyEdit("?plugins=blockeditor&editmode=true", "")).toBe(true);
 });
 
 // The reader's runtime: the main manifest, no supplement, and the cached fetch a
@@ -102,9 +102,9 @@ test("the bootstrap asks for the supplement only for an explicit ?editmode=true"
 test("an owner's view boot downloads the main manifest and no supplement", async () => {
   const code = await read("clay.js");
   for (const context of [
-    { search: "?plugins=page", cookie: OWNER },
-    { search: "?plugins=page&editmode=false", cookie: OWNER },
-    { search: "?plugins=page", cookie: "" },
+    { search: "?plugins=blockeditor", cookie: OWNER },
+    { search: "?plugins=blockeditor&editmode=false", cookie: OWNER },
+    { search: "?plugins=blockeditor", cookie: "" },
   ]) {
     const { chunks, clay } = await runBootstrap(code, { ...context, base: release() });
     const runtime = await chunks.runtime;
@@ -121,7 +121,7 @@ test("an owner's view boot downloads the main manifest and no supplement", async
 // The first entry after view, and every later one, share one fetch: the same promise,
 // the supplement's entries, and the edit-only path the main manifest does not hold.
 test("the first entry after view fetches the hint index once and every later one reuses it", async () => {
-  const { chunks } = await runBootstrap(await read("clay.js"), { search: "?plugins=page", cookie: OWNER, base: release() });
+  const { chunks } = await runBootstrap(await read("clay.js"), { search: "?plugins=blockeditor", cookie: OWNER, base: release() });
   const runtime = await chunks.runtime;
 
   const first = runtime.loadEditHints();
@@ -138,7 +138,7 @@ test("the first entry after view fetches the hint index once and every later one
 // fetch hands back that same index instead of requesting it again.
 test("an explicit edit's hint fetch reuses the supplement the bootstrap fetched", async () => {
   const { chunks } = await runBootstrap(await read("clay.js"), {
-    search: "?plugins=page&editmode=true",
+    search: "?plugins=blockeditor&editmode=true",
     cookie: OWNER,
     base: release(),
   });
@@ -157,7 +157,7 @@ test("a failed hint fetch leaves the release alone and is retried by the next en
   await writeFile(path.join(dir, "package.json"), '{ "type": "module" }\n');
   await cp(path.join(outdir, "m", built.manifest.runtime), path.join(dir, "m", built.manifest.runtime));
   const code = await read("clay.js");
-  const { chunks } = await runBootstrap(code, { search: "?plugins=page", cookie: OWNER, base: pathToFileURL(dir + path.sep).href });
+  const { chunks } = await runBootstrap(code, { search: "?plugins=blockeditor", cookie: OWNER, base: pathToFileURL(dir + path.sep).href });
   const runtime = await chunks.runtime;
 
   try {
@@ -178,7 +178,7 @@ test("the meter counts no supplement for an owner's view, default or explicit", 
   const html = await htmlOf("document.html");
   const measured = [];
 
-  for (const search of ["?plugins=page", "?plugins=page&editmode=false"]) {
+  for (const search of ["?plugins=blockeditor", "?plugins=blockeditor&editmode=false"]) {
     const view = await measureBuilt({ html, mode: "view", dir: outdir, search, owner: true });
     expect(paths(view)).not.toContain(`m/${built.manifest.edit}`);
     expect(view.js.requests).toBeGreaterThan(1);
@@ -199,8 +199,8 @@ test("the meter counts no supplement for an owner's view, default or explicit", 
 // in the stage beside the plan.
 test("the meter counts the supplement once for an initial explicit edit and once for a draft", async () => {
   const document = await htmlOf("document.html");
-  const edit = await measureBuilt({ html: document, mode: "edit", dir: outdir, search: "?plugins=page&editmode=true", owner: true });
-  const view = await measureBuilt({ html: document, mode: "view", dir: outdir, search: "?plugins=page&editmode=true", owner: true });
+  const edit = await measureBuilt({ html: document, mode: "edit", dir: outdir, search: "?plugins=blockeditor&editmode=true", owner: true });
+  const view = await measureBuilt({ html: document, mode: "view", dir: outdir, search: "?plugins=blockeditor&editmode=true", owner: true });
 
   expect(countOf(paths(edit), `m/${built.manifest.edit}`)).toBe(1);
   expect(edit.js.depth).toBe(3);
@@ -213,5 +213,5 @@ test("the meter counts the supplement once for an initial explicit edit and once
 
   // The same boot the predicate describes: an explicit edit asks early, so the
   // loader's hint fetch has nothing left to download.
-  expect(predicateOf(await read("clay.js"))("?plugins=page&editmode=true", OWNER)).toBe(true);
+  expect(predicateOf(await read("clay.js"))("?plugins=blockeditor&editmode=true", OWNER)).toBe(true);
 });

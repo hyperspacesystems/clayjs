@@ -52,7 +52,9 @@ describe('page blocks in a browser', () => {
     const body = [...mount.querySelectorAll('[data-id="b1"], [data-id="b2"]')];
     expect(body.length).to.equal(2);
     for (const el of body) expect(getComputedStyle(el).display).to.equal('none');
-    expect(mount.querySelector('[data-id="t"]').getAttribute('aria-expanded')).to.equal('false');
+    expect(mount.querySelector('[data-id="t"]').getAttribute('data-expanded')).to.equal('false');
+    expect(mount.querySelector('[data-id="t"]').hasAttribute('aria-expanded')).to.equal(false);
+    expect(mount.querySelector('button[data-toggle="t"]').getAttribute('aria-expanded')).to.equal('false');
   });
 
   it('ArrowDown and ArrowUp skip a closed body', async () => {
@@ -90,7 +92,7 @@ describe('page blocks in a browser', () => {
     setup();
     put(startOf('p', 2));
     const depth = pmHistory.undoDepth(view.state);
-    mount.querySelector('.page-toggle-button').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    mount.querySelector('.blockeditor-toggle-button').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     await settle();
     expect(view.state.doc.child(1).attrs.open).to.equal(true);
@@ -136,12 +138,12 @@ describe('page chrome in a browser', () => {
     setup();
     put(endOf('z'));
     await settle();
-    const plus = mount.querySelector('.page-plus');
+    const plus = mount.querySelector('.blockeditor-plus');
     const line = mount.querySelector('[data-id="z"]').getBoundingClientRect();
     const box = plus.getBoundingClientRect();
     expect(box.right).to.be.at.most(line.left);
     expect(Math.abs((box.top + box.bottom) / 2 - (line.top + Math.min(line.height, 30) / 2))).to.be.below(12);
-    const shell = mount.querySelector('.page-shell');
+    const shell = mount.querySelector('.blockeditor-shell');
     const rest = getComputedStyle(plus).color;
     shell.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
     expect(shell.classList.contains('is-moved')).to.equal(true);
@@ -156,12 +158,12 @@ describe('page chrome in a browser', () => {
     put(startOf('e'));
     await sendKeys({ type: '/' });
     await settle();
-    const menu = mount.querySelector('.page-menu');
+    const menu = mount.querySelector('.blockeditor-menu');
     expect(menu.hidden).to.equal(false);
-    expect(menu.querySelectorAll('.page-menu-item').length).to.be.above(7);
+    expect(menu.querySelectorAll('.blockeditor-menu-item').length).to.be.above(7);
     await sendKeys({ type: 'chec' });
     await settle();
-    expect([...menu.querySelectorAll('.page-menu-label')].map((l) => l.textContent)).to.deep.equal(['Checklist']);
+    expect([...menu.querySelectorAll('.blockeditor-menu-label')].map((l) => l.textContent)).to.deep.equal(['Checklist']);
     await press('Enter');
     const n = view.state.doc.child(1);
     expect([n.type.name, n.attrs.kind, n.textContent, n.attrs.id]).to.deep.equal(['list_item', 'check', '', 'e']);
@@ -174,7 +176,7 @@ describe('page chrome in a browser', () => {
     await sendKeys({ type: '/' });
     await settle();
     await press('Escape');
-    expect(mount.querySelector('.page-menu').hidden).to.equal(true);
+    expect(mount.querySelector('.blockeditor-menu').hidden).to.equal(true);
     expect(view.state.doc.child(0).textContent).to.equal('/');
   });
 
@@ -182,7 +184,7 @@ describe('page chrome in a browser', () => {
     setup();
     put(startOf('p', 0), startOf('p', 4));
     await settle();
-    const bubble = mount.querySelector('.page-bubble');
+    const bubble = mount.querySelector('.blockeditor-bubble');
     expect(bubble.hidden).to.equal(false);
     const line = mount.querySelector('[data-id="p"]').getBoundingClientRect();
     expect(bubble.getBoundingClientRect().bottom).to.be.at.most(line.top + 2);
@@ -209,19 +211,19 @@ describe('page chrome in a browser', () => {
       put(endOf('z'));
       await settle();
       expect(document.documentElement.scrollWidth).to.be.at.most(390);
-      mount.querySelector('.page-plus').click();
+      mount.querySelector('.blockeditor-plus').click();
       await settle();
-      const menu = mount.querySelector('.page-menu');
+      const menu = mount.querySelector('.blockeditor-menu');
       expect(menu.hidden).to.equal(false);
       const r = menu.getBoundingClientRect();
-      const bar = mount.querySelector('.page-dock').getBoundingClientRect();
+      const bar = mount.querySelector('.blockeditor-dock').getBoundingClientRect();
       expect(r.top).to.be.at.least(0);
       expect(r.left).to.be.at.least(0);
       expect(r.right).to.be.at.most(390);
       expect(r.bottom).to.be.at.most(800);
       expect(r.bottom).to.be.at.most(bar.top);
       expect(document.documentElement.scrollWidth).to.be.at.most(390);
-      for (const row of menu.querySelectorAll('.page-menu-item')) expect(row.getBoundingClientRect().height).to.be.at.least(44);
+      for (const row of menu.querySelectorAll('.blockeditor-menu-item')) expect(row.getBoundingClientRect().height).to.be.at.least(44);
     } finally {
       await setViewport({ width: 800, height: 600 });
     }

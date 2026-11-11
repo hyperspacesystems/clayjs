@@ -221,7 +221,7 @@ export const blockSelKeys = {
   "Mod-a": selectAllBlocks,
 };
 
-export const blockSelKey = new PluginKey("page-blocksel");
+export const blockSelKey = new PluginKey("blockeditor-blocksel");
 
 const countOf = (st) => {
   const sel = st.selection;
@@ -245,7 +245,7 @@ export function blockSelectionPlugin() {
         if (!(sel instanceof BlockSelection)) return null;
         const decos = [];
         st.doc.nodesBetween(sel.from, sel.to, (n, pos) => {
-          decos.push(pmView.Decoration.node(pos, pos + n.nodeSize, { class: "page-block-selected" }));
+          decos.push(pmView.Decoration.node(pos, pos + n.nodeSize, { class: "blockeditor-block-selected" }));
           return false;
         });
         return pmView.DecorationSet.create(st.doc, decos);

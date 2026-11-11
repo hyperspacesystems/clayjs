@@ -6,7 +6,7 @@ import { entriesOf } from '../../page/ybind/parts.js';
 import { rangesOf, within, docRanges } from '../../page/ybind/containment.js';
 
 /**
- * The D13 page-room conformance fixture: a seeded run of several tabs, restarts,
+ * The D13 blockeditor-room conformance fixture: a seeded run of several tabs, restarts,
  * resets and legacy file writes over one page room, driven through an adapter
  * that stands in for a host's wiring of the room. Every run throws with the seed
  * and the invariant it broke. The module reads no files: the caller passes the
@@ -39,14 +39,14 @@ import { rangesOf, within, docRanges } from '../../page/ybind/containment.js';
  *
  *   readState({ key, tabId, capable })
  *     The JSON the client receives for a state read: { epoch, seq, writer,
- *     stores: { page: { value, ... }, ... }, ... }, with the page store's value
+ *     stores: { blockeditor: { value, ... }, ... }, ... }, with the page store's value
  *     as the client's re-read carries it. `tabId` is the reading client (null for
  *     a broadcast's read) and `capable` says whether it advertises the page
  *     compaction capability (default true). Answers { status: 404, body: null }
  *     when the host has no room for key.
  *
  *   apply({ key, tabId, frame })
- *     Apply one frame { name, n, epoch, pageGeneration, compaction, ops } from
+ *     Apply one frame { name, n, epoch, blockeditorGeneration, compaction, ops } from
  *     tabId, atomically. Answer { status: 200, body: { duplicate, seq, epoch, ... } }
  *     when the host took it, { status, body: { error, ... } } with the host's
  *     status for a refusal (the error code and any retryAfter), or
@@ -82,7 +82,7 @@ import { rangesOf, within, docRanges } from '../../page/ybind/containment.js';
  */
 
 const NET = 'net';
-const TAG = /merge="page" clay="live"(?: live-at="[^"]*")?>(.*?)<\/script>/;
+const TAG = /merge="blockeditor" clay="live"(?: live-at="[^"]*")?>(.*?)<\/script>/;
 
 function rng(seed) {
   let s = seed >>> 0 || 1;
@@ -167,7 +167,7 @@ export function createRoomsAdapter({ now = null, newEpoch = null, compaction = n
         body: {
           reported: rooms.used(),
           receiptBytes: target.receiptBytes ?? 0,
-          transitionBytes: target.pageTransition?.bytes ?? 0,
+          transitionBytes: target.blockeditorTransition?.bytes ?? 0,
           reservedBytes: target.compaction?.job?.reserved ?? 0,
           stores,
         },
@@ -206,7 +206,7 @@ export function runPageRoomConformance({ adapter, template, seed = 1, steps = 40
   const r = rng(seed);
   const pick = (n) => Math.floor(r() * n);
   const limits = { activeBytes, loose: adapter.limits.loose, soft: adapter.limits.soft, leaseMs: adapter.limits.leaseMs, tailFloor };
-  const htmlOf = (value, at = null) => template.replace(TAG, () => `merge="page" clay="live"${at ? ` live-at="${at}"` : ''}>${JSON.stringify(value)}</script>`);
+  const htmlOf = (value, at = null) => template.replace(TAG, () => `merge="blockeditor" clay="live"${at ? ` live-at="${at}"` : ''}>${JSON.stringify(value)}</script>`);
   const fail = (message, extra = {}) => { throw Object.assign(new Error(`seed ${seed}: ${message}`), extra); };
   const dueSet = new Set();
   adapter.onCompactionDue(({ key, overflow }) => { if (key === KEY) dueSet.add({ key, overflow }); });
@@ -218,7 +218,7 @@ export function runPageRoomConformance({ adapter, template, seed = 1, steps = 40
     if (answer.status !== 200) fail(`state read refused with ${answer.status}`);
     return answer.body;
   };
-  const page = () => state().stores.page.value;
+  const page = () => state().stores.blockeditor.value;
   const usage = () => {
     const answer = adapter.usage({ key: KEY });
     if (answer.status !== 200) fail(`usage read refused with ${answer.status}`);
@@ -246,7 +246,7 @@ export function runPageRoomConformance({ adapter, template, seed = 1, steps = 40
 
   const check = (where) => {
     const u = usage();
-    const bytes = u.stores.page.bytes;
+    const bytes = u.stores.blockeditor.bytes;
     const shape = pageShape(page().y, limits);
     stats.maxLoose = Math.max(stats.maxLoose, shape.loose);
     stats.maxBytes = Math.max(stats.maxBytes, bytes);
@@ -291,12 +291,12 @@ export function runPageRoomConformance({ adapter, template, seed = 1, steps = 40
     const out = adapter.fileWritten({ key: KEY, html: htmlOf(file, at) });
     legacy.writes++;
     const after = state();
-    if (!after.stores.page) fail('a merge dropped the page store');
-    const y = after.stores.page.value.y;
+    if (!after.stores.blockeditor) fail('a merge dropped the page store');
+    const y = after.stores.blockeditor.value.y;
     if (keysBefore.some((k) => !(k in y) || y[k] !== valueBefore.y[k])) fail('a file merge deleted or changed a room key');
     if (!contains([update])) fail('a file merge lost the legacy edit');
     if (out.body?.valueChanged) legacy.merged++;
-    if (out.body?.landed?.includes('page')) stats.landed++;
+    if (out.body?.landed?.includes('blockeditor')) stats.landed++;
     admitted.push(update);
     const u = usage();
     if (u.reported !== held(u)) fail('budget after merge');
@@ -330,13 +330,13 @@ export function runPageRoomConformance({ adapter, template, seed = 1, steps = 40
     const before = serializeLive(page());
     const seqBefore = state().seq;
     const now = state();
-    const answer = adapter.apply({ key: KEY, tabId: t.id, frame: { name: 'page', n: f.n, epoch: now.epoch, pageGeneration: now.pageTransition?.id ?? null, compaction: 1, ops: [{ op: 'set', path: ['y', f.key], value: f.value }] } });
+    const answer = adapter.apply({ key: KEY, tabId: t.id, frame: { name: 'blockeditor', n: f.n, epoch: now.epoch, blockeditorGeneration: now.blockeditorTransition?.id ?? null, compaction: 1, ops: [{ op: 'set', path: ['y', f.key], value: f.value }] } });
     const body = answer.body ?? {};
     if (body.error) {
       if (serializeLive(page()) !== before || state().seq !== seqBefore) fail(`refusal ${body.error} changed the room`);
       stats.unchangedRefusals++;
       if (body.error === 'checkpoint-required') { stats.refusedRetry++; return; }
-      if (body.error === 'page-full') { stats.capacity++; t.blocked = true; return; }
+      if (body.error === 'blockeditor-full') { stats.capacity++; t.blocked = true; return; }
       fail(`unexpected refusal ${body.error}`);
     }
     if (body.stale) { t.inflight = null; return; }
@@ -455,7 +455,7 @@ export function runPageRoomConformance({ adapter, template, seed = 1, steps = 40
     roomDoc.destroy();
   }
   const end = page();
-  const out = { seed, ...stats, legacyWrites: legacy.writes, legacyMerged: legacy.merged, blocked: blocked.length, end: { bytes: usage().stores.page.bytes, ...pageShape(end.y, limits) } };
+  const out = { seed, ...stats, legacyWrites: legacy.writes, legacyMerged: legacy.merged, blocked: blocked.length, end: { bytes: usage().stores.blockeditor.bytes, ...pageShape(end.y, limits) } };
   if (log) console.log(JSON.stringify(out));
   return out;
 }

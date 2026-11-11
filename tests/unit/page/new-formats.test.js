@@ -16,7 +16,7 @@ import { toastText } from "../helpers/editor-ui.js";
  */
 
 const UPGRADE = "This document uses a newer page format; update the editor in the other tabs to keep writing";
-const MESSAGE = { message: UPGRADE, required: 1, minimum: 1, code: "page-format-upgrade-required" };
+const MESSAGE = { message: UPGRADE, required: 1, minimum: 1, code: "blockeditor-format-upgrade-required" };
 
 function gate({ refuse = false } = {}) {
   const calls = [];
@@ -73,8 +73,8 @@ const descriptors = (view, id) => {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 const pinned = (view) => { view.coordsAtPos = () => ({ left: 40, right: 48, top: 100, bottom: 120 }); return view; };
 const part = (view, selector) => view.dom.parentElement.querySelector(selector);
-const row = (view, label) => [...part(view, ".page-menu").querySelectorAll(".page-menu-item")]
-  .find((item) => item.querySelector(".page-menu-label").textContent === label);
+const row = (view, label) => [...part(view, ".blockeditor-menu").querySelectorAll(".blockeditor-menu-item")]
+  .find((item) => item.querySelector(".blockeditor-menu-label").textContent === label);
 const wholeLine = (view, id) => {
   const node = nodeOf(view, id);
   select(view, posOf(view, id), posOf(view, id) + node.content.size);
@@ -105,7 +105,7 @@ test("a refused floor activation writes no descriptor and leaves the document al
   expect(g.calls).toHaveLength(1);
   expect(view.state.doc.eq(before)).toBe(true);
   expect(keyOf(view, "a")).toBe("");
-  expect(part(view, ".page-live").textContent).toBe(UPGRADE);
+  expect(part(view, ".blockeditor-live").textContent).toBe(UPGRADE);
   expect(await toastSaying(UPGRADE)).toBe(true);
 });
 
@@ -131,10 +131,10 @@ test("text color takes only the fixed palette and reset takes it off again", asy
   const { view, gate: g } = opened([["a", "paragraph", "color me"]]);
   wholeLine(view, "a");
   pinned(view);
-  part(view, ".page-tool-more").click();
+  part(view, ".blockeditor-tool-more").click();
   row(view, "Text color").click();
   await settle();
-  expect([...part(view, ".page-menu").querySelectorAll(".page-menu-label")].map((x) => x.textContent))
+  expect([...part(view, ".blockeditor-menu").querySelectorAll(".blockeditor-menu-label")].map((x) => x.textContent))
     .toEqual([...PALETTE.map((color) => `Text: ${color[0].toUpperCase()}${color.slice(1)}`), "Automatic"]);
   row(view, "Text: Red").click();
   await settle();
@@ -217,7 +217,7 @@ test("the block menu turns a line into a quote through the gate", async () => {
   const { view, gate: g } = opened([["a", "paragraph", "read this"]]);
   pinned(view);
   select(view, posOf(view, "a") + 2);
-  part(view, ".page-tool-turn").click();
+  part(view, ".blockeditor-tool-turn").click();
   row(view, "Quote").click();
   await settle();
   expect(g.calls).toHaveLength(1);
@@ -230,12 +230,12 @@ test("a refused quote leaves the paragraph as it was", async () => {
   const before = view.state.doc;
   pinned(view);
   select(view, posOf(view, "a") + 2);
-  part(view, ".page-tool-turn").click();
+  part(view, ".blockeditor-tool-turn").click();
   row(view, "Quote").click();
   await settle();
   expect(view.state.doc.eq(before)).toBe(true);
   expect(quoteOf(view, "a")).toBe("paragraph");
-  expect(part(view, ".page-live").textContent).toBe(UPGRADE);
+  expect(part(view, ".blockeditor-live").textContent).toBe(UPGRADE);
   expect(await toastSaying(UPGRADE)).toBe(true);
 });
 
@@ -339,11 +339,11 @@ test("the More menu keeps the phone's four controls and puts the formats behind 
   try {
     const { view, gate: g } = opened([["a", "paragraph", "under me"]]);
     pinned(view);
-    const primary = [...view.dom.parentElement.querySelectorAll(".page-dock .page-tool-primary")].map((b) => b.getAttribute("aria-label"));
+    const primary = [...view.dom.parentElement.querySelectorAll(".blockeditor-dock .blockeditor-tool-primary")].map((b) => b.getAttribute("aria-label"));
     expect(primary).toEqual(["Bold", "Italic", "Link", "More"]);
 
     wholeLine(view, "a");
-    part(view, ".page-tool-more").click();
+    part(view, ".blockeditor-tool-more").click();
     expect(["Underline", "Text color", "Highlight"].every((label) => row(view, label) !== undefined)).toBe(true);
     row(view, "Underline").click();
     await settle();
@@ -367,7 +367,7 @@ test("the article renders the four formats as u, mark and blockquote and reads t
   ];
   const html = renderModel(model);
   expect(html).toBe('<p data-id="a"><span data-color="red"><u>red and under</u></span><u>lined</u></p>\n<blockquote data-id="b"><mark data-color="blue">marked</mark></blockquote>');
-  const parsed = parseModel(new DOMParser().parseFromString(`<article data-page="1">${html}</article>`, "text/html").querySelector("article"));
+  const parsed = parseModel(new DOMParser().parseFromString(`<article data-blockeditor="1">${html}</article>`, "text/html").querySelector("article"));
   expect(revOf(parsed)).toBe(revOf(model));
   expect(renderModel(parsed)).toBe(html);
 });

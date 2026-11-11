@@ -303,7 +303,7 @@ export function createToolTargets({
         tables: () => tablesFromDoc(view.state.doc).map(({ id, cols, rows }) => ({ id, cols, rows })),
       });
       const dom = view.dom.ownerDocument.createElement("div");
-      dom.className = "page-ai-preview";
+      dom.className = "blockeditor-ai-preview";
       let mounted = null;
       try {
         mounted = host.mount(dom, { id: "preview", rev: "preview", artifact: candidate.artifact, seed: candidate.state });

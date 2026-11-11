@@ -5,7 +5,7 @@ import { PAGE_FORMAT, PAGE_FORMAT_HEADER } from "../core/page-format.js";
 // one POST per frame of ops, one GET for the room's whole state. Both name the
 // document with Document-URL, as the sync relay and presence do, and both declare
 // the page format this client writes: registration, operation and checkpoint are
-// page-writing paths, so each one carries the capability the floor decides on.
+// blockeditor-writing paths, so each one carries the capability the floor decides on.
 
 const DATA_PATH = "/_/sync/data";
 

@@ -1,4 +1,4 @@
-// The reader half of plugins=page. A Document opened in view mode follows saved
+// The reader half of plugins=blockeditor. A Document opened in view mode follows saved
 // files through the receive-only saved transport (sync/saved-stream.js): the reader
 // opens that transport itself and mounts the article's tools from what the host
 // served before the stream says anything, so a host that cannot stream (static,
@@ -30,7 +30,7 @@ export let ready = null;
 // not `ready`, for the file.
 export let acquired = null;
 
-const oneArticle = () => document.querySelectorAll("article[data-page]").length === 1;
+const oneArticle = () => document.querySelectorAll("article[data-blockeditor]").length === 1;
 
 // The reader reports what it applied on `clay:reader-status`; the first file is the
 // first applied one, and a blocked or recoverable first read settles with null while

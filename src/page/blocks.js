@@ -22,8 +22,8 @@ const parentOf = (n) => n.attrs.parent ?? null;
 // Move, Tab and Shift-Tab are each their own undo step: the transaction closes
 // the history group before it, and carries STEP so the editor closes the group
 // after it too (createPageEditor).
-export const STEP = "page-step";
-export const MOVE = "page-move";
+export const STEP = "blockeditor-step";
+export const MOVE = "blockeditor-move";
 const asStep = (dispatch) => dispatch && ((tr) => dispatch(history.closeHistory(tr).setMeta(STEP, true)));
 
 // ---- the outline ------------------------------------------------------------
@@ -223,7 +223,7 @@ export class BlockSelection extends Selection {
     return other instanceof BlockSelection && other.anchor === this.anchor && other.head === this.head;
   }
   toJSON() {
-    return { type: "page-block", anchor: this.anchor, head: this.head };
+    return { type: "blockeditor-block", anchor: this.anchor, head: this.head };
   }
   static fromJSON(doc, json) {
     return new BlockSelection(doc.resolve(json.anchor), doc.resolve(json.head));
@@ -237,7 +237,7 @@ export class BlockSelection extends Selection {
   }
 }
 BlockSelection.prototype.visible = false;
-Selection.jsonID("page-block", BlockSelection);
+Selection.jsonID("blockeditor-block", BlockSelection);
 
 class BlockBookmark {
   constructor(anchor, head, span) { this.anchor = anchor; this.head = head; this.span = span; }
@@ -657,7 +657,7 @@ export function backspaceBodyBlock(st, dispatch) {
 // A reveal is edit-mode state, never a document attribute: the toggle ids a followed link
 // opened live in the collapse plugin's own state, so nothing is saved, no undo step is
 // made and no peer is told.
-export const REVEAL = "page-reveal";
+export const REVEAL = "blockeditor-reveal";
 
 export function revealToggles(tr, ids) {
   return ids.length ? tr.setMeta(REVEAL, { add: ids }) : tr;
@@ -765,7 +765,7 @@ export function orderedMarkers(ents) {
 
 // ---- the collapse plugin ----------------------------------------------------
 
-export const collapseKey = new PluginKey("page-collapse");
+export const collapseKey = new PluginKey("blockeditor-collapse");
 
 const STRUCTURAL = ["id", "parent", "indent", "kind", "open"];
 
@@ -812,10 +812,10 @@ export function decorationsFor(doc, ents = outline(doc)) {
   const local = [], children = [];
   for (const e of ents) {
     const attrs = {};
-    if (e.hidden) { attrs.class = "page-hidden"; attrs["aria-hidden"] = "true"; }
-    if (e.depth) attrs.style = `--page-depth:${e.depth}`;
+    if (e.hidden) { attrs.class = "blockeditor-hidden"; attrs["aria-hidden"] = "true"; }
+    if (e.depth) attrs.style = `--blockeditor-depth:${e.depth}`;
     if (markers.has(e.i)) attrs["data-marker"] = markers.get(e.i);
-    if (isToggle(e.node)) attrs["aria-expanded"] = e.open ? "true" : "false";
+    if (isToggle(e.node)) attrs["data-expanded"] = e.open ? "true" : "false";
     if (Object.keys(attrs).length) local.push(Decoration.node(e.at, e.end, attrs));
     if (isToggle(e.node) && !e.hidden) {
       const widget = Decoration.widget(0, () => disclosure(e.node, e.open), { side: -1, ignoreSelection: true, key: `t:${e.node.attrs.id}:${e.open}` });
@@ -829,9 +829,10 @@ export function decorationsFor(doc, ents = outline(doc)) {
 function disclosure(node, open = node.attrs.open) {
   const b = document.createElement("button");
   b.type = "button";
-  b.className = "page-toggle-button";
+  b.className = "blockeditor-toggle-button";
   b.contentEditable = "false";
   b.setAttribute("aria-label", open ? "Collapse" : "Expand");
+  b.setAttribute("aria-expanded", open ? "true" : "false");
   b.setAttribute("data-toggle", node.attrs.id || "");
   return b;
 }
@@ -867,7 +868,7 @@ export function collapsePlugin() {
       decorations: (s) => collapseKey.getState(s).decos,
       handleDOMEvents: {
         mousedown: (view, event) => {
-          const btn = event.target.closest?.(".page-toggle-button");
+          const btn = event.target.closest?.(".blockeditor-toggle-button");
           if (btn) {
             event.preventDefault();
             const ents = outline(view.state.doc);
@@ -969,9 +970,9 @@ function listKind(li) {
 }
 
 // Rewrites pasted HTML so every list item, at any nesting, is one flat
-// <div data-page-li> carrying kind, indent and checked, and every <details> is
-// a <div data-page-toggle> followed by its body, each top-level body block
-// marked with data-page-parent naming a temporary toggle key. Indent comes from
+// <div data-blockeditor-li> carrying kind, indent and checked, and every <details> is
+// a <div data-blockeditor-toggle> followed by its body, each top-level body block
+// marked with data-blockeditor-parent naming a temporary toggle key. Indent comes from
 // aria-level when present (Google Docs), otherwise from the number of list
 // ancestors (Notion, markdown renderers, GitHub), and is made relative to the
 // shallowest item pasted.
@@ -994,11 +995,11 @@ export function flattenPastedHTML(html, doc = globalThis.document) {
   function emitLi(li, parentKey, target) {
     const div = doc.createElement("div");
     const { check, checked } = checkState(li);
-    div.setAttribute("data-page-li", "");
+    div.setAttribute("data-blockeditor-li", "");
     div.setAttribute("data-kind", check ? "check" : listKind(li));
     div.setAttribute("data-checked", checked ? "true" : "false");
     div.dataset.depth = String(listDepth(li));
-    if (parentKey) div.setAttribute("data-page-parent", parentKey);
+    if (parentKey) div.setAttribute("data-blockeditor-parent", parentKey);
     let first = true;
     const rest = [];
     for (const child of [...li.childNodes]) {
@@ -1025,7 +1026,7 @@ export function flattenPastedHTML(html, doc = globalThis.document) {
     const inline = (n) => {
       if (!line) {
         line = doc.createElement("p");
-        if (parentKey) line.setAttribute("data-page-parent", parentKey);
+        if (parentKey) line.setAttribute("data-blockeditor-parent", parentKey);
         target.appendChild(line);
       }
       line.appendChild(n);
@@ -1045,9 +1046,9 @@ export function flattenPastedHTML(html, doc = globalThis.document) {
         const k = `paste-${++key}`;
         const summary = child.querySelector(":scope > summary");
         const t = doc.createElement("div");
-        t.setAttribute("data-page-toggle", k);
+        t.setAttribute("data-blockeditor-toggle", k);
         if (child.hasAttribute("open")) t.setAttribute("data-open", "true");
-        if (parentKey) t.setAttribute("data-page-parent", parentKey);
+        if (parentKey) t.setAttribute("data-blockeditor-parent", parentKey);
         // A toggle heading saves as a heading in its summary: keep the level, paste its text.
         const head = summary?.querySelector(":scope > h1, :scope > h2, :scope > h3");
         if (head) {
@@ -1058,8 +1059,8 @@ export function flattenPastedHTML(html, doc = globalThis.document) {
         for (const c of [...child.childNodes]) if (c !== summary) { const box = doc.createElement("div"); box.appendChild(c); walk(box, k, target); }
         continue;
       }
-      if (child.tagName === "DIV" && !child.hasAttribute("data-page-li") && [...child.children].some((c) => BLOCK_TAGS.has(c.tagName))) { walk(child, parentKey, target); continue; }
-      if (parentKey) child.setAttribute("data-page-parent", parentKey);
+      if (child.tagName === "DIV" && !child.hasAttribute("data-blockeditor-li") && [...child.children].some((c) => BLOCK_TAGS.has(c.tagName))) { walk(child, parentKey, target); continue; }
+      if (parentKey) child.setAttribute("data-blockeditor-parent", parentKey);
       target.appendChild(child);
     }
   }
@@ -1088,10 +1089,10 @@ export function flattenPastedHTML(html, doc = globalThis.document) {
     return parts;
   };
   for (const child of [...out.children]) {
-    if (!child.matches("p, h1, h2, h3, h4, h5, h6, aside, div[data-page-li], div.page-li") || !child.querySelector("img")) continue;
+    if (!child.matches("p, h1, h2, h3, h4, h5, h6, aside, div[data-blockeditor-li], div.blockeditor-li") || !child.querySelector("img")) continue;
     const pieces = splitImages(child);
-    const parent = child.getAttribute("data-page-parent");
-    if (parent) for (const piece of pieces) piece.setAttribute("data-page-parent", parent);
+    const parent = child.getAttribute("data-blockeditor-parent");
+    if (parent) for (const piece of pieces) piece.setAttribute("data-blockeditor-parent", parent);
     child.replaceWith(...pieces);
   }
   const sliced = root.querySelector("[data-pm-slice]");
@@ -1100,7 +1101,7 @@ export function flattenPastedHTML(html, doc = globalThis.document) {
 }
 
 const numberAttr = (value, min = 0) => value !== null && value !== "" && Number.isInteger(+value) && +value >= min ? +value : null;
-const parentAttr = (dom) => dom.getAttribute("data-page-parent") || null;
+const parentAttr = (dom) => dom.getAttribute("data-blockeditor-parent") || null;
 
 // A copied opaque mark is not one of the schema's marks, so the rules of the
 // clipboard parser resolve mark names through a view of the schema that holds
@@ -1142,17 +1143,17 @@ export const clipboardParser = new model.DOMParser(parseSchema, [
   { tag: "table", node: "table", getAttrs: (d) => shape?.table(d) ?? false, getContent: (d) => shape.rows(d) },
   { tag: `div[${OPAQUE}]`, node: "opaque_block", getAttrs: pastedOpaque, getContent: pastedOpaqueContent },
   { tag: `span[${MARKS}]`, mark: OPAQUE_MARK, getAttrs: pastedOpaqueMarks },
-  { tag: "div[data-page-li]", node: "list_item", getAttrs: (d) => ({ kind: d.getAttribute("data-kind") || "bullet", indent: +d.getAttribute("data-indent") || 0, checked: d.getAttribute("data-checked") === "true", parent: parentAttr(d) }) },
-  { tag: "div.page-li", node: "list_item", getAttrs: (d) => ({ kind: d.getAttribute("data-kind") || "bullet", indent: +d.getAttribute("data-indent") || 0, checked: d.getAttribute("data-checked") === "true", parent: parentAttr(d) }) },
-  { tag: "div[data-page-toggle]", node: "toggle", getAttrs: (d) => ({ id: d.getAttribute("data-page-toggle"), open: d.getAttribute("data-open") === "true", parent: parentAttr(d), level: toggleLevel(Number(d.getAttribute("data-level"))) }) },
-  { tag: "div.page-toggle", node: "toggle", getAttrs: (d) => ({ id: d.getAttribute("data-id"), open: d.getAttribute("data-open") === "true", parent: null, level: toggleLevel(Number(d.getAttribute("data-level"))) }) },
+  { tag: "div[data-blockeditor-li]", node: "list_item", getAttrs: (d) => ({ kind: d.getAttribute("data-kind") || "bullet", indent: +d.getAttribute("data-indent") || 0, checked: d.getAttribute("data-checked") === "true", parent: parentAttr(d) }) },
+  { tag: "div.blockeditor-li", node: "list_item", getAttrs: (d) => ({ kind: d.getAttribute("data-kind") || "bullet", indent: +d.getAttribute("data-indent") || 0, checked: d.getAttribute("data-checked") === "true", parent: parentAttr(d) }) },
+  { tag: "div[data-blockeditor-toggle]", node: "toggle", getAttrs: (d) => ({ id: d.getAttribute("data-blockeditor-toggle"), open: d.getAttribute("data-open") === "true", parent: parentAttr(d), level: toggleLevel(Number(d.getAttribute("data-level"))) }) },
+  { tag: "div.blockeditor-toggle", node: "toggle", getAttrs: (d) => ({ id: d.getAttribute("data-id"), open: d.getAttribute("data-open") === "true", parent: null, level: toggleLevel(Number(d.getAttribute("data-level"))) }) },
   { tag: "h1", node: "heading", getAttrs: (d) => ({ level: 1, parent: parentAttr(d) }) },
   { tag: "h2", node: "heading", getAttrs: (d) => ({ level: 2, parent: parentAttr(d) }) },
   { tag: "h3", node: "heading", getAttrs: (d) => ({ level: 3, parent: parentAttr(d) }) },
   { tag: "h4", node: "heading", getAttrs: (d) => ({ level: 3, parent: parentAttr(d) }) },
   { tag: "pre", node: "code_block", preserveWhitespace: "full", getAttrs: (d) => ({ lang: d.getAttribute("data-lang") || "", parent: parentAttr(d) }) },
   { tag: "hr", node: "divider", getAttrs: (d) => ({ parent: parentAttr(d) }) },
-  { tag: "aside.page-callout", node: "callout", getAttrs: (d) => ({ parent: parentAttr(d) }) },
+  { tag: "aside.blockeditor-callout", node: "callout", getAttrs: (d) => ({ parent: parentAttr(d) }) },
   { tag: 'figure:not([data-type]), figure[data-type="image"]', node: "image", getAttrs: (d) => {
     const img = d.querySelector("img"), src = safeSrc(img?.getAttribute("src"));
     return src ? { src, alt: img.getAttribute("alt") || "", caption: d.querySelector("figcaption")?.textContent || "", width: numberAttr(d.getAttribute("data-width") ?? img.getAttribute("width"), 1), align: alignOf(d.getAttribute("data-align")), parent: parentAttr(d) } : false;
@@ -1161,7 +1162,7 @@ export const clipboardParser = new model.DOMParser(parseSchema, [
     const src = safeSrc(d.getAttribute("src"));
     return src ? { src, alt: d.getAttribute("alt") || "", width: numberAttr(d.getAttribute("width"), 1), parent: parentAttr(d) } : false;
   } },
-  { tag: 'div.page-file, div[data-type="file"]', node: "file", getAttrs: (d) => {
+  { tag: 'div.blockeditor-file, div[data-type="file"]', node: "file", getAttrs: (d) => {
     const src = safeHref(d.getAttribute("data-src"));
     return src ? { src, name: d.getAttribute("data-name") || "file", size: numberAttr(d.getAttribute("data-size")), mime: d.getAttribute("data-mime") || null, parent: parentAttr(d) } : false;
   } },
@@ -1217,7 +1218,7 @@ export function remapPasted(slice, st) {
 }
 
 // The clipboard serializer: the schema's toDOM, plus each copied block's
-// owner (data-page-parent) and each toggle's id (data-page-toggle), so a copied
+// owner (data-blockeditor-parent) and each toggle's id (data-blockeditor-toggle), so a copied
 // toggle pastes with its body still inside it.
 class ClipboardSerializer extends model.DOMSerializer {
   serializeFragment(fragment, options, target) {
@@ -1227,8 +1228,8 @@ class ClipboardSerializer extends model.DOMSerializer {
     fragment.forEach((n, _, i) => {
       const dom = doms[i];
       if (!dom || dom.nodeType !== 1) return;
-      if (parentOf(n) !== null) dom.setAttribute("data-page-parent", parentOf(n));
-      if (isToggle(n) && n.attrs.id) dom.setAttribute("data-page-toggle", n.attrs.id);
+      if (parentOf(n) !== null) dom.setAttribute("data-blockeditor-parent", parentOf(n));
+      if (isToggle(n) && n.attrs.id) dom.setAttribute("data-blockeditor-toggle", n.attrs.id);
       if (n.type === N.image && n.attrs.width) dom.setAttribute("data-width", String(n.attrs.width));
     });
     shape?.copy(fragment, doms);

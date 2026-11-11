@@ -9,11 +9,11 @@ test.each(['Table','Board'])('a plus beside B inserts %s at B even with the care
   select(view,posOf(view,'a'));
   view.dom.parentElement.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:300,clientY:32}));
   await frame();
-  part(view,'.page-plus').click();
+  part(view,'.blockeditor-plus').click();
   const chrome=view.pluginViews.find(p=>p.menuEl);
   const anchorId=chrome.menu.anchorId;
   expect(anchorId).toBe('b');
-  const row=[...chrome.menuEl.querySelectorAll('.page-menu-item')].find(r=>r.querySelector('.page-menu-label').textContent===label);
+  const row=[...chrome.menuEl.querySelectorAll('.blockeditor-menu-item')].find(r=>r.querySelector('.blockeditor-menu-label').textContent===label);
   row.click();
   const order=[]; view.state.doc.forEach(n=>order.push(n.attrs.id==='a'||n.attrs.id==='b'||n.attrs.id==='c'?n.attrs.id:n.type.name));
   expect(order.indexOf(label.toLowerCase())).toBeGreaterThan(order.indexOf('b'));

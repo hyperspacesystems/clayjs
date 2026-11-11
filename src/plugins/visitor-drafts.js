@@ -66,11 +66,11 @@ if (isDraftMode && slot && rulesTag) {
     // Read before adopting: adopting reads the record as this tab's own.
     const unit = store.externalUnit();
     // A page another tab wrote goes to the page editor, which merges it into its own.
-    if (unit) document.dispatchEvent(new CustomEvent("clay:drafts-page-external", { detail: { live: unit.live, adopted: () => store.adoptedUnit(unit) } }));
+    if (unit) document.dispatchEvent(new CustomEvent("clay:drafts-blockeditor-external", { detail: { live: unit.live, adopted: () => store.adoptedUnit(unit) } }));
     store.adoptExternal();
   };
   window.addEventListener("storage", (event) => { if (event.key === store.key) takeOtherTab(); });
-  document.addEventListener("clay:drafts-page-listening", takeOtherTab);
+  document.addEventListener("clay:drafts-blockeditor-listening", takeOtherTab);
   window.addEventListener("pageshow", (event) => { if (event.persisted) takeOtherTab(); });
   const flush = () => store.flush();
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });

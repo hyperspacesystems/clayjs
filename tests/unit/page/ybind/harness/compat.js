@@ -12,11 +12,11 @@ const toY = (init) => (init && init.y ? init : seedValue(ordered(init).map(([id,
 export const initial = (c) => ({ blocks: { p: { t: "paragraph", pos: "M", c }, q: { t: "paragraph", pos: "V", c: "" } }, deleted: {} });
 
 export function createRoom(sim, stores, opts) {
-  return globalThis.__room = baseRoom(sim, Object.fromEntries(Object.entries(stores).map(([k, v]) => [k, k === "page" ? toY(v) : v])), opts);
+  return globalThis.__room = baseRoom(sim, Object.fromEntries(Object.entries(stores).map(([k, v]) => [k, k === "blockeditor" ? toY(v) : v])), opts);
 }
 
 export function legacy(room) {
-  const value = room.stores.get("page").value;
+  const value = room.stores.get("blockeditor").value;
   const doc = docOfValue(value);
   const blocks = {};
   let i = 0;

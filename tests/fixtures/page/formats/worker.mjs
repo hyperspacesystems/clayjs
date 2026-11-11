@@ -110,14 +110,14 @@ const canon = (value) =>
 // re-derived on open; everything else in its record is the content a cohort has
 // to keep.
 const withoutBookkeeping = ({ pos, id, ...rest }) => rest;
-const marker = (floor) => (floor > 0 ? `<meta name="clay-page-format" content="${floor}">` : "");
+const marker = (floor) => (floor > 0 ? `<meta name="clay-blockeditor-format" content="${floor}">` : "");
 const pageTag = (value) =>
-  `<script type="application/json" merge="page" clay="live">${JSON.stringify(value).replace(/</g, "\\u003c")}</script>`;
+  `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value).replace(/</g, "\\u003c")}</script>`;
 const fileOf = (inner, rev, value, floor) =>
-  `<!doctype html>\n<html>\n<head>${marker(floor)}<title>A page</title></head>\n<body>\n<article data-page="1" data-rev="${rev}">${inner}</article>\n${pageTag(value)}\n</body>\n</html>`;
+  `<!doctype html>\n<html>\n<head>${marker(floor)}<title>A page</title></head>\n<body>\n<article data-blockeditor="1" data-rev="${rev}">${inner}</article>\n${pageTag(value)}\n</body>\n</html>`;
 const articleOf = (inner, rev) => {
   const article = globalThis.document.createElement("article");
-  article.setAttribute("data-page", "1");
+  article.setAttribute("data-blockeditor", "1");
   article.setAttribute("data-rev", rev);
   article.innerHTML = inner;
   return article;
@@ -208,8 +208,8 @@ async function scenarioWrite(rt, input) {
     const formatLevel = await rt.load("page/format-level.js");
     fileHtml = formatLevel.withPageFormatFloor(fileHtml, floor);
     await positive("the capture carries the canonical floor marker", () => {
-      must(formatLevel.pageFormatFloor(fileHtml) === floor, "the written file does not declare its floor");
-      return formatLevel.pageFormatFloor(fileHtml);
+      must(formatLevel.blockeditorFormatFloor(fileHtml) === floor, "the written file does not declare its floor");
+      return formatLevel.blockeditorFormatFloor(fileHtml);
     });
   }
   await positive("the saved file reads back with the same text and marks", () => {
@@ -238,7 +238,7 @@ async function scenarioRead(rt, input) {
   }
   if (rt.projection.OPAQUE) {
     await negative("an article with an unreadable envelope is refused", () =>
-      parseArticle(rt, '<p data-id="p" data-clay-page-opaque="1" data-clay-page-value="!!not-base64!!">x</p>', "rev"));
+      parseArticle(rt, '<p data-id="p" data-clay-blockeditor-opaque="1" data-clay-blockeditor-value="!!not-base64!!">x</p>', "rev"));
   }
   await negative("a malformed mark descriptor is refused on the way in", () =>
     renderArticle(rt, { p: { t: "paragraph", pos: "00000001", c: "abc", m: [[3, 'x["underline"']] } }));
@@ -274,13 +274,13 @@ async function scenarioReadNewer(rt, input) {
 async function scenarioAdmit(rt, input) {
   const { currentHtml, html, capability, admitted, floorZeroHtml } = input;
   const { checkPageFormatAdmission } = await rt.load("server/rooms/index.js");
-  const { pageFormatFloor } = await rt.load("page/format-level.js");
+  const { blockeditorFormatFloor } = await rt.load("page/format-level.js");
   const output = {
     refusal: null,
     decision: null,
     currentHtml,
     html,
-    floors: { current: pageFormatFloor(currentHtml), capture: pageFormatFloor(html) },
+    floors: { current: blockeditorFormatFloor(currentHtml), capture: blockeditorFormatFloor(html) },
     readable: null,
   };
 
@@ -344,7 +344,7 @@ async function scenarioPreserve(rt, input) {
   });
 
   const value = migrateHybridValues([{ blocks }]);
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(value)) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(value)) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   const mount = globalThis.document.body.appendChild(globalThis.document.createElement("div"));
   const view = new pmView.EditorView(mount, {
@@ -440,7 +440,7 @@ async function scenarioOffline(rt, input) {
     const { createStore } = await rt.load("live/store.js");
     const { createYPageBinding } = await rt.load("page/ybind/index.js");
     const { migrateHybridValues } = await rt.load("page/ybind/migrate.js");
-    const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(migrateHybridValues([{ blocks }]))) });
+    const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(migrateHybridValues([{ blocks }]))) });
     const binding = createYPageBinding({ store, captureTimeout: 0 });
     try {
       const refused = [];
@@ -460,13 +460,13 @@ async function scenarioOffline(rt, input) {
     }
   });
 
-  const { pageFormatFloor } = await rt.load("page/format-level.js");
+  const { blockeditorFormatFloor } = await rt.load("page/format-level.js");
   await positive("the reader leaves the newer file's floor as it found it", () => {
-    must(pageFormatFloor(fileHtml) === 1, "the newer file lost its floor marker");
-    return pageFormatFloor(fileHtml);
+    must(blockeditorFormatFloor(fileHtml) === 1, "the newer file lost its floor marker");
+    return blockeditorFormatFloor(fileHtml);
   });
   await negative("an envelope that is not canonical JSON is refused", () =>
-    parseArticle(rt, '<p data-id="p" data-clay-page-opaque="1" data-clay-page-value="!!not-base64!!">x</p>', "rev"));
+    parseArticle(rt, '<p data-id="p" data-clay-blockeditor-opaque="1" data-clay-blockeditor-value="!!not-base64!!">x</p>', "rev"));
   return output;
 }
 
@@ -495,7 +495,7 @@ async function scenarioInvalid(rt, input) {
   });
   await negative("an envelope holding bytes that are not JSON is refused", () => {
     try {
-      parseArticle(rt, '<p data-id="p" data-clay-page-opaque="1" data-clay-page-value="!!not-base64!!">x</p>', "rev");
+      parseArticle(rt, '<p data-id="p" data-clay-blockeditor-opaque="1" data-clay-blockeditor-value="!!not-base64!!">x</p>', "rev");
     } catch (error) {
       output.refusals.push({ input: "envelope", code: error.code ?? null, name: error.name });
       throw error;
@@ -503,7 +503,7 @@ async function scenarioInvalid(rt, input) {
   });
 
   await positive("an invalid update adopts nothing and leaves the source as it was", () => {
-    const tag = JSON.parse(new RegExp('<script[^>]*merge="page"[^>]*>([\\s\\S]*?)</script>').exec(fileHtml)[1]);
+    const tag = JSON.parse(new RegExp('<script[^>]*merge="blockeditor"[^>]*>([\\s\\S]*?)</script>').exec(fileHtml)[1]);
     output.before = blocksFromPageValues([tag]);
     const doc = new Y.Doc();
     for (const text of updates) Y.applyUpdateV2(doc, dec(text), null);
@@ -538,7 +538,7 @@ async function scenarioNewerSave(rt) {
   const fileHtml = formatLevel.withPageFormatFloor(fileOf(written.inner, written.rev, value, manifest.floor), manifest.floor);
 
   await positive("the newer writer declares the floor its formats need", () => {
-    must(formatLevel.pageFormatFloor(fileHtml) === manifest.floor, "the newer file does not declare its floor");
+    must(formatLevel.blockeditorFormatFloor(fileHtml) === manifest.floor, "the newer file does not declare its floor");
     must(formatLevel.requiredPageFormat(written.model) === manifest.floor, "the newer content does not need its floor");
     return formatLevel.requiredPageFormat(written.model);
   });
@@ -609,7 +609,7 @@ async function openPage(rt, blocks) {
   const { identityPlugin } = await rt.load("page/model.js");
   const { state: pmState, view: pmView } = await rt.load("vendor/prosemirror.vendor.js");
   const value = migrateHybridValues([{ blocks }]);
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(value)) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(value)) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   const mount = globalThis.document.body.appendChild(globalThis.document.createElement("div"));
   const view = new pmView.EditorView(mount, {
@@ -654,8 +654,8 @@ async function scenarioFeatureRead(rt, input) {
     return `${output.text} blocks`;
   });
   await positive("the content's floor is the one the file declares", async () => {
-    const { requiredPageFormat, pageFormatFloor } = await rt.load("page/format-level.js");
-    must(pageFormatFloor(fileHtml) === floor, `the file declares floor ${pageFormatFloor(fileHtml)}`);
+    const { requiredPageFormat, blockeditorFormatFloor } = await rt.load("page/format-level.js");
+    must(blockeditorFormatFloor(fileHtml) === floor, `the file declares floor ${blockeditorFormatFloor(fileHtml)}`);
     const required = requiredPageFormat(rt.projection.project(output.records));
     must(required === floor, `the records need floor ${required}`);
     output.floor = required;
@@ -805,13 +805,13 @@ async function scenarioFeatureOffline(rt, input) {
     return `${output.blocks} blocks`;
   });
   await positive("the reader leaves the file's floor marker as it found it", async () => {
-    const { pageFormatFloor } = await rt.load("page/format-level.js");
-    must(pageFormatFloor(fileHtml) === floor, `the file declares floor ${pageFormatFloor(fileHtml)}`);
+    const { blockeditorFormatFloor } = await rt.load("page/format-level.js");
+    must(blockeditorFormatFloor(fileHtml) === floor, `the file declares floor ${blockeditorFormatFloor(fileHtml)}`);
     output.floor = floor;
     return floor;
   });
   await negative("an envelope that is not canonical JSON is refused", () =>
-    parseArticle(rt, '<p data-id="p" data-clay-page-opaque="1" data-clay-page-value="!!not-base64!!">x</p>', "rev"));
+    parseArticle(rt, '<p data-id="p" data-clay-blockeditor-opaque="1" data-clay-blockeditor-value="!!not-base64!!">x</p>', "rev"));
   return output;
 }
 
@@ -835,8 +835,8 @@ async function scenarioFeatureChannel(rt, input) {
     output.after = localLaneKey(1, pagePath);
     must(output.before === `clay-live:${pagePath}:${ROOM_SCOPE}`, `the floor-0 scope is ${output.before}`);
     must(output.after === `clay-live:${pagePath}:${FORMAT_SCOPE}:${ROOM_SCOPE}`, `the floor-1 scope is ${output.after}`);
-    must(FORMAT_SCOPE === "page-format:1", `the transition scope is ${FORMAT_SCOPE}`);
-    must(ROOM_SCOPE === "page-rooms:2", `the room scope is ${ROOM_SCOPE}`);
+    must(FORMAT_SCOPE === "blockeditor-format:1", `the transition scope is ${FORMAT_SCOPE}`);
+    must(ROOM_SCOPE === "blockeditor-rooms:2", `the room scope is ${ROOM_SCOPE}`);
     must(localLaneKey(2, pagePath) === output.after, "a higher floor left the scope");
     return output.after;
   });

@@ -12,7 +12,7 @@ function fileOf(record, { edit = () => {}, rev = true } = {}) {
   const model = project(blocks);
   const html = renderModel(model, { fallbackOf: fallbacks(blocks), clean: fragmentCleaner(document) });
   const revAttr = rev ? ` data-rev="${revOf(model)}"` : "";
-  const page = `<!DOCTYPE html><html><head><script type="application/json" merge="page" clay="live">${JSON.stringify(record).replace(/</g, "\\u003c")}</script></head><body><article class="page" clay="freeze" data-page="1"${revAttr}>\n${html}\n</article></body></html>`;
+  const page = `<!DOCTYPE html><html><head><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(record).replace(/</g, "\\u003c")}</script></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1"${revAttr}>\n${html}\n</article></body></html>`;
   const d = new DOMParser().parseFromString(page, "text/html");
   edit(d);
   return "<!DOCTYPE html>" + d.documentElement.outerHTML;

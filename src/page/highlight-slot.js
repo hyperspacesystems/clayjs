@@ -6,7 +6,7 @@ import { state, view as pmView } from "../vendor/prosemirror.vendor.js";
 const { Plugin, PluginKey } = state;
 const { DecorationSet } = pmView;
 
-export const highlightKey = new PluginKey("page-highlight");
+export const highlightKey = new PluginKey("blockeditor-highlight");
 
 export function highlightSlot() {
   return new Plugin({

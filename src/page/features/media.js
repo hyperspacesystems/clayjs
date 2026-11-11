@@ -17,44 +17,44 @@ const N = schema.nodes;
 const RETRY = new Set(["timeout", "network", "error", "bad-response"]);
 
 export const MEDIA_CSS = `
-.page-editor .page-image { margin-inline: 0; }
-.page-image-frame { position: relative; margin: 0 auto; max-width: 100%; }
-.page-image-frame img { display: block; width: 100%; height: auto; border-radius: var(--page-image-radius, 6px); }
-.page-image[data-broken] .page-image-frame { min-height: 80px; background: var(--page-code-bg); border-radius: var(--page-image-radius, 6px); }
-.page-image-handle { position: absolute; top: 50%; inset-inline-end: 6px; width: 6px; height: 36px; margin-top: -18px; border-radius: 3px; background: var(--page-chrome-ink-moved); opacity: 0; cursor: ew-resize; touch-action: none; transition: opacity var(--page-fade); }
-.page-image:hover .page-image-handle, .page-image.is-selected .page-image-handle { opacity: 1; }
-.page-editor .page-image.page-block-selected { background: none; box-shadow: none; }
-.page-editor .page-image.page-block-selected .page-image-frame { box-shadow: 0 0 0 6px var(--page-block-selected, rgba(88, 120, 170, 0.12)); border-radius: var(--page-image-radius, 6px); }
-.page-image[data-align="left"] .page-image-frame { margin-left: 0; margin-right: auto; }
-.page-image[data-align="right"] .page-image-frame { margin-left: auto; margin-right: 0; }
-.page-image[data-align="left"] .page-image-caption { text-align: left; }
-.page-image[data-align="right"] .page-image-caption { text-align: right; }
-.page-image-align { position: absolute; top: 8px; inset-inline-end: 8px; display: none; gap: 1px; padding: 2px; background: var(--page-pop-bg); color: var(--page-pop-ink); border: 1px solid var(--page-pop-line); box-shadow: var(--page-pop-shadow); border-radius: 7px; }
-.page-image.is-selected .page-image-align, .page-image.page-block-selected .page-image-align { display: flex; }
-.page-image-align button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 5px; background: none; color: inherit; cursor: pointer; }
-.page-image-align button:hover, .page-image-align button[aria-pressed="true"] { background: var(--page-pop-hover); }
-.page-image.is-selected .page-image-frame img { outline: 2px solid var(--page-selection); outline-offset: 2px; }
-.page-image-caption { margin-top: 6px; color: var(--page-ink-soft); font-size: 0.88em; text-align: center; outline: none; }
-.page-image-caption[data-empty]::before { content: attr(data-placeholder); color: var(--page-ink-faint); }
-.page-image:not(.is-selected) .page-image-caption[data-empty]:not(:focus) { display: none; }
-.page-file-link { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--page-rule); border-radius: 8px; color: var(--page-ink); text-decoration: none; }
-.page-file-icon { color: var(--page-link, var(--page-accent)); }
-.page-file-name { color: var(--page-link, var(--page-accent)); min-width: 0; overflow-wrap: anywhere; }
-.page-file-meta { margin-inline-start: auto; color: var(--page-ink-faint); font-size: 0.88em; }
-.page-upload { display: flex; align-items: center; gap: 10px; margin: var(--page-block-gap) 0; padding: 8px 12px; border: 1px dashed var(--page-rule); border-radius: 8px; color: var(--page-ink-soft); font-size: 0.88em; }
-.page-upload-preview { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; opacity: 0.6; }
-.page-upload-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.page-upload-bar { flex: 1; height: 2px; border-radius: 1px; background: var(--page-rule); overflow: hidden; }
-.page-upload-bar > span { display: block; height: 100%; background: var(--page-progress, var(--page-ink-soft)); transition: width 200ms; }
-.page-upload[data-state="error"] .page-upload-msg, .page-upload[data-state="embed-choice"] .page-upload-msg { flex: 1; }
-.page-upload[data-state="error"] .page-upload-msg { color: var(--page-danger, #9E3B2F); }
-.page-upload-btn { border: 0; padding: 4px 8px; border-radius: 6px; background: none; color: inherit; font: inherit; cursor: pointer; }
-.page-upload-btn:hover { background: var(--page-pop-hover); }`;
+.blockeditor-editor .blockeditor-image { margin-inline: 0; }
+.blockeditor-image-frame { position: relative; margin: 0 auto; max-width: 100%; }
+.blockeditor-image-frame img { display: block; width: 100%; height: auto; border-radius: var(--blockeditor-image-radius, 6px); }
+.blockeditor-image[data-broken] .blockeditor-image-frame { min-height: 80px; background: var(--blockeditor-code-bg); border-radius: var(--blockeditor-image-radius, 6px); }
+.blockeditor-image-handle { position: absolute; top: 50%; inset-inline-end: 6px; width: 6px; height: 36px; margin-top: -18px; border-radius: 3px; background: var(--blockeditor-chrome-ink-moved); opacity: 0; cursor: ew-resize; touch-action: none; transition: opacity var(--blockeditor-fade); }
+.blockeditor-image:hover .blockeditor-image-handle, .blockeditor-image.is-selected .blockeditor-image-handle { opacity: 1; }
+.blockeditor-editor .blockeditor-image.blockeditor-block-selected { background: none; box-shadow: none; }
+.blockeditor-editor .blockeditor-image.blockeditor-block-selected .blockeditor-image-frame { box-shadow: 0 0 0 6px var(--blockeditor-block-selected, rgba(88, 120, 170, 0.12)); border-radius: var(--blockeditor-image-radius, 6px); }
+.blockeditor-image[data-align="left"] .blockeditor-image-frame { margin-left: 0; margin-right: auto; }
+.blockeditor-image[data-align="right"] .blockeditor-image-frame { margin-left: auto; margin-right: 0; }
+.blockeditor-image[data-align="left"] .blockeditor-image-caption { text-align: left; }
+.blockeditor-image[data-align="right"] .blockeditor-image-caption { text-align: right; }
+.blockeditor-image-align { position: absolute; top: 8px; inset-inline-end: 8px; display: none; gap: 1px; padding: 2px; background: var(--blockeditor-pop-bg); color: var(--blockeditor-pop-ink); border: 1px solid var(--blockeditor-pop-line); box-shadow: var(--blockeditor-pop-shadow); border-radius: 7px; }
+.blockeditor-image.is-selected .blockeditor-image-align, .blockeditor-image.blockeditor-block-selected .blockeditor-image-align { display: flex; }
+.blockeditor-image-align button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 5px; background: none; color: inherit; cursor: pointer; }
+.blockeditor-image-align button:hover, .blockeditor-image-align button[aria-pressed="true"] { background: var(--blockeditor-pop-hover); }
+.blockeditor-image.is-selected .blockeditor-image-frame img { outline: 2px solid var(--blockeditor-selection); outline-offset: 2px; }
+.blockeditor-image-caption { margin-top: 6px; color: var(--blockeditor-ink-soft); font-size: 0.88em; text-align: center; outline: none; }
+.blockeditor-image-caption[data-empty]::before { content: attr(data-placeholder); color: var(--blockeditor-ink-faint); }
+.blockeditor-image:not(.is-selected) .blockeditor-image-caption[data-empty]:not(:focus) { display: none; }
+.blockeditor-file-link { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--blockeditor-rule); border-radius: 8px; color: var(--blockeditor-ink); text-decoration: none; }
+.blockeditor-file-icon { color: var(--blockeditor-link, var(--blockeditor-accent)); }
+.blockeditor-file-name { color: var(--blockeditor-link, var(--blockeditor-accent)); min-width: 0; overflow-wrap: anywhere; }
+.blockeditor-file-meta { margin-inline-start: auto; color: var(--blockeditor-ink-faint); font-size: 0.88em; }
+.blockeditor-upload { display: flex; align-items: center; gap: 10px; margin: var(--blockeditor-block-gap) 0; padding: 8px 12px; border: 1px dashed var(--blockeditor-rule); border-radius: 8px; color: var(--blockeditor-ink-soft); font-size: 0.88em; }
+.blockeditor-upload-preview { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; opacity: 0.6; }
+.blockeditor-upload-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.blockeditor-upload-bar { flex: 1; height: 2px; border-radius: 1px; background: var(--blockeditor-rule); overflow: hidden; }
+.blockeditor-upload-bar > span { display: block; height: 100%; background: var(--blockeditor-progress, var(--blockeditor-ink-soft)); transition: width 200ms; }
+.blockeditor-upload[data-state="error"] .blockeditor-upload-msg, .blockeditor-upload[data-state="embed-choice"] .blockeditor-upload-msg { flex: 1; }
+.blockeditor-upload[data-state="error"] .blockeditor-upload-msg { color: var(--blockeditor-danger, #9E3B2F); }
+.blockeditor-upload-btn { border: 0; padding: 4px 8px; border-radius: 6px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.blockeditor-upload-btn:hover { background: var(--blockeditor-pop-hover); }`;
 
 function button(doc, act, label, id) {
   const b = doc.createElement("button");
   b.type = "button";
-  b.className = "page-upload-btn";
+  b.className = "blockeditor-upload-btn";
   b.dataset.act = act;
   b.dataset.upload = id;
   b.textContent = label;
@@ -63,25 +63,25 @@ function button(doc, act, label, id) {
 
 function bookmarkDOM(doc, it) {
   const box = doc.createElement("div");
-  box.className = "page-upload";
+  box.className = "blockeditor-upload";
   box.dataset.state = it.state;
   box.dataset.kind = it.kind;
   box.contentEditable = "false";
   box.setAttribute("role", it.state === "uploading" ? "status" : "alert");
   if (it.preview) {
     const img = doc.createElement("img");
-    img.className = "page-upload-preview";
+    img.className = "blockeditor-upload-preview";
     img.src = it.preview;
     img.alt = "";
     box.append(img);
   }
   const name = doc.createElement("span");
-  name.className = "page-upload-name";
+  name.className = "blockeditor-upload-name";
   name.textContent = it.name;
   box.append(name);
   if (it.state === "uploading") {
     const bar = doc.createElement("span");
-    bar.className = "page-upload-bar";
+    bar.className = "blockeditor-upload-bar";
     bar.setAttribute("role", "progressbar");
     bar.setAttribute("aria-label", `Uploading ${it.name}`);
     bar.setAttribute("aria-valuemin", "0");
@@ -94,7 +94,7 @@ function bookmarkDOM(doc, it) {
     return box;
   }
   const msg = doc.createElement("span");
-  msg.className = "page-upload-msg";
+  msg.className = "blockeditor-upload-msg";
   msg.textContent = it.message;
   box.append(msg);
   if (it.state === "embed-choice") box.append(button(doc, "embed", "Keep this image inside the document", it.id));
@@ -118,21 +118,21 @@ export class ImageView {
     this.getPos = getPos;
     const doc = view.dom.ownerDocument;
     this.dom = doc.createElement("figure");
-    this.dom.className = "page-image";
+    this.dom.className = "blockeditor-image";
     this.dom.addEventListener("dragstart", (event) => { event.preventDefault(); event.stopPropagation(); });
     this.dom.draggable = false;
     this.frame = doc.createElement("div");
-    this.frame.className = "page-image-frame";
+    this.frame.className = "blockeditor-image-frame";
     this.img = doc.createElement("img");
     this.img.draggable = false;
     this.img.addEventListener("error", () => this.dom.toggleAttribute("data-broken", true));
     this.img.addEventListener("load", () => this.dom.removeAttribute("data-broken"));
     this.handle = doc.createElement("span");
-    this.handle.className = "page-image-handle";
+    this.handle.className = "blockeditor-image-handle";
     this.handle.setAttribute("aria-hidden", "true");
     this.handle.addEventListener("pointerdown", (e) => this.resize(e));
     this.alignBar = doc.createElement("div");
-    this.alignBar.className = "page-image-align";
+    this.alignBar.className = "blockeditor-image-align";
     this.alignBar.setAttribute("role", "toolbar");
     this.alignBar.setAttribute("aria-label", "Image alignment");
     for (const [value, label, path] of ALIGNS) {
@@ -151,7 +151,7 @@ export class ImageView {
     });
     this.frame.append(this.img, this.handle, this.alignBar);
     this.caption = doc.createElement("figcaption");
-    this.caption.className = "page-image-caption";
+    this.caption.className = "blockeditor-image-caption";
     this.caption.contentEditable = "plaintext-only";
     this.caption.setAttribute("aria-label", "Caption");
     this.caption.dataset.placeholder = "Add a caption";
@@ -230,7 +230,7 @@ export class ImageView {
 
   selectNode() { this.dom.classList.add("is-selected"); }
   deselectNode() { this.dom.classList.remove("is-selected"); }
-  stopEvent(event) { return this.caption.contains(event.target) || this.alignBar.contains(event.target) || event.target.classList?.contains("page-image-handle"); }
+  stopEvent(event) { return this.caption.contains(event.target) || this.alignBar.contains(event.target) || event.target.classList?.contains("blockeditor-image-handle"); }
   ignoreMutation() { return true; }
 }
 
@@ -246,19 +246,19 @@ export class FileView {
     this.node = node;
     const doc = view.dom.ownerDocument;
     this.dom = doc.createElement("div");
-    this.dom.className = "page-file";
+    this.dom.className = "blockeditor-file";
     this.dom.addEventListener("dragstart", (event) => { event.preventDefault(); event.stopPropagation(); });
     this.link = doc.createElement("a");
-    this.link.className = "page-file-link";
+    this.link.className = "blockeditor-file-link";
     this.link.target = "_blank";
     this.link.rel = "noopener noreferrer";
     this.icon = doc.createElement("span");
-    this.icon.className = "page-file-icon";
+    this.icon.className = "blockeditor-file-icon";
     this.icon.textContent = "⎘";
     this.name = doc.createElement("span");
-    this.name.className = "page-file-name";
+    this.name.className = "blockeditor-file-name";
     this.meta = doc.createElement("span");
-    this.meta.className = "page-file-meta";
+    this.meta.className = "blockeditor-file-meta";
     this.link.append(this.icon, this.name, this.meta);
     this.dom.append(this.link);
     this.render(node);

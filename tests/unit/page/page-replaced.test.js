@@ -23,8 +23,8 @@ const BLOCKS = [
   { id: "h", t: "heading", text: "Notes" },
   { id: "p", t: "paragraph", text: "Hello" },
 ];
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
-const TOOLS_SEL = 'script[type="application/json"][merge="page.tools"][clay~="live"]';
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
+const TOOLS_SEL = 'script[type="application/json"][merge="blockeditor.tools"][clay~="live"]';
 const REPLACED_TEXT = "This page was changed outside the editor. Reload to see it.";
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const flushAsync = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
@@ -35,14 +35,14 @@ const until = async (done, timeout = 500) => {
 
 const pageHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const tagHtml = (value, { name = "page" } = {}) =>
+const tagHtml = (value, { name = "blockeditor" } = {}) =>
   `<script type="application/json" merge="${name}" clay="live">${JSON.stringify(value)}</script>`;
-const revOf = (html) => new DOMParser().parseFromString(html, "text/html").querySelector("article[data-page]").getAttribute("data-rev");
+const revOf = (html) => new DOMParser().parseFromString(html, "text/html").querySelector("article[data-blockeditor]").getAttribute("data-rev");
 const docOf = (head, body) => `<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
 const outsideEdit = (rev, text) =>
-  docOf("", `<article data-page="1" data-rev="${rev}"><h1 data-id="h">Notes</h1><p data-id="p">${text}</p></article>`);
+  docOf("", `<article data-blockeditor="1" data-rev="${rev}"><h1 data-id="h">Notes</h1><p data-id="p">${text}</p></article>`);
 const blockStart = (view, id) => {
   let pos = null;
   view.state.doc.forEach((node, offset) => {
@@ -66,14 +66,14 @@ const waitForToast = (fragment = "") => until(() => toastText().includes(fragmen
 const syncFromDisk = async (html) => {
   let adopted = 0;
   const onAdopted = () => { adopted += 1; };
-  document.addEventListener("clay:page-adopted", onAdopted);
+  document.addEventListener("clay:blockeditor-adopted", onAdopted);
   try {
     document.dispatchEvent(new CustomEvent("clay:sync-applied", { detail: { source: "disk", html } }));
     await until(() => adopted > 0);
     await flushAsync();
     return adopted;
   } finally {
-    document.removeEventListener("clay:page-adopted", onAdopted);
+    document.removeEventListener("clay:blockeditor-adopted", onAdopted);
   }
 };
 
@@ -96,7 +96,7 @@ async function load({ html = pageHtml(), head = "", liveData = false, answer = (
   const handlersRef = { h: null };
   const room = { epoch: "e1", seq: 0, writer: null, stores: {} };
 
-  const extensions = liveData ? ["page", "live-data"] : ["page"];
+  const extensions = liveData ? ["blockeditor", "live-data"] : ["blockeditor"];
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
     hostMeta: async () => ({ spec: 1, extensions, document: { etag: "stamp-1" } }),
@@ -166,7 +166,7 @@ test("with rooms (live-data), a tagless incoming document with a new article rev
 
   await page.ready;
   expect(page.view).toBeTruthy();
-  const store = storeOf("page");
+  const store = storeOf("blockeditor");
   const before = JSON.stringify(store.value);
 
   document.dispatchEvent(new CustomEvent("clay:sync-applied", {
@@ -183,7 +183,7 @@ test("with rooms (live-data), a tagless incoming document with a new article rev
   page.view.dispatch(page.view.state.tr.insertText("!", 6));
   await flushAsync();
   expect(JSON.stringify(store.value)).toBe(before);
-  expect(sent.filter((frame) => frame.name === "page")).toHaveLength(0);
+  expect(sent.filter((frame) => frame.name === "blockeditor")).toHaveLength(0);
 
   // And no save leaves the tab, even one asked for explicitly.
   const save = await import("../../../src/core/save.js");
@@ -200,7 +200,7 @@ test("a tagless incoming document with the same article rev is an outside edit e
 
   await page.ready;
   document.dispatchEvent(new CustomEvent("clay:sync-applied", {
-    detail: { source: "peer", html: docOf("", `<main><article data-page="1" data-rev="${rev}"><h1 data-id="h">Notes</h1><p data-id="p">Hello</p></article><footer>Footer</footer></main>`) },
+    detail: { source: "peer", html: docOf("", `<main><article data-blockeditor="1" data-rev="${rev}"><h1 data-id="h">Notes</h1><p data-id="p">Hello</p></article><footer>Footer</footer></main>`) },
   }));
 
   expect(toastText()).toBe("");
@@ -208,7 +208,7 @@ test("a tagless incoming document with the same article rev is an outside edit e
 
   page.view.dispatch(page.view.state.tr.insertText("!", 6));
   await flushAsync();
-  expect(blocksFromYValue(storeOf("page").value).h.c).toBe("Notes!");
+  expect(blocksFromYValue(storeOf("blockeditor").value).h.c).toBe("Notes!");
   expect(saves).toHaveLength(0);
 });
 
@@ -244,7 +244,7 @@ test("an unknown-store refusal of the page store's frames shows the notice", asy
   const { page, storeOf } = await load({ html: pageHtml(value), head: tagHtml(value) });
 
   await page.ready;
-  storeOf("page").deliver({ phase: "left", code: "no-store", n: 1 });
+  storeOf("blockeditor").deliver({ phase: "left", code: "no-store", n: 1 });
 
   await waitForToast(REPLACED_TEXT);
   expect(toastText()).toContain(REPLACED_TEXT);
@@ -255,7 +255,7 @@ test("an unknown-store refusal of the page store's frames shows the notice", asy
 test("a downloaded copy carries no page merge state, and keeps the article and the tool store", async () => {
   const value = seedValue(BLOCKS);
   const html = pageHtml(value);
-  const { page } = await load({ html, head: tagHtml(value) + tagHtml({}, { name: "page.tools" }) });
+  const { page } = await load({ html, head: tagHtml(value) + tagHtml({}, { name: "blockeditor.tools" }) });
 
   await page.ready;
   expect(document.querySelector(TAG_SEL)).toBeTruthy();
@@ -264,7 +264,7 @@ test("a downloaded copy carries no page merge state, and keeps the article and t
   const create = URL.createObjectURL;
   const revoke = URL.revokeObjectURL;
   const click = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-  URL.createObjectURL = jest.fn((blob) => { blobs.push(blob); return "blob:page-copy"; });
+  URL.createObjectURL = jest.fn((blob) => { blobs.push(blob); return "blob:blockeditor-copy"; });
   URL.revokeObjectURL = jest.fn();
   try {
     const { downloadPageCopy } = await import("../../../src/page/save-states.js");
@@ -279,9 +279,9 @@ test("a downloaded copy carries no page merge state, and keeps the article and t
     });
     const copy = new DOMParser().parseFromString(text, "text/html");
     expect(copy.querySelector(TAG_SEL)).toBe(null);
-    expect(text).not.toContain('merge="page"');
+    expect(text).not.toContain('merge="blockeditor"');
     expect(copy.querySelector(TOOLS_SEL)).toBeTruthy();
-    expect(copy.querySelector("article[data-page]").innerHTML).toContain("Hello");
+    expect(copy.querySelector("article[data-blockeditor]").innerHTML).toContain("Hello");
   } finally {
     click.mockRestore();
     URL.createObjectURL = create;
@@ -296,9 +296,9 @@ test("on a host with no rooms, an outside edit to one block merges into the tab"
 
   await page.ready;
   await syncFromDisk(outsideEdit(revOf(html), "Hello from outside"));
-  await until(() => blocksFromYValue(storeOf("page").value).p.c === "Hello from outside");
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello from outside");
 
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello from outside");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello from outside");
   expect(toastText()).toBe("");
   expect(page.view.editable).toBe(true);
 });
@@ -311,13 +311,13 @@ test("an outside edit and the tab's own typing in another block are both kept", 
   await page.ready;
   page.view.dispatch(page.view.state.tr.insertText("!", 6));
   await flushAsync();
-  expect(blocksFromYValue(storeOf("page").value).h.c).toBe("Notes!");
+  expect(blocksFromYValue(storeOf("blockeditor").value).h.c).toBe("Notes!");
 
   await syncFromDisk(outsideEdit(revOf(html), "Hello from outside"));
-  await until(() => blocksFromYValue(storeOf("page").value).p.c === "Hello from outside");
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello from outside");
 
-  expect(blocksFromYValue(storeOf("page").value).h.c).toBe("Notes!");
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello from outside");
+  expect(blocksFromYValue(storeOf("blockeditor").value).h.c).toBe("Notes!");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello from outside");
   expect(toastText()).toBe("");
 });
 
@@ -328,12 +328,12 @@ test("the tab's own save coming back changes nothing and shows no notice", async
   await page.ready;
   page.view.dispatch(page.view.state.tr.insertText("!", 6));
   await flushAsync();
-  expect(blocksFromYValue(storeOf("page").value).h.c).toBe("Notes!");
+  expect(blocksFromYValue(storeOf("blockeditor").value).h.c).toBe("Notes!");
 
-  await syncFromDisk(pageHtml(storeOf("page").value));
+  await syncFromDisk(pageHtml(storeOf("blockeditor").value));
 
-  expect(blocksFromYValue(storeOf("page").value).h.c).toBe("Notes!");
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello");
+  expect(blocksFromYValue(storeOf("blockeditor").value).h.c).toBe("Notes!");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello");
   expect(toastText()).toBe("");
   expect(page.view.editable).toBe(true);
 });
@@ -345,12 +345,12 @@ test("an untouched older copy leaves the page as it is", async () => {
 
   await page.ready;
   await syncFromDisk(outsideEdit(revOf(html), "Hello from outside"));
-  await until(() => blocksFromYValue(storeOf("page").value).p.c === "Hello from outside");
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello from outside");
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello from outside");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello from outside");
 
   await syncFromDisk(pageHtml(value));
 
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello from outside");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello from outside");
   expect(toastText()).toBe("");
 });
 
@@ -362,20 +362,20 @@ test("a second outside save that kept the rev merges against the first, not the 
 
   await page.ready;
   await syncFromDisk(outsideEdit(rev, "Hello outside"));
-  await until(() => blocksFromYValue(storeOf("page").value).p.c === "Hello outside");
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello outside");
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello outside");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello outside");
 
   // The tab types over the adopted text.
   replaceText(page.view, "p", 0, "Hello outside".length, "Hello there");
   await flushAsync();
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello there");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello there");
 
   // A second outside save, the first edit plus a new block, with the rev kept.
-  const second = docOf("", `<article data-page="1" data-rev="${rev}"><h1 data-id="h">Notes</h1><p data-id="p">Hello outside</p><p data-id="q">New from outside</p></article>`);
+  const second = docOf("", `<article data-blockeditor="1" data-rev="${rev}"><h1 data-id="h">Notes</h1><p data-id="p">Hello outside</p><p data-id="q">New from outside</p></article>`);
   await syncFromDisk(second);
-  await until(() => blocksFromYValue(storeOf("page").value).q?.c === "New from outside");
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).q?.c === "New from outside");
 
-  const blocks = Object.values(blocksFromYValue(storeOf("page").value));
+  const blocks = Object.values(blocksFromYValue(storeOf("blockeditor").value));
   expect(blocks.map((b) => b.c)).toEqual(["Notes", "Hello there", "New from outside"]);
   expect(toastText()).toBe("");
 });
@@ -388,7 +388,7 @@ test("an outside edit made on the tab's own saved file merges without duplicatin
   await page.ready;
   page.view.dispatch(page.view.state.tr.insertText(" world", textEnd(page.view, "p")));
   await flushAsync();
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello world");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello world");
 
   const save = await import("../../../src/core/save.js");
   const result = await save.savePageForce();
@@ -398,18 +398,18 @@ test("an outside edit made on the tab's own saved file merges without duplicatin
   // The tab keeps typing after its own save.
   replaceText(page.view, "p", 6, 11, "there");
   await flushAsync();
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello there");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello there");
 
   // An outside edit made on the saved file: another block, its rev kept.
   const savedDoc = new DOMParser().parseFromString(saves[0].body, "text/html");
-  const article = savedDoc.querySelector("article[data-page]");
+  const article = savedDoc.querySelector("article[data-blockeditor]");
   const savedRev = article.getAttribute("data-rev");
   expect(article.querySelector('[data-id="p"]').textContent).toBe("Hello world");
   article.querySelector('[data-id="h"]').textContent = "Notes from outside";
   await syncFromDisk(docOf("", article.outerHTML));
 
-  await until(() => blocksFromYValue(storeOf("page").value).h.c === "Notes from outside");
-  const blocks = Object.values(blocksFromYValue(storeOf("page").value));
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).h.c === "Notes from outside");
+  const blocks = Object.values(blocksFromYValue(storeOf("blockeditor").value));
   expect(blocks.map((b) => b.c)).toEqual(["Notes from outside", "Hello there"]);
   expect(toastText()).toBe("");
   expect(savedRev).toBeTruthy();
@@ -434,7 +434,7 @@ const readDownload = async (click) => {
   click();
   anchor.mockRestore();
   const text = await new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(String(r.result)); r.readAsText(blobs[0]); });
-  return new DOMParser().parseFromString(text, "text/html").querySelector("article[data-page]").textContent;
+  return new DOMParser().parseFromString(text, "text/html").querySelector("article[data-blockeditor]").textContent;
 };
 const toastButton = (label) => [...($("[data-clay-toast]", "toasts")?.querySelectorAll("button") ?? [])].find((b) => b.textContent === label);
 const appendToPage = (view, text) => {
@@ -451,8 +451,8 @@ test("a tab stopped by another page's history downloads its own edits", async ()
   appendToPage(page.view, " UNIQUE UNSAVED");
   await flushAsync();
   const otherBlocks = { p: { t: "paragraph", pos: "00000001", c: "Replacement article" } };
-  storeOf("page").setMode("fast");
-  storeOf("page").rebase(buildPageValue([{ blocks: otherBlocks }], seedClientId(otherBlocks)), { source: "state" });
+  storeOf("blockeditor").setMode("fast");
+  storeOf("blockeditor").rebase(buildPageValue([{ blocks: otherBlocks }], seedClientId(otherBlocks)), { source: "state" });
   await flushAsync();
   expect(page.view.editable).toBe(false);
   await waitForToast("Download your copy");
@@ -468,7 +468,7 @@ test("a page update refused as too large stops the tab with a notice and keeps t
   await page.ready;
   appendToPage(page.view, " BIG EDIT");
   await flushAsync();
-  storeOf("page").deliver({ phase: "refused", code: "too-large" });
+  storeOf("blockeditor").deliver({ phase: "refused", code: "too-large" });
   await flushAsync();
   expect(page.view.editable).toBe(false);
   await waitForToast("That change is too large to share, so it was not saved.");
@@ -488,9 +488,9 @@ test("a host-mode page store that refuses a full page offers only the download",
   const value = seedValue(BLOCKS);
   const { page, PAGE_FULL_MESSAGE, storeOf } = await load({ html: pageHtml(value), head: tagHtml(value) });
   await page.ready;
-  enterHostMode(storeOf("page"));
+  enterHostMode(storeOf("blockeditor"));
   await flushAsync();
-  storeOf("page").deliver({ phase: "refused", code: "page-full" });
+  storeOf("blockeditor").deliver({ phase: "refused", code: "blockeditor-full" });
   await flushAsync();
 
   await waitForToast(PAGE_FULL_MESSAGE);
@@ -503,9 +503,9 @@ test("a host-mode page store whose compaction failed offers only the download", 
   const value = seedValue(BLOCKS);
   const { page, PAGE_FULL_MESSAGE, storeOf } = await load({ html: pageHtml(value), head: tagHtml(value) });
   await page.ready;
-  enterHostMode(storeOf("page"));
+  enterHostMode(storeOf("blockeditor"));
   await flushAsync();
-  storeOf("page").deliver({ phase: "refused", code: "compaction-failed" });
+  storeOf("blockeditor").deliver({ phase: "refused", code: "compaction-failed" });
   await flushAsync();
 
   await waitForToast(PAGE_FULL_MESSAGE);
@@ -518,11 +518,11 @@ test("a host-mode full page's download keeps the edit the room refused", async (
   const value = seedValue(BLOCKS);
   const { page, PAGE_FULL_MESSAGE, storeOf } = await load({ html: pageHtml(value), head: tagHtml(value) });
   await page.ready;
-  enterHostMode(storeOf("page"));
+  enterHostMode(storeOf("blockeditor"));
   await flushAsync();
   appendToPage(page.view, " FULL PAGE EDIT");
   await flushAsync();
-  storeOf("page").deliver({ phase: "refused", code: "page-full" });
+  storeOf("blockeditor").deliver({ phase: "refused", code: "blockeditor-full" });
   await flushAsync();
 
   await waitForToast(PAGE_FULL_MESSAGE);

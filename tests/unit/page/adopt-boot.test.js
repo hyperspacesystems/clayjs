@@ -20,7 +20,7 @@ const RECORD = { blocks: {
 function fileHtml(record, edit = () => {}) {
   const blocks = blocksOfValues([record]);
   const model = project(blocks);
-  const html = `<!DOCTYPE html><html><head><script type="application/json" merge="page" clay="live">${JSON.stringify(record)}</script></head><body><article class="page" clay="freeze" data-page="1" data-rev="${revOf(model)}">${renderModel(model)}</article></body></html>`;
+  const html = `<!DOCTYPE html><html><head><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(record)}</script></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${revOf(model)}">${renderModel(model)}</article></body></html>`;
   const d = new DOMParser().parseFromString(html, "text/html");
   edit(d);
   return "<!DOCTYPE html>" + d.documentElement.outerHTML;
@@ -89,7 +89,7 @@ test("seeded boot file: the page was built from it, so nothing is adopted or wai
 test("hand-edited boot file: adopted, held, checkpointed, announced, undoable", async () => {
   const ed = open();
   const c = counters();
-  document.addEventListener("clay:page-adopted", c.onFrame);
+  document.addEventListener("clay:blockeditor-adopted", c.onFrame);
   const controller = installAdoption({ view: ed.view, source: fileOf(fileHtml(RECORD, editA)), hold: c.hold, release: c.release, requestCheckpoint: c.requestCheckpoint, notice: c.notice });
   await controller.idle();
   const blocks = blockMap(ed.view.state.doc);
@@ -103,7 +103,7 @@ test("hand-edited boot file: adopted, held, checkpointed, announced, undoable", 
   expect(c.frames).toEqual([{ edited: 1, created: 0, deleted: 0, moved: false }]);
   expect(history.undo(ed.view.state, ed.view.dispatch)).toBe(true);
   expect(blockMap(ed.view.state.doc).a.c).toBe("First paragraph");
-  document.removeEventListener("clay:page-adopted", c.onFrame);
+  document.removeEventListener("clay:blockeditor-adopted", c.onFrame);
   controller.dispose();
   ed.close();
 });
@@ -177,7 +177,7 @@ test("a pre-save snapshot: old article, newer tags, is not adopted", async () =>
   const c = counters();
   const html = fileHtml(RECORD);
   const d = new DOMParser().parseFromString(html, "text/html");
-  d.querySelector('script[merge="page"]').textContent = JSON.stringify(peerRecord);
+  d.querySelector('script[merge="blockeditor"]').textContent = JSON.stringify(peerRecord);
   const frame = "<!DOCTYPE html>" + d.documentElement.outerHTML;
   const controller = installAdoption({ view: ed.view, hold: c.hold, release: c.release, requestCheckpoint: c.requestCheckpoint, notice: c.notice });
   document.dispatchEvent(new CustomEvent("clay:sync-applied", { detail: { html: frame } }));
@@ -195,7 +195,7 @@ test("article and data both edited: kept the data, warned", async () => {
   const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
   const html = fileHtml(RECORD, editA);
   const d = new DOMParser().parseFromString(html, "text/html");
-  d.querySelector('script[merge="page"]').textContent = JSON.stringify(peerRecord);
+  d.querySelector('script[merge="blockeditor"]').textContent = JSON.stringify(peerRecord);
   const frame = "<!DOCTYPE html>" + d.documentElement.outerHTML;
   const controller = installAdoption({ view: ed.view, hold: c.hold, release: c.release, requestCheckpoint: c.requestCheckpoint, notice: c.notice });
   document.dispatchEvent(new CustomEvent("clay:sync-applied", { detail: { html: frame } }));

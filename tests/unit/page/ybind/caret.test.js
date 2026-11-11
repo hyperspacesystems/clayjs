@@ -4,7 +4,7 @@ import { startLab } from "../../../fixtures/ypage-lab/lab.js";
 import { state as pmState } from "../../../../src/vendor/prosemirror.vendor.js";
 
 const open = (text) => {
-  const store = createStore({ name: "page", value: seedValue([{ id: "lab1", text }]) });
+  const store = createStore({ name: "blockeditor", value: seedValue([{ id: "lab1", text }]) });
   const root = document.body.appendChild(document.createElement("div"));
   return startLab({ root, store, interval: 1000000 });
 };

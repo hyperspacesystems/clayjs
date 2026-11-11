@@ -39,7 +39,7 @@ test("Duplicate gives a board new column and card ids and copies what it shows, 
 });
 
 test("through the Yjs binding a duplicated board has its own fields: changing either leaves the other alone, and one Undo takes the copy back", () => {
-  const store = createStore({ name: "page", value: seedValue([{ id: "p", text: "Intro" }, { id: "bd", t: "board", attrs: { columns: COLUMNS, cards: { a: CARDS.a } } }]) });
+  const store = createStore({ name: "blockeditor", value: seedValue([{ id: "p", text: "Intro" }, { id: "bd", t: "board", attrs: { columns: COLUMNS, cards: { a: CARDS.a } } }]) });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const pm = new pmView.EditorView(document.body.appendChild(document.createElement("div")), { state: pmState.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }), dispatchTransaction: (tr) => binding.dispatch(tr) });
   binding.attach(pm);

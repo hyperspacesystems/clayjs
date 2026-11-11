@@ -20,7 +20,7 @@ const SEED = [
 async function pair(blocks = SEED, { tabOpts = {}, roomOpts = {} } = {}) {
   const sim = new Sim(7);
   const initial = seedValue(blocks);
-  const room = createRoom(sim, { page: initial }, roomOpts);
+  const room = createRoom(sim, { blockeditor: initial }, roomOpts);
   const a = makeYTab(sim, room, "a", clone(initial), tabOpts);
   const b = makeYTab(sim, room, "b", clone(initial), tabOpts);
   a.start();
@@ -94,8 +94,8 @@ async function settled({ sim, room, a, b }) {
   expect(a.stats.mismatch).toBe(0);
   expect(b.stats.mismatch).toBe(0);
   expect(a.blocks()).toEqual(b.blocks());
-  const saved = clone(room.stores.get("page").value);
-  room.land("page", room.seq);
+  const saved = clone(room.stores.get("blockeditor").value);
+  room.land("blockeditor", room.seq);
   const fresh = makeYTab(sim, room, "reopen", saved);
   const opened = fresh.editor.state.doc;
   fresh.start();

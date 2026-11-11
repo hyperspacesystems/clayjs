@@ -123,16 +123,16 @@ async function declaredRenames(htmlText) {
 const PAGE_STORE = 'script[clay~="live"][merge]';
 
 function carryPage(doc, afterDoc, article) {
-  const target = afterDoc.querySelector("article[data-page]");
+  const target = afterDoc.querySelector("article[data-blockeditor]");
   if (!target) return null;
   target.replaceWith(afterDoc.importNode(article, true));
   for (const store of doc.querySelectorAll(PAGE_STORE)) {
     const name = store.getAttribute("merge");
-    if (name !== "page" && !name.startsWith("page.")) continue;
+    if (name !== "blockeditor" && !name.startsWith("blockeditor.")) continue;
     const copy = afterDoc.importNode(store, true);
     const existing = [...afterDoc.querySelectorAll(PAGE_STORE)].find((el) => el.getAttribute("merge") === name);
     if (existing) existing.replaceWith(copy);
-    else afterDoc.querySelector("article[data-page]").after(copy);
+    else afterDoc.querySelector("article[data-blockeditor]").after(copy);
   }
   const doctype = afterDoc.doctype ? `<!DOCTYPE ${afterDoc.doctype.name}>\n` : "";
   return doctype + afterDoc.documentElement.outerHTML;
@@ -209,7 +209,7 @@ export async function prepare(update, {
   }
   const afterDoc = new DOMParser().parseFromString(result.html, "text/html");
   const before = upgrade.extractAll(doc).dataByName;
-  const article = doc.querySelector("article[data-page]");
+  const article = doc.querySelector("article[data-blockeditor]");
   if (!article && !Object.keys(before || {}).length) {
     return { ok: false, code: "undeclared", message: UNDECLARED };
   }

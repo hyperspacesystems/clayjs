@@ -51,8 +51,8 @@ const blockPos = (view, id) => {
 const endOf = (view, id) => blockPos(view, id) + 1 + view.state.doc.nodeAt(blockPos(view, id)).textContent.length;
 const caret = (view, pos) => view.dispatch(view.state.tr.setSelection(pmState.TextSelection.create(view.state.doc, pos)));
 const select = (view, from, to) => view.dispatch(view.state.tr.setSelection(pmState.TextSelection.create(view.state.doc, from, to)));
-const pickerEl = () => document.querySelector(".page-mention-picker");
-const options = () => [...document.querySelectorAll(".page-mention-picker .page-menu-item")];
+const pickerEl = () => document.querySelector(".blockeditor-mention-picker");
+const options = () => [...document.querySelectorAll(".blockeditor-mention-picker .blockeditor-menu-item")];
 const keys = (view, key) => view.dom.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
 const start = (view, args = {}) => runPageCommand(view, "emoji", args);
 // The row for one glyph, found by the glyph itself rather than by a position in the list.
@@ -64,7 +64,7 @@ const choose = (char) => {
 };
 
 function articleOf(html, rev) {
-  const parsed = new DOMParser().parseFromString(`<!DOCTYPE html><html><body><article data-page="1" data-rev="${rev}">\n${html}\n</article></body></html>`, "text/html");
+  const parsed = new DOMParser().parseFromString(`<!DOCTYPE html><html><body><article data-blockeditor="1" data-rev="${rev}">\n${html}\n</article></body></html>`, "text/html");
   return parsed.querySelector("article");
 }
 const reopen = (blocks) => {
@@ -95,7 +95,7 @@ test("a joined family, a skin tone, a flag and a keycap each go in as one graphe
   const saved = blockMap(view.state.doc);
   const article = articleOf(renderModel(project(saved)), revOf(project(saved)));
   expect(article.textContent).toContain(`${FAMILY}${SKIN_TONE}${FLAG}${KEYCAP}`);
-  expect(article.querySelector("[data-page-mention], [data-page-date]")).toBeNull();
+  expect(article.querySelector("[data-blockeditor-mention], [data-blockeditor-date]")).toBeNull();
   expect(reopen(saved).find((item) => item.id === "a").c).toBe(`Hello ${FAMILY}${SKIN_TONE}${FLAG}${KEYCAP}`);
 });
 
@@ -256,13 +256,13 @@ test("the picker asks for no image, font or CDN, and keeps no state of its own",
   expect(made.filter((tag) => ["img", "image", "link", "style", "iframe", "object", "embed", "source"].includes(tag))).toEqual([]);
   // The list lives outside the saved article, and nothing about it is written anywhere: no
   // storage entry, no element inside the editor, and no mark or attribute on the block.
-  expect(view.dom.querySelector(".page-mention-picker")).toBeNull();
+  expect(view.dom.querySelector(".blockeditor-mention-picker")).toBeNull();
   expect(localStorage.length).toBe(0);
   expect(sessionStorage.length).toBe(0);
   expect(record(view, "a").m).toBeUndefined();
   const saved = blockMap(view.state.doc);
   const article = articleOf(renderModel(project(saved)), revOf(project(saved)));
-  expect(article.querySelector("[role=listbox], .page-mention-picker")).toBeNull();
+  expect(article.querySelector("[role=listbox], .blockeditor-mention-picker")).toBeNull();
   expect(before).not.toBe(canon(saved));
 });
 
@@ -290,9 +290,9 @@ test("nothing about an open picker changes the document, and the exit takes it a
   setEditorActive(view, true);
   caret(view, endOf(view, "a"));
   expect(await start(view)).toEqual({ ok: true, picker: true });
-  expect(document.querySelectorAll(".page-mention-picker")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-mention-picker")).toHaveLength(1);
   keys(view, "Enter");
-  expect(document.querySelectorAll(".page-mention-picker")).toHaveLength(0);
+  expect(document.querySelectorAll(".blockeditor-mention-picker")).toHaveLength(0);
   expect(canon(blockMap(view.state.doc))).not.toBe(before);
 });
 

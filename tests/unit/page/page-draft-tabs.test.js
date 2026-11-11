@@ -48,15 +48,15 @@ track(document);
 
 function articleHtml() {
   const { html, rev } = renderFromTags([JSON.stringify(seedValue(BLOCKS))]);
-  return `<article class="page" clay="freeze" data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 }
 
 async function bootPage({ tagText = null, slot: wanted = null, storage = null } = {}) {
-  window.clay?.page?.dispose?.();
+  window.clay?.blockeditor?.dispose?.();
   await wait(400);
   dropListeners();
   jest.resetModules();
-  const slot = wanted ?? `page-draft-tabs-${++boots}`;
+  const slot = wanted ?? `blockeditor-draft-tabs-${++boots}`;
   delete window.clayEditMode;
   delete window.__hyperclayEditMode;
   const root = document.documentElement;
@@ -72,7 +72,7 @@ async function bootPage({ tagText = null, slot: wanted = null, storage = null } 
   document.head.append(rules);
   const settings = document.createElement("script");
   settings.setAttribute("type", "application/json");
-  settings.setAttribute("merge", "page.settings");
+  settings.setAttribute("merge", "blockeditor.settings");
   settings.setAttribute("clay", "live");
   settings.textContent = "{}";
   document.head.append(settings);
@@ -80,10 +80,10 @@ async function bootPage({ tagText = null, slot: wanted = null, storage = null } 
   if (tagText) {
     const tag = document.createElement("script");
     tag.setAttribute("type", "application/json");
-    tag.setAttribute("merge", "page");
+    tag.setAttribute("merge", "blockeditor");
     tag.setAttribute("clay", "live");
     tag.textContent = tagText;
-    const article = document.querySelector("article[data-page]");
+    const article = document.querySelector("article[data-blockeditor]");
     article.parentNode.insertBefore(tag, article);
   }
   localStorage.clear();
@@ -97,7 +97,7 @@ async function bootPage({ tagText = null, slot: wanted = null, storage = null } 
   await import("../../../src/ui/toast.js");
   await import("../../../src/lib/region-policy.js");
   const { boot } = await import("../../../src/loader.js");
-  await new Promise((resolve) => boot(null, new URLSearchParams("plugins=page,visitor-drafts,indicator"), resolve));
+  await new Promise((resolve) => boot(null, new URLSearchParams("plugins=blockeditor,visitor-drafts,indicator"), resolve));
   return { clay: window.clay, fetchMock };
 }
 
@@ -141,23 +141,23 @@ function recordReader(slot) {
 }
 
 test("two tabs typing different paragraphs both keep their words", async () => {
-  const slot = "page-draft-tabs-both";
+  const slot = "blockeditor-draft-tabs-both";
   const { key, recordOf } = recordReader(slot);
 
   const b = await bootPage({ slot });
-  await b.clay.page.ready;
-  const bView = b.clay.page.view;
+  await b.clay.blockeditor.ready;
+  const bView = b.clay.blockeditor.view;
   bView.dispatch(bView.state.tr.insertText("bravo", firstParagraph(bView)));
-  await waitFor(() => recordOf()?.page?.html?.includes("bravo"));
+  await waitFor(() => recordOf()?.blockeditor?.html?.includes("bravo"));
   const rawB = localStorage.getItem(key);
   expect(rawB).toBeTruthy();
 
   const a = await bootPage({ slot });
-  await a.clay.page.ready;
+  await a.clay.blockeditor.ready;
   const bytes = await tapDraftTransport();
-  const aView = a.clay.page.view;
+  const aView = a.clay.blockeditor.view;
   aView.dispatch(aView.state.tr.insertText("alpha", firstParagraph(aView)));
-  await waitFor(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.page?.html?.includes("alpha"));
+  await waitFor(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.blockeditor?.html?.includes("alpha"));
   expect(aView.state.doc.textContent).not.toContain("bravo");
 
   localStorage.setItem(key, rawB);
@@ -169,65 +169,65 @@ test("two tabs typing different paragraphs both keep their words", async () => {
   expect(aView.state.doc.textContent).toContain("bravo");
 
   aView.dispatch(aView.state.tr.insertText("!", firstParagraph(aView)));
-  await waitFor(() => recordOf()?.page?.html?.includes("!") && recordOf()?.page?.html?.includes("alpha") && recordOf()?.page?.html?.includes("bravo"));
+  await waitFor(() => recordOf()?.blockeditor?.html?.includes("!") && recordOf()?.blockeditor?.html?.includes("alpha") && recordOf()?.blockeditor?.html?.includes("bravo"));
   const record = recordOf();
-  expect(record.page.html).toContain("alpha");
-  expect(record.page.html).toContain("bravo");
+  expect(record.blockeditor.html).toContain("alpha");
+  expect(record.blockeditor.html).toContain("bravo");
   expect(localStorage.getItem(key + ":conflict")).toBeNull();
 
   const third = await bootPage({ slot, storage: { [key]: localStorage.getItem(key) } });
-  await third.clay.page.ready;
-  expect(third.clay.page.view.state.doc.textContent).toContain("alpha");
-  expect(third.clay.page.view.state.doc.textContent).toContain("bravo");
+  await third.clay.blockeditor.ready;
+  expect(third.clay.blockeditor.view.state.doc.textContent).toContain("alpha");
+  expect(third.clay.blockeditor.view.state.doc.textContent).toContain("bravo");
 }, 60000);
 
 test("without the page editor's merge, the other tab's page is kept aside", async () => {
-  const slot = "page-draft-tabs-unmerged";
+  const slot = "blockeditor-draft-tabs-unmerged";
   const { key, recordOf } = recordReader(slot);
 
   const b = await bootPage({ slot });
-  await b.clay.page.ready;
-  const bView = b.clay.page.view;
+  await b.clay.blockeditor.ready;
+  const bView = b.clay.blockeditor.view;
   bView.dispatch(bView.state.tr.insertText("bravo", firstParagraph(bView)));
-  await waitFor(() => recordOf()?.page?.html?.includes("bravo"));
+  await waitFor(() => recordOf()?.blockeditor?.html?.includes("bravo"));
   const rawB = localStorage.getItem(key);
   expect(rawB).toBeTruthy();
 
   const a = await bootPage({ slot });
-  await a.clay.page.ready;
+  await a.clay.blockeditor.ready;
   const bytes = await tapDraftTransport();
-  const aView = a.clay.page.view;
+  const aView = a.clay.blockeditor.view;
   aView.dispatch(aView.state.tr.insertText("alpha", firstParagraph(aView)));
-  await waitFor(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.page?.html?.includes("alpha"));
+  await waitFor(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.blockeditor?.html?.includes("alpha"));
 
   localStorage.setItem(key, rawB);
   aView.dispatch(aView.state.tr.insertText("!", firstParagraph(aView)));
-  await waitFor(() => recordOf()?.id && localStorage.getItem(key) !== rawB && recordOf()?.page?.html?.includes("!"));
+  await waitFor(() => recordOf()?.id && localStorage.getItem(key) !== rawB && recordOf()?.blockeditor?.html?.includes("!"));
 
   expect(localStorage.getItem(key + ":conflict")).toBe(rawB);
   const record = recordOf();
-  expect(record.page.html).toContain("alpha");
-  expect(record.page.html).not.toContain("bravo");
+  expect(record.blockeditor.html).toContain("alpha");
+  expect(record.blockeditor.html).not.toContain("bravo");
 }, 60000);
 
 test("a hide right after a merge keeps this tab's saved words", async () => {
-  const slot = "page-draft-tabs-hide";
+  const slot = "blockeditor-draft-tabs-hide";
   const { key, recordOf } = recordReader(slot);
 
   const b = await bootPage({ slot });
-  await b.clay.page.ready;
-  const bView = b.clay.page.view;
+  await b.clay.blockeditor.ready;
+  const bView = b.clay.blockeditor.view;
   bView.dispatch(bView.state.tr.insertText("bravo", firstParagraph(bView)));
-  await waitFor(() => recordOf()?.page?.html?.includes("bravo"));
+  await waitFor(() => recordOf()?.blockeditor?.html?.includes("bravo"));
   const rawB = localStorage.getItem(key);
   expect(rawB).toBeTruthy();
 
   const a = await bootPage({ slot });
-  await a.clay.page.ready;
+  await a.clay.blockeditor.ready;
   const bytes = await tapDraftTransport();
-  const aView = a.clay.page.view;
+  const aView = a.clay.blockeditor.view;
   aView.dispatch(aView.state.tr.insertText("alpha", firstParagraph(aView)));
-  await waitFor(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.page?.html?.includes("alpha"));
+  await waitFor(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.blockeditor?.html?.includes("alpha"));
 
   localStorage.setItem(key, rawB);
   window.dispatchEvent(new StorageEvent("storage", { key }));
@@ -235,25 +235,25 @@ test("a hide right after a merge keeps this tab's saved words", async () => {
 
   const record = recordOf();
   expect(record).toBeTruthy();
-  expect(record.page.html).toContain("alpha");
-  expect(record.page.html).toContain("bravo");
+  expect(record.blockeditor.html).toContain("alpha");
+  expect(record.blockeditor.html).toContain("bravo");
 }, 60000);
 
 test("a tab that took in the other tab's page follows Start over", async () => {
-  const slot = "page-draft-tabs-reset";
+  const slot = "blockeditor-draft-tabs-reset";
   const { key, recordOf } = recordReader(slot);
 
   const a = await bootPage({ slot });
-  await a.clay.page.ready;
-  const aView = a.clay.page.view;
+  await a.clay.blockeditor.ready;
+  const aView = a.clay.blockeditor.view;
   aView.dispatch(aView.state.tr.insertText("alpha", firstParagraph(aView)));
-  await waitFor(() => recordOf()?.page?.html?.includes("alpha"));
+  await waitFor(() => recordOf()?.blockeditor?.html?.includes("alpha"));
   const rawA = localStorage.getItem(key);
   expect(rawA).toBeTruthy();
 
   const b = await bootPage({ slot });
-  await b.clay.page.ready;
-  const bView = b.clay.page.view;
+  await b.clay.blockeditor.ready;
+  const bView = b.clay.blockeditor.view;
   expect(bView.state.doc.textContent).not.toContain("alpha");
 
   localStorage.setItem(key, rawA);
@@ -269,41 +269,41 @@ test("a tab that took in the other tab's page follows Start over", async () => {
 }, 60000);
 
 test("a page recorded before the editor listened is taken in once it listens", async () => {
-  const slot = "page-draft-tabs-listening";
+  const slot = "blockeditor-draft-tabs-listening";
   const { key, recordOf } = recordReader(slot);
 
   const a = await bootPage({ slot });
-  await a.clay.page.ready;
-  const aView = a.clay.page.view;
+  await a.clay.blockeditor.ready;
+  const aView = a.clay.blockeditor.view;
   aView.dispatch(aView.state.tr.insertText("other", firstParagraph(aView)));
-  await waitFor(() => recordOf()?.page?.html?.includes("other"));
+  await waitFor(() => recordOf()?.blockeditor?.html?.includes("other"));
   const rawA = localStorage.getItem(key);
   expect(rawA).toBeTruthy();
 
   const dispatching = jest.spyOn(document, "dispatchEvent");
   const b = await bootPage({ slot });
-  await b.clay.page.ready;
-  const announced = dispatching.mock.calls.filter(([event]) => event?.type === "clay:drafts-page-listening");
+  await b.clay.blockeditor.ready;
+  const announced = dispatching.mock.calls.filter(([event]) => event?.type === "clay:drafts-blockeditor-listening");
   dispatching.mockRestore();
   expect(announced.length).toBe(1);
 
-  const bView = b.clay.page.view;
+  const bView = b.clay.blockeditor.view;
   expect(bView.state.doc.textContent).not.toContain("other");
 
   localStorage.setItem(key, rawA);
-  document.dispatchEvent(new CustomEvent("clay:drafts-page-listening"));
+  document.dispatchEvent(new CustomEvent("clay:drafts-blockeditor-listening"));
   await waitFor(() => bView.state.doc.textContent.includes("other"));
   expect(bView.state.doc.textContent).toContain("other");
 }, 60000);
 
 test("only the tab in front answers another tab's page", async () => {
-  const slot = "page-draft-tabs-one-listener";
+  const slot = "blockeditor-draft-tabs-one-listener";
   const first = await bootPage({ slot });
-  await first.clay.page.ready;
+  await first.clay.blockeditor.ready;
   const second = await bootPage({ slot });
-  await second.clay.page.ready;
+  await second.clay.blockeditor.ready;
 
   const adopted = jest.fn();
-  document.dispatchEvent(new CustomEvent("clay:drafts-page-external", { detail: { live: { page: seedValue(BLOCKS) }, adopted } }));
+  document.dispatchEvent(new CustomEvent("clay:drafts-blockeditor-external", { detail: { live: { blockeditor: seedValue(BLOCKS) }, adopted } }));
   expect(adopted).toHaveBeenCalledTimes(1);
 }, 40000);

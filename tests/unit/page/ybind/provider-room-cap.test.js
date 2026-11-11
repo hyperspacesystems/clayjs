@@ -8,18 +8,18 @@ async function runProbe(chars, count, maxEvents) {
   const blocks = Array.isArray(chars) ? chars : [{ id: "p", text: "x".repeat(chars) }];
   const initial = seedValue(blocks);
   const sim = new Sim();
-  const room = createRoom(sim, { page: initial });
+  const room = createRoom(sim, { blockeditor: initial });
   const tabs = [];
   for (let i = 0; i < count; i++) {
     const id = "tab" + i;
-    const store = createStore({ name: "page", value: initial });
+    const store = createStore({ name: "blockeditor", value: initial });
     const ydoc = docFromValue(initial);
     ydoc.clientID = 10 + i;
     const compact = { keys: 32 };
     const provider = createYProvider({ store, ydoc, compact, setTimer: sim.setTimer, clearTimer: sim.clearTimer });
     const transport = room.transport(id);
-    const lane = createFastLane({ transport, entries: new Map([["page", { store }]]), now: sim.now, setTimer: sim.setTimer, clearTimer: sim.clearTimer });
-    store.onLocal((ops) => lane.local("page", ops, store.mark));
+    const lane = createFastLane({ transport, entries: new Map([["blockeditor", { store }]]), now: sim.now, setTimer: sim.setTimer, clearTimer: sim.clearTimer });
+    store.onLocal((ops) => lane.local("blockeditor", ops, store.mark));
     lane.start();
     room.open(id);
     tabs.push({ store, ydoc, provider, lane, compact });
@@ -32,8 +32,8 @@ async function runProbe(chars, count, maxEvents) {
     for (let i = 0; i < 4; i++) await Promise.resolve();
     events++;
   }
-  const finalValue = room.stores.get("page").value;
-  const final = { time: sim.t, posts: room.posts, refusals: room.refused.length, bytes: room.stores.get("page").bytes, complete: entriesOf(finalValue.y).length, reloaded: docFromValue(finalValue).getText("flow").toString().length, tabs: tabs.map((t) => ({ pending: t.store.pending.length })) };
+  const finalValue = room.stores.get("blockeditor").value;
+  const final = { time: sim.t, posts: room.posts, refusals: room.refused.length, bytes: room.stores.get("blockeditor").bytes, complete: entriesOf(finalValue.y).length, reloaded: docFromValue(finalValue).getText("flow").toString().length, tabs: tabs.map((t) => ({ pending: t.store.pending.length })) };
   for (const t of tabs) { t.provider.dispose(); t.lane.stop(); t.ydoc.destroy(); }
   return final;
 }

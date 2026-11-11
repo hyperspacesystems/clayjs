@@ -5,7 +5,7 @@ const same = (a, b) => canon(a) === canon(b);
 
 function inlineOf(item, doc) {
   const article = doc.createElement("article");
-  article.setAttribute("data-page", "");
+  article.setAttribute("data-blockeditor", "");
   article.innerHTML = renderModel([{ id: item.id, t: "paragraph", c: item.c ?? "", ...(item.m ? { m: item.m } : {}) }], { clean: fragmentCleaner(doc) });
   return article;
 }

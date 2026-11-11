@@ -28,10 +28,10 @@ export function openAltEditor(view, id) {
   let at = 0;
   for (let i = 0; i < index; i++) at += view.state.doc.child(i).nodeSize;
   const box = doc.createElement("div");
-  box.className = "page-link";
+  box.className = "blockeditor-link";
   box.dataset.mode = "alt";
   const input = doc.createElement("input");
-  input.className = "page-link-input";
+  input.className = "blockeditor-link-input";
   input.type = "text";
   input.value = view.state.doc.child(index).attrs.alt || "";
   input.placeholder = "Describe the image";
@@ -40,8 +40,8 @@ export function openAltEditor(view, id) {
   const rect = view.nodeDOM(at)?.getBoundingClientRect?.();
   const shellBox = shell.getBoundingClientRect();
   if (rect) {
-    box.style.setProperty("--page-pop-x", `${rect.left - shellBox.left}px`);
-    box.style.setProperty("--page-pop-y", `${rect.bottom - shellBox.top + 6}px`);
+    box.style.setProperty("--blockeditor-pop-x", `${rect.left - shellBox.left}px`);
+    box.style.setProperty("--blockeditor-pop-y", `${rect.bottom - shellBox.top + 6}px`);
   }
   shell.append(box);
   let done = false;

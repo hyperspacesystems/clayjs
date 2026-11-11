@@ -17,14 +17,14 @@
       warn.apply(console, arguments);
     };
     // The host's capability document. The page plugin mounts the editor only when
-    // the host advertises "page", and /_/meta is the only place it asks, so the
+    // the host advertises "blockeditor", and /_/meta is the only place it asks, so the
     // fixture answers discovery itself before clay.js runs. Everything else goes
     // to the real network.
     var nativeFetch = window.fetch.bind(window);
     window.fetch = function (input, init) {
       var url = new URL(typeof input === "string" ? input : input.url, location.href);
       if (url.pathname === "/_/meta") {
-        return Promise.resolve(new Response(JSON.stringify({ spec: 1, extensions: ["page"], document: null }), {
+        return Promise.resolve(new Response(JSON.stringify({ spec: 1, extensions: ["blockeditor"], document: null }), {
           status: 200,
           headers: { "content-type": "application/json" },
         }));
@@ -41,11 +41,11 @@
       });
     }, { once: true });
   </script>
-  <script src="/dist/clay.js?plugins=page"></script>
+  <script src="/dist/clay.js?plugins=blockeditor"></script>
 </head>
 <body>
-  <script type="application/json" merge="page" clay="live">{"v":1,"g":0,"y":{"seed":"AAACQQMEAQAIQgALJwAoAQUAJwAoAIUkHGF0dHJzdGl0bGVsZXZlbHRmbG93YXR0cnNwMXRFAQEEBQIBBwEAAAEBAQACQQACQQEBBwB9AXcHaGVhZGluZ3YBAWJ3BXRpdGxldwlwYXJhZ3JhcGh2AQFidwJwMQA="}}</script>
-  <article class="page" clay="freeze" data-page="1" data-rev="093360993130d818"><h1 data-id="title"></h1>
+  <script type="application/json" merge="blockeditor" clay="live">{"v":1,"g":0,"y":{"seed":"AAACQQMEAQAIQgALJwAoAQUAJwAoAIUkHGF0dHJzdGl0bGVsZXZlbHRmbG93YXR0cnNwMXRFAQEEBQIBBwEAAAEBAQACQQACQQEBBwB9AXcHaGVhZGluZ3YBAWJ3BXRpdGxldwlwYXJhZ3JhcGh2AQFidwJwMQA="}}</script>
+  <article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="093360993130d818"><h1 data-id="title"></h1>
 <p data-id="p1"></p></article>
 
   <nav clay="no-save no-watch">

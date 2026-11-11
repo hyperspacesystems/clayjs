@@ -10,7 +10,7 @@ import { createToolHost } from "../../../src/page/tools.js";
 import { editor, ids, posOf, select, typeText } from "./view-helpers.js";
 
 /**
- * /ai tools as contract A targets: what goes over the `page-tool` helper, what the
+ * /ai tools as contract A targets: what goes over the `blockeditor-tool` helper, what the
  * preview touches, and what Keep writes. The panel that drives these targets is
  * ai-edit's, so nothing here builds chrome.
  */
@@ -57,8 +57,8 @@ const baseClay = window.clay;
 let view, ai, live, sent, acceptState, saveResult, toolHost;
 
 function setup({ blocks = [["p", "paragraph", ""]], records = null, tools = {}, accepting = true, save = { ok: true }, mountTools = false } = {}) {
-  document.body.innerHTML = '<article data-page="1"></article>';
-  live = createStore({ name: "page.tools", value: tools }).handle;
+  document.body.innerHTML = '<article data-blockeditor="1"></article>';
+  live = createStore({ name: "blockeditor.tools", value: tools }).handle;
   sent = [];
   window.clay = {
     wire: {
@@ -106,15 +106,15 @@ afterEach(() => {
 });
 
 test("the capability reads the document's helper list, never the old extension", () => {
-  expect(capabilityAdvertised({ extensions: ["page"] })).toBe(false);
-  expect(capabilityAdvertised({ extensions: ["page", "page-tool/1"] })).toBe(false);
+  expect(capabilityAdvertised({ extensions: ["blockeditor"] })).toBe(false);
+  expect(capabilityAdvertised({ extensions: ["blockeditor", "blockeditor-tool/1"] })).toBe(false);
   expect(capabilityAdvertised({ extensions: [], document: { helpers: [{ name: "ai-edit", state: "ready" }] } })).toBe(false);
-  expect(capabilityAdvertised({ extensions: [], document: { helpers: [{ name: "page-tool", state: "ready" }] } })).toBe(true);
-  expect(capabilityAdvertised({ extensions: [], document: { helpers: [{ name: "page-tool", state: "unavailable" }] } })).toBe(true);
-  expect(capabilityAdvertised({ extensions: [], document: { helpers: [{ name: "page-tool", state: "denied" }] } })).toBe(false);
+  expect(capabilityAdvertised({ extensions: [], document: { helpers: [{ name: "blockeditor-tool", state: "ready" }] } })).toBe(true);
+  expect(capabilityAdvertised({ extensions: [], document: { helpers: [{ name: "blockeditor-tool", state: "unavailable" }] } })).toBe(true);
+  expect(capabilityAdvertised({ extensions: [], document: { helpers: [{ name: "blockeditor-tool", state: "denied" }] } })).toBe(false);
 });
 
-test("a new tool's request is the page-tool protocol with the page's context and no revision", async () => {
+test("a new tool's request is the blockeditor-tool protocol with the page's context and no revision", async () => {
   setup({ blocks: [["h", "heading", "Research"], ["p", "paragraph", "Notes"]] });
   const target = ai.newTool(null);
   expect(target.aiTarget).toBe(true);
@@ -129,7 +129,7 @@ test("a new tool's request is the page-tool protocol with the page's context and
 
   const [call] = sent;
   expect(call.payload).toEqual({
-    protocol: "page-tool/1",
+    protocol: "blockeditor-tool/1",
     requestId: call.payload.requestId,
     prompt: "make a tally",
     context: { title: document.title, outline: [{ level: 2, text: "Research" }], tables: [] },
@@ -137,7 +137,7 @@ test("a new tool's request is the page-tool protocol with the page's context and
     current: null,
   });
   expect(call.payload.requestId).toBe(uuid);
-  expect(call.options).toMatchObject({ helper: "page-tool", document: "none", id: call.payload.requestId });
+  expect(call.options).toMatchObject({ helper: "blockeditor-tool", document: "none", id: call.payload.requestId });
 });
 
 test("Generate previews without touching the document, then Keep saves state before one block in one undo step", async () => {
@@ -150,7 +150,7 @@ test("Generate previews without touching the document, then Keep saves state bef
   expect(previewShown(view.state)).toBe(true);
   expect(view.state.doc.toJSON()).toEqual(before);
   expect(live.data).toEqual({});
-  expect(view.dom.querySelector(".page-ai-preview output").textContent).toBe("Made");
+  expect(view.dom.querySelector(".blockeditor-ai-preview output").textContent).toBe("Made");
 
   const kept = await target.keep();
   expect(kept.status).toBe("kept");
@@ -205,7 +205,7 @@ test("the preview reads the document\u0027s tables, as the kept tool would", asy
   sent.at(-1).finish({ state: "done", result: { requestId: started.id, artifact: TABLE_TOOL, state: {} } });
   expect((await target.propose((await handle.done).result)).status).toBe("ready");
 
-  expect(view.dom.querySelector(".page-ai-preview output").textContent).toBe("10");
+  expect(view.dom.querySelector(".blockeditor-ai-preview output").textContent).toBe("10");
 });
 
 test("a state write the store refuses leaves no block and says why", async () => {
@@ -423,7 +423,7 @@ test("a tool that writes its own data on a schedule is paused for its revision a
     tools: { t: { r1: { count: 0 } } },
     mountTools: true,
   });
-  const output = () => view.dom.querySelector(".page-tool-content output");
+  const output = () => view.dom.querySelector(".blockeditor-tool-content output");
   expect(await waitFor(() => output() && Number(output().textContent) > 0)).toBe(true);
 
   const target = ai.reviseTool("t");
@@ -453,7 +453,7 @@ test("Discard remounts a paused tool from its saved data", async () => {
     tools: { t: { r1: { count: 0 } } },
     mountTools: true,
   });
-  const output = () => view.dom.querySelector(".page-tool-content output");
+  const output = () => view.dom.querySelector(".blockeditor-tool-content output");
   expect(await waitFor(() => output())).toBe(true);
   const target = ai.reviseTool("t");
   await target.start("make it bigger");
@@ -474,7 +474,7 @@ test("a failed Keep remounts a paused tool from its saved data", async () => {
     save: { ok: false },
     mountTools: true,
   });
-  const output = () => view.dom.querySelector(".page-tool-content output");
+  const output = () => view.dom.querySelector(".blockeditor-tool-content output");
   expect(await waitFor(() => output())).toBe(true);
   const target = ai.reviseTool("t");
   const { outcome } = await generate(target, "make it bigger");
@@ -494,7 +494,7 @@ test("a peer's data change during the preview still refuses Keep", async () => {
     tools: { t: { r1: { count: 0 } } },
     mountTools: true,
   });
-  const output = () => view.dom.querySelector(".page-tool-content output");
+  const output = () => view.dom.querySelector(".blockeditor-tool-content output");
   expect(await waitFor(() => output())).toBe(true);
   const target = ai.reviseTool("t");
   const { outcome } = await generate(target, "make it bigger");

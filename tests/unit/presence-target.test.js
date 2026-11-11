@@ -48,7 +48,7 @@ const refused = (value, reason) => {
 
 const RECORD = { kind: "record", id: "card-42", field: "title" };
 const PAGE = {
-  kind: "page",
+  kind: "blockeditor",
   v: 1,
   epoch: "room-7",
   generation: 12,
@@ -239,7 +239,7 @@ describe("roster sessions", () => {
       null,
       { n: 1 },
       session({ id: "", n: 1 }),
-      session({ id: "s2", editing: { kind: "page" } }),
+      session({ id: "s2", editing: { kind: "blockeditor" } }),
       session({ id: "s3", n: -4 }),
     ]);
 

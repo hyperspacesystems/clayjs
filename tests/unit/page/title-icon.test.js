@@ -39,8 +39,8 @@ const open = (spec) => {
   return { view, asked };
 };
 
-const picker = () => document.querySelector(".page-mention-picker");
-const options = () => [...document.querySelectorAll(".page-mention-picker .page-menu-item")];
+const picker = () => document.querySelector(".blockeditor-mention-picker");
+const options = () => [...document.querySelectorAll(".blockeditor-mention-picker .blockeditor-menu-item")];
 const glyphs = () => options().map((option) => option.textContent.split(" ")[0]);
 const choose = (char) => {
   const index = glyphs().indexOf(char);
@@ -48,7 +48,7 @@ const choose = (char) => {
   options()[index].click();
 };
 const record = (view, id) => blockMap(view.state.doc)[id];
-const header = (view) => view.dom.querySelector("header[data-page-heading]");
+const header = (view) => view.dom.querySelector("header[data-blockeditor-heading]");
 const settle = () => new Promise((done) => setTimeout(done, 0));
 const addIcon = async (view, char = RAINBOW) => {
   const started = runPageCommand(view, "titleIcon", {});
@@ -61,7 +61,7 @@ const addIcon = async (view, char = RAINBOW) => {
 
 const articleOf = (inner, rev = "0") => {
   const parsed = new DOMParser().parseFromString(
-    `<!DOCTYPE html><html><body><article data-page="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
+    `<!DOCTYPE html><html><body><article data-blockeditor="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
     "text/html",
   );
   return parsed.querySelector("article");
@@ -83,8 +83,8 @@ test("the first root H1 is the title, and the glyph is written to it alone", asy
 
   // The glyph is drawn beside the title, and a second root H1 does not show one.
   expect(header(view).getAttribute("data-id")).toBe("h");
-  expect(header(view).querySelector("span[data-page-icon]").textContent).toBe(RAINBOW);
-  expect(view.dom.querySelectorAll("header[data-page-heading]")).toHaveLength(1);
+  expect(header(view).querySelector("span[data-blockeditor-icon]").textContent).toBe(RAINBOW);
+  expect(view.dom.querySelectorAll("header[data-blockeditor-heading]")).toHaveLength(1);
 });
 
 test("Add icon makes the title when the page has no H1: one admitted transaction, one undo step", async () => {
@@ -104,7 +104,7 @@ test("Add icon makes the title when the page has no H1: one admitted transaction
   history.undoNoScroll(view.state, view.dispatch);
   expect(view.state.doc.childCount).toBe(1);
   expect(canon(blockMap(view.state.doc))).toBe(canon(blockMap(before)));
-  expect(view.dom.querySelector("header[data-page-heading]")).toBeNull();
+  expect(view.dom.querySelector("header[data-blockeditor-heading]")).toBeNull();
 });
 
 test("a nested H1 is no title: the command makes one rather than decorating the nested heading", async () => {
@@ -125,11 +125,11 @@ test("the block id appears once, on the wrapper, and the decoration is outside t
   await addIcon(view, RAINBOW);
 
   const box = header(view);
-  expect(box.getAttribute("data-page-heading")).toBe("1");
+  expect(box.getAttribute("data-blockeditor-heading")).toBe("1");
   expect(view.dom.querySelectorAll('[data-id="h"]')).toHaveLength(1);
   expect(box.querySelector("h1").hasAttribute("data-id")).toBe(false);
   expect(box.querySelector("h1").textContent).toBe("Notes");
-  expect(box.querySelector("span[data-page-icon]").getAttribute("aria-hidden")).toBe("true");
+  expect(box.querySelector("span[data-blockeditor-icon]").getAttribute("aria-hidden")).toBe("true");
   expect(box.firstChild.tagName).toBe("SPAN");
 });
 
@@ -141,7 +141,7 @@ test("the glyph stays out of the title, the search text and the plain words of t
   expect(documentTitle(shape)).toBe("Notes");
   expect(shape.find((item) => item.id === "h").c).toBe("Notes");
   expect(shape.find((item) => item.id === "h").pageIcon).toBe(RAINBOW);
-  expect(view.dom.querySelector("header[data-page-heading] h1").textContent).toBe("Notes");
+  expect(view.dom.querySelector("header[data-blockeditor-heading] h1").textContent).toBe("Notes");
 });
 
 test("a single glyph is the whole requirement, counted the way a person sees it", () => {
@@ -180,12 +180,12 @@ test("a copied title pastes its words without a second icon, and undo takes it b
   expect(pasted).toBeTruthy();
   expect(pasted.attrs.pageIcon ?? null).toBeNull();
   expect(record(view, "h").pageIcon).toBe(RAINBOW);
-  expect(view.dom.querySelectorAll("header[data-page-heading]")).toHaveLength(1);
+  expect(view.dom.querySelectorAll("header[data-blockeditor-heading]")).toHaveLength(1);
 
   history.undoNoScroll(view.state, view.dispatch);
   expect(view.state.doc.childCount).toBe(2);
   expect(record(view, "h").pageIcon).toBe(RAINBOW);
-  expect(header(view).querySelector("span[data-page-icon]").textContent).toBe(RAINBOW);
+  expect(header(view).querySelector("span[data-blockeditor-icon]").textContent).toBe(RAINBOW);
 });
 
 test("a writer that does not know the icon keeps it for this one, and this one writes the wrapper", () => {
@@ -195,7 +195,7 @@ test("a writer that does not know the icon keeps it for this one, and this one w
   expect(items).toEqual([{ id: "h", t: "heading", level: 1, pageIcon: RAINBOW, c: "Notes" }]);
 
   const html = renderModel(items);
-  expect(html).toBe(`<header data-id="h" data-page-heading="1"><span data-page-icon aria-hidden="true">${RAINBOW}</span><h1>Notes</h1></header>`);
+  expect(html).toBe(`<header data-id="h" data-blockeditor-heading="1"><span data-blockeditor-icon aria-hidden="true">${RAINBOW}</span><h1>Notes</h1></header>`);
   expect(canon(parseModel(articleOf(html)))).toBe(canon(items));
   // Read back through the record it is the same heading with the same glyph.
   expect(reopen({ h: { t: "heading", pos: "B", c: "Notes", level: 1, pageIcon: RAINBOW } }).items).toEqual(items);
@@ -229,7 +229,7 @@ test("opening the list writes nothing, and a title that moves away while it is o
   const before = view.state.doc;
   expect(await runPageCommand(view, "titleIcon", {})).toEqual({ ok: true, picker: true });
   expect(picker().hidden).toBe(false);
-  expect(view.dom.querySelector("header[data-page-heading]")).toBeNull();
+  expect(view.dom.querySelector("header[data-blockeditor-heading]")).toBeNull();
   expect(view.state.doc).toBe(before);
   expect(asked).toHaveLength(0);
   history.undoNoScroll(view.state, view.dispatch);
@@ -248,7 +248,7 @@ test("opening the list writes nothing, and a title that moves away while it is o
 
   expect(view.state.doc).toBe(after);
   expect(view.state.doc.child(0).attrs.pageIcon ?? null).toBeNull();
-  expect(view.dom.querySelector("header[data-page-heading]")).toBeNull();
+  expect(view.dom.querySelector("header[data-blockeditor-heading]")).toBeNull();
 });
 
 test("reordering the root H1s moves ownership, and the saved page decorates only the title", async () => {
@@ -256,7 +256,7 @@ test("reordering the root H1s moves ownership, and the saved page decorates only
   const { view } = open([["h", "heading", "Notes", { level: 1 }], ["z", "heading", "Second", { level: 1 }], ["b", "paragraph", "Body"]]);
   await addIcon(view, RAINBOW);
   expect(header(view).querySelector("h1").textContent).toBe("Notes");
-  expect(saved(view)).toContain(`<header data-id="h" data-page-heading="1">`);
+  expect(saved(view)).toContain(`<header data-id="h" data-blockeditor-heading="1">`);
 
   // The second H1 moves to the front: it is the title now, and it carries no icon.
   const at = posOf(view, "z") - 1;
@@ -265,21 +265,21 @@ test("reordering the root H1s moves ownership, and the saved page decorates only
   expect(titleIcon.titleOf(view.state.doc).node.attrs.id).toBe("z");
   // The displaced heading keeps its own attribute, and the page shows no icon for it.
   expect(record(view, "h").pageIcon).toBe(RAINBOW);
-  expect(saved(view)).not.toContain("data-page-icon");
+  expect(saved(view)).not.toContain("data-blockeditor-icon");
 
   // The command writes to the title the document has now.
   await addIcon(view, SKIN_TONE);
   expect(record(view, "z").pageIcon).toBe(SKIN_TONE);
   expect(record(view, "h").pageIcon).toBe(RAINBOW);
   const html = saved(view);
-  expect(html.match(/data-page-icon/g)).toHaveLength(1);
-  expect(html).toContain(`<header data-id="z" data-page-heading="1">`);
+  expect(html.match(/data-blockeditor-icon/g)).toHaveLength(1);
+  expect(html).toContain(`<header data-id="z" data-blockeditor-heading="1">`);
 });
 
 test("a gate that refuses writes nothing, and a page with no gate never asks one", async () => {
   const { view } = open(PAGE());
   const before = view.state.doc;
-  view.runFormatCommand = async () => ({ status: "upgrade-required", code: "page-format-upgrade-required" });
+  view.runFormatCommand = async () => ({ status: "upgrade-required", code: "blockeditor-format-upgrade-required" });
   expect((await runPageCommand(view, "titleIcon", {})).ok).toBe(true);
   await settle();
   choose(RAINBOW);
@@ -287,7 +287,7 @@ test("a gate that refuses writes nothing, and a page with no gate never asks one
   await settle();
   expect(view.state.doc).toBe(before);
   expect(record(view, "h").pageIcon).toBeUndefined();
-  expect(view.dom.querySelector("header[data-page-heading]")).toBeNull();
+  expect(view.dom.querySelector("header[data-blockeditor-heading]")).toBeNull();
 
   delete view.runFormatCommand;
   expect(await titleIcon.createFeature({ view }).run()).toEqual({ ok: true, picker: true });
@@ -295,7 +295,7 @@ test("a gate that refuses writes nothing, and a page with no gate never asks one
   await settle();
   await settle();
   expect(view.state.doc).toBe(before);
-  expect(view.dom.querySelector("header[data-page-heading]")).toBeNull();
+  expect(view.dom.querySelector("header[data-blockeditor-heading]")).toBeNull();
 });
 
 test("the title's attribute is one of the heading's defaults, so a page without one writes nothing new", () => {

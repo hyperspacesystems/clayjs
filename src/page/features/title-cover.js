@@ -30,16 +30,16 @@ function titleOf(doc) {
 }
 
 // The bar sits in its own shadow root beside the editor, so the page's CSS cannot restyle
-// it. The page's --page-* tokens still reach it, and it keeps the editor's font and colour.
+// it. The page's --blockeditor-* tokens still reach it, and it keeps the editor's font and colour.
 const COVER_CSS = `
 :host{font:inherit !important;color:inherit !important}
-.page-cover-panel{display:flex;align-items:center;gap:8px;margin:8px 0;padding:6px 10px;border:1px solid var(--page-pop-line);border-radius:8px;background:var(--page-pop-bg);color:var(--page-pop-ink);box-shadow:var(--page-pop-shadow);font-size:.88em}
-.page-cover-msg{max-width:34ch}
-.page-cover-bar{flex:1;height:2px;border-radius:1px;background:var(--page-rule);overflow:hidden}
-.page-cover-bar>span{display:block;height:100%;background:var(--page-progress, var(--page-ink-soft));transition:width 200ms}
-.page-cover-btn{border:0;padding:4px 8px;border-radius:6px;background:none;color:inherit;font:inherit;cursor:pointer}
-.page-cover-btn:hover{background:var(--page-pop-hover)}
-.page-cover-panel[data-state="error"] .page-cover-msg{color:var(--page-danger, #9E3B2F)}
+.blockeditor-cover-panel{display:flex;align-items:center;gap:8px;margin:8px 0;padding:6px 10px;border:1px solid var(--blockeditor-pop-line);border-radius:8px;background:var(--blockeditor-pop-bg);color:var(--blockeditor-pop-ink);box-shadow:var(--blockeditor-pop-shadow);font-size:.88em}
+.blockeditor-cover-msg{max-width:34ch}
+.blockeditor-cover-bar{flex:1;height:2px;border-radius:1px;background:var(--blockeditor-rule);overflow:hidden}
+.blockeditor-cover-bar>span{display:block;height:100%;background:var(--blockeditor-progress, var(--blockeditor-ink-soft));transition:width 200ms}
+.blockeditor-cover-btn{border:0;padding:4px 8px;border-radius:6px;background:none;color:inherit;font:inherit;cursor:pointer}
+.blockeditor-cover-btn:hover{background:var(--blockeditor-pop-hover)}
+.blockeditor-cover-panel[data-state="error"] .blockeditor-cover-msg{color:var(--blockeditor-danger, #9E3B2F)}
 `;
 
 const clamp = (value) => Math.min(100, Math.max(0, Math.round(value)));
@@ -47,9 +47,9 @@ const clamp = (value) => Math.min(100, Math.max(0, Math.round(value)));
 // The format gate's own answer, as every command that writes a newer page format asks for
 // it: the command's result when the gate admitted the write, the gate's refusal otherwise.
 async function formatted(view, apply) {
-  if (typeof view.runFormatCommand !== "function") return { ok: false, code: "page-format-unsupported" };
+  if (typeof view.runFormatCommand !== "function") return { ok: false, code: "blockeditor-format-unsupported" };
   const answer = await view.runFormatCommand(apply);
-  return answer?.status === "applied" ? answer.result : { ok: false, code: answer?.code ?? answer?.status ?? "page-format-refused", retry: answer?.retry === true };
+  return answer?.status === "applied" ? answer.result : { ok: false, code: answer?.code ?? answer?.status ?? "blockeditor-format-refused", retry: answer?.retry === true };
 }
 const readDataUrl = (file) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => no(r.error); r.readAsDataURL(file); });
 
@@ -78,7 +78,7 @@ export function createFeature({ view = null, upload = null } = {}) {
   const button = (act, label) => {
     const b = doc.createElement("button");
     b.type = "button";
-    b.className = "page-cover-btn";
+    b.className = "blockeditor-cover-btn";
     b.dataset.act = act;
     b.textContent = label;
     return b;
@@ -88,18 +88,18 @@ export function createFeature({ view = null, upload = null } = {}) {
   // reposition's own message. It is runtime only, so nothing of it is in the record.
   function draw(s) {
     const box = s.panel ?? (s.panel = doc.createElement("div"));
-    box.className = "page-cover-panel";
+    box.className = "blockeditor-cover-panel";
     box.dataset.state = s.state;
     box.setAttribute("contenteditable", "false");
     box.setAttribute("role", s.state === "uploading" ? "status" : "alert");
     box.textContent = "";
     const msg = doc.createElement("span");
-    msg.className = "page-cover-msg";
+    msg.className = "blockeditor-cover-msg";
     msg.textContent = s.message;
     box.append(msg);
     if (s.state === "uploading") {
       const bar = doc.createElement("span");
-      bar.className = "page-cover-bar";
+      bar.className = "blockeditor-cover-bar";
       bar.setAttribute("role", "progressbar");
       bar.setAttribute("aria-valuemin", "0");
       bar.setAttribute("aria-valuemax", "100");
@@ -113,7 +113,7 @@ export function createFeature({ view = null, upload = null } = {}) {
     else box.append(button("cancel", "Close"));
     if (!s.ui) {
       const host = view.dom.parentElement;
-      s.ui = mountEditorUI({ name: "page-cover", content: box, css: [COVER_CSS], parent: host ?? doc.body, before: host ? view.dom : null });
+      s.ui = mountEditorUI({ name: "blockeditor-cover", content: box, css: [COVER_CSS], parent: host ?? doc.body, before: host ? view.dom : null });
     }
   }
 
@@ -156,7 +156,7 @@ export function createFeature({ view = null, upload = null } = {}) {
       const input = doc.createElement("input");
       input.type = "file";
       input.accept = "image/*";
-      input.className = "page-cover-input";
+      input.className = "blockeditor-cover-input";
       input.hidden = true;
       (view.dom.parentElement ?? doc.body).appendChild(input);
       s.input = input;
@@ -261,7 +261,7 @@ export function createFeature({ view = null, upload = null } = {}) {
     return { ok: true, picker: true };
   }
 
-  const coverImg = () => view.dom.querySelector("header[data-page-heading] img[data-page-cover]");
+  const coverImg = () => view.dom.querySelector("header[data-blockeditor-heading] img[data-blockeditor-cover]");
 
   function preview(s) {
     const img = coverImg();

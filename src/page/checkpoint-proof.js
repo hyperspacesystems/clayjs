@@ -14,7 +14,7 @@
  * meaning, a page rebuilt from another article or a stale tag all produce no proof, and
  * the records stay.
  *
- * The second half is the conditional page-state client: the host's own copy of the page
+ * The second half is the conditional blockeditor-state client: the host's own copy of the page
  * state, asked for by the accepted ETag, for the cases a local capture cannot answer —
  * the server's checkpoint, another writer's, and a lost reply that only a verified
  * refetch can reconcile. Nothing here reads a cookie, a room sequence or a version
@@ -35,7 +35,7 @@ import { articleOfPageState, pageStateOfClone } from "./save-projection.js";
 // clone whose bytes it sends, after every transform.
 setCapturePageState(pageStateOfClone);
 
-/** The only page-state resource version this client reads. */
+/** The only blockeditor-state resource version this client reads. */
 export const PAGE_STATE_VERSION = 1;
 
 export class PageCheckpointError extends Error {
@@ -79,7 +79,7 @@ const idKey = (value) => (value === null || value === undefined ? "" : String(va
  * failure are refusals with a code: the caller keeps its records and asks again later.
  *
  * @param {Object} options
- * @param {string} options.href - the resource discovery named in `document.pageState.href`
+ * @param {string} options.href - the resource discovery named in `document.blockeditorState.href`
  * @param {string} options.etag - the ETag the accepted bytes were stored under
  * @param {Function} [options.fetch]
  * @param {AbortSignal} [options.signal]
@@ -87,12 +87,12 @@ const idKey = (value) => (value === null || value === undefined ? "" : String(va
  */
 export async function readPageState({ href, etag, fetch: doFetch = globalThis.fetch, signal = null } = {}) {
   if (typeof etag !== "string" || !etag) return refused("missing-etag", "A conditional read needs the accepted ETag");
-  if (typeof href !== "string" || !href) return refused("no-page-state", "This host names no page-state resource");
+  if (typeof href !== "string" || !href) return refused("no-blockeditor-state", "This host names no blockeditor-state resource");
   if (typeof doFetch !== "function") return refused("unavailable", "This tab cannot read the page state");
   const base = globalThis.location?.href ?? "http://localhost/";
   let url;
   try { url = new URL(href, base).href; }
-  catch (_) { return refused("no-page-state", "The page-state resource is not a URL"); }
+  catch (_) { return refused("no-blockeditor-state", "The blockeditor-state resource is not a URL"); }
   const token = saveToken();
   let res;
   try {
@@ -105,23 +105,23 @@ export async function readPageState({ href, etag, fetch: doFetch = globalThis.fe
       signal,
     });
   } catch (_) {
-    return refused("unavailable", "The page-state request did not complete");
+    return refused("unavailable", "The blockeditor-state request did not complete");
   }
-  if (!res || typeof res.status !== "number") return refused("unavailable", "The page-state request did not answer");
+  if (!res || typeof res.status !== "number") return refused("unavailable", "The blockeditor-state request did not answer");
   if (res.status === 412) return refused("etag-mismatch", "Another version of this document is stored");
   if (res.status === 428) return refused("etag-required", "The host needs a condition this read cannot send");
-  if (res.status === 404) return refused("no-page-state", "This host keeps no page state");
+  if (res.status === 404) return refused("no-blockeditor-state", "This host keeps no page state");
   if (!res.ok) return refused("unavailable", `The host answered ${res.status}`);
 
   let body;
   try { body = JSON.parse(await res.text()); }
-  catch (_) { return refused("invalid-state", "The page-state answer is not JSON"); }
-  if (!isObject(body) || body.version !== PAGE_STATE_VERSION) return refused("unsupported-version", "Unknown page-state version");
-  if (typeof body.tag !== "string" || !body.tag) return refused("invalid-state", "The page-state answer carries no page tag");
-  if (typeof body.stateHash !== "string" || !HEX64.test(body.stateHash)) return refused("invalid-state", "The page-state answer carries no state digest");
-  if (typeof body.generation !== "string" || !GENERATION.test(body.generation)) return refused("invalid-state", "The page-state answer carries no generation");
-  if (typeof body.etag !== "string" || !body.etag) return refused("invalid-state", "The page-state answer carries no ETag");
-  if (!Object.hasOwn(body, "documentId")) return refused("invalid-state", "The page-state answer carries no document identity");
+  catch (_) { return refused("invalid-state", "The blockeditor-state answer is not JSON"); }
+  if (!isObject(body) || body.version !== PAGE_STATE_VERSION) return refused("unsupported-version", "Unknown blockeditor-state version");
+  if (typeof body.tag !== "string" || !body.tag) return refused("invalid-state", "The blockeditor-state answer carries no page tag");
+  if (typeof body.stateHash !== "string" || !HEX64.test(body.stateHash)) return refused("invalid-state", "The blockeditor-state answer carries no state digest");
+  if (typeof body.generation !== "string" || !GENERATION.test(body.generation)) return refused("invalid-state", "The blockeditor-state answer carries no generation");
+  if (typeof body.etag !== "string" || !body.etag) return refused("invalid-state", "The blockeditor-state answer carries no ETag");
+  if (!Object.hasOwn(body, "documentId")) return refused("invalid-state", "The blockeditor-state answer carries no document identity");
   return {
     ok: true,
     version: body.version,
@@ -149,7 +149,7 @@ export async function readPageState({ href, etag, fetch: doFetch = globalThis.fe
  * @param {{authority: Object, lineage: Object}} options.accepted
  * @param {string} options.article - the final outgoing canonical article
  * @param {string} options.etag - the ETag the accepted save carried
- * @returns {Promise<{ok: true, state: Object, receipt: {file: string, pageState: string}}|{ok: false, code: string, message: string}>}
+ * @returns {Promise<{ok: true, state: Object, receipt: {file: string, blockeditorState: string}}|{ok: false, code: string, message: string}>}
  */
 export async function verifyPageState(read, { accepted, article, etag } = {}) {
   if (!read || read.ok !== true) return refused(read?.code ?? "unavailable", read?.message ?? "The page state was not read");
@@ -167,7 +167,7 @@ export async function verifyPageState(read, { accepted, article, etag } = {}) {
   try { projected = articleOfPageState(state); }
   catch (error) { return refused("invalid-state", error?.message ?? "The page state does not project"); }
   if (projected !== article) return refused("article-mismatch", "The page state does not project to the accepted article");
-  return { ok: true, state, receipt: { file: read.etag, pageState: read.stateHash } };
+  return { ok: true, state, receipt: { file: read.etag, blockeditorState: read.stateHash } };
 }
 
 // A proof is only worth the records the validator confirms, over the revisions the
@@ -217,7 +217,7 @@ export async function captureProof({ capture, records = [], accepted, article, s
       accepted,
       article,
       state,
-      receipt: { file: etag, pageState: await digestHex(stateBytes) },
+      receipt: { file: etag, blockeditorState: await digestHex(stateBytes) },
     });
   } catch (error) {
     return refused(error?.code ?? "invalid-proof", error?.message ?? "The proof could not be built");
@@ -265,7 +265,7 @@ export async function refetchedProof({ read, capture, records = [], accepted, ar
  * @param {string} options.article
  * @param {Object} [options.state] - the page state pinned to the capture
  * @param {string} options.etag
- * @param {?string} [options.href] - the page-state resource, or null
+ * @param {?string} [options.href] - the blockeditor-state resource, or null
  * @param {Function} [options.read]
  * @param {Function} [options.fetch]
  * @returns {Promise<{ok: boolean, retired: Array, proof: ?Object, code?: string}>}

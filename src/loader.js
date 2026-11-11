@@ -212,7 +212,7 @@ const stale = (path, editMode) =>
 // degrades to absent as at boot.
 async function loadLate(paths, editMode) {
   try {
-    await window.clay.page?.ready;
+    await window.clay.blockeditor?.ready;
   } catch {}
   for (const path of paths) {
     if (stale(path, editMode)) continue;
@@ -360,7 +360,7 @@ function attachPluginMember(path, mod, namespaces = loaded) {
   } else if (path === "plugins/live.js") {
     clay.live = mod.live;
   } else if (path === "plugins/page.js") {
-    clay.page = mod.page;
+    clay.blockeditor = mod.page;
   } else if (path === "plugins/upgrade.js") {
     clay.save = clay.save || {};
     clay.save.replace = mod.replace;

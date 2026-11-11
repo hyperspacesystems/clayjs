@@ -201,7 +201,7 @@ export function installAdoption({
         if (!outcome.ok || outcome.outcome !== "adopted") return outcome;
         requestCheckpoint();
         notice(outcome.counts);
-        doc.dispatchEvent(new CustomEvent("clay:page-adopted", { detail: outcome.counts }));
+        doc.dispatchEvent(new CustomEvent("clay:blockeditor-adopted", { detail: outcome.counts }));
         return outcome;
       });
     return queue;

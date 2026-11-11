@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "writer-drain",
-  "fixture": "page-host",
+  "fixture": "blockeditor-host",
   "boot": { "mode": "edit", "live": true, "destination": "host" },
   "steps": [
     { "op": "settle", "ms": 200 },

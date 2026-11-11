@@ -11,7 +11,7 @@ const lineages = new Map();
 
 function storedArticle(html, doc) {
   const $ = load(html);
-  const nodes = $('article[data-page]').toArray().filter((node) => !inert(node));
+  const nodes = $('article[data-blockeditor]').toArray().filter((node) => !inert(node));
   if (nodes.length !== 1) return null;
   const article = doc.createElement('article');
   for (const [name, value] of Object.entries(nodes[0].attribs)) article.setAttribute(name, value);
@@ -31,7 +31,7 @@ function storedLineage(html, createDocument) {
   return lineage;
 }
 
-export function checkInitialLineage({ currentHtml, html, pageWrite = null, createDocument }) {
+export function checkInitialLineage({ currentHtml, html, blockeditorWrite = null, createDocument }) {
   const lineage = storedLineage(currentHtml, createDocument);
   if (!lineage) return;
   let doc;
@@ -42,7 +42,7 @@ export function checkInitialLineage({ currentHtml, html, pageWrite = null, creat
   }
   try {
     if (lineage.client !== null && !Y.decodeStateVector(Y.encodeStateVector(doc)).has(lineage.client)) refuse('seed-lineage');
-    if (typeof pageWrite === 'string' && pageWrite.trim() === 'v1' && seedOnly(doc, lineage.client) &&
+    if (typeof blockeditorWrite === 'string' && blockeditorWrite.trim() === 'v1' && seedOnly(doc, lineage.client) &&
       splitPage(html).file === currentHtml) refuse('nothing-to-write');
   } finally {
     doc.destroy();
@@ -51,6 +51,6 @@ export function checkInitialLineage({ currentHtml, html, pageWrite = null, creat
 
 export function checkOrdinaryLineage({ currentHtml, html, room = null }) {
   const before = inspectPage(currentHtml ?? '');
-  const stored = before.kind === 'yjs' ? before.tags[0][1] : room?.stores.get('page')?.value ?? null;
+  const stored = before.kind === 'yjs' ? before.tags[0][1] : room?.stores.get('blockeditor')?.value ?? null;
   if (stored && !sharesLineage(stored, inspectPage(html).tags[0][1])) refuse('seed-lineage');
 }

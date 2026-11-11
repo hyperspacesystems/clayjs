@@ -6,7 +6,7 @@ import { formatBy } from "../../../src/live/provenance.js";
 
 const fileOf = (blocks) => {
   const model = project(blocks);
-  return `<!DOCTYPE html><html><body><main><article class="page" clay="freeze" data-page="1" data-rev="${revOf(model)}">\n${renderModel(model)}\n</article></main></body></html>`;
+  return `<!DOCTYPE html><html><body><main><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${revOf(model)}">\n${renderModel(model)}\n</article></main></body></html>`;
 };
 
 let view;
@@ -84,17 +84,17 @@ test("a toggle the reader opened stays open across an update", async () => {
 
 test("a saved file's page tag replaces the live tag, and a file without one removes it", () => {
   const base = blocksOfValues([RECORD]);
-  const tagged = (tag) => fileOf(base).replace("<body>", `<body><script type="application/json" merge="page" clay="live">${tag}</script>`);
+  const tagged = (tag) => fileOf(base).replace("<body>", `<body><script type="application/json" merge="blockeditor" clay="live">${tag}</script>`);
   document.documentElement.innerHTML = new DOMParser().parseFromString(fileOf(base), "text/html").documentElement.innerHTML;
   const first = JSON.stringify({ v: 1, y: { seed: "one" } });
   const second = JSON.stringify({ v: 1, y: { seed: "two" } });
-  document.head.insertAdjacentHTML("beforeend", `<script type="application/json" merge="page" clay="live">${first}</script>`);
+  document.head.insertAdjacentHTML("beforeend", `<script type="application/json" merge="blockeditor" clay="live">${first}</script>`);
 
   expect(view.applySavedArticle(tagged(second), document)).toBe(true);
-  expect(document.querySelector('script[type="application/json"][merge="page"]').textContent).toBe(second);
+  expect(document.querySelector('script[type="application/json"][merge="blockeditor"]').textContent).toBe(second);
 
   expect(view.applySavedArticle(fileOf(base), document)).toBe(true);
-  expect(document.querySelector('script[type="application/json"][merge="page"]')).toBe(null);
+  expect(document.querySelector('script[type="application/json"][merge="blockeditor"]')).toBe(null);
 });
 
 test("a saved tag keeps the room lineage it carries", () => {
@@ -102,7 +102,7 @@ test("a saved tag keeps the room lineage it carries", () => {
   const tagged = (tag, { at = null, by = null } = {}) =>
     fileOf(base).replace(
       "<body>",
-      `<body><script type="application/json" merge="page" clay="live"${at ? ` live-at="${at}"` : ""}${by ? ` live-by="${by}"` : ""}>${tag}</script>`
+      `<body><script type="application/json" merge="blockeditor" clay="live"${at ? ` live-at="${at}"` : ""}${by ? ` live-by="${by}"` : ""}>${tag}</script>`
     );
   const first = JSON.stringify({ v: 1, y: { seed: "one" } });
   const second = JSON.stringify({ v: 1, y: { seed: "two" } });
@@ -112,11 +112,11 @@ test("a saved tag keeps the room lineage it carries", () => {
   expect(secondBy).toBeTruthy();
 
   document.documentElement.innerHTML = new DOMParser().parseFromString(fileOf(base), "text/html").documentElement.innerHTML;
-  document.head.insertAdjacentHTML("beforeend", `<script type="application/json" merge="page" clay="live" live-at="${firstAt}">${first}</script>`);
+  document.head.insertAdjacentHTML("beforeend", `<script type="application/json" merge="blockeditor" clay="live" live-at="${firstAt}">${first}</script>`);
 
   // The file a peer saved: newer text, and the room position it was saved at.
   expect(view.applySavedArticle(tagged(second, { at: secondAt, by: secondBy }), document)).toBe(true);
-  const liveTag = document.querySelector('script[type="application/json"][merge="page"]');
+  const liveTag = document.querySelector('script[type="application/json"][merge="blockeditor"]');
   expect(liveTag.textContent).toBe(second);
   // The tag states the saved lineage, so the next live entry reads the room it carries
   // instead of finding a stamp that does not match its text and dropping it.

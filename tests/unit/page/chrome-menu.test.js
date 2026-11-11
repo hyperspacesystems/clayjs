@@ -20,9 +20,9 @@ const open = (spec, id = spec[0][0], end = true) => {
   select(view, posOf(view, id, end));
   return view;
 };
-const menu = (view) => view.dom.parentElement.querySelector(".page-menu");
-const rows = (view) => [...menu(view).querySelectorAll(".page-menu-item")];
-const labels = (view) => rows(view).map((r) => r.querySelector(".page-menu-label").textContent);
+const menu = (view) => view.dom.parentElement.querySelector(".blockeditor-menu");
+const rows = (view) => [...menu(view).querySelectorAll(".blockeditor-menu-item")];
+const labels = (view) => rows(view).map((r) => r.querySelector(".blockeditor-menu-label").textContent);
 const type = (view, text) => { for (const ch of text) typeText(view, ch); };
 const backspace = (view) => view.dispatch(view.state.tr.delete(view.state.selection.head - 1, view.state.selection.head));
 const isOpen = (view) => !menu(view).hidden;
@@ -34,7 +34,7 @@ describe("the slash trigger", () => {
     expect(typeText(view, "/")).toBe(true);
     expect(isOpen(view)).toBe(true);
     expect(labels(view)).toEqual(["Text", "Heading 1", "Heading 2", "Heading 3", "Bulleted list", "Numbered list", "Checklist", "Toggle", "Toggle heading 1", "Toggle heading 2", "Toggle heading 3", "Callout", "Quote", "Code", "Divider", "Table of contents", "Image", "File", "Table", "Import CSV…", "Board", "Mention", "Date", "Emoji", "Import Markdown…"]);
-    expect(menu(view).querySelector(".page-menu-note")).toBe(null);
+    expect(menu(view).querySelector(".blockeditor-menu-note")).toBe(null);
   });
 
   test("opens after a space in the middle of a line, and at the start of a line that has text", () => {
@@ -119,7 +119,7 @@ describe("no match", () => {
     type(view, "/zq");
     expect(isOpen(view)).toBe(true);
     expect(rows(view)).toEqual([]);
-    expect(menu(view).querySelector(".page-menu-empty").textContent).toBe("No matching blocks");
+    expect(menu(view).querySelector(".blockeditor-menu-empty").textContent).toBe("No matching blocks");
     const before = view.state.doc;
     expect(key(view, "Enter")).toBe(true);
     expect(view.state.doc).toBe(before);
@@ -153,7 +153,7 @@ describe("no match", () => {
 });
 
 describe("the plus", () => {
-  const plus = (view) => view.dom.parentElement.querySelector(".page-plus");
+  const plus = (view) => view.dom.parentElement.querySelector(".blockeditor-plus");
 
   test("opens the menu without changing the document, and closing it changes nothing", () => {
     const view = open([["p", "paragraph", "P"], ["z", "paragraph", "Z"]], "p");
@@ -192,7 +192,7 @@ describe("the plus", () => {
 
   test("Image opens the picker for images and File for anything, placed after the block", () => {
     const view = open([["p", "paragraph", "P"]], "p");
-    const input = view.dom.parentElement.querySelector(".page-file-input");
+    const input = view.dom.parentElement.querySelector(".blockeditor-file-input");
     input.click = jest.fn();
     plus(view).click();
     rows(view).find((r) => r.textContent.startsWith("▣")).click();
@@ -213,8 +213,8 @@ describe("the plus", () => {
 describe("the toolbar's turn menu", () => {
   test("still lists the fourteen block types under its own title and turns the caret's block", () => {
     const view = open([["p", "paragraph", "P"]], "p");
-    view.dom.parentElement.querySelector(".page-tool-turn").click();
-    expect(menu(view).querySelector(".page-menu-title").textContent).toBe("Turn into");
+    view.dom.parentElement.querySelector(".blockeditor-tool-turn").click();
+    expect(menu(view).querySelector(".blockeditor-menu-title").textContent).toBe("Turn into");
     expect(rows(view).length).toBe(14);
     rows(view)[1].click();
     expect(view.state.doc.child(0).type.name).toBe("heading");
@@ -229,7 +229,7 @@ describe("rows and aria", () => {
     expect(h1.id).toBe(`${menu(view).id}-1`);
     expect(h1.getAttribute("role")).toBe("option");
     expect(h1.getAttribute("tabindex")).toBe("-1");
-    expect(h1.querySelector(".page-menu-hint").textContent).toBe("#");
+    expect(h1.querySelector(".blockeditor-menu-hint").textContent).toBe("#");
     key(view, "ArrowDown");
     expect(rows(view)[1].getAttribute("aria-selected")).toBe("true");
     expect(rows(view)[1].classList.contains("is-active")).toBe(true);
@@ -259,7 +259,7 @@ describe("rows and aria", () => {
 });
 
 describe("anchoring", () => {
-  const y = (view) => menu(view).style.getPropertyValue("--page-pop-y");
+  const y = (view) => menu(view).style.getPropertyValue("--blockeditor-pop-y");
 
   test("a slash menu sits under the slash", async () => {
     const view = open([["e", "paragraph", ""]]);
@@ -267,7 +267,7 @@ describe("anchoring", () => {
     type(view, "/");
     await frame();
     expect(y(view)).toBe("126px");
-    expect(menu(view).style.getPropertyValue("--page-pop-x")).toBe("40px");
+    expect(menu(view).style.getPropertyValue("--blockeditor-pop-x")).toBe("40px");
   });
 
   test("near the bottom of the viewport it flips above the slash", async () => {
@@ -287,7 +287,7 @@ describe("the actions menu", () => {
     for (let i = lo; i <= hi; i++) out.push(view.state.doc.child(i).attrs.id);
     return out;
   };
-  const row = (view, label) => rows(view).find((r) => r.querySelector(".page-menu-label").textContent === label);
+  const row = (view, label) => rows(view).find((r) => r.querySelector(".blockeditor-menu-label").textContent === label);
   const FOLD = [["p", "paragraph", "P"], ["t", "toggle", "T"], ["b1", "paragraph", "b1", { parent: "t" }], ["z", "paragraph", "Z"]];
 
   test("Mod+/ opens it and selects the caret's block with its hidden body", () => {
@@ -301,7 +301,7 @@ describe("the actions menu", () => {
   test("every action icon is a line SVG, not a glyph or an emoji", () => {
     const view = open(FOLD, "p");
     key(view, "/", { ctrlKey: true });
-    const icons = rows(view).map((r) => r.querySelector(".page-menu-icon"));
+    const icons = rows(view).map((r) => r.querySelector(".blockeditor-menu-icon"));
     expect(icons.length).toBeGreaterThan(0);
     for (const icon of icons) expect(icon.querySelector("svg")).not.toBeNull();
     expect(icons.map((icon) => icon.textContent).join("")).not.toMatch(/[\u21bb\u{1F517}\u29c9]/u);
@@ -355,7 +355,7 @@ describe("the actions menu", () => {
     key(view, "/", { ctrlKey: true });
     expect(selectedIds(view)).toEqual(["a", "b"]);
     row(view, "Turn into").click();
-    expect(menu(view).querySelector(".page-menu-title").textContent).toBe("Turn into");
+    expect(menu(view).querySelector(".blockeditor-menu-title").textContent).toBe("Turn into");
     rows(view)[1].click();
     expect([...Array(3).keys()].map((i) => [view.state.doc.child(i).type.name, view.state.doc.child(i).attrs.id])).toEqual([["heading", "a"], ["heading", "b"], ["paragraph", "z"]]);
   });
@@ -379,13 +379,13 @@ describe("the actions menu", () => {
 
 describe("the actions menu on an image", () => {
   const IMG = [["p", "paragraph", "P"], ["i", "image", "", { src: "/a.png", alt: "", caption: "" }]];
-  const row = (view, label) => rows(view).find((r) => r.querySelector(".page-menu-label").textContent === label);
+  const row = (view, label) => rows(view).find((r) => r.querySelector(".blockeditor-menu-label").textContent === label);
   const onImage = () => {
     const view = open(IMG, "p");
     view.dispatch(view.state.tr.setSelection(selectBlocks(view.state.doc, 1)));
     return view;
   };
-  const popover = (view) => view.dom.parentElement.querySelector('.page-link[data-mode="alt"]');
+  const popover = (view) => view.dom.parentElement.querySelector('.blockeditor-link[data-mode="alt"]');
   // The image actions are their own part: the chrome asks for it on the first one.
   const pick = async (view, label) => { row(view, label).click(); await frame(); await frame(); };
   const press = (input, k) => input.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
@@ -409,7 +409,7 @@ describe("the actions menu on an image", () => {
     const view = onImage();
     key(view, "/", { ctrlKey: true });
     await pick(view, "Alt text…");
-    const input = popover(view).querySelector(".page-link-input");
+    const input = popover(view).querySelector(".blockeditor-link-input");
     expect(input.getAttribute("aria-label")).toBe("Alt text");
     input.value = "  A red door  ";
     press(input, "Enter");
@@ -424,7 +424,7 @@ describe("the actions menu on an image", () => {
     view.dispatch(view.state.tr.setNodeMarkup(view.state.doc.child(0).nodeSize, null, { ...view.state.doc.child(1).attrs, alt: "Door" }));
     key(view, "/", { ctrlKey: true });
     await pick(view, "Alt text…");
-    const input = popover(view).querySelector(".page-link-input");
+    const input = popover(view).querySelector(".blockeditor-link-input");
     expect(input.value).toBe("Door");
     input.value = "changed";
     press(input, "Escape");
@@ -437,7 +437,7 @@ describe("review menu regressions", () => {
   test("F9 plus Divider adds a following paragraph and selects its caret", () => {
     const view = open([["p", "paragraph", "hello"]]);
     try {
-      view.dom.parentElement.querySelector(".page-plus").click();
+      view.dom.parentElement.querySelector(".blockeditor-plus").click();
       rows(view)[14].click();
       expect(view.state.doc.childCount).toBe(3);
       expect(view.state.doc.child(1).type.name).toBe("divider");
@@ -461,7 +461,7 @@ describe("review menu regressions", () => {
     try {
       type(view, "/image");
       key(view, "Enter");
-      view.dom.parentElement.querySelector(".page-file-input").dispatchEvent(new Event("cancel"));
+      view.dom.parentElement.querySelector(".blockeditor-file-input").dispatchEvent(new Event("cancel"));
       expect(view.state.doc.textContent).toBe("/image");
     } finally { view.destroy(); }
   });
@@ -488,7 +488,7 @@ describe("review menu regressions", () => {
   test("F14 Turn into and following typing undo separately", () => {
     const view = open([["p", "paragraph", "hello"]]);
     try {
-      view.dom.parentElement.querySelector(".page-tool-turn").click();
+      view.dom.parentElement.querySelector(".blockeditor-tool-turn").click();
       rows(view)[1].click();
       typeText(view, "!");
       expect(history.undoDepth(view.state)).toBe(2);
@@ -513,27 +513,27 @@ describe("review menu regressions", () => {
     const view = open([["p", "paragraph", "hello"]]);
     try {
       select(view, 1, 4);
-      view.dom.parentElement.querySelector('.page-dock [data-cmd="link"]').click();
-      expect(document.activeElement).toBe(view.dom.parentElement.querySelector(".page-link-input"));
+      view.dom.parentElement.querySelector('.blockeditor-dock [data-cmd="link"]').click();
+      expect(document.activeElement).toBe(view.dom.parentElement.querySelector(".blockeditor-link-input"));
     } finally { view.destroy(); }
   });
 });
 
 describe("the selection bar matches the toolbar", () => {
-  const bubble = (view) => view.dom.parentElement.querySelector(".page-bubble");
-  const dock = (view) => view.dom.parentElement.querySelector(".page-dock");
+  const bubble = (view) => view.dom.parentElement.querySelector(".blockeditor-bubble");
+  const dock = (view) => view.dom.parentElement.querySelector(".blockeditor-dock");
 
   test("selecting text shows a Turn into button naming the block and a More button that opens its menu", () => {
     const view = open([["p", "paragraph", "hello"], ["q", "paragraph", "Q"]]);
     view.hasFocus = () => true;
     select(view, posOf(view, "p") + 1, posOf(view, "p") + 4);
     expect(bubble(view).hidden).toBe(false);
-    const turn = bubble(view).querySelector(".page-tool-turn");
-    const more = bubble(view).querySelector(".page-tool-more");
+    const turn = bubble(view).querySelector(".blockeditor-tool-turn");
+    const more = bubble(view).querySelector(".blockeditor-tool-more");
     expect(turn.textContent).toBe(`${blockTypeOf(view.state.doc.child(0)).label} \u25be`);
-    expect(turn.textContent).toBe(dock(view).querySelector(".page-tool-turn").textContent);
-    expect(turn.classList.contains("page-tool-desk")).toBe(false);
-    expect(more.classList.contains("page-tool-desk")).toBe(false);
+    expect(turn.textContent).toBe(dock(view).querySelector(".blockeditor-tool-turn").textContent);
+    expect(turn.classList.contains("blockeditor-tool-desk")).toBe(false);
+    expect(more.classList.contains("blockeditor-tool-desk")).toBe(false);
     expect([...bubble(view).children].indexOf(turn)).toBe(0);
     expect([...bubble(view).children].indexOf(more)).toBe(bubble(view).children.length - 1);
     more.click();
@@ -545,8 +545,8 @@ describe("the selection bar matches the toolbar", () => {
     const view = open([["p", "paragraph", "hello"], ["q", "paragraph", "Q"]]);
     view.hasFocus = () => true;
     select(view, posOf(view, "p") + 1, posOf(view, "p") + 4);
-    const more = bubble(view).querySelector(".page-tool-more");
-    const toolbarMore = dock(view).querySelector(".page-tool-more");
+    const more = bubble(view).querySelector(".blockeditor-tool-more");
+    const toolbarMore = dock(view).querySelector(".blockeditor-tool-more");
     const rect = { left: 300, right: 320, top: 500, bottom: 520, width: 20, height: 20 };
     more.getBoundingClientRect = jest.fn(() => rect);
     toolbarMore.getBoundingClientRect = jest.fn(() => ({ ...rect, top: 10, bottom: 30 }));
@@ -554,7 +554,7 @@ describe("the selection bar matches the toolbar", () => {
     await frame();
     more.getBoundingClientRect.mockClear();
     toolbarMore.getBoundingClientRect.mockClear();
-    rows(view).find((r) => r.querySelector(".page-menu-label").textContent === "Insert").click();
+    rows(view).find((r) => r.querySelector(".blockeditor-menu-label").textContent === "Insert").click();
     await frame();
     expect(isOpen(view)).toBe(true);
     expect(more.getBoundingClientRect).toHaveBeenCalled();
@@ -567,10 +567,10 @@ describe("the selection bar matches the toolbar", () => {
     view.hasFocus = () => true;
     view.coordsAtPos = () => COORDS;
     select(view, posOf(view, "p"), posOf(view, "p") + "under me".length);
-    bubble(view).querySelector(".page-tool-more").click();
+    bubble(view).querySelector(".blockeditor-tool-more").click();
     expect(bubble(view).hidden).toBe(false);
     expect(view.state.selection.empty).toBe(false);
-    rows(view).find((r) => r.querySelector(".page-menu-label").textContent === "Underline").click();
+    rows(view).find((r) => r.querySelector(".blockeditor-menu-label").textContent === "Underline").click();
     await new Promise((done) => setTimeout(done, 0));
     expect(gate.calls).toHaveLength(1);
     expect(view.state.doc.rangeHasMark(posOf(view, "p"), posOf(view, "p") + "under me".length, view.state.schema.marks.underline)).toBe(true);
@@ -618,7 +618,7 @@ describe("the selection bar matches the toolbar", () => {
 
   test("the More menu names the page's icon row Page icon, and has no Add icon row", () => {
     const view = open([["p", "paragraph", "hello"]]);
-    dock(view).querySelector(".page-tool-more").click();
+    dock(view).querySelector(".blockeditor-tool-more").click();
     expect(labels(view)).toContain("Page icon");
     expect(labels(view)).not.toContain("Add icon");
   });

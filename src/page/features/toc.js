@@ -41,7 +41,7 @@ export class TocView {
     this.doc = view.state.doc;
     const doc = view.dom.ownerDocument;
     this.dom = doc.createElement("div");
-    this.dom.className = "page-toc";
+    this.dom.className = "blockeditor-toc";
     this.dom.contentEditable = "false";
     this.dom.setAttribute("role", "group");
     this.dom.setAttribute("aria-label", "Table of contents");

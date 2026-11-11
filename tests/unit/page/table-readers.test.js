@@ -60,7 +60,7 @@ test("a chart reads marked cells as numbers and labels", () => {
 test("a saved table writes its rows once, as the visible table, and reads them back from it", () => {
   const [item] = project({ tbl: table });
   const html = renderModel([item]);
-  expect(html).not.toContain("data-clay-page-value");
+  expect(html).not.toContain("data-clay-blockeditor-value");
   const article = document.createElement("article");
   article.innerHTML = html;
   expect(parseModel(article)).toEqual([item]);

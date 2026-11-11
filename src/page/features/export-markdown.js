@@ -41,30 +41,30 @@ export function createFeature({ view = null, download = downloadHtml } = {}) {
       el.textContent = text;
       return el;
     };
-    parts.push(line("page-menu-title", "Export as Markdown"));
+    parts.push(line("blockeditor-menu-title", "Export as Markdown"));
     const counts = [`${s.report.blocks} block${s.report.blocks === 1 ? "" : "s"}`];
     if (s.report.extensions.length) counts.push(`${s.report.extensions.length} kept as HTML`);
     if (s.report.losses.length) counts.push(`${s.report.losses.length} lost`);
-    parts.push(line("page-menu-title page-export-summary", counts.join(" \u00b7 ")));
+    parts.push(line("blockeditor-menu-title blockeditor-export-summary", counts.join(" \u00b7 ")));
     const section = (className, label, list) => {
       if (!list.length) return;
       const box = doc.createElement("div");
       box.className = className;
-      box.append(line("page-menu-title", label));
+      box.append(line("blockeditor-menu-title", label));
       for (const one of list) {
-        const row = line("page-export-row", one.name);
+        const row = line("blockeditor-export-row", one.name);
         row.dataset.block = one.block ?? "";
         row.dataset.type = one.type ?? "";
         box.append(row);
       }
       parts.push(box);
     };
-    section("page-export-extensions", "Kept as HTML", s.report.extensions);
-    section("page-export-losses", "Not kept in Markdown", s.report.losses);
-    if (!s.report.extensions.length && !s.report.losses.length) parts.push(line("page-export-row", "Everything here is written as Markdown."));
+    section("blockeditor-export-extensions", "Kept as HTML", s.report.extensions);
+    section("blockeditor-export-losses", "Not kept in Markdown", s.report.losses);
+    if (!s.report.extensions.length && !s.report.losses.length) parts.push(line("blockeditor-export-row", "Everything here is written as Markdown."));
     if (s.notice) {
       const failed = doc.createElement("p");
-      failed.className = "page-export-error";
+      failed.className = "blockeditor-export-error";
       failed.setAttribute("role", "alert");
       failed.textContent = s.notice;
       parts.push(failed);
@@ -72,7 +72,7 @@ export function createFeature({ view = null, download = downloadHtml } = {}) {
     const button = (what, label) => {
       const el = doc.createElement("button");
       el.type = "button";
-      el.className = "page-menu-item";
+      el.className = "blockeditor-menu-item";
       el.dataset.export = what;
       el.textContent = label;
       el.addEventListener("mousedown", (event) => event.preventDefault());
@@ -112,7 +112,7 @@ export function createFeature({ view = null, download = downloadHtml } = {}) {
 
   function open(report, name) {
     const panel = doc.createElement("div");
-    panel.className = "page-menu page-export-preview";
+    panel.className = "blockeditor-menu blockeditor-export-preview";
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Export Markdown");
     const s = { report, name, panel, notice: null, listen: [] };

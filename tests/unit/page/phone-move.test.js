@@ -11,7 +11,7 @@ test("phone More → Move down moves the highlighted block range like the keyboa
   moveBlock(1)(keyboard.state, keyboard.dispatch);
   const phone = editor(SPEC);
   select(phone, posOf(phone, "a") + 1, posOf(phone, "b") + 2);
-  phone.dom.parentElement.querySelector(".page-tool-more").click();
+  phone.dom.parentElement.querySelector(".blockeditor-tool-more").click();
   const captured = chromeOf(phone).menu.ids;
   const down = [...chromeOf(phone).menuEl.querySelectorAll("button")].find((b) => b.textContent.includes("Move down"));
   down.click();

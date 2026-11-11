@@ -3,8 +3,8 @@
 // stylesheet of its own, and it takes no focus: the caret and the typed query stay in the
 // document, and the active row is announced through the editor's aria-activedescendant as
 // the slash menu does. A name is only ever text.
-export const PICKER = "page-mention-picker";
-export const OPTION = "page-menu-item";
+export const PICKER = "blockeditor-mention-picker";
+export const OPTION = "blockeditor-menu-item";
 const EMPTY = "No people to mention";
 
 let count = 0;
@@ -28,9 +28,9 @@ export const filterPeople = (people, query) => {
 // The shell takes the words a command shows, so a date command reuses the same listbox:
 // same placement, same rows, same keyboard, and its own name for what it lists.
 export function createMentionPicker({ document: doc = globalThis.document, onPick = () => {}, label = "Mention a person", empty = EMPTY } = {}) {
-  const id = `page-mentions-${++count}`;
+  const id = `blockeditor-mentions-${++count}`;
   const el = doc.createElement("div");
-  el.className = `page-menu ${PICKER}`;
+  el.className = `blockeditor-menu ${PICKER}`;
   el.id = id;
   el.setAttribute("role", "listbox");
   el.setAttribute("aria-label", label);
@@ -41,7 +41,7 @@ export function createMentionPicker({ document: doc = globalThis.document, onPic
   const draw = () => {
     if (!people.length) {
       const none = doc.createElement("div");
-      none.className = "page-menu-title";
+      none.className = "blockeditor-menu-title";
       none.textContent = empty;
       el.replaceChildren(none);
       return;
@@ -64,8 +64,8 @@ export function createMentionPicker({ document: doc = globalThis.document, onPic
   // The caret the list hangs from, in the page's own placement variables: the same ones
   // the block menu writes, so the existing menu stylesheet paints and lifts it.
   const place = (at) => {
-    el.style.setProperty("--page-pop-x", `${at.x}px`);
-    el.style.setProperty("--page-pop-y", `${at.y}px`);
+    el.style.setProperty("--blockeditor-pop-x", `${at.x}px`);
+    el.style.setProperty("--blockeditor-pop-y", `${at.y}px`);
   };
 
   return {

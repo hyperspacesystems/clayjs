@@ -41,12 +41,12 @@ const until = async (check, tries = 400) => {
   return false;
 };
 
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const handEdit = (doc) => { doc.querySelector('article[data-page] [data-id="p"]').textContent = ADOPTED; };
+const handEdit = (doc) => { doc.querySelector('article[data-blockeditor] [data-id="p"]').textContent = ADOPTED; };
 
 const marks = [];
 beforeEach(() => { marks.length = 0; });
@@ -57,7 +57,7 @@ Object.defineProperty(globalThis.performance, "mark", {
 });
 afterAll(() => { delete globalThis.performance.mark; });
 
-async function open({ edit = null, blocks = BLOCKS, roomEdits = null, extensions = ["page", "live-data"], writer = null } = {}) {
+async function open({ edit = null, blocks = BLOCKS, roomEdits = null, extensions = ["blockeditor", "live-data"], writer = null } = {}) {
   jest.resetModules();
   window.clayEditMode = true;
   const value = seedValue(blocks);
@@ -81,7 +81,7 @@ async function open({ edit = null, blocks = BLOCKS, roomEdits = null, extensions
     seq: room.seq,
     writer: room.writer,
     conn: 0,
-    stores: { page: { value: clone(roomValue), ephemeral: false, last: 0, landed: 0 } },
+    stores: { blockeditor: { value: clone(roomValue), ephemeral: false, last: 0, landed: 0 } },
   });
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
@@ -93,6 +93,7 @@ async function open({ edit = null, blocks = BLOCKS, roomEdits = null, extensions
   }));
 
   await jest.unstable_mockModule("../../../src/core/save.js", () => ({
+    claimFailure: () => {},
     savesAdmitted: () => true,
     savePageForce: async () => ({ ok: true, msgType: "success" }),
     savePage: async () => ({ ok: true, msgType: "success" }),
@@ -147,7 +148,7 @@ async function open({ edit = null, blocks = BLOCKS, roomEdits = null, extensions
 
   const { live } = await import("../../../src/plugins/live.js");
   window.clay = { live: (name) => live(name) };
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   const { ownerOf } = await import("../../../src/page/runtime-owner.js");
   const { page } = await import("../../../src/plugins/page.js");
 
@@ -160,7 +161,7 @@ async function open({ edit = null, blocks = BLOCKS, roomEdits = null, extensions
     handlersRef.h.frame({
       epoch: room.epoch,
       seq: room.seq,
-      name: "page",
+      name: "blockeditor",
       from: "other",
       n: room.seq,
       ops: Object.entries(updates).map(([key, encoded]) => ({ op: "set", path: ["y", key], value: encoded })),
@@ -227,7 +228,7 @@ test("a room that already holds the adopted article takes input at once", async 
     expect(page.view.editable).toBe(true);
     expect(editableNodes()).toBe(1);
     expect(await until(() => page.view.state.doc.textContent.includes(ADOPTED))).toBe(true);
-    expect(article.querySelectorAll(".page-shell")).toHaveLength(1);
+    expect(article.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
     expect(article.textContent).toContain(ADOPTED);
     expect(marks.at(-1)).toMatchObject({ name: "document:input-ready" });
   } finally {
@@ -277,7 +278,7 @@ test("an adoption that never arrives blocks with the timeout", async () => {
     expect(warn.mock.calls.map((call) => call.map(String).join(" ")).some((line) => /writer/.test(line))).toBe(true);
     // The wait released the view and the article came back from the room's state.
     expect(page.view.isDestroyed).toBe(true);
-    expect(article.querySelectorAll(".page-shell")).toHaveLength(0);
+    expect(article.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
     expect(article.textContent.trim()).toBe("Hello");
     expect(ownerOf(article)).toBe(null);
     expect(editableNodes()).toBe(0);
@@ -298,7 +299,7 @@ test("a boot that ends while waiting leaves nothing running", async () => {
     await flushAsync();
 
     expect(page.status).toBe(null);
-    expect(article.querySelectorAll(".page-shell")).toHaveLength(0);
+    expect(article.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
     expect(article.textContent.trim()).toBe("Hello");
     expect(registrations.filter((entry) => entry.id === "page:live" && !entry.disposed)).toEqual([]);
     expect(ownerOf(article)).toBe(null);

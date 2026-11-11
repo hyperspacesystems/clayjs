@@ -13,7 +13,7 @@ import { PresenceStore, presence } from "../../src/sync/presence-store.js";
  */
 
 const PAGE = {
-  kind: "page",
+  kind: "blockeditor",
   v: 1,
   epoch: "room-7",
   generation: 0,

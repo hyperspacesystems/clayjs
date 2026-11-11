@@ -24,8 +24,8 @@ const BLOCKS = [
   { id: "p", t: "paragraph", text: "Hello" },
 ];
 const TOOL = { id: "t1", t: "tool", pos: "Z" };
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
-const ARTICLE_SEL = "article[data-page]";
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
+const ARTICLE_SEL = "article[data-blockeditor]";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const deferred = () => {
@@ -46,9 +46,9 @@ const tick = async (turns = 20) => { for (let i = 0; i < turns; i++) await Promi
 
 const articleHtml = (blocks = BLOCKS) => {
   const { html, rev } = renderFromTags([JSON.stringify(seedValue(blocks))]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const tagHtml = (blocks = BLOCKS) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(seedValue(blocks))}</script>`;
+const tagHtml = (blocks = BLOCKS) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(seedValue(blocks))}</script>`;
 const articleOf = (html) => new DOMParser().parseFromString(html, "text/html").querySelector(ARTICLE_SEL);
 const context = (generation = 1) => ({ generation, destination: "host", signal: new AbortController().signal, isCurrent: () => true });
 
@@ -84,7 +84,7 @@ async function load({
   document.head.innerHTML = head;
   document.body.innerHTML = html;
 
-  const extensions = liveData ? ["page", "live-data", "conditional"] : ["page"];
+  const extensions = liveData ? ["blockeditor", "live-data", "conditional"] : ["blockeditor"];
   const saves = [];
   const reads = [];
   const sent = [];
@@ -129,7 +129,7 @@ async function load({
     ...realEditor,
     createPageEditor: (mount, options) => {
       if (MODE.factory === "throw") {
-        mount.appendChild(document.createElement("div")).className = "page-shell";
+        mount.appendChild(document.createElement("div")).className = "blockeditor-shell";
         throw new Error("the editor could not be built");
       }
       return realEditor.createPageEditor(mount, options);
@@ -163,7 +163,7 @@ async function load({
     const tag = doc.querySelector(TAG_SEL);
     const status = reply.status ?? 200;
     const headers = reply.headers ?? {};
-    if (status < 400 && tag) room.stores.page = { value: JSON.parse(tag.textContent), ephemeral: false, last: 0, landed: 0 };
+    if (status < 400 && tag) room.stores.blockeditor = { value: JSON.parse(tag.textContent), ephemeral: false, last: 0, landed: 0 };
     return {
       ok: status < 400,
       status,
@@ -202,7 +202,7 @@ const noInput = (page) => {
   const view = page.view;
   if (!view) return;
   expect(view.editable).toBe(false);
-  const shell = view.dom.closest(".page-shell");
+  const shell = view.dom.closest(".blockeditor-shell");
   expect(shell.inert).toBe(true);
 };
 
@@ -219,11 +219,11 @@ test("a session stages a tagless page and takes no input or write until the comm
     expect(page.view).toBeTruthy();
     expect(page.view.editable).toBe(false);
     noInput(page);
-    expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
+    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
     expect(inputReady()).toHaveLength(0);
     expect(page.status.phase).not.toBe("ready");
     // The seed is the article's own, held as a value only.
-    expect(storeOf("page").value).toEqual(seedPageFromArticle(articleOf(html)));
+    expect(storeOf("blockeditor").value).toEqual(seedPageFromArticle(articleOf(html)));
     expect(saves).toHaveLength(0);
 
     // An edit and a checkpoint while the mode is still view write nothing.
@@ -232,12 +232,12 @@ test("a session stages a tagless page and takes no input or write until the comm
     checkpointWithin(0);
     await tick();
     expect(saves).toHaveLength(0);
-    expect(storeOf("page").handle.status.mode).toBe("file");
+    expect(storeOf("blockeditor").handle.status.mode).toBe("file");
 
     lease.enable();
     expect(page.view).toBe(view);
     expect(page.view.editable).toBe(true);
-    expect(page.view.dom.closest(".page-shell").inert).toBe(false);
+    expect(page.view.dom.closest(".blockeditor-shell").inert).toBe(false);
     expect(page.status).toMatchObject({ phase: "ready" });
     expect(inputReady()).toHaveLength(1);
     expect(page.view.dom.textContent).toContain("Hello there");
@@ -246,7 +246,7 @@ test("a session stages a tagless page and takes no input or write until the comm
     checkpointWithin(0);
     expect(await until(() => saves.length > 0)).toBe(true);
     expect(saves).toHaveLength(1);
-    expect(saves[0].headers["Page-Write"]).toBe("v1");
+    expect(saves[0].headers["Blockeditor-Write"]).toBe("v1");
   } finally {
     lease.dispose();
   }
@@ -263,7 +263,7 @@ test("a tagged document prepares the state the file already has", async () => {
 
     expect(page.view.editable).toBe(false);
     expect(saves).toHaveLength(0);
-    expect(storeOf("page").value).toEqual(seedValue(BLOCKS));
+    expect(storeOf("blockeditor").value).toEqual(seedValue(BLOCKS));
 
     lease.enable();
     expect(page.view.editable).toBe(true);
@@ -287,7 +287,7 @@ test("a view part still on the wire keeps preparation open and the saved article
     expect(inputReady()).toHaveLength(0);
     expect(page.status.phase).not.toBe("ready");
     expect(page.view?.editable).toBe(false);
-    expect(document.querySelector('.page-shell').style.visibility).toBe("hidden");
+    expect(document.querySelector('.blockeditor-shell').style.visibility).toBe("hidden");
     expect(document.querySelector(`${ARTICLE_SEL} > [data-id="p"]`)).toBeTruthy();
 
     MODE.toolGate.resolve();
@@ -312,7 +312,7 @@ test("a part the room adds while the page prepares is in before the commit", asy
   const { page, preparePageSession, sent } = await load({
     html: articleHtml(blocks),
     head: tagHtml(blocks),
-    roomStores: { page: { value: remote, ephemeral: false, last: 0, landed: 0 } },
+    roomStores: { blockeditor: { value: remote, ephemeral: false, last: 0, landed: 0 } },
   });
   const save = await import("../../../src/core/save.js");
   const lease = preparePageSession(context());
@@ -329,7 +329,7 @@ test("a part the room adds while the page prepares is in before the commit", asy
     lease.enable();
     expect(page.view.editable).toBe(true);
     expect(inputReady()).toHaveLength(1);
-    expect(document.querySelectorAll(".page-shell section[data-type=\"tool\"]").length).toBe(1);
+    expect(document.querySelectorAll(".blockeditor-shell section[data-type=\"tool\"]").length).toBe(1);
     expect(sent).toHaveLength(0);
   } finally {
     lease.dispose();
@@ -352,7 +352,7 @@ test("a pending composition refuses the exit and keeps the typed text", async ()
     expect(page.view).toBe(view);
     expect(view.editable).toBe(true);
     expect(view.dom.textContent).toContain("Hello there");
-    expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello there");
+    expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello there");
 
     Object.defineProperty(view, "composing", { configurable: true, get: () => false });
     lease.quiesce();
@@ -368,7 +368,7 @@ test("a pending composition refuses the exit and keeps the typed text", async ()
     expect(view.editable).toBe(true);
     expect(view.dom.textContent).toContain("Hello there");
     expect(await until(() => saves.length > 0)).toBe(true);
-    expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello there");
+    expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello there");
   } finally {
     lease.dispose();
   }
@@ -387,7 +387,7 @@ test("a refused checkpoint during preparation writes nothing and keeps the edit"
     checkpointWithin(0);
     await tick(60);
     expect(saves).toHaveLength(0);
-    expect(storeOf("page").pending).toHaveLength(1);
+    expect(storeOf("blockeditor").pending).toHaveLength(1);
     expect(view.dom.textContent).toContain("Hello there");
 
     lease.enable();
@@ -410,7 +410,7 @@ test("a mount that fails blocks the session and leaves the saved article alone",
     await tick();
     expect(page.status).toMatchObject({ phase: "blocked", reason: "mount-failed" });
     expect(page.view).toBe(null);
-    expect(document.querySelectorAll(".page-shell")).toHaveLength(0);
+    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
     expect(document.querySelector(ARTICLE_SEL).innerHTML).toBe(articleOf(html).innerHTML);
     expect(inputReady()).toHaveLength(0);
     lease.enable();
@@ -432,15 +432,15 @@ test("a page with a tool prepares it inside the session and gives it back on the
     expect(page.view.editable).toBe(false);
     // The store the tool keeps its state in is open, and the tool renders with the
     // page rather than waiting for the commit.
-    expect(storeOf("page.tools")).toBeTruthy();
-    expect(document.querySelectorAll('.page-shell section[data-type="tool"]').length).toBe(1);
+    expect(storeOf("blockeditor.tools")).toBeTruthy();
+    expect(document.querySelectorAll('.blockeditor-shell section[data-type="tool"]').length).toBe(1);
 
     lease.enable();
     expect(page.view.editable).toBe(true);
 
     lease.dispose();
     expect(page.view).toBe(null);
-    expect(document.querySelectorAll(".page-shell")).toHaveLength(0);
+    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
     // The article comes back from the accepted page, tools included.
     expect(document.querySelectorAll(`${ARTICLE_SEL} section[data-type="tool"]`).length).toBe(1);
   } finally {
@@ -458,7 +458,7 @@ test("a session cancelled before its commit leaves nothing behind, however often
     const lease = preparePageSession(context(i + 1));
     lease.dispose();
     await tick();
-    expect(document.querySelectorAll(".page-shell")).toHaveLength(0);
+    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
     expect(document.querySelector(ARTICLE_SEL).innerHTML).toBe(before);
     expect(page.view).toBe(null);
   }
@@ -469,7 +469,7 @@ test("a session cancelled before its commit leaves nothing behind, however often
     await lease.ready;
     await settle(save);
     lease.enable();
-    expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
+    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
     expect(page.view.editable).toBe(true);
     expect(inputReady()).toHaveLength(1);
   } finally {
@@ -481,7 +481,7 @@ test("a refused first write re-reads the file once, re-seeds, replays the edit a
   const html = articleHtml();
   // The stored document is the same page, now carrying the tag a first write left on
   // it: same article, newer stamp.
-  const stored = `<script type="application/json" merge="page" clay="live">${JSON.stringify(seedPageFromArticle(articleOf(html)))}</script>${html}`;
+  const stored = `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(seedPageFromArticle(articleOf(html)))}</script>${html}`;
   const { page, preparePageSession, checkpointWithin, storeOf, saves, reads } = await load({
     html,
     answer: (count) => (count === 0
@@ -510,7 +510,7 @@ test("a refused first write re-reads the file once, re-seeds, replays the edit a
     expect(reads).toHaveLength(1);
     expect(saves).toHaveLength(2);
     expect(saves[1].headers["If-Match"]).toBe("stamp-2");
-    expect(saves[1].headers["Page-Write"]).toBe("v1");
+    expect(saves[1].headers["Blockeditor-Write"]).toBe("v1");
     const saved = new DOMParser().parseFromString(saves[1].body, "text/html");
     const value = JSON.parse(saved.querySelector(TAG_SEL).textContent);
     const blocks = blocksFromYValue(value);
@@ -523,7 +523,7 @@ test("a refused first write re-reads the file once, re-seeds, replays the edit a
     expect(page.view).toBe(view);
     expect(view.editable).toBe(true);
     expect(view.dom.textContent).toContain("Hello there");
-    expect(await until(() => storeOf("page").handle.status.mode === "fast")).toBe(true);
+    expect(await until(() => storeOf("blockeditor").handle.status.mode === "fast")).toBe(true);
   } finally {
     document.removeEventListener("clay:save-conflict", onConflict);
     lease.dispose();
@@ -534,7 +534,7 @@ test("a re-read page stamps its own version, never the weak HTTP etag that answe
   const html = articleHtml();
   // The stored document names its own version on its root; the host's answer carries a
   // weak HTTP ETag, which names the response rather than the document.
-  const stored = `<script type="application/json" merge="page" clay="live">${JSON.stringify(seedPageFromArticle(articleOf(html)))}</script>${html}`;
+  const stored = `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(seedPageFromArticle(articleOf(html)))}</script>${html}`;
   const { page, preparePageSession, checkpointWithin, saves, reads } = await load({
     html,
     answer: (count) => (count === 0
@@ -569,7 +569,7 @@ test("a re-read page stamps its own version, never the weak HTTP etag that answe
 
 test("a re-read page with only a weak HTTP etag retries against the refusal\'s own stamp", async () => {
   const html = articleHtml();
-  const stored = `<script type="application/json" merge="page" clay="live">${JSON.stringify(seedPageFromArticle(articleOf(html)))}</script>${html}`;
+  const stored = `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(seedPageFromArticle(articleOf(html)))}</script>${html}`;
   const { page, preparePageSession, checkpointWithin, saves, reads } = await load({
     html,
     answer: (count) => (count === 0
@@ -606,7 +606,7 @@ test("a seed the host refuses for its lineage is offered again over the stored a
   const { page, preparePageSession, checkpointWithin, storeOf, saves, reads } = await load({
     html,
     answer: (count) => (count === 0
-      ? { status: 409, body: { msg: "This page does not descend from the stored document.", code: "page-lineage-stale", etag: "stamp-2" } }
+      ? { status: 409, body: { msg: "This page does not descend from the stored document.", code: "blockeditor-lineage-stale", etag: "stamp-2" } }
       : { status: 200, body: { msg: "Saved", etag: "stamp-3" } }),
     reread: () => ({ html: articleHtml(), etag: "stamp-2" }),
   });
@@ -627,7 +627,7 @@ test("a seed the host refuses for its lineage is offered again over the stored a
     expect(saves[1].headers["If-Match"]).toBe("stamp-2");
     const saved = new DOMParser().parseFromString(saves[1].body, "text/html");
     expect(blocksFromYValue(JSON.parse(saved.querySelector(TAG_SEL).textContent)).p.c).toBe("Hello there");
-    expect(await until(() => storeOf("page").handle.status.mode === "fast")).toBe(true);
+    expect(await until(() => storeOf("blockeditor").handle.status.mode === "fast")).toBe(true);
     expect(view.dom.textContent).toContain("Hello there");
   } finally {
     lease.dispose();
@@ -660,7 +660,7 @@ test("a second refusal keeps the text and shows the conflict instead of writing 
     expect(page.view).toBe(view);
     expect(view.editable).toBe(true);
     expect(view.dom.textContent).toContain("Hello there");
-    expect(storeOf("page").pending.length).toBeGreaterThan(0);
+    expect(storeOf("blockeditor").pending.length).toBeGreaterThan(0);
     expect(document.documentElement.getAttribute("savestatus")).toBe("conflict");
   } finally {
     lease.dispose();
@@ -670,7 +670,7 @@ test("a second refusal keeps the text and shows the conflict instead of writing 
 test("the page is a participant the coordinator can hold", async () => {
   const { page, pageParticipant } = await load();
   const participant = pageParticipant();
-  expect(participant.id).toBe("clay:page");
+  expect(participant.id).toBe("clay:blockeditor");
   expect(participant.order).toBeLessThan(1000);
   const lease = await participant.prepare(context());
   try {

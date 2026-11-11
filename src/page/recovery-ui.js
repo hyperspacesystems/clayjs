@@ -29,26 +29,26 @@ import {
 export const REVIEW_TEXT = "Work from an earlier session could not be put back. Read it, download it, or recover it as a copy.";
 
 // The control and its panel sit in one shadow root inside the page shell, so the page's
-// CSS cannot restyle them. The page's --page-* tokens still reach them, and they keep
+// CSS cannot restyle them. The page's --blockeditor-* tokens still reach them, and they keep
 // the page's font and colour.
 const STYLES = `
 :host { font: inherit !important; color: inherit !important; }
-.page-recovery-root { display: contents; }
-.page-recovery { position: fixed; right: 16px; bottom: 16px; z-index: 20; min-height: 36px; padding: 0 14px; font: inherit; font-size: 14px; color: var(--page-ink); background: var(--page-pop-bg); border: 1px solid var(--page-chrome-line-rest); border-radius: 999px; cursor: pointer; }
-.page-recovery[hidden], .page-recovery-panel[hidden] { display: none; }
-.page-recovery-panel { position: fixed; right: 16px; bottom: 64px; z-index: 21; width: min(420px, calc(100vw - 32px)); max-height: 60vh; overflow-y: auto; color: var(--page-ink); background: var(--page-pop-bg); border: 1px solid var(--page-chrome-line-rest); border-radius: var(--page-chrome-radius); padding: 8px; box-sizing: border-box; }
-.page-recovery-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px 8px; font-weight: 600; }
-.page-recovery-note { margin: 0 6px 8px; font-size: 13px; opacity: .72; }
-.page-recovery-failure { margin: 0 6px 8px; font-size: 13px; color: var(--page-warn, #b25b00); }
-.page-recovery-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; min-height: 44px; padding: 8px 6px; border-top: 1px solid var(--page-chrome-line-rest); }
-.page-recovery-meta { grid-column: 1; font-size: 12px; opacity: .72; }
-.page-recovery-text { grid-column: 1; overflow-wrap: anywhere; white-space: pre-wrap; }
-.page-recovery-row button, .page-recovery-head button { grid-column: 2; grid-row: 1 / span 2; min-height: 36px; padding: 0 12px; font: inherit; font-size: 14px; color: inherit; background: transparent; border: 1px solid var(--page-chrome-line-rest); border-radius: var(--page-chrome-radius); cursor: pointer; }
-.page-recovery-row.is-busy button { opacity: .6; cursor: progress; }
+.blockeditor-recovery-root { display: contents; }
+.blockeditor-recovery { position: fixed; right: 16px; bottom: 16px; z-index: 20; min-height: 36px; padding: 0 14px; font: inherit; font-size: 14px; color: var(--blockeditor-ink); background: var(--blockeditor-pop-bg); border: 1px solid var(--blockeditor-chrome-line-rest); border-radius: 999px; cursor: pointer; }
+.blockeditor-recovery[hidden], .blockeditor-recovery-panel[hidden] { display: none; }
+.blockeditor-recovery-panel { position: fixed; right: 16px; bottom: 64px; z-index: 21; width: min(420px, calc(100vw - 32px)); max-height: 60vh; overflow-y: auto; color: var(--blockeditor-ink); background: var(--blockeditor-pop-bg); border: 1px solid var(--blockeditor-chrome-line-rest); border-radius: var(--blockeditor-chrome-radius); padding: 8px; box-sizing: border-box; }
+.blockeditor-recovery-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px 8px; font-weight: 600; }
+.blockeditor-recovery-note { margin: 0 6px 8px; font-size: 13px; opacity: .72; }
+.blockeditor-recovery-failure { margin: 0 6px 8px; font-size: 13px; color: var(--blockeditor-warn, #b25b00); }
+.blockeditor-recovery-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; min-height: 44px; padding: 8px 6px; border-top: 1px solid var(--blockeditor-chrome-line-rest); }
+.blockeditor-recovery-meta { grid-column: 1; font-size: 12px; opacity: .72; }
+.blockeditor-recovery-text { grid-column: 1; overflow-wrap: anywhere; white-space: pre-wrap; }
+.blockeditor-recovery-row button, .blockeditor-recovery-head button { grid-column: 2; grid-row: 1 / span 2; min-height: 36px; padding: 0 12px; font: inherit; font-size: 14px; color: inherit; background: transparent; border: 1px solid var(--blockeditor-chrome-line-rest); border-radius: var(--blockeditor-chrome-radius); cursor: pointer; }
+.blockeditor-recovery-row.is-busy button { opacity: .6; cursor: progress; }
 @media (max-width: 560px) {
-  .page-recovery { top: 12px; bottom: auto; min-height: 44px; }
-  .page-recovery-panel { left: 0; right: 0; bottom: 0; width: 100%; max-height: 70vh; border-radius: var(--page-chrome-radius) var(--page-chrome-radius) 0 0; }
-  .page-recovery-row button, .page-recovery-head button { min-height: 44px; }
+  .blockeditor-recovery { top: 12px; bottom: auto; min-height: 44px; }
+  .blockeditor-recovery-panel { left: 0; right: 0; bottom: 0; width: 100%; max-height: 70vh; border-radius: var(--blockeditor-chrome-radius) var(--blockeditor-chrome-radius) 0 0; }
+  .blockeditor-recovery-row button, .blockeditor-recovery-head button { min-height: 44px; }
 }
 `;
 
@@ -136,7 +136,7 @@ export function insertCopy(view, blocks) {
 }
 
 const preview = (doc, text) => {
-  const box = el(doc, "div", "page-recovery-text");
+  const box = el(doc, "div", "blockeditor-recovery-text");
   box.textContent = text.length > PREVIEW_LIMIT ? `${text.slice(0, PREVIEW_LIMIT)}…` : text;
   return box;
 };
@@ -184,13 +184,13 @@ export function createRecoveryReview({
   onCovered = () => {},
 } = {}) {
   const doc = mount.ownerDocument;
-  const button = el(doc, "button", "page-recovery", { type: "button", "aria-haspopup": "dialog", "aria-expanded": "false" });
-  const panel = el(doc, "div", "page-recovery-panel", { role: "dialog", "aria-label": "Recover work" });
+  const button = el(doc, "button", "blockeditor-recovery", { type: "button", "aria-haspopup": "dialog", "aria-expanded": "false" });
+  const panel = el(doc, "div", "blockeditor-recovery-panel", { role: "dialog", "aria-label": "Recover work" });
   button.hidden = true;
   panel.hidden = true;
-  const content = el(doc, "div", "page-recovery-root");
+  const content = el(doc, "div", "blockeditor-recovery-root");
   content.append(button, panel);
-  const ui = mountEditorUI({ name: "page-recovery", content, css: [STYLES], parent: mount });
+  const ui = mountEditorUI({ name: "blockeditor-recovery", content, css: [STYLES], parent: mount });
 
   let rows = [];
   let journaled = [];
@@ -312,23 +312,23 @@ export function createRecoveryReview({
 
   function draw() {
     panel.replaceChildren();
-    const head = el(doc, "div", "page-recovery-head");
+    const head = el(doc, "div", "blockeditor-recovery-head");
     head.append(doc.createTextNode("Recover work"));
     head.append(rowButton("Download", download));
     const done = rowButton("Close", () => { close(); button.focus(); });
     head.append(done);
-    const note = el(doc, "p", "page-recovery-note");
+    const note = el(doc, "p", "blockeditor-recovery-note");
     note.textContent = REVIEW_TEXT;
     panel.append(head, note);
     if (failure) {
-      const line = el(doc, "p", "page-recovery-failure");
+      const line = el(doc, "p", "blockeditor-recovery-failure");
       line.textContent = failure;
       panel.append(line);
     }
     for (const row of rows) {
-      const item = el(doc, "div", "page-recovery-row", { "data-capsule": String(row.id) });
+      const item = el(doc, "div", "blockeditor-recovery-row", { "data-capsule": String(row.id) });
       if (busy.has(row.id)) item.classList.add("is-busy");
-      const meta = el(doc, "div", "page-recovery-meta");
+      const meta = el(doc, "div", "blockeditor-recovery-meta");
       meta.textContent = `${row.message}${copied.has(row.id) ? " · Recovered as a copy" : ""}`;
       const action = rowButton("Recover as a copy", () => recover(row));
       action.disabled = busy.has(row.id) || copied.has(row.id);
@@ -336,8 +336,8 @@ export function createRecoveryReview({
       panel.append(item);
     }
     for (const row of journaled) {
-      const item = el(doc, "div", "page-recovery-row", { "data-composing": row.blockId });
-      const meta = el(doc, "div", "page-recovery-meta");
+      const item = el(doc, "div", "blockeditor-recovery-row", { "data-composing": row.blockId });
+      const meta = el(doc, "div", "blockeditor-recovery-meta");
       meta.textContent = "Text typed while composing. It never reached the page.";
       item.append(meta, preview(doc, row.text));
       const actions = el(doc, "div", "");

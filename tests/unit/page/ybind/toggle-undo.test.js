@@ -7,7 +7,7 @@ import { createYPageBinding, seedValue, enc } from "../../../../src/page/ybind/i
 import { blocksFromYValue } from "../../../../src/page/ybind/decode.js";
 
 const open = (initial) => {
-  const store = createStore({ name: "page", value: initial });
+  const store = createStore({ name: "blockeditor", value: initial });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const view = new pmView.EditorView(document.body.appendChild(document.createElement("div")), {
     state: pmState.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }),

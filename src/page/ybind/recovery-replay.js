@@ -584,8 +584,8 @@ export function openPageJournal({ meta = null, service = null, base = null, onCh
   if (!authority) return null;
   const channel = pageChannel(service);
   if (!channel) return null;
-  const generation = meta?.document?.pageState?.generation ?? null;
-  const formatFloor = Array.isArray(meta?.extensions) && meta.extensions.includes("page-format-v1") ? 1 : 0;
+  const generation = meta?.document?.blockeditorState?.generation ?? null;
+  const formatFloor = Array.isArray(meta?.extensions) && meta.extensions.includes("blockeditor-format-v1") ? 1 : 0;
   return createPageJournal({
     channel,
     key: [authority.host, authority.documentId].join(":"),

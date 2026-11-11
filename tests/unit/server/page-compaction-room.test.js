@@ -14,7 +14,7 @@ import { buildCandidate, isCheckpointKey, pageShape } from "../../../src/live/pa
 import { rangesOf, within, docRanges } from "../../../src/page/ybind/containment.js";
 
 const doc = (...parts) => `<!doctype html><html><body>${parts.join("")}</body></html>`;
-const pageTag = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const pageTag = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 
 let clients = 100;
 const insert = (text, client = (clients += 1)) => {
@@ -44,10 +44,10 @@ const clock = () => {
 };
 
 const frame = (room, n, ops, over = {}) => ({
-  name: "page",
+  name: "blockeditor",
   epoch: room.epoch,
   n,
-  pageGeneration: room.pageTransition.id,
+  blockeditorGeneration: room.blockeditorTransition.id,
   compaction: 1,
   ops,
   ...over,
@@ -55,7 +55,7 @@ const frame = (room, n, ops, over = {}) => ({
 
 // Everything a refusal must leave alone, and a commit changes on purpose.
 const snapshot = (room) => {
-  const store = room.stores.get("page");
+  const store = room.stores.get("blockeditor");
   return {
     value: JSON.stringify(store.value),
     bytes: store.bytes,
@@ -73,7 +73,7 @@ const expectUsed = (rooms) => {
   let total = 0;
   for (const key of rooms.keys()) {
     const room = rooms.get(key);
-    total += (room.receiptBytes ?? 0) + (room.pageTransition?.bytes ?? 0) + (room.compaction?.job?.reserved ?? 0);
+    total += (room.receiptBytes ?? 0) + (room.blockeditorTransition?.bytes ?? 0) + (room.compaction?.job?.reserved ?? 0);
     for (const store of room.stores.values()) total += store.bytes + store.logBytes;
   }
   expect(rooms.used()).toBe(total);
@@ -119,16 +119,16 @@ test("compaction off leaves the frame and state answers as they are today", () =
   const rooms = c.rooms();
   const room = open(rooms);
   const page = rooms.state(room, "a", null);
-  expect(Object.keys(page.stores.page).sort()).toEqual(["ephemeral", "floor", "from", "landed", "last", "seen", "value"]);
-  expect(page.stores.page.value).toEqual({ v: 1, g: 0, y: room.stores.get("page").value.y });
+  expect(Object.keys(page.stores.blockeditor).sort()).toEqual(["ephemeral", "floor", "from", "landed", "last", "seen", "value"]);
+  expect(page.stores.blockeditor.value).toEqual({ v: 1, g: 0, y: room.stores.get("blockeditor").value.y });
 
   const key = nextKey();
-  expect(rooms.apply(room, "a", { name: "page", epoch: room.epoch, n: 1, pageGeneration: room.pageTransition.id, ops: [setOp(key, insert("free"))] }))
-    .toEqual({ seq: 1, epoch: room.epoch, name: "page", ops: [setOp(key, room.stores.get("page").value.y[key])], writer: "a", checkpoint: false, receiptGeneration: 0, pageGeneration: room.pageTransition.id });
-  const del = rooms.apply(room, "a", { name: "page", epoch: room.epoch, n: 2, pageGeneration: room.pageTransition.id, ops: [{ op: "del", path: ["y", key] }] });
+  expect(rooms.apply(room, "a", { name: "blockeditor", epoch: room.epoch, n: 1, blockeditorGeneration: room.blockeditorTransition.id, ops: [setOp(key, insert("free"))] }))
+    .toEqual({ seq: 1, epoch: room.epoch, name: "blockeditor", ops: [setOp(key, room.stores.get("blockeditor").value.y[key])], writer: "a", checkpoint: false, receiptGeneration: 0, blockeditorGeneration: room.blockeditorTransition.id });
+  const del = rooms.apply(room, "a", { name: "blockeditor", epoch: room.epoch, n: 2, blockeditorGeneration: room.blockeditorTransition.id, ops: [{ op: "del", path: ["y", key] }] });
   expect(del.error).toBeUndefined();
-  expect(Object.hasOwn(room.stores.get("page").value.y, key)).toBe(false);
-  expect(rooms.state(room, "a", null).stores.page.compaction).toBeUndefined();
+  expect(Object.hasOwn(room.stores.get("blockeditor").value.y, key)).toBe(false);
+  expect(rooms.state(room, "a", null).stores.blockeditor.compaction).toBeUndefined();
 });
 
 test("a host mode room advertises the descriptor and admits one whole client key", () => {
@@ -137,14 +137,14 @@ test("a host mode room advertises the descriptor and admits one whole client key
   const room = open(rooms, { g: 7 });
   expect(room.compaction).toMatchObject({ fence: 0, job: null, failed: null });
   const state = rooms.state(room, "a", null, { compaction: 1 });
-  expect(state.stores.page.compaction).toEqual({ v: 1, loose: COMPACTION.loose, activeBytes: COMPACTION.activeBytes });
+  expect(state.stores.blockeditor.compaction).toEqual({ v: 1, loose: COMPACTION.loose, activeBytes: COMPACTION.activeBytes });
 
   const key = nextKey();
   const answer = send(rooms, room, 1, [[key, insert("hello")]]);
   expect(answer.seq).toBe(1);
-  expect(room.stores.get("page").value.y[key]).toBe(answer.ops[0].value);
+  expect(room.stores.get("blockeditor").value.y[key]).toBe(answer.ops[0].value);
   expect(room.compaction.contentSeq).toBe(1);
-  expect(room.stores.get("page").value.g).toBe(7);
+  expect(room.stores.get("blockeditor").value.g).toBe(7);
   expectUsed(rooms);
 });
 
@@ -162,16 +162,16 @@ test("every refusal code leaves the value, the seq, the log and the receipts unc
     expectUsed(rooms);
   };
 
-  refused(send(rooms, room, 2, [[nextKey(), insert("x")]], { compaction: 2 }), "page-upgrade");
-  refused(rooms.apply(room, "a", frame(room, 2, [{ op: "del", path: ["y", key] }])), "page-immutable");
-  refused(send(rooms, room, 2, [["seed", insert("x")]]), "page-immutable");
-  refused(send(rooms, room, 2, [[key, insert("different")]]), "page-immutable");
-  refused(send(rooms, room, 2, [[nextKey(), "not base64 at all!"]]), "page-update-invalid");
-  refused(send(rooms, room, 2, [[nextKey(), insert("a")], [nextKey(), insert("b")], [nextKey(), insert("c")], [nextKey(), insert("d")], [nextKey(), insert("e")]]), "page-batch");
+  refused(send(rooms, room, 2, [[nextKey(), insert("x")]], { compaction: 2 }), "blockeditor-upgrade");
+  refused(rooms.apply(room, "a", frame(room, 2, [{ op: "del", path: ["y", key] }])), "blockeditor-immutable");
+  refused(send(rooms, room, 2, [["seed", insert("x")]]), "blockeditor-immutable");
+  refused(send(rooms, room, 2, [[key, insert("different")]]), "blockeditor-immutable");
+  refused(send(rooms, room, 2, [[nextKey(), "not base64 at all!"]]), "blockeditor-update-invalid");
+  refused(send(rooms, room, 2, [[nextKey(), insert("a")], [nextKey(), insert("b")], [nextKey(), insert("c")], [nextKey(), insert("d")], [nextKey(), insert("e")]]), "blockeditor-batch");
 
   const before = snapshot(room);
-  expect(send(rooms, room, 2, [[key, room.stores.get("page").value.y[key]]]).seq).toBeGreaterThan(0);
-  expect(JSON.stringify(room.stores.get("page").value)).toBe(before.value);
+  expect(send(rooms, room, 2, [[key, room.stores.get("blockeditor").value.y[key]]]).seq).toBeGreaterThan(0);
+  expect(JSON.stringify(room.stores.get("blockeditor").value)).toBe(before.value);
 });
 
 test("a retired key is refused, and the loose bound asks for a checkpoint", () => {
@@ -186,13 +186,13 @@ test("a retired key is refused, and the loose bound asks for a checkpoint", () =
   expect(room.compaction.retired.has(key)).toBe(true);
 
   const before = snapshot(room);
-  expect(send(rooms, room, 2, [[key, insert("again")]]).error).toBe("page-immutable");
+  expect(send(rooms, room, 2, [[key, insert("again")]]).error).toBe("blockeditor-immutable");
   expect(snapshot(room)).toEqual(before);
 
   const wakes = [];
   rooms.onCompactionDue((due, options) => wakes.push(options));
   const next = fill(rooms, room, COMPACTION.loose, 10);
-  expect(pageShape(room.stores.get("page").value.y).loose).toBe(COMPACTION.loose);
+  expect(pageShape(room.stores.get("blockeditor").value.y).loose).toBe(COMPACTION.loose);
   const refused = send(rooms, room, next, [[nextKey(), insert("over")]]);
   expect(refused).toMatchObject({ error: "checkpoint-required", retryAfter: 0 });
   expect(wakes.length).toBeGreaterThan(0);
@@ -238,7 +238,7 @@ test("four contenders at the loose bound get one slot and one commit", () => {
   const built = buildCandidate({ kind: job.kind, sources: job.sources });
   const answer = rooms.commitCompaction(job.token, built);
   expect(answer.from).toBe(COMPACTOR);
-  expect(pageShape(room.stores.get("page").value.y)).toMatchObject({ normal: true, loose: 0, checkpoints: 1 });
+  expect(pageShape(room.stores.get("blockeditor").value.y)).toMatchObject({ normal: true, loose: 0, checkpoints: 1 });
   expect(rooms.commitCompaction(job.token, built)).toEqual({ refused: "stale-token" });
   expectUsed(rooms);
 });
@@ -295,7 +295,7 @@ test("a candidate that drops a deletion fails the proof and the full candidate k
   const answer = rooms.commitCompaction(job.token, withoutDeletion);
   expect(answer.refused).toBeUndefined();
   expect(snapshot(room)).not.toEqual(before);
-  expect(integrated(room.stores.get("page").value).getText("flow").toString()).toContain("keep me");
+  expect(integrated(room.stores.get("blockeditor").value).getText("flow").toString()).toContain("keep me");
   expectUsed(rooms);
 });
 
@@ -326,7 +326,7 @@ test("two hundred cycles keep every admitted edit and one checkpoint", () => {
   const rooms = c.rooms({ compaction: true });
   const room = open(rooms, { g: 3 });
   const oracle = new Y.Doc();
-  Y.applyUpdateV2(oracle, Y.fromBase64(room.stores.get("page").value.y.seed));
+  Y.applyUpdateV2(oracle, Y.fromBase64(room.stores.get("blockeditor").value.y.seed));
   for (let cycle = 1; cycle <= 200; cycle++) {
     const text = insert(`edit ${cycle} `);
     const answer = send(rooms, room, cycle, [[nextKey(), text]]);
@@ -334,7 +334,7 @@ test("two hundred cycles keep every admitted edit and one checkpoint", () => {
     Y.applyUpdateV2(oracle, Y.fromBase64(text));
     const { answer: committed } = run(rooms, room, { overflow: true });
     expect(committed.seq).toBeGreaterThan(0);
-    const value = room.stores.get("page").value;
+    const value = room.stores.get("blockeditor").value;
     expect(value.v).toBe(1);
     expect(value.g).toBe(3);
     expect(pageShape(value.y)).toMatchObject({ normal: true, loose: 0, checkpoints: 1 });
@@ -403,7 +403,7 @@ test("a stale token after reset, drop, commitPage and the lease changes nothing"
   const afterPage = snapshot(room);
   expect(rooms.commitCompaction(replaced.token, replacedBuilt)).toEqual({ refused: "stale-token" });
   expect(snapshot(room)).toEqual(afterPage);
-  expect(room.pageTransition.format).toBe("yjs");
+  expect(room.blockeditorTransition.format).toBe("yjs");
   expect(rooms.commitPage(token)).toBe(rooms.commitPage(token));
   expectUsed(rooms);
 });
@@ -440,20 +440,20 @@ test("a clean room stays clean through a full commit and is never committed as a
   const room = open(rooms, { g: 9 });
   const spy = jest.spyOn(rooms, "commitPage");
   expect(roomIsDirty(room)).toBe(false);
-  const value = room.stores.get("page").value;
+  const value = room.stores.get("blockeditor").value;
   expect(Object.keys(value.y)).toEqual(["seed"]);
   const { answer } = run(rooms, room, { overflow: true });
   expect(spy).not.toHaveBeenCalled();
   spy.mockRestore();
   expect(roomIsDirty(room)).toBe(false);
-  expect(room.stores.get("page").landed).toBe(room.stores.get("page").last);
-  expect(room.stores.get("page").value.v).toBe(1);
-  expect(room.stores.get("page").value.g).toBe(9);
-  expect(room.stores.get("page").value.y.seed).toBeUndefined();
+  expect(room.stores.get("blockeditor").landed).toBe(room.stores.get("blockeditor").last);
+  expect(room.stores.get("blockeditor").value.v).toBe(1);
+  expect(room.stores.get("blockeditor").value.g).toBe(9);
+  expect(room.stores.get("blockeditor").value.y.seed).toBeUndefined();
   expect(answer.landed).toBe(answer.seq);
-  expect(Object.keys(room.stores.get("page").value.y)).toHaveLength(1);
-  expect(isCheckpointKey(Object.keys(room.stores.get("page").value.y)[0])).toBe(true);
-  expect(Object.keys(room.stores.get("page").value.y)).not.toContain("seed");
+  expect(Object.keys(room.stores.get("blockeditor").value.y)).toHaveLength(1);
+  expect(isCheckpointKey(Object.keys(room.stores.get("blockeditor").value.y)[0])).toBe(true);
+  expect(Object.keys(room.stores.get("blockeditor").value.y)).not.toContain("seed");
 });
 
 test("successive full commits write fresh checkpoint keys", () => {
@@ -470,7 +470,7 @@ test("successive full commits write fresh checkpoint keys", () => {
   expect(keys).not.toContain("seed");
   expect(first.ops.at(-1).op).toBe("set");
   expect(second.ops.filter((op) => op.op === "del").map((op) => op.path[1])).toEqual([keys[0]]);
-  expect(Object.keys(room.stores.get("page").value.y)).toEqual([keys[1]]);
+  expect(Object.keys(room.stores.get("blockeditor").value.y)).toEqual([keys[1]]);
 });
 
 test("a legacy client's state hides the page store and a declared client's carries it", () => {
@@ -479,15 +479,15 @@ test("a legacy client's state hides the page store and a declared client's carri
   const room = open(rooms);
   expect(send(rooms, room, 1, [[nextKey(), insert("content")]]).seq).toBe(1);
 
-  expect(rooms.state(room, "old", null, { compaction: 0 }).stores.page).toBeUndefined();
+  expect(rooms.state(room, "old", null, { compaction: 0 }).stores.blockeditor).toBeUndefined();
   expect([...room.compaction.legacy]).toEqual(["old"]);
-  expect(rooms.state(room, "new", null, { compaction: 1 }).stores.page.compaction.v).toBe(1);
-  expect(rooms.state(room, "new").stores.page).toBeDefined();
+  expect(rooms.state(room, "new", null, { compaction: 1 }).stores.blockeditor.compaction.v).toBe(1);
+  expect(rooms.state(room, "new").stores.blockeditor).toBeDefined();
 
   const push = rooms.state(room, "old");
-  expect(push.stores.page).toBeUndefined();
-  expect(rooms.state(room, "new").stores.page).toBeDefined();
-  expect(rooms.state(room, null).stores.page).toBeDefined();
+  expect(push.stores.blockeditor).toBeUndefined();
+  expect(rooms.state(room, "new").stores.blockeditor).toBeDefined();
+  expect(rooms.state(room, null).stores.blockeditor).toBeDefined();
 });
 
 test("a persistent check on a compacting room projects it without a clone error", () => {
@@ -510,7 +510,7 @@ test("a failed room past its byte limit refuses as full, not as waiting for a fo
   const room = open(rooms);
   room.compaction.failed = { reason: "worker-crash", at: c.now() };
   const before = snapshot(room);
-  expect(send(rooms, room, 1, [[nextKey(), insert("growing past the limit")]]).error).toBe("page-full");
+  expect(send(rooms, room, 1, [[nextKey(), insert("growing past the limit")]]).error).toBe("blockeditor-full");
   expect(snapshot(room)).toEqual(before);
 });
 
@@ -523,14 +523,14 @@ test("a full fold of the whole page that does not fit makes the next write refus
 
   const job = rooms.beginCompaction(room, { overflow: true });
   expect(job.kind).toBe("full");
-  expect(job.sources.map(([key]) => key).sort()).toEqual(Object.keys(room.stores.get("page").value.y).sort());
+  expect(job.sources.map(([key]) => key).sort()).toEqual(Object.keys(room.stores.get("blockeditor").value.y).sort());
   const built = buildCandidate({ kind: job.kind, sources: job.sources });
   expect(rooms.commitCompaction(job.token, built)).toEqual({ refused: "too-large" });
   expect(snapshot(room)).toEqual(before);
   expect(room.compaction.lastFull).toMatchObject({ seq: room.seq, deletesAtBegin: 0 });
   expect(room.compaction.deletesSince).toBe(0);
 
-  expect(send(rooms, room, 2, [[nextKey(), insert("after the fold")]]).error).toBe("page-full");
+  expect(send(rooms, room, 2, [[nextKey(), insert("after the fold")]]).error).toBe("blockeditor-full");
   expect(snapshot(room)).toEqual(before);
 });
 
@@ -545,7 +545,7 @@ test("a leaving writer hands the room to a tab that can see the page store", () 
   expect(apply("new", 1, "capable").seq).toBe(2);
   c.state.now += 10;
   expect(apply("old", 1, "legacy").seq).toBe(3);
-  expect(rooms.state(room, "old", null, { compaction: 0 }).stores.page).toBeUndefined();
+  expect(rooms.state(room, "old", null, { compaction: 0 }).stores.blockeditor).toBeUndefined();
   expect([...room.compaction.legacy]).toEqual(["old"]);
   expect(room.lastSentAt.get("old")).toBeGreaterThan(room.lastSentAt.get("new"));
 
@@ -554,8 +554,8 @@ test("a leaving writer hands the room to a tab that can see the page store", () 
 
 test("the compaction status table names every refusal the room can answer", () => {
   expect(ROOM_ERROR_STATUS).toEqual({
-    "checkpoint-required": 503, "page-full": 409, "compaction-failed": 409,
-    "page-immutable": 409, "page-batch": 409, "page-update-invalid": 422, "page-upgrade": 404,
+    "checkpoint-required": 503, "blockeditor-full": 409, "compaction-failed": 409,
+    "blockeditor-immutable": 409, "blockeditor-batch": 409, "blockeditor-update-invalid": 422, "blockeditor-upgrade": 404,
   });
   expect(COMPACTOR).toBe("compactor");
 });

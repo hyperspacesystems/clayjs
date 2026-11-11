@@ -73,8 +73,8 @@ test("a generated bootstrap is served from dist/, not from the entries/ file it 
 
 test("the document URL serves the compiled sheet the package carries", async () => {
   expect(index.files["src/loader.js"].source).toBe("src/loader.js");
-  expect(index.files["src/page/themes/light-1.css"].source).toBe("src/page/themes/light-1.css");
-  const css = await readFile(path.join(site, "src/page/themes/light-1.css"), "utf8");
+  expect(index.files["src/blockeditor/themes/light-1.css"].source).toBe("src/blockeditor/themes/light-1.css");
+  const css = await readFile(path.join(site, "src/blockeditor/themes/light-1.css"), "utf8");
   expect(css).not.toContain("@import");
   expect(css).not.toContain("googleapis");
 });

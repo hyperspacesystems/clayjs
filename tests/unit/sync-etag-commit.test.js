@@ -245,7 +245,7 @@ describe("the body a commit frame puts on the wire", () => {
 
     LiveSync.prototype._postUpdate.call(postingTab(), "<html>saved</html>", { a: 1 });
 
-    expect(sent[0]["X-Clay-Page-Format"]).toBe("1");
+    expect(sent[0]["X-Clay-Blockeditor-Format"]).toBe("1");
   });
 
   test("leaves the stamp off a body that has none", () => {

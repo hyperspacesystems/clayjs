@@ -19,7 +19,7 @@ const el = (doc, tag, cls, attrs = {}, text = null) => {
   return node;
 };
 
-const cardFace = (doc, name) => el(doc, "span", "page-board-face", { "aria-hidden": "true" }, ([...String(name).trim()][0] ?? "?").toUpperCase());
+const cardFace = (doc, name) => el(doc, "span", "blockeditor-board-face", { "aria-hidden": "true" }, ([...String(name).trim()][0] ?? "?").toUpperCase());
 
 function itemAt(view, id) {
   let found = null;
@@ -81,7 +81,7 @@ function dueLabel(due, today) {
 }
 
 function tag(doc, { name, paths, label, aria, filled, overdue = false }) {
-  const button = el(doc, "button", "page-check-chip", {
+  const button = el(doc, "button", "blockeditor-check-chip", {
     type: "button",
     "data-check": name,
     "data-filled": String(filled),
@@ -89,7 +89,7 @@ function tag(doc, { name, paths, label, aria, filled, overdue = false }) {
     "aria-expanded": "false",
     "aria-label": aria,
   });
-  button.append(icon(doc, paths), el(doc, "span", "page-check-chip-label", {}, label));
+  button.append(icon(doc, paths), el(doc, "span", "blockeditor-check-chip-label", {}, label));
   return button;
 }
 
@@ -103,11 +103,11 @@ function popup(view, anchor, { className, label, check, onKey = null }) {
   const doc = anchor.ownerDocument;
   const win = doc.defaultView;
   if (openPopup) openPopup.close();
-  for (const node of doc.querySelectorAll(".page-check-popup")) node.remove();
+  for (const node of doc.querySelectorAll(".blockeditor-check-popup")) node.remove();
   const parent = view.dom.parentNode;
   const anchored = ["relative", "absolute", "fixed", "sticky"].includes(win?.getComputedStyle?.(parent)?.position ?? "");
   const placement = parent && anchored ? parent : doc.body;
-  const panel = el(doc, "div", `page-check-popup ${className}`, { role: "dialog", "aria-label": label, "data-check": check });
+  const panel = el(doc, "div", `blockeditor-check-popup ${className}`, { role: "dialog", "aria-label": label, "data-check": check });
   let closed = false;
   const place = () => {
     const ring = anchor.getBoundingClientRect();
@@ -176,7 +176,7 @@ function ownerPicker(view, id, anchor) {
   const doc = anchor.ownerDocument;
   const current = itemAt(view, id)?.node.attrs.owner || "";
   const { panel, close, place } = popup(view, anchor, {
-    className: "page-check-owner",
+    className: "blockeditor-check-owner",
     label: "Assignee",
     check: "owner-panel",
     onKey: (event, panel) => {
@@ -189,28 +189,28 @@ function ownerPicker(view, id, anchor) {
       next?.focus();
     },
   });
-  const input = el(doc, "input", "page-check-search", { type: "text", placeholder: "Find or type a name", "aria-label": "Find or type a name" });
-  const list = el(doc, "div", "page-check-people");
-  const remove = el(doc, "button", "page-check-person page-check-danger", { type: "button", "data-check": "clear-owner" });
-  remove.append(icon(doc, ICONS.clear), el(doc, "span", "page-check-person-name", {}, "Remove assignee"));
+  const input = el(doc, "input", "blockeditor-check-search", { type: "text", placeholder: "Find or type a name", "aria-label": "Find or type a name" });
+  const list = el(doc, "div", "blockeditor-check-people");
+  const remove = el(doc, "button", "blockeditor-check-person blockeditor-check-danger", { type: "button", "data-check": "clear-owner" });
+  remove.append(icon(doc, ICONS.clear), el(doc, "span", "blockeditor-check-person-name", {}, "Remove assignee"));
   remove.disabled = !current;
   remove.addEventListener("click", () => choose(null));
-  panel.append(input, el(doc, "div", "page-check-subhead", {}, "People in this document"), list, el(doc, "div", "page-check-divider"), remove);
+  panel.append(input, el(doc, "div", "blockeditor-check-subhead", {}, "People in this document"), list, el(doc, "div", "blockeditor-check-divider"), remove);
   let available = [];
   const choose = (name) => { close(); setItem(view, id, "owner", name); };
   const personRow = (name, count) => {
     const selected = name.toLowerCase() === String(current).toLowerCase();
-    const row = el(doc, "button", "page-check-person", { type: "button", "data-check": "owner-option", "data-name": name, "aria-pressed": String(selected) });
-    row.append(cardFace(doc, name), el(doc, "span", "page-check-person-name", {}, name), el(doc, "span", "page-check-person-meta", {}, `${count} ${count === 1 ? "item" : "items"}`));
+    const row = el(doc, "button", "blockeditor-check-person", { type: "button", "data-check": "owner-option", "data-name": name, "aria-pressed": String(selected) });
+    row.append(cardFace(doc, name), el(doc, "span", "blockeditor-check-person-name", {}, name), el(doc, "span", "blockeditor-check-person-meta", {}, `${count} ${count === 1 ? "item" : "items"}`));
     if (selected) row.append(icon(doc, ICONS.tick));
     row.addEventListener("click", () => choose(name));
     return row;
   };
   const addRow = (name) => {
-    const row = el(doc, "button", "page-check-person", { type: "button", "data-check": "owner-new", "data-name": name });
-    const label = el(doc, "span", "page-check-person-name", {}, "Assign to ");
+    const row = el(doc, "button", "blockeditor-check-person", { type: "button", "data-check": "owner-new", "data-name": name });
+    const label = el(doc, "span", "blockeditor-check-person-name", {}, "Assign to ");
     label.append(el(doc, "strong", null, {}, name));
-    row.append(icon(doc, ICONS.plus), label, el(doc, "span", "page-check-person-meta", {}, "New"));
+    row.append(icon(doc, ICONS.plus), label, el(doc, "span", "blockeditor-check-person-meta", {}, "New"));
     row.addEventListener("click", () => choose(name));
     return row;
   };
@@ -267,55 +267,55 @@ function datePicker(view, id, anchor) {
   let month = opened.getMonth();
 
   const { panel, close, place } = popup(view, anchor, {
-    className: "page-check-date",
+    className: "blockeditor-check-date",
     label: "Due date",
     check: "date-panel",
     onKey: (event, panel) => gridKey(event, panel),
   });
   const pick = (key) => { close(); setItem(view, id, "due", key); };
 
-  const quick = el(doc, "div", "page-check-quick");
+  const quick = el(doc, "div", "blockeditor-check-quick");
   const quickRow = (label, offset) => {
     const day = dateOf(now.getFullYear(), now.getMonth(), now.getDate() + offset);
-    const row = el(doc, "button", "page-check-quick-row", { type: "button", "data-check": "date-quick", "data-date": todayKey(day) });
-    row.append(icon(doc, ICONS.calendar), el(doc, "span", "page-check-quick-label", {}, label), el(doc, "span", "page-check-quick-meta", {}, shortDay(day)));
+    const row = el(doc, "button", "blockeditor-check-quick-row", { type: "button", "data-check": "date-quick", "data-date": todayKey(day) });
+    row.append(icon(doc, ICONS.calendar), el(doc, "span", "blockeditor-check-quick-label", {}, label), el(doc, "span", "blockeditor-check-quick-meta", {}, shortDay(day)));
     row.addEventListener("click", () => pick(todayKey(day)));
     return row;
   };
   quick.append(quickRow("Today", 0), quickRow("Tomorrow", 1), quickRow("Next week", 7));
 
-  const calendar = el(doc, "div", "page-check-cal");
-  const head = el(doc, "div", "page-check-cal-head");
-  const monthLabel = el(doc, "span", "page-check-cal-month");
-  const nav = el(doc, "span", "page-check-cal-nav");
+  const calendar = el(doc, "div", "blockeditor-check-cal");
+  const head = el(doc, "div", "blockeditor-check-cal-head");
+  const monthLabel = el(doc, "span", "blockeditor-check-cal-month");
+  const nav = el(doc, "span", "blockeditor-check-cal-nav");
   const step = (by) => {
     const moved = dateOf(year, month + by, 1);
     year = moved.getFullYear();
     month = moved.getMonth();
     draw();
   };
-  const previous = el(doc, "button", "page-check-cal-btn", { type: "button", "aria-label": "Previous month" });
-  const next = el(doc, "button", "page-check-cal-btn", { type: "button", "aria-label": "Next month" });
+  const previous = el(doc, "button", "blockeditor-check-cal-btn", { type: "button", "aria-label": "Previous month" });
+  const next = el(doc, "button", "blockeditor-check-cal-btn", { type: "button", "aria-label": "Next month" });
   previous.append(icon(doc, ICONS["chevron-left"]));
   next.append(icon(doc, ICONS["chevron-right"]));
   previous.addEventListener("click", () => step(-1));
   next.addEventListener("click", () => step(1));
   nav.append(previous, next);
   head.append(monthLabel, nav);
-  const grid = el(doc, "div", "page-check-cal-grid");
+  const grid = el(doc, "div", "blockeditor-check-cal-grid");
   calendar.append(head, grid);
 
   const draw = () => {
-    monthLabel.replaceChildren(el(doc, "span", null, {}, `${MONTHS[month]} `), el(doc, "span", "page-check-cal-year", {}, String(year)));
+    monthLabel.replaceChildren(el(doc, "span", null, {}, `${MONTHS[month]} `), el(doc, "span", "blockeditor-check-cal-year", {}, String(year)));
     const first = dateOf(year, month, 1);
     const days = dateOf(year, month + 1, 0).getDate();
     const cells = Math.ceil((first.getDay() + days) / 7) * 7;
-    const heads = ["S", "M", "T", "W", "T", "F", "S"].map((letter) => el(doc, "span", "page-check-cal-dow", {}, letter));
+    const heads = ["S", "M", "T", "W", "T", "F", "S"].map((letter) => el(doc, "span", "blockeditor-check-cal-dow", {}, letter));
     const buttons = [];
     for (let i = 0; i < cells; i += 1) {
       const day = dateOf(year, month, 1 - first.getDay() + i);
       const key = todayKey(day);
-      const button = el(doc, "button", "page-check-cal-day", {
+      const button = el(doc, "button", "blockeditor-check-cal-day", {
         type: "button",
         "data-check": "date-day",
         "data-date": key,
@@ -347,12 +347,12 @@ function datePicker(view, id, anchor) {
     panel.querySelector(`[data-check="date-day"][data-date="${todayKey(day)}"]`)?.focus();
   };
 
-  const clear = el(doc, "button", "page-check-quick-row page-check-danger", { type: "button", "data-check": "clear-date" });
-  clear.append(icon(doc, ICONS.clear), el(doc, "span", "page-check-quick-label", {}, "Clear date"));
+  const clear = el(doc, "button", "blockeditor-check-quick-row blockeditor-check-danger", { type: "button", "data-check": "clear-date" });
+  clear.append(icon(doc, ICONS.clear), el(doc, "span", "blockeditor-check-quick-label", {}, "Clear date"));
   clear.disabled = !current;
   clear.addEventListener("click", () => pick(null));
 
-  panel.append(quick, calendar, el(doc, "div", "page-check-divider"), clear);
+  panel.append(quick, calendar, el(doc, "div", "blockeditor-check-divider"), clear);
   draw();
   place();
   (grid.querySelector('[data-check="date-day"][aria-pressed="true"]') ?? grid.querySelector('[data-check="date-day"][data-today="true"]'))?.focus();
@@ -361,7 +361,7 @@ function datePicker(view, id, anchor) {
 function controls(view, node) {
   const doc = view.dom.ownerDocument;
   const box = doc.createElement("span");
-  box.className = "page-check-controls";
+  box.className = "blockeditor-check-controls";
   box.contentEditable = "false";
   box.dataset.empty = String(!node.attrs.owner && !node.attrs.due);
   const today = todayKey();
@@ -380,7 +380,7 @@ export function focusControl(view, name) {
   const $pos = view.state.selection.$head;
   if ($pos.depth !== 1 || $pos.parent.type !== schema.nodes.list_item || $pos.parent.attrs.kind !== "check") return false;
   const id = $pos.parent.attrs.id;
-  const widget = [...view.dom.querySelectorAll(".page-check-controls")].find((el) => el.dataset.item === id);
+  const widget = [...view.dom.querySelectorAll(".blockeditor-check-controls")].find((el) => el.dataset.item === id);
   const button = widget?.querySelector(`[data-check="${name}"]`);
   if (!button) return false;
   button.dataset.fromKeys = "true";
@@ -397,7 +397,7 @@ export function decorations(st) {
       const box = controls(view, node);
       box.dataset.item = node.attrs.id;
       return box;
-    }, { key: `${node.attrs.id}:${node.attrs.owner}:${node.attrs.due}:${node.attrs.checked}:${today}`, side: -1, stopEvent: (event) => !!event.target.closest?.(".page-check-chip, .page-check-popup"), ignoreSelection: true }));
+    }, { key: `${node.attrs.id}:${node.attrs.owner}:${node.attrs.due}:${node.attrs.checked}:${today}`, side: -1, stopEvent: (event) => !!event.target.closest?.(".blockeditor-check-chip, .blockeditor-check-popup"), ignoreSelection: true }));
   });
   return DecorationSet.create(st.doc, widgets);
 }

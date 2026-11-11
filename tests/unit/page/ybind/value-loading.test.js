@@ -39,7 +39,7 @@ test("strict loading accepts a complete value without g and leaves the input unc
 });
 
 test("strict loading accepts the provider's multipart output and rejects a missing piece", () => {
-  const store = createStore({ name: "page", value: { v: 1, g: 0, y: {} } });
+  const store = createStore({ name: "blockeditor", value: { v: 1, g: 0, y: {} } });
   const source = track(new Y.Doc());
   const provider = createYProvider({ store, ydoc: source, setTimer: () => 0, clearTimer: () => {} });
   try { source.getText("flow").insert(0, "large ".repeat(2400)); } finally { provider.dispose(); }

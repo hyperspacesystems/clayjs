@@ -7,10 +7,10 @@ export async function run() {
     const { sim, room, list, result, done } = await tabs('alpha bravo charlie delta echo foxtrot', ['a', 'b', 'c']);
     const t = Object.fromEntries(list.map((x) => [x.id, x]));
     await sim.run(1500);
-    const file = JSON.parse(JSON.stringify(room.stores.get('page').value));
-    room.land('page', room.seq);
+    const file = JSON.parse(JSON.stringify(room.stores.get('blockeditor').value));
+    room.land('blockeditor', room.seq);
     const T = sim.now() + 100;
-    if (loss) sim.at(T, () => room.restart({ page: file }));
+    if (loss) sim.at(T, () => room.restart({ blockeditor: file }));
     sim.at(T + 77, () => t.b.format(6, 19, 'b'));
     sim.at(T + 164, () => { t.a.caret = 10; t.a.type('XX'); });
     await sim.run(T + 30000);

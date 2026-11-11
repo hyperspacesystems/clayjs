@@ -10,7 +10,7 @@
 // card id can never match an article block id. An id that appears twice is not
 // reused at all: neither occurrence promises node identity.
 
-const ARTICLE = "article[data-page]";
+const ARTICLE = "article[data-blockeditor]";
 const TOOL = 'section[data-type="tool"][data-id]';
 const CONTAINERS = new Set(["UL", "OL", "LI", "DETAILS"]);
 const LISTS = new Set(["UL", "OL"]);
@@ -60,7 +60,7 @@ export function toolsOf(root) {
 }
 
 export function toolStateOf(doc) {
-  const tag = doc.querySelector('script[type="application/json"][merge="page.tools"]');
+  const tag = doc.querySelector('script[type="application/json"][merge="blockeditor.tools"]');
   if (!tag) return {};
   try { return JSON.parse(tag.textContent); } catch { return {}; }
 }

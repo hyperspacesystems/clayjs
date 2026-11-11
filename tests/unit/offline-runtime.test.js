@@ -60,12 +60,12 @@ test("a projection without a descriptor rewrites every runtime URL and inserts n
   const input = htmlVectors.cases.find((entry) => entry.name === "bare-ampersand-round-trip").input;
   const project = projectRuntimeHTML(input, { ...options, descriptor: false });
 
-  expect(project.html).toContain('src="/_/clayjs/1.15.2/clay.js?plugins=page&exclude=richclay"');
+  expect(project.html).toContain('src="/_/clayjs/1.15.2/clay.js?plugins=blockeditor&exclude=richclay"');
   expect(project.html).not.toContain("clay-runtime-map");
   expect(project.mappings).toEqual([
     {
-      original: "https://clayjs.com/v1/clay.js?plugins=page&exclude=richclay",
-      local: "/_/clayjs/1.15.2/clay.js?plugins=page&exclude=richclay",
+      original: "https://clayjs.com/v1/clay.js?plugins=blockeditor&exclude=richclay",
+      local: "/_/clayjs/1.15.2/clay.js?plugins=blockeditor&exclude=richclay",
     },
   ]);
 });

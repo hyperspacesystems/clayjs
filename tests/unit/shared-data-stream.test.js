@@ -229,7 +229,7 @@ test('named events preserve payloads and never advance snapshot since', () => {
   workers[0].send({ type: 'cursor', seq: 12, resync: false });
   const payloads = [
     ['data', { seq: 900, op: { kind: 'set' } }],
-    ['data-state', { seen: { editor_A: 7 }, saved: { editor_A: 5 }, pageTransition: 'stable' }],
+    ['data-state', { seen: { editor_A: 7 }, saved: { editor_A: 5 }, blockeditorTransition: 'stable' }],
     ['data-writer', { clientId: 'editor_A', conn: 'proof', writable: true }],
   ];
   for (const [event, data] of payloads) workers[0].send({ type: 'event', event, data });

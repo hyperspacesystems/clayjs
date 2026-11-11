@@ -11,7 +11,7 @@ const KEY = draftKey(SLOT, "/");
 const SAVED_AT = "2026-10-15T12:00:00.000Z";
 
 const RULES = '{"title":"h1"}';
-const SETTINGS = '<script type="application/json" merge="page.settings" clay="live">{}</script>';
+const SETTINGS = '<script type="application/json" merge="blockeditor.settings" clay="live">{}</script>';
 const PAGE = { v: 1, y: "AAA" };
 
 const rulesTag = (rules) => `<script type="application/json" data-rules-name="api" data-rules-version="1">${rules}</script>`;
@@ -19,22 +19,22 @@ const rulesTag = (rules) => `<script type="application/json" data-rules-name="ap
 function setPage({ rules = RULES, rev = "r0", article = "<p>served</p>", withArticle = true, page = null } = {}) {
   document.documentElement.setAttribute("visitor-drafts", SLOT);
   document.head.innerHTML = rulesTag(rules) + SETTINGS;
-  document.body.innerHTML = `<h1>T</h1>${page ? `<script type="application/json" merge="page" clay="live">${JSON.stringify(page)}</script>` : ""}${withArticle ? `<article class="page" clay="freeze" data-page="1" data-rev="${rev}">${article}</article>` : ""}`;
+  document.body.innerHTML = `<h1>T</h1>${page ? `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(page)}</script>` : ""}${withArticle ? `<article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}">${article}</article>` : ""}`;
 }
 
 function savedBytes({ rules = RULES, rev = "r1", article = "<p>typed</p>", withArticle = true, title = "T", page = PAGE } = {}) {
-  const articleHtml = withArticle ? `<script type="application/json" merge="page" clay="live">${JSON.stringify(page)}</script><article class="page" clay="freeze" data-page="1" data-rev="${rev}">${article}</article>` : "";
+  const articleHtml = withArticle ? `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(page)}</script><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}">${article}</article>` : "";
   return `<!DOCTYPE html><html visitor-drafts="${SLOT}"><head>${rulesTag(rules)}${SETTINGS}</head><body><h1>${title}</h1>${articleHtml}</body></html>`;
 }
 
-const pageRecord = ({ id = "a", rev = "r1", title = "owner", value = PAGE } = {}) => JSON.stringify({
+const blockeditorRecord = ({ id = "a", rev = "r1", title = "owner", value = PAGE } = {}) => JSON.stringify({
   v: 1,
   savedAt: SAVED_AT,
   id,
   ancestry: [],
   data: { title },
-  live: { page: value, "page.settings": {} },
-  page: { rev, html: `<p>${rev}</p>` },
+  live: { blockeditor: value, "blockeditor.settings": {} },
+  blockeditor: { rev, html: `<p>${rev}</p>` },
 });
 
 function fakeStorage(initial = {}) {
@@ -55,13 +55,13 @@ function collect(name) {
 }
 
 const now = () => new Date(SAVED_AT);
-const article = () => document.querySelector("article[data-page]");
+const article = () => document.querySelector("article[data-blockeditor]");
 
 afterEach(() => {
   jest.restoreAllMocks();
 });
 
-test("a page-only change writes a record holding the page", () => {
+test("a blockeditor-only change writes a record holding the page", () => {
   setPage({ rules: "{}" });
   const storage = fakeStorage();
   const store = createStore({ doc: document, storage, now });
@@ -70,9 +70,9 @@ test("a page-only change writes a record holding the page", () => {
 
   const record = JSON.parse(storage.getItem(KEY));
   expect(record.data).toEqual({});
-  expect(record.live.page).toEqual({ v: 1, y: "AAA" });
-  expect(record.page.rev).toBe("r1");
-  expect(record.page.html).toContain("typed");
+  expect(record.live.blockeditor).toEqual({ v: 1, y: "AAA" });
+  expect(record.blockeditor.rev).toBe("r1");
+  expect(record.blockeditor.html).toContain("typed");
 });
 
 test("an untouched page writes no record", () => {
@@ -92,25 +92,25 @@ test("an untouched page writes no record", () => {
 
 test("restore puts the stored page into the store tags before the article", () => {
   setPage();
-  const storage = fakeStorage({ [KEY]: pageRecord({ rev: "r1" }) });
+  const storage = fakeStorage({ [KEY]: blockeditorRecord({ rev: "r1" }) });
   const store = createStore({ doc: document, storage, now });
 
   const result = store.restore();
 
   expect(result.restored).toBe(true);
   const tag = article().previousElementSibling;
-  expect(tag.getAttribute("merge")).toBe("page");
+  expect(tag.getAttribute("merge")).toBe("blockeditor");
   expect(tag.getAttribute("clay")).toContain("live");
   expect(JSON.parse(tag.textContent)).toEqual(PAGE);
   expect(article().textContent).toContain("served");
   expect(article().getAttribute("data-rev")).toBe("r0");
-  expect(JSON.parse(document.querySelector('script[merge="page.settings"]').textContent)).toEqual({});
+  expect(JSON.parse(document.querySelector('script[merge="blockeditor.settings"]').textContent)).toEqual({});
 });
 
 test("a stored value cannot close its tag", () => {
   setPage();
   const value = "</script><script>x()</script>";
-  const storage = fakeStorage({ [KEY]: pageRecord({ rev: "r1", value }) });
+  const storage = fakeStorage({ [KEY]: blockeditorRecord({ rev: "r1", value }) });
   const scripts = document.querySelectorAll("script").length;
   const store = createStore({ doc: document, storage, now });
 
@@ -119,7 +119,7 @@ test("a stored value cannot close its tag", () => {
   expect(result.restored).toBe(true);
   expect(document.querySelectorAll("script").length).toBe(scripts + 1);
   const tag = article().previousElementSibling;
-  expect(tag.getAttribute("merge")).toBe("page");
+  expect(tag.getAttribute("merge")).toBe("blockeditor");
   expect(tag.textContent).not.toContain("</script");
   expect(tag.textContent).toContain("\\u003c");
   expect(JSON.parse(tag.textContent)).toBe(value);
@@ -128,7 +128,7 @@ test("a stored value cannot close its tag", () => {
 
 test("a page record with no article to go into is kept aside", () => {
   setPage({ withArticle: false });
-  const raw = pageRecord({ rev: "r1" });
+  const raw = blockeditorRecord({ rev: "r1" });
   const storage = fakeStorage({ [KEY]: raw });
   jest.spyOn(console, "warn").mockImplementation(() => {});
   const store = createStore({ doc: document, storage, now });
@@ -143,59 +143,59 @@ test("a page record with no article to go into is kept aside", () => {
 
 test("a page record from another tab is kept when this tab's page did not change", () => {
   setPage();
-  const recordA = pageRecord({ id: "a", rev: "r1" });
+  const recordA = blockeditorRecord({ id: "a", rev: "r1" });
   const storage = fakeStorage({ [KEY]: recordA });
   const store = createStore({ doc: document, storage, now });
   expect(store.restore().restored).toBe(true);
-  const recordB = pageRecord({ id: "b", rev: "r2", title: "owner" });
+  const recordB = blockeditorRecord({ id: "b", rev: "r2", title: "owner" });
   storage.setItem(KEY, recordB);
 
   store.write(savedBytes({ rev: "r1", title: "Typed" }));
 
   const stored = JSON.parse(storage.getItem(KEY));
-  expect(stored.page.rev).toBe("r2");
-  expect(stored.page.html).toContain("r2");
-  expect(stored.live.page).toEqual(PAGE);
+  expect(stored.blockeditor.rev).toBe("r2");
+  expect(stored.blockeditor.html).toContain("r2");
+  expect(stored.live.blockeditor).toEqual(PAGE);
   expect(stored.data.title).toBe("Typed");
   expect(storage.getItem(KEY + ":conflict")).toBeNull();
 });
 
 test("both tabs changed the page: mine is written and theirs is kept aside", () => {
   setPage();
-  const recordA = pageRecord({ id: "a", rev: "r1" });
+  const recordA = blockeditorRecord({ id: "a", rev: "r1" });
   const storage = fakeStorage({ [KEY]: recordA });
   const store = createStore({ doc: document, storage, now });
   expect(store.restore().restored).toBe(true);
-  const recordB = pageRecord({ id: "b", rev: "r2", title: "owner" });
+  const recordB = blockeditorRecord({ id: "b", rev: "r2", title: "owner" });
   storage.setItem(KEY, recordB);
   jest.spyOn(console, "warn").mockImplementation(() => {});
 
   store.write(savedBytes({ rev: "r3", title: "Typed", article: "<p>mine</p>" }));
 
   const stored = JSON.parse(storage.getItem(KEY));
-  expect(stored.page.rev).toBe("r3");
-  expect(stored.page.html).toContain("mine");
+  expect(stored.blockeditor.rev).toBe("r3");
+  expect(stored.blockeditor.html).toContain("mine");
   expect(storage.getItem(KEY + ":conflict")).toBe(recordB);
 });
 
 test("externalUnit names a page another tab recorded, and adoptedUnit makes it this tab's", () => {
   setPage();
-  const recordA = pageRecord({ id: "a", rev: "r1" });
+  const recordA = blockeditorRecord({ id: "a", rev: "r1" });
   const storage = fakeStorage({ [KEY]: recordA });
   const store = createStore({ doc: document, storage, now });
   expect(store.restore().restored).toBe(true);
-  const recordB = pageRecord({ id: "b", rev: "r2", title: "owner" });
+  const recordB = blockeditorRecord({ id: "b", rev: "r2", title: "owner" });
   storage.setItem(KEY, recordB);
 
-  expect(store.externalUnit().page.rev).toBe("r2");
+  expect(store.externalUnit().blockeditor.rev).toBe("r2");
   store.adoptedUnit(store.externalUnit());
   expect(store.externalUnit()).toBeNull();
 
   store.write(savedBytes({ rev: "r3", title: "Typed", article: "<p>mine</p>" }));
 
   const stored = JSON.parse(storage.getItem(KEY));
-  expect(stored.page.rev).toBe("r3");
-  expect(stored.page.html).toContain("mine");
+  expect(stored.blockeditor.rev).toBe("r3");
+  expect(stored.blockeditor.html).toContain("mine");
   expect(storage.getItem(KEY + ":conflict")).toBeNull();
 });
 
@@ -216,38 +216,38 @@ test("a Journal record is unchanged", () => {
 
 test("a page cleared back to the served text still reaches the other tab", () => {
   setPage({ page: PAGE });
-  const storage = fakeStorage({ [KEY]: pageRecord({ id: "a", rev: "r1" }) });
+  const storage = fakeStorage({ [KEY]: blockeditorRecord({ id: "a", rev: "r1" }) });
   const store = createStore({ doc: document, storage, now });
   expect(store.restore().restored).toBe(true);
 
   store.write(savedBytes({ rev: "r0", page: PAGE }));
 
   const record = JSON.parse(storage.getItem(KEY));
-  expect(record.page).toBeTruthy();
-  expect(record.page.rev).toBe("r0");
+  expect(record.blockeditor).toBeTruthy();
+  expect(record.blockeditor.rev).toBe("r0");
 });
 
 test("a data-only save leaves the other tab's page unseen", () => {
   setPage();
-  const storage = fakeStorage({ [KEY]: pageRecord({ id: "a", rev: "r1" }) });
+  const storage = fakeStorage({ [KEY]: blockeditorRecord({ id: "a", rev: "r1" }) });
   const store = createStore({ doc: document, storage, now });
   expect(store.restore().restored).toBe(true);
-  storage.setItem(KEY, pageRecord({ id: "b", rev: "r2" }));
+  storage.setItem(KEY, blockeditorRecord({ id: "b", rev: "r2" }));
 
   store.write(savedBytes({ rev: "r1", title: "Typed" }));
-  expect(JSON.parse(storage.getItem(KEY)).page.rev).toBe("r2");
+  expect(JSON.parse(storage.getItem(KEY)).blockeditor.rev).toBe("r2");
 
   jest.spyOn(console, "warn").mockImplementation(() => {});
   store.write(savedBytes({ rev: "r3", title: "Typed", article: "<p>mine</p>" }));
 
   const conflict = JSON.parse(storage.getItem(KEY + ":conflict"));
-  expect(conflict.page.rev).toBe("r2");
-  expect(JSON.parse(storage.getItem(KEY)).page.rev).toBe("r3");
+  expect(conflict.blockeditor.rev).toBe("r2");
+  expect(JSON.parse(storage.getItem(KEY)).blockeditor.rev).toBe("r3");
 });
 
 test("a page is placed even when no saved field fits the rules", () => {
   setPage({ rules: '{"heading":"h1"}', rev: "r1", article: "<h1>served</h1>", page: PAGE });
-  const raw = pageRecord({ title: "x", rev: "r1" });
+  const raw = blockeditorRecord({ title: "x", rev: "r1" });
   const storage = fakeStorage({ [KEY]: raw });
   jest.spyOn(console, "warn").mockImplementation(() => {});
   const store = createStore({ doc: document, storage, now });
@@ -257,7 +257,7 @@ test("a page is placed even when no saved field fits the rules", () => {
   expect(result.restored).toBe(true);
   expect(result.partial).toBe(true);
   const tag = article().previousElementSibling;
-  expect(tag.getAttribute("merge")).toBe("page");
+  expect(tag.getAttribute("merge")).toBe("blockeditor");
   expect(JSON.parse(tag.textContent)).toEqual(PAGE);
   expect(storage.getItem(KEY)).toBe(raw);
   expect(storage.keys().filter((name) => name.startsWith(KEY + ":unreadable:"))).toEqual([KEY + ":unreadable:" + SAVED_AT]);

@@ -83,13 +83,13 @@ beforeAll(async () => {
 const seed = () => migration.migrateHybridValues([{ blocks: { p: { t: "paragraph", pos: "1", c: "First" } } }]);
 const authored = () => migration.migrateHybridValues([{ blocks: { p: { t: "paragraph", pos: "1", c: "Authored at save" } } }]);
 
-function pageDocument({ pageTag = seed(), title = "Notes", extra = "", article = '<div class="page-editor">Editor DOM</div>' } = {}) {
+function pageDocument({ pageTag = seed(), title = "Notes", extra = "", article = '<div class="blockeditor-editor">Editor DOM</div>' } = {}) {
   document.head.innerHTML =
     `<title>${title}</title>` +
-    `<script type="application/json" merge="page" clay="live">${JSON.stringify(pageTag)}</script>` +
+    `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(pageTag)}</script>` +
     `<script type="application/json" merge="prefs" clay="live">{"theme":"one"}</script>` +
     `<style id="owned-style" clay="no-dirty">.page { color: red; }</style>`;
-  document.body.innerHTML = `${extra}<main><article data-page="1" clay="freeze" data-rev="old">${article}</article></main>`;
+  document.body.innerHTML = `${extra}<main><article data-blockeditor="1" clay="freeze" data-rev="old">${article}</article></main>`;
 }
 
 beforeEach(() => {
@@ -122,8 +122,8 @@ async function startSync() {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const parse = (html) => new DOMParser().parseFromString(html, "text/html");
-const articleText = (html) => parse(html).querySelector("article[data-page]").textContent;
-const pageTagText = (html) => parse(html).querySelector('script[merge="page"]').textContent;
+const articleText = (html) => parse(html).querySelector("article[data-blockeditor]").textContent;
+const pageTagText = (html) => parse(html).querySelector('script[merge="blockeditor"]').textContent;
 const titleText = (html) => parse(html).querySelector("head > title")?.textContent ?? null;
 
 function pendingSnapshot(html, identity, captureId = 7) {
@@ -133,20 +133,20 @@ function pendingSnapshot(html, identity, captureId = 7) {
 
 const PENDING = () =>
   "<!DOCTYPE html><html><head><title>Notes</title>" +
-  `<script type="application/json" merge="page" clay="live">${JSON.stringify(seed())}</script>` +
+  `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(seed())}</script>` +
   '<script type="application/json" merge="prefs" clay="live">{"theme":"one"}</script>' +
   "</head><body>" +
   '<header data-id="toolbar"><b>Toolbar</b></header>' +
   '<aside no-save data-id="scratch">A note only this tab holds</aside>' +
-  '<main><article data-page="1" clay="freeze" data-rev="old"><div class="page-editor">Editor DOM</div></article></main>' +
+  '<main><article data-blockeditor="1" clay="freeze" data-rev="old"><div class="blockeditor-editor">Editor DOM</div></article></main>' +
   "</body></html>";
 
 function acceptedFromPending(identity, { pageTag = seed(), title = "Notes" } = {}) {
   const root = parse(PENDING()).documentElement;
   for (const el of root.querySelectorAll("[no-save]")) el.remove();
-  const article = root.querySelector("article[data-page]");
+  const article = root.querySelector("article[data-blockeditor]");
   article.innerHTML = projection.renderFromTags([JSON.stringify(pageTag)]).html;
-  root.querySelector('script[merge="page"]').textContent = JSON.stringify(pageTag);
+  root.querySelector('script[merge="blockeditor"]').textContent = JSON.stringify(pageTag);
   root.querySelector("head > title").textContent = title;
   return { html: serializeForSync(root), identity };
 }
@@ -178,7 +178,7 @@ describe("pageRelay", () => {
 
   test("a second capture of newer input cannot be relayed under an older save's stamp", async () => {
     pageDocument();
-    live("page").update((value) => {
+    live("blockeditor").update((value) => {
       for (const key of Object.keys(value)) delete value[key];
       Object.assign(value, seed());
     });
@@ -224,7 +224,7 @@ describe("pageRelay", () => {
 describe("a page save's relay", () => {
   async function savePage() {
     pageDocument();
-    live("page").update((value) => {
+    live("blockeditor").update((value) => {
       for (const key of Object.keys(value)) delete value[key];
       Object.assign(value, seed());
     });
@@ -255,27 +255,27 @@ describe("a page save's relay", () => {
 
   test("the relay of a floor-0 page activated in the session carries the floor its save sent", async () => {
     pageDocument();
-    live("page").update((value) => {
+    live("blockeditor").update((value) => {
       for (const key of Object.keys(value)) delete value[key];
       Object.assign(value, seed());
     });
     await startSync();
     // The format gate's activation: one save that raises the document's floor on its
     // way out, so the marker is in the bytes the host took and not in the capture.
-    const result = await save.savePageForce(() => {}, { pageFormatFloor: 1 });
+    const result = await save.savePageForce(() => {}, { blockeditorFormatFloor: 1 });
     await wait(20);
 
     expect(result.ok).toBe(true);
     expect(savePosts).toHaveLength(1);
     expect(relayPosts).toHaveLength(1);
-    expect(savePosts[0]).toContain('<meta name="clay-page-format" content="1">');
+    expect(savePosts[0]).toContain('<meta name="clay-blockeditor-format" content="1">');
     // A peer that receives this relay learns the floor the host stored.
-    expect(relayPosts[0].html).toContain('<meta name="clay-page-format" content="1">');
+    expect(relayPosts[0].html).toContain('<meta name="clay-blockeditor-format" content="1">');
   });
 
   test("typing after the capture but before the answer is absent from that older relay", async () => {
     pageDocument();
-    live("page").update((value) => {
+    live("blockeditor").update((value) => {
       for (const key of Object.keys(value)) delete value[key];
       Object.assign(value, seed());
     });
@@ -289,7 +289,7 @@ describe("a page save's relay", () => {
 
     // The store moves on while the save is on the wire: the answer still
     // describes the bytes that were sent.
-    live("page").update((value) => {
+    live("blockeditor").update((value) => {
       Object.assign(value, migration.migrateHybridValues([{ blocks: { p: { t: "paragraph", pos: "1", c: "First later" } } }]));
     });
     release(respond(200, { msg: "Saved", etag: "E1" }));
@@ -305,9 +305,9 @@ describe("a page save's relay", () => {
     pageDocument();
     // Runs after the capture, before the projection reads the tag: the accepted
     // article can differ from both the live store and the captured article.
-    document.head.querySelector('script[merge="page"]')
+    document.head.querySelector('script[merge="blockeditor"]')
       .setAttribute("onbeforesave", `this.textContent = ${JSON.stringify(JSON.stringify(authored()))}`);
-    live("page").update((value) => {
+    live("blockeditor").update((value) => {
       for (const key of Object.keys(value)) delete value[key];
       Object.assign(value, seed());
     });
@@ -324,7 +324,7 @@ describe("a page save's relay", () => {
 
   test("a no-save region outside the article stays in the relay and out of the file", async () => {
     pageDocument({ extra: '<aside no-save data-id="scratch">A note only this tab holds</aside>' });
-    live("page").update((value) => {
+    live("blockeditor").update((value) => {
       for (const key of Object.keys(value)) delete value[key];
       Object.assign(value, seed());
     });
@@ -351,7 +351,7 @@ describe("a page save's relay", () => {
     expect(relay.identityMap["~"]).toBeDefined();
     const imported = importMap(relayRoot, relay.identityMap);
     expect(imported.get(relayRoot.querySelector("body"))).toEqual(expect.any(String));
-    expect(imported.get(relayRoot.querySelector("article[data-page]"))).toEqual(expect.any(String));
+    expect(imported.get(relayRoot.querySelector("article[data-blockeditor]"))).toEqual(expect.any(String));
     expect(imported.get(relayRoot.querySelector('[data-id="scratch"]'))).toEqual(expect.any(String));
 
     // A sibling outside the article keeps exactly the identity it had.
@@ -391,7 +391,7 @@ describe("a page save's relay", () => {
 
   test("a download taken while a save is on the wire does not take that save's relay", async () => {
     pageDocument();
-    live("page").update((value) => {
+    live("blockeditor").update((value) => {
       for (const key of Object.keys(value)) delete value[key];
       Object.assign(value, seed());
     });
@@ -408,7 +408,7 @@ describe("a page save's relay", () => {
     // save's: it must not replace the snapshot this save is waiting to relay.
     const { downloadPageCopy } = await import("../../src/page/save-states.js");
     const click = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    URL.createObjectURL = jest.fn(() => "blob:page-copy");
+    URL.createObjectURL = jest.fn(() => "blob:blockeditor-copy");
     URL.revokeObjectURL = jest.fn();
     try {
       expect(await downloadPageCopy()).toBe(true);

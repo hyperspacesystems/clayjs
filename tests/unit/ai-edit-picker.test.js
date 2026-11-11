@@ -62,7 +62,7 @@ afterEach(() => {
   coarse(false);
 });
 
-// A surface that answers by block, as window.clay.page.ai does: points are mapped by
+// A surface that answers by block, as window.clay.blockeditor.ai does: points are mapped by
 // hand, and a span is whatever the test says the two ends cover.
 function fakeSurface({ at = new Map(), span = () => null } = {}) {
   const asked = [];

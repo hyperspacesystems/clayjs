@@ -89,7 +89,7 @@ test("a collapsed toggle copies with the body it hides, in both formats", () => 
   const event = clip();
   expect(fire(view, "copy", event).defaultPrevented).toBe(true);
   expect(event.data["text/plain"]).toBe("Title\n\nHidden body");
-  expect(event.data["text/html"]).toBe('<div data-id="t" class="page-toggle" data-open="false" data-page-toggle="t" data-pm-slice="0 0 []">Title</div><p data-id="b" data-page-parent="t">Hidden body</p>');
+  expect(event.data["text/html"]).toBe('<div data-id="t" class="blockeditor-toggle" data-open="false" data-blockeditor-toggle="t" data-pm-slice="0 0 []">Title</div><p data-id="b" data-blockeditor-parent="t">Hidden body</p>');
 });
 
 test("lists, links and code text copy as their own markup", () => {

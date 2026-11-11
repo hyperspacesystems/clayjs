@@ -19,11 +19,11 @@ const columns = (table) => orderedIds(table.attrs.cols);
 const UNAVAILABLE = "That part of the table is no longer available.";
 const GEAR = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="scale(0.6667)" stroke-width="2.25"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></g></svg>';
 const ACTIONS_CSS = `
-.page-editor .page-table-actions { position: absolute; z-index: 2; bottom: 100%; inset-inline-end: 0; inset-inline-start: auto; width: 24px; height: 20px; padding: 0; display: grid; place-items: center; border: 1px solid var(--page-chrome-line-rest); border-bottom: 0; border-radius: 6px 6px 0 0; background: var(--page-chrome-bg-moved); color: var(--page-chrome-ink-moved); font: inherit; cursor: pointer; opacity: 1; }
-.page-editor .page-table-actions:hover { background: var(--page-pop-hover); color: var(--page-ink-soft); }
+.blockeditor-editor .blockeditor-table-actions { position: absolute; z-index: 2; bottom: 100%; inset-inline-end: 0; inset-inline-start: auto; width: 24px; height: 20px; padding: 0; display: grid; place-items: center; border: 1px solid var(--blockeditor-chrome-line-rest); border-bottom: 0; border-radius: 6px 6px 0 0; background: var(--blockeditor-chrome-bg-moved); color: var(--blockeditor-chrome-ink-moved); font: inherit; cursor: pointer; opacity: 1; }
+.blockeditor-editor .blockeditor-table-actions:hover { background: var(--blockeditor-pop-hover); color: var(--blockeditor-ink-soft); }
 @media (max-width: 560px) {
-  .page-editor .page-table-actions { position: absolute; }
-  .page-editor .page-table-actions::after { content: ""; position: absolute; inset: -12px; }
+  .blockeditor-editor .blockeditor-table-actions { position: absolute; }
+  .blockeditor-editor .blockeditor-table-actions::after { content: ""; position: absolute; inset: -12px; }
 }
 `;
 
@@ -94,12 +94,12 @@ export class TableView {
     this.destroyed = false;
     const doc = view.dom.ownerDocument;
     this.dom = doc.createElement("div");
-    this.dom.className = "page-table";
+    this.dom.className = "blockeditor-table";
     this.dom.dataset.id = node.attrs.id ?? "";
     this.dom.setAttribute("role", "group");
     this.dom.setAttribute("aria-label", "Table");
     const scroll = doc.createElement("div");
-    scroll.className = "page-table-scroll";
+    scroll.className = "blockeditor-table-scroll";
     const table = doc.createElement("table");
     table.setAttribute("aria-label", "Table");
     this.table = table;
@@ -110,16 +110,16 @@ export class TableView {
     table.append(this.colgroup, this.header, this.contentDOM);
     scroll.append(table);
     const addRowButton = button(doc, "+", () => this.append("row"));
-    addRowButton.className = "page-table-add-row";
+    addRowButton.className = "blockeditor-table-add-row";
     addRowButton.setAttribute("aria-label", "Add a row");
     addRowButton.title = "Add a row";
     const addColumnButton = button(doc, "+", () => this.append("column"));
-    addColumnButton.className = "page-table-add-col";
+    addColumnButton.className = "blockeditor-table-add-col";
     addColumnButton.setAttribute("aria-label", "Add a column");
     addColumnButton.title = "Add a column";
     const actions = doc.createElement("button");
     actions.type = "button";
-    actions.className = "page-table-actions";
+    actions.className = "blockeditor-table-actions";
     actions.innerHTML = GEAR;
     actions.dataset.control = "actions";
     actions.setAttribute("aria-haspopup", "menu");
@@ -258,7 +258,7 @@ export class TableView {
     const tableId = this.node.attrs.id;
     const input = doc.createElement("input");
     input.type = "text";
-    input.className = "page-table-rename";
+    input.className = "blockeditor-table-rename";
     input.dataset.control = "rename";
     input.dataset.col = colId;
     input.value = col.name ?? "";
@@ -316,7 +316,7 @@ export class TableView {
   resizer(colId, th, col, index) {
     const doc = this.dom.ownerDocument;
     const handle = doc.createElement("span");
-    handle.className = "page-table-resize";
+    handle.className = "blockeditor-table-resize";
     handle.dataset.control = "resize";
     handle.dataset.col = colId;
     handle.setAttribute("role", "separator");
@@ -395,7 +395,7 @@ export class TableView {
     return this.command(colId, this.widthCommand(colId, width));
   }
   handleFor(colId) {
-    return [...this.header.querySelectorAll(".page-table-resize")].find((handle) => handle.dataset.col === colId) ?? null;
+    return [...this.header.querySelectorAll(".blockeditor-table-resize")].find((handle) => handle.dataset.col === colId) ?? null;
   }
   // The arrow keys, Home, End, Enter and Escape preview a width; the key that
   // stops repeating, Enter, or leaving the handle commits the one command.
@@ -474,7 +474,7 @@ export class TableView {
       if (this.node.attrs.sort?.col === colId) th.setAttribute("aria-sort", this.node.attrs.sort.dir === "asc" ? "ascending" : "descending");
       const control = doc.createElement("button");
       control.type = "button";
-      control.className = "page-table-col-menu";
+      control.className = "blockeditor-table-col-menu";
       control.textContent = name;
       control.dataset.control = "column";
       control.dataset.col = colId;
@@ -540,7 +540,7 @@ export class TableView {
     if (focused && !renaming) this.afterUpdate(focused);
     return true;
   }
-  stopEvent(event) { return !!event.target.closest?.("thead, .page-table-actions, .page-table-add-row, .page-table-add-col"); }
+  stopEvent(event) { return !!event.target.closest?.("thead, .blockeditor-table-actions, .blockeditor-table-add-row, .blockeditor-table-add-col"); }
   ignoreMutation(mutation) { return !this.contentDOM.contains(mutation.target); }
   destroy() {
     this.destroyed = true;
@@ -566,7 +566,7 @@ export class TableCellView {
     this.contentDOM = doc.createElement("span");
     const menu = doc.createElement("button");
     menu.type = "button";
-    menu.className = "page-table-row-menu";
+    menu.className = "blockeditor-table-row-menu";
     menu.innerHTML = GEAR;
     menu.dataset.control = "row";
     menu.setAttribute("aria-haspopup", "menu");
@@ -630,7 +630,7 @@ export class TableCellView {
     const doc = this.dom.ownerDocument;
     const input = doc.createElement("input");
     input.type = "date";
-    input.className = "page-table-date";
+    input.className = "blockeditor-table-date";
     input.contentEditable = "false";
     input.setAttribute("aria-label", "Pick a date");
     const current = this.node.textContent.trim();
@@ -656,7 +656,7 @@ export class TableCellView {
     if (input?.isConnected) input.remove();
   }
   destroy() { this.closeDate(); }
-  stopEvent(event) { return !!event.target.closest?.(".page-table-row-menu, .page-table-date"); }
+  stopEvent(event) { return !!event.target.closest?.(".blockeditor-table-row-menu, .blockeditor-table-date"); }
   ignoreMutation(mutation) { return !this.contentDOM.contains(mutation.target); }
 }
 

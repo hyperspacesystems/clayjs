@@ -5,13 +5,13 @@ import { project, parseModel, renderModel, fragmentCleaner } from '../../page/pr
 import { blocksFromPageValues } from '../../page/ybind/decode.js';
 import { mergePageModels } from '../../page/merge.js';
 import { inert, pageRev } from './page-state.js';
-import { pageFormatFloor, withPageFormatFloor } from '../../page/format-level.js';
+import { blockeditorFormatFloor, withPageFormatFloor } from '../../page/format-level.js';
 
 // The lone article of html: its element rebuilt in doc, and where its start tag
 // and its contents sit in html.
 export function articleOf(html, doc) {
   const $ = load(html, { sourceCodeLocationInfo: true });
-  const nodes = $('article[data-page]').toArray().filter((node) => !inert(node));
+  const nodes = $('article[data-blockeditor]').toArray().filter((node) => !inert(node));
   if (nodes.length !== 1) return null;
   const loc = nodes[0].sourceCodeLocation;
   if (!loc?.startTag || !loc?.endTag) return null;
@@ -70,7 +70,7 @@ export function rebasePage({ storedHtml, state, incomingHtml, baseHtml, createDo
   const body = incomingHtml.slice(0, incoming.startTag.startOffset) + open + inner + incomingHtml.slice(innerEnd);
   // The floor is canonical metadata outside the article, and it only rises: a
   // writer that rebased from a version before activation cannot lower it.
-  const html = withPageFormatFloor(body, Math.max(pageFormatFloor(storedHtml), pageFormatFloor(incomingHtml)));
+  const html = withPageFormatFloor(body, Math.max(blockeditorFormatFloor(storedHtml), blockeditorFormatFloor(incomingHtml)));
   return { html, conflicts: merged.conflicts };
 }
 
@@ -106,7 +106,7 @@ export function closestBase(candidates, incomingHtml, createDocument) {
 export function stampPageRev(html, rev, floor = 0) {
   if (typeof html !== 'string' || !rev) return null;
   const $ = load(html, { sourceCodeLocationInfo: true });
-  const nodes = $('article[data-page]').toArray().filter((node) => !inert(node));
+  const nodes = $('article[data-blockeditor]').toArray().filter((node) => !inert(node));
   const loc = nodes.length === 1 ? nodes[0].sourceCodeLocation?.startTag : null;
   if (!loc) return null;
   const stamped = stampOpen(html, loc, rev);

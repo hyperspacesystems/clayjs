@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals";
 
 /**
- * A reader opens a Document in view mode with `plugins=page`. The loader adds
+ * A reader opens a Document in view mode with `plugins=blockeditor`. The loader adds
  * the reader half of the page plugin by itself (plugins/page-view.js) and nothing
  * else: no generic sync, no live data service. So the reader follows saved files
  * through its own receive-only transport — the startup GET and the saved lane —
@@ -9,7 +9,7 @@ import { jest } from "@jest/globals";
  * the page's own code calling startPageView.
  */
 
-const SERVED = (rev, p1, stamp = "disk-two") => `<!doctype html><html documentetag="${stamp}"><head><title>Reader</title></head><body><article class="page" clay="freeze" data-page="1" data-rev="${rev}"><p data-id="p1">${p1}</p><p data-id="p2">Keep me</p><details data-id="d1"><summary>Note</summary><p>Inside</p></details></article></body></html>`;
+const SERVED = (rev, p1, stamp = "disk-two") => `<!doctype html><html documentetag="${stamp}"><head><title>Reader</title></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}"><p data-id="p1">${p1}</p><p data-id="p2">Keep me</p><details data-id="d1"><summary>Note</summary><p>Inside</p></details></article></body></html>`;
 
 const sources = [];
 
@@ -47,7 +47,7 @@ test("a view-mode boot follows the saved file through the reader's own transport
   });
 
   const { boot } = await import("../../../src/loader.js");
-  const booting = boot("https://clayjs.com/v1", new URLSearchParams("plugins=page"), () => {});
+  const booting = boot("https://clayjs.com/v1", new URLSearchParams("plugins=blockeditor"), () => {});
   await until(() => sources.length > 0);
   expect(sources).toHaveLength(1);
 
@@ -62,7 +62,7 @@ test("a view-mode boot follows the saved file through the reader's own transport
   expect(document.querySelector('[data-id="p1"]').textContent).toBe("Served");
   expect(window.clay.conflicts).toBeUndefined();
   expect(window.clay.live).toBeUndefined();
-  expect(window.clay.page).toBeUndefined();
+  expect(window.clay.blockeditor).toBeUndefined();
 
   // The reader adopted the acquisition stream instead of opening its own, so one
   // connection carries the file from acquisition onward.
@@ -95,7 +95,7 @@ test("a view-mode boot follows the saved file through the reader's own transport
 const META = { ok: true, status: 200, json: async () => ({ extensions: [] }), text: async () => "", headers: { get: () => null } };
 
 /**
- * Boot `plugins=page` in view mode with a stream that records itself but never
+ * Boot `plugins=blockeditor` in view mode with a stream that records itself but never
  * opens on its own, so each test decides when (or whether) the host answers.
  */
 const bootView = async (fetchImpl, { stamp = null, version = null } = {}) => {
@@ -128,7 +128,7 @@ const bootView = async (fetchImpl, { stamp = null, version = null } = {}) => {
   const onReady = () => events.push("clay:ready");
   document.addEventListener("clay:ready", onReady);
   const { boot } = await import("../../../src/loader.js");
-  await boot("https://clayjs.com/v1", new URLSearchParams("plugins=page"), () => {});
+  await boot("https://clayjs.com/v1", new URLSearchParams("plugins=blockeditor"), () => {});
   document.removeEventListener("clay:ready", onReady);
   const pageView = await import("../../../src/plugins/page-view.js");
   const reads = () => fetched.filter((url) => !url.includes("/_/meta"));
@@ -144,7 +144,7 @@ test("clay:ready fires even when the host's stream never opens, and the first fi
   // clay:ready never waits on the network: it fired with the root on screen and
   // the startup GET was never asked for.
   expect(events).toEqual(["clay:ready"]);
-  expect(window.clay.page).toBeUndefined();
+  expect(window.clay.blockeditor).toBeUndefined();
   expect(documentReads).toEqual([]);
   expect(await pageView.ready).toBeNull();
 
@@ -340,7 +340,7 @@ test("a first file another version wrote is refused, nothing applies and acquire
   pageView.stop();
 });
 
-test("page-view starts again after stop(), with one new stream", async () => {
+test("blockeditor-view starts again after stop(), with one new stream", async () => {
   const disk = SERVED("two", "Served");
   const { pageView } = await bootView(async () => ({ ok: true, status: 200, text: async () => disk, headers: { get: () => null } }));
 

@@ -18,7 +18,7 @@ import { resolveModules } from "../../src/loader-logic.js";
  * (esbuild, write:false): nothing is externalized to make the assertion pass.
  */
 
-const READER = { plugins: "page", exclude: "richclay" };
+const READER = { plugins: "blockeditor", exclude: "richclay" };
 
 const readerPlan = () =>
   resolveModules(new URLSearchParams(`plugins=${READER.plugins}&exclude=${READER.exclude}`), false, {

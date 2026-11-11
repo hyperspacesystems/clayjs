@@ -35,7 +35,7 @@ function page(spec, caretId = spec[0][0]) {
   select(view, posOf(view, caretId));
   return view;
 }
-const grip = (view) => view.dom.parentElement.querySelector(".page-grip");
+const grip = (view) => view.dom.parentElement.querySelector(".blockeditor-grip");
 const shell = (view) => view.dom.parentElement;
 const ptr = (type, props = {}) => {
   const e = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: props.clientX ?? 0, clientY: props.clientY ?? 0 });
@@ -51,9 +51,9 @@ const drag = (view, from, to, x = 5) => {
   grip(view).dispatchEvent(ptr("pointermove", { clientX: x, clientY: to }));
 };
 const drop = (view) => grip(view).dispatchEvent(ptr("pointerup"));
-const line = (view) => view.dom.parentElement.querySelector(".page-drop");
+const line = (view) => view.dom.parentElement.querySelector(".blockeditor-drop");
 const keys = (view) => { const m = {}; view.state.doc.forEach((n) => { m[n.attrs.id] = n.attrs.pos; }); return m; };
-const live = (view) => view.dom.parentElement.querySelector(".page-live").textContent;
+const live = (view) => view.dom.parentElement.querySelector(".blockeditor-live").textContent;
 
 const FOUR = [["a", "paragraph", "A"], ["b", "paragraph", "B"], ["c", "paragraph", "C"], ["d", "paragraph", "D"]];
 
@@ -65,18 +65,18 @@ describe("a press on the grip", () => {
     grip(view).dispatchEvent(ptr("pointerup", { clientX: -20, clientY: 70 }));
     expect(view.state.selection instanceof BlockSelection).toBe(true);
     expect(view.state.selection.span(view.state.doc)).toEqual({ lo: 2, hi: 2 });
-    expect(view.dom.parentElement.querySelector(".page-menu").hidden).toBe(false);
+    expect(view.dom.parentElement.querySelector(".blockeditor-menu").hidden).toBe(false);
     grip(view).dispatchEvent(ptr("pointerdown"));
     grip(view).dispatchEvent(ptr("pointerup"));
-    expect(view.dom.parentElement.querySelector(".page-menu").hidden).toBe(true);
+    expect(view.dom.parentElement.querySelector(".blockeditor-menu").hidden).toBe(true);
   });
 
   test("a keyboard activation of the grip opens the menu, and a mouse click event after a pointer click does not toggle it twice", () => {
     const view = page(FOUR);
     grip(view).dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
-    expect(view.dom.parentElement.querySelector(".page-menu").hidden).toBe(false);
+    expect(view.dom.parentElement.querySelector(".blockeditor-menu").hidden).toBe(false);
     grip(view).dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
-    expect(view.dom.parentElement.querySelector(".page-menu").hidden).toBe(false);
+    expect(view.dom.parentElement.querySelector(".blockeditor-menu").hidden).toBe(false);
   });
 
   test("movement under the slop is still a click", () => {
@@ -85,7 +85,7 @@ describe("a press on the grip", () => {
     grip(view).dispatchEvent(ptr("pointermove", { clientX: 2, clientY: 2 }));
     expect(shell(view).classList.contains("is-dragging")).toBe(false);
     grip(view).dispatchEvent(ptr("pointerup", { clientX: 2, clientY: 2 }));
-    expect(view.dom.parentElement.querySelector(".page-menu").hidden).toBe(false);
+    expect(view.dom.parentElement.querySelector(".blockeditor-menu").hidden).toBe(false);
   });
 
   test("a touch press never drags: moving cancels it and releasing without moving is a click", () => {
@@ -94,10 +94,10 @@ describe("a press on the grip", () => {
     grip(view).dispatchEvent(ptr("pointermove", { pointerType: "touch", clientX: 30, clientY: 80 }));
     expect(shell(view).classList.contains("is-dragging")).toBe(false);
     grip(view).dispatchEvent(ptr("pointerup", { pointerType: "touch" }));
-    expect(view.dom.parentElement.querySelector(".page-menu").hidden).toBe(true);
+    expect(view.dom.parentElement.querySelector(".blockeditor-menu").hidden).toBe(true);
     grip(view).dispatchEvent(ptr("pointerdown", { pointerType: "touch" }));
     grip(view).dispatchEvent(ptr("pointerup", { pointerType: "touch" }));
-    expect(view.dom.parentElement.querySelector(".page-menu").hidden).toBe(false);
+    expect(view.dom.parentElement.querySelector(".blockeditor-menu").hidden).toBe(false);
   });
 });
 
@@ -109,7 +109,7 @@ describe("dragging", () => {
     expect(view.state.selection instanceof BlockSelection).toBe(true);
     expect(shell(view).dataset.drop).toBe("ok");
     expect(line(view).hidden).toBe(false);
-    expect(line(view).style.getPropertyValue("--page-drop-y")).toBe(`${3 * ROW - 2}px`);
+    expect(line(view).style.getPropertyValue("--blockeditor-drop-y")).toBe(`${3 * ROW - 2}px`);
     drop(view);
     expect(shell(view).classList.contains("is-dragging")).toBe(false);
     expect(line(view).hidden).toBe(true);
@@ -150,9 +150,9 @@ describe("dragging", () => {
     const spec = [["t", "toggle", "T", { open: true }], ["b1", "paragraph", "b1", { parent: "t" }], ["z", "paragraph", "Z"]];
     const view = page(spec);
     drag(view, 2, 2 * ROW + 2, 5);
-    expect(line(view).style.getPropertyValue("--page-drop-x")).toBe("0px");
+    expect(line(view).style.getPropertyValue("--blockeditor-drop-x")).toBe("0px");
     grip(view).dispatchEvent(ptr("pointermove", { clientX: 40, clientY: 2 * ROW + 2 }));
-    expect(line(view).style.getPropertyValue("--page-drop-x")).toBe("27px");
+    expect(line(view).style.getPropertyValue("--blockeditor-drop-x")).toBe("27px");
     drop(view);
     expect(shape(view)).toBe("T | b1<t | Z<t");
   });
@@ -215,7 +215,7 @@ describe("dropping on a closed toggle's summary", () => {
     const view = page(SPEC);
     drag(view, 0, ROW + 10);
     expect(shell(view).dataset.drop).toBe("ok");
-    expect(line(view).style.getPropertyValue("--page-drop-x")).toBe("27px");
+    expect(line(view).style.getPropertyValue("--blockeditor-drop-x")).toBe("27px");
     drop(view);
     expect(shape(view)).toBe("C | c1<c | Z<c | D");
     expect(view.state.doc.child(0).attrs.open).toBe(true);
@@ -338,7 +338,7 @@ describe("review regressions", () => {
     } finally { view.destroy(); }
   });
 
-  test.each([".page-image", ".page-image-caption", ".page-file-link"])("F11 native drag from %s is prevented outside block mode", (selector) => {
+  test.each([".blockeditor-image", ".blockeditor-image-caption", ".blockeditor-file-link"])("F11 native drag from %s is prevented outside block mode", (selector) => {
     const view = page([["p", "paragraph", "P"], ["i", "image", "", { src: "https://example.test/i.png", caption: "caption" }], ["f", "file", "", { src: "https://example.test/f", name: "file" }]]);
     try {
       const event = new Event("dragstart", { bubbles: true, cancelable: true });

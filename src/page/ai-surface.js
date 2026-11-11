@@ -1,4 +1,4 @@
-// clay.page.ai: the page half of "rewrite a chosen area". It builds a target for the
+// clay.blockeditor.ai: the page half of "rewrite a chosen area". It builds a target for the
 // chosen blocks, sends their captured HTML as one request, previews the reply over them
 // and keeps it as one undoable transaction. The panel that drives it is ai-edit's.
 import { state, model } from "../vendor/prosemirror.vendor.js";
@@ -97,7 +97,7 @@ export function createPageAi({ getView, store = () => null, acceptState } = {}) 
       getBoundingClientRect() {
         const view = viewNow();
         if (!view) return emptyRect();
-        const preview = view.dom.querySelector(".page-ai-preview");
+        const preview = view.dom.querySelector(".blockeditor-ai-preview");
         if (preview) return preview.getBoundingClientRect();
         const ends = [target.ref[0], target.ref[target.ref.length - 1]];
         const rects = ends
@@ -165,7 +165,7 @@ export function createPageAi({ getView, store = () => null, acceptState } = {}) 
         if (ready.status !== "ready") return { status: "refused", message: ready.message };
         proposal = ready;
         const dom = view.dom.ownerDocument.createElement("div");
-        dom.className = "page-ai-preview";
+        dom.className = "blockeditor-ai-preview";
         const serializer = model.DOMSerializer.fromSchema(schema);
         dom.appendChild(serializer.serializeFragment(model.Fragment.from(ready.nodes), { document: view.dom.ownerDocument }));
         showPreview(view, { ids: capture.ids, dom });

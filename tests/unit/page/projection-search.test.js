@@ -29,8 +29,8 @@ const blocks = blocksOfValues([RECORD]);
 const model = project(blocks);
 const html = renderModel(model, { fallbackOf: (id) => blocks[id]?.artifact?.fallbackHtml ?? "" });
 const file = `<!DOCTYPE html><html><head><title>Relay launch review</title>
-<script type="application/json" merge="page" clay="live" live-format="lines">${JSON.stringify(RECORD).replace(/</g, "\\u003c")}</script></head>
-<body><main><article class="page" clay="freeze" data-page="1" data-rev="${revOf(model)}">\n${html}\n</article></main></body></html>`;
+<script type="application/json" merge="blockeditor" clay="live" live-format="lines">${JSON.stringify(RECORD).replace(/</g, "\\u003c")}</script></head>
+<body><main><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${revOf(model)}">\n${html}\n</article></main></body></html>`;
 
 const squash = (s) => s.replace(/\uFFFC/g, " ").replace(/\s+/g, " ").trim();
 const wanted = [];

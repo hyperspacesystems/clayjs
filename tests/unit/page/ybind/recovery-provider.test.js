@@ -131,7 +131,7 @@ const gate = () => {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function openTab({ channel, value = valueOf(), generation = null, authority = AUTHORITY, clientID = 5 } = {}) {
-  const store = createStore({ name: "page", value });
+  const store = createStore({ name: "blockeditor", value });
   const binding = createYPageBinding({
     store,
     setTimer: (fn) => { setTimeout(fn, 0); return 1; },

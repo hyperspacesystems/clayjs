@@ -47,7 +47,7 @@ const transport = ({ meter = null, firstSave = "ok", join = "ok", editor = "ok",
   metadata: async () => {
     meter?.beginAuthority();
     await settle();
-    return { spec: 1, extensions: ["page", "live-data"] };
+    return { spec: 1, extensions: ["blockeditor", "live-data"] };
   },
   firstSave: async () => {
     meter?.beginAuthority();
@@ -84,14 +84,14 @@ const transport = ({ meter = null, firstSave = "ok", join = "ok", editor = "ok",
 
 async function authorityFrom(net, source) {
   const meta = await net.metadata();
-  if (!meta.extensions.includes("page")) return { ok: false, reason: "missing-capability" };
+  if (!meta.extensions.includes("blockeditor")) return { ok: false, reason: "missing-capability" };
   if (source.seeded) {
     const saved = await net.firstSave();
     if (!saved.ok) return { ok: false, reason: saved.status === 412 ? "first-save-conflict" : "first-save-refused" };
   }
   const handle = await net.join();
   if (!handle.ready) return { ok: false, reason: "admission-failed" };
-  return { ok: true, store: "page", handle };
+  return { ok: true, store: "blockeditor", handle };
 }
 
 // A fixture mirrors the step it stands for in page.js: the editor's import, the feature

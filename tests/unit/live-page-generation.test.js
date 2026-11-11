@@ -10,13 +10,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 test("page frames carry the room's page generation, other stores none", async () => {
   const rooms = createRooms({ newEpoch: (() => { let n = 0; return () => `e${++n}`; })() });
   const room = rooms.open("doc", readFileSync(TEMPLATE, "utf8"), { nodeId: 1 });
-  expect(room.pageTransition.format).toBe("yjs");
-  const pageValue = room.stores.get("page").value;
+  expect(room.blockeditorTransition.format).toBe("yjs");
+  const pageValue = room.stores.get("blockeditor").value;
   const seed = pageValue.y[Object.keys(pageValue.y)[0]];
 
-  const page = createStore({ name: "page", value: pageValue });
-  const tools = createStore({ name: "page.tools", value: room.stores.get("page.tools").value });
-  const entries = new Map([["page", { store: page }], ["page.tools", { store: tools }]]);
+  const page = createStore({ name: "blockeditor", value: pageValue });
+  const tools = createStore({ name: "blockeditor.tools", value: room.stores.get("blockeditor.tools").value });
+  const entries = new Map([["blockeditor", { store: page }], ["blockeditor.tools", { store: tools }]]);
   const sent = [];
   const refused = [];
   let handlers;
@@ -44,19 +44,19 @@ test("page frames carry the room's page generation, other stores none", async ()
 
   page.handle.set(["y", "u1"], seed);
   await sleep(50);
-  const pageFrames = sent.filter((frame) => frame.name === "page");
+  const pageFrames = sent.filter((frame) => frame.name === "blockeditor");
   expect(pageFrames.length).toBe(1);
-  expect(pageFrames[0].pageGeneration).toBe(room.pageTransition.id);
+  expect(pageFrames[0].blockeditorGeneration).toBe(room.blockeditorTransition.id);
   expect(refused.map((event) => event.code)).toEqual([]);
-  expect(room.stores.get("page").value.y.u1).toBe(seed);
+  expect(room.stores.get("blockeditor").value.y.u1).toBe(seed);
 
   tools.handle.set(["k"], 1);
   await sleep(50);
-  const toolFrames = sent.filter((frame) => frame.name === "page.tools");
+  const toolFrames = sent.filter((frame) => frame.name === "blockeditor.tools");
   expect(toolFrames.length).toBe(1);
-  expect("pageGeneration" in toolFrames[0]).toBe(false);
+  expect("blockeditorGeneration" in toolFrames[0]).toBe(false);
   expect(refused.map((event) => event.code)).toEqual([]);
-  expect(room.stores.get("page.tools").value.k).toBe(1);
+  expect(room.stores.get("blockeditor.tools").value.k).toBe(1);
 
   lane.stop();
 });

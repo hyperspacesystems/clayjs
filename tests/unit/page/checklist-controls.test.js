@@ -12,12 +12,12 @@ const dayKey = (offset) => {
   day.setDate(day.getDate() + offset);
   return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
 };
-const tags = (view) => [...view.dom.querySelectorAll(".page-check-chip")];
+const tags = (view) => [...view.dom.querySelectorAll(".blockeditor-check-chip")];
 afterEach(() => { delete globalThis.clay; });
 
 test("only checklist items have owner and date tags", () => {
   const view = fresh();
-  expect(view.dom.querySelectorAll(".page-check-controls")).toHaveLength(1);
+  expect(view.dom.querySelectorAll(".blockeditor-check-controls")).toHaveLength(1);
   expect(tags(view).map((button) => button.textContent)).toEqual(["Unassigned", "No date"]);
   expect(tags(view).every((button) => button.tagName === "BUTTON")).toBe(true);
 });
@@ -55,15 +55,15 @@ test("a past date is overdue with a clock, today reads Today, tomorrow reads Tom
 
 test("an empty check item shows the To do placeholder", () => {
   const view = editor([["empty", "list_item", "", { kind: "check" }]]);
-  const li = view.dom.querySelector('.page-li[data-kind="check"]');
+  const li = view.dom.querySelector('.blockeditor-li[data-kind="check"]');
   expect(li.getAttribute("data-placeholder")).toBe("To do");
-  expect(li.classList.contains("page-check-placeholder")).toBe(true);
+  expect(li.classList.contains("blockeditor-check-placeholder")).toBe(true);
 });
 
 test("the tags widget leaves a click on the line itself to the editor", () => {
   const view = editor([["empty", "list_item", "", { kind: "check" }]]);
-  const li = view.dom.querySelector('.page-li[data-kind="check"]');
-  const box = view.dom.querySelector(".page-check-controls");
+  const li = view.dom.querySelector('.blockeditor-li[data-kind="check"]');
+  const box = view.dom.querySelector(".blockeditor-check-controls");
   const widget = decorations(view.state).find().find((decoration) => decoration.type.spec.stopEvent);
   expect(widget.type.spec.stopEvent({ target: li })).toBe(false);
   expect(widget.type.spec.stopEvent({ target: box })).toBe(false);
@@ -100,9 +100,9 @@ const owned = () => editor([
   ["c", "list_item", "C", { kind: "check", owner: "Ben" }],
 ]);
 const openOwner = (view, item) => {
-  const tag = view.dom.querySelector(`.page-check-controls[data-item="${item}"] [data-check="owner"]`);
+  const tag = view.dom.querySelector(`.blockeditor-check-controls[data-item="${item}"] [data-check="owner"]`);
   tag.click();
-  return { tag, panel: document.querySelector(".page-check-owner") };
+  return { tag, panel: document.querySelector(".blockeditor-check-owner") };
 };
 const people = (panel) => [...panel.querySelectorAll('[data-check="owner-option"]')];
 const typing = (input, text) => {
@@ -121,11 +121,11 @@ test("the assignee panel lists the document's people with their counts", () => {
   expect(input.getAttribute("placeholder")).toBe("Find or type a name");
   expect(input.getAttribute("aria-label")).toBe("Find or type a name");
   expect(document.activeElement).toBe(input);
-  expect(panel.querySelector(".page-check-subhead").textContent).toBe("People in this document");
-  expect(people(panel).map((row) => row.querySelector(".page-check-person-name").textContent)).toEqual(["Ben", "Maya"]);
-  expect(people(panel).map((row) => row.querySelector(".page-check-person-meta").textContent)).toEqual(["1 item", "2 items"]);
+  expect(panel.querySelector(".blockeditor-check-subhead").textContent).toBe("People in this document");
+  expect(people(panel).map((row) => row.querySelector(".blockeditor-check-person-name").textContent)).toEqual(["Ben", "Maya"]);
+  expect(people(panel).map((row) => row.querySelector(".blockeditor-check-person-meta").textContent)).toEqual(["1 item", "2 items"]);
   expect(people(panel).map((row) => row.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
-  expect(people(panel)[0].querySelector(".page-board-face").textContent).toBe("B");
+  expect(people(panel)[0].querySelector(".blockeditor-board-face").textContent).toBe("B");
   expect(people(panel)[1].querySelector("svg")).not.toBeNull();
   press(input, "Escape");
 });
@@ -138,10 +138,10 @@ test("typing a new name and pressing Enter assigns it in one undo step", () => {
   expect(people(panel)).toHaveLength(0);
   const add = panel.querySelector('[data-check="owner-new"]');
   expect(add.textContent).toContain("Assign to Ro");
-  expect(add.querySelector(".page-check-person-meta").textContent).toBe("New");
+  expect(add.querySelector(".blockeditor-check-person-meta").textContent).toBe("New");
   press(input, "Enter");
   expect(view.state.doc.child(0).attrs.owner).toBe("Ro");
-  expect(document.querySelector(".page-check-owner")).toBeNull();
+  expect(document.querySelector(".blockeditor-check-owner")).toBeNull();
   let undone;
   history.undo(view.state, (tr) => { undone = view.state.apply(tr); });
   expect(undone.doc.child(0).attrs.owner).toBe("Maya");
@@ -162,14 +162,14 @@ test("Remove assignee is disabled without an owner and clears one when there is 
   expect(clear.querySelector("svg")).not.toBeNull();
   clear.click();
   expect(view.state.doc.child(1).attrs.owner).toBeNull();
-  expect(document.querySelector(".page-check-owner")).toBeNull();
+  expect(document.querySelector(".blockeditor-check-owner")).toBeNull();
 });
 
 test("Escape closes the assignee panel and returns focus to the tag", () => {
   const view = owned();
   const { tag, panel } = openOwner(view, "a");
   press(panel, "Escape");
-  expect(document.querySelector(".page-check-owner")).toBeNull();
+  expect(document.querySelector(".blockeditor-check-owner")).toBeNull();
   expect(tag.getAttribute("aria-expanded")).toBe("false");
   expect(document.activeElement).toBe(tag);
 });
@@ -177,14 +177,14 @@ test("Escape closes the assignee panel and returns focus to the tag", () => {
 test("date can be set and cleared, with one undo step per change", () => {
   const view = fresh();
   view.dom.querySelector('[data-check="date"]').click();
-  document.querySelector('.page-check-date [data-check="date-quick"]').click();
+  document.querySelector('.blockeditor-check-date [data-check="date-quick"]').click();
   expect(view.state.doc.child(0).attrs.due).toBe(dayKey(0));
   expect(view.dom.querySelector('[data-check="date"]').getAttribute("aria-label")).toBe("Due date: Today");
   let undone;
   history.undo(view.state, (tr) => { undone = view.state.apply(tr); });
   expect(undone.doc.child(0).attrs.due).toBeNull();
   view.dom.querySelector('[data-check="date"]').click();
-  document.querySelector('.page-check-date [data-check="clear-date"]').click();
+  document.querySelector('.blockeditor-check-date [data-check="clear-date"]').click();
   expect(view.state.doc.child(0).attrs.due).toBeNull();
 });
 
@@ -192,13 +192,13 @@ test("keyboard shortcuts open both popovers from the item text, and Escape retur
   const view = fresh();
   select(view, 2);
   expect(key(view, "o", { metaKey: true, shiftKey: true })).toBe(true);
-  const owner = document.querySelector('.page-check-popup[data-check="owner-panel"]');
+  const owner = document.querySelector('.blockeditor-check-popup[data-check="owner-panel"]');
   expect(owner).not.toBeNull();
   owner.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  expect(document.querySelector(".page-check-popup")).toBeNull();
+  expect(document.querySelector(".blockeditor-check-popup")).toBeNull();
   expect(view.dom.contains(document.activeElement)).toBe(true);
   expect(key(view, "d", { metaKey: true, shiftKey: true })).toBe(true);
-  const date = document.querySelector('.page-check-popup[data-check="date-panel"]');
+  const date = document.querySelector('.blockeditor-check-popup[data-check="date-panel"]');
   expect(date).not.toBeNull();
   date.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   expect(view.dom.contains(document.activeElement)).toBe(true);

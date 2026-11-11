@@ -98,7 +98,7 @@ const fixtureParams = (name) => {
 // The host's answer about what it can do. The boot asks before any entry runs and
 // memoizes the answer, so the route is installed right after boot and the memo is
 // dropped; every other request still goes to the harness's own host.
-const PAGE_HOST = { spec: 1, extensions: ["page", "live-data", "sync", "upload"], document: {} };
+const PAGE_HOST = { spec: 1, extensions: ["blockeditor", "live-data", "sync", "upload"], document: {} };
 
 const routeHost = async () => {
   const inner = globalThis.fetch;
@@ -129,8 +129,8 @@ const sendFrame = async (boot, bytes, seq = 1) => {
 const serveFirstFile = (boot) => sendFrame(boot, `<!DOCTYPE html>\n${document.documentElement.outerHTML}`, 1);
 
 // What the reader this boot runs now represents: a Document's view boot follows its saved
-// stream through page-view, and the other two through generic sync's saved lane. An
-// initial edit boot never loaded page-view, so the reader its exit starts is that lane too.
+// stream through blockeditor-view, and the other two through generic sync's saved lane. An
+// initial edit boot never loaded blockeditor-view, so the reader its exit starts is that lane too.
 const readerFile = async (name) => {
   if (name === "document.html") {
     const pageView = await import("../../src/plugins/page-view.js");
@@ -314,10 +314,10 @@ for (const name of TEMPLATES) {
     // tag that save wrote beside it.
     const otherTabFile = (bytes) => {
       const file = new DOMParser().parseFromString(bytes, "text/html");
-      const paragraph = file.querySelector('article[data-page] [data-id="p1"]');
+      const paragraph = file.querySelector('article[data-blockeditor] [data-id="p1"]');
       if (paragraph) paragraph.textContent = "from another tab";
-      const article = file.querySelector("article[data-page]");
-      const tag = file.querySelector('script[merge="page"]');
+      const article = file.querySelector("article[data-blockeditor]");
+      const tag = file.querySelector('script[merge="blockeditor"]');
       if (tag && article) tag.textContent = JSON.stringify(seedPageFromArticle(article.cloneNode(true)));
       return `<!DOCTYPE html>\n${file.documentElement.outerHTML}`;
     };
@@ -334,7 +334,7 @@ for (const name of TEMPLATES) {
         const { storeOf } = await import("../../src/plugins/live.js");
 
         await enter(clay);
-        const first = storeOf("page");
+        const first = storeOf("blockeditor");
         typeSomething("first session");
         await flush();
         await clay.save();
@@ -346,15 +346,15 @@ for (const name of TEMPLATES) {
         // Another tab saves the page: the file the reader holds changes under this one.
         const bytes = otherTabFile(save.acceptedReceipt().bytes);
         await sendFrame(boot, bytes, 2);
-        const paragraph = () => document.querySelector('article[data-page] [data-id="p1"]');
+        const paragraph = () => document.querySelector('article[data-blockeditor] [data-id="p1"]');
         expect(await until(() => paragraph()?.textContent === "from another tab")).toBe(true);
 
         await enter(clay);
-        const second = storeOf("page");
+        const second = storeOf("blockeditor");
         expect(second).toBeTruthy();
         expect(second).not.toBe(first);
         const represented = new DOMParser().parseFromString(bytes, "text/html");
-        const article = represented.querySelector("article[data-page]");
+        const article = represented.querySelector("article[data-blockeditor]");
         expect(second.value).toEqual(seedPageFromArticle(article.cloneNode(true)));
         await leave(clay);
       } finally {

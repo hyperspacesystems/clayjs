@@ -692,7 +692,7 @@ function endDomPin(maybeLanded, ownerId = null) {
 function mayHaveLanded(result, sent) {
   if (result?.code === "draft-storage" || result?.code === "draft-not-ready") return false;
   const code = result?.code;
-  const precommit = code === "page-converting" || code === "page-capacity";
+  const precommit = code === "blockeditor-converting" || code === "blockeditor-capacity";
   return code === "save-already-applied" || result?.hadTimeout === true ||
     (sent !== false && !precommit && !(result?.status >= 400 && result?.status < 500));
 }
@@ -794,7 +794,7 @@ function ensureLane() {
         // never shares the lane a tab that cannot read it is on. The room scope
         // puts this tab's sequencer in the host-mode room, which a tab of the lane
         // before it never joins.
-        local = lane.localTransport({ seed: seedLocalRoom, rooms: true, floor: document.querySelector('meta[name="clay-page-format"]')?.getAttribute("content") });
+        local = lane.localTransport({ seed: seedLocalRoom, rooms: true, floor: document.querySelector('meta[name="clay-blockeditor-format"]')?.getAttribute("content") });
         fast = lane.createFastLane(laneOptions(local));
       } else {
         settleLane?.(null);
@@ -861,7 +861,7 @@ function parseHtml(html) {
 function textOf(entry) {
   const fastMode = entry.store.handle.status.mode === "fast";
   const current = fastMode ? entry.store.authoritative : entry.store.value;
-  const value = fastMode && /^page(\.[0-9]+)?$/.test(entry.store.name) ? captureYValue(current) : current;
+  const value = fastMode && /^blockeditor(\.[0-9]+)?$/.test(entry.store.name) ? captureYValue(current) : current;
   if (entry.layout === "lines") return serializeLines(value);
   return entry.layout === "pretty" ? JSON.stringify(value, null, 2).replace(/</g, "\\u003c") : serializeLive(value);
 }
@@ -911,12 +911,12 @@ function openEntry(name, store, { layout = "line", leftAt = null, staged = null 
     if (event.code === "receipt-expired") document.dispatchEvent(new CustomEvent("clay:live-notice", {
       detail: { name, code: event.code, ops: event.ops, message: "The room retired an update receipt. Check the saved value before restoring this update." },
     }));
-    if (event.phase === "refused" && event.code === "too-large" && !/^page(\.[0-9]+)?$/.test(name)) document.dispatchEvent(new CustomEvent("clay:live-notice", {
+    if (event.phase === "refused" && event.code === "too-large" && !/^blockeditor(\.[0-9]+)?$/.test(name)) document.dispatchEvent(new CustomEvent("clay:live-notice", {
       detail: { name, code: "op-too-large", message: "That change was too large to share, so it was undone." },
     }));
     // The room was opened from a document with no store of this name, so the
     // page it holds is not the one this tab is editing.
-    if (event.phase === "left" && event.code === "no-store" && /^page(\.[0-9]+)?$/.test(name)) document.dispatchEvent(new CustomEvent("clay:live-notice", {
+    if (event.phase === "left" && event.code === "no-store" && /^blockeditor(\.[0-9]+)?$/.test(name)) document.dispatchEvent(new CustomEvent("clay:live-notice", {
       detail: { name, code: "unknown-store", message: `The room has no "${name}" store, so the page it holds is not the one this tab is editing.` },
     }));
   });
@@ -1011,7 +1011,7 @@ onSnapshot((clone, { forSave, requestRefresh }) => {
     // A staged store reaches the file here, where the boot would have put its tag, and
     // so does one that started that way, on every save after its first.
     if (!tag && (entry.staged || entry.tagless)) {
-      const article = clone.querySelector("article[data-page]");
+      const article = clone.querySelector("article[data-blockeditor]");
       if (!article) continue;
       const element = article.ownerDocument.createElement("script");
       element.setAttribute("type", "application/json");
@@ -1132,7 +1132,7 @@ for (const type of ["clay:save-error", "clay:save-offline"]) {
   document.addEventListener(type, (event) => {
     const status = event.detail?.status;
     const code = event.detail?.code;
-    const precommit = code === "page-converting" || code === "page-capacity";
+    const precommit = code === "blockeditor-converting" || code === "blockeditor-capacity";
     endDomPin(code === "save-already-applied" || event.detail?.hadTimeout === true ||
       (event.detail?.sent !== false && !precommit && !(status >= 400 && status < 500)), event.detail?.captureId);
   });
@@ -1241,7 +1241,7 @@ onSaveOutcome(({ captureId, result, attempts, sent }) => {
   if (!pin) return;
   const stagedEntry = [...pin.keys()].map((name) => entries.get(name)).find((entry) => entry?.staged);
   // Nothing was written: the staged store is clean and nothing follows.
-  if (stagedEntry && result.code === "page-nothing-to-write") {
+  if (stagedEntry && result.code === "blockeditor-nothing-to-write") {
     stagedEntry.store.confirm(stagedEntry.store.mark);
     dropCapture(captureId);
     releaseBody();
@@ -1249,7 +1249,7 @@ onSaveOutcome(({ captureId, result, attempts, sent }) => {
     return;
   }
   // This tab's value does not descend from the stored document: never send it again.
-  if (stagedEntry && result.code === "page-lineage-stale") stagedEntry.staged.conflict = "conflict";
+  if (stagedEntry && result.code === "blockeditor-lineage-stale") stagedEntry.staged.conflict = "conflict";
   dropCapture(captureId);
   const landed = mayHaveLanded(result, sent);
   const plan = landed ? historyPlan(captureId) : null;
@@ -1285,7 +1285,7 @@ function offerCheckpoint(captureId, html) {
   const state = capturePageState(captureId);
   if (!state) return;
   let article = null;
-  try { article = parseHtml(html).querySelector("article[data-page]")?.innerHTML ?? null; }
+  try { article = parseHtml(html).querySelector("article[data-blockeditor]")?.innerHTML ?? null; }
   catch (_) { article = null; }
   const etag = lastSeenEtag();
   Promise.resolve()
@@ -1499,7 +1499,7 @@ export async function requestExitCheckpoint({ name, needsSave, permit, deadline,
     const result = await withKeepalive(keepalive, () => save(permit));
     if (over()) return failed("timeout");
     if (!result?.ok) return failed(result?.code ?? "checkpoint-failed");
-    return needsSave() ? failed("page-not-checkpointed") : { ok: true };
+    return needsSave() ? failed("blockeditor-not-checkpointed") : { ok: true };
   }
 }
 

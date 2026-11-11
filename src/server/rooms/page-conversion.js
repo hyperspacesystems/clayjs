@@ -1,7 +1,7 @@
 import { ifMatchSatisfied } from './spec-wire.js';
 import { inspectPage, pageBaseline } from './page-admission.js';
 
-const PAGE = /^page(\.[0-9]+)?$/;
+const PAGE = /^blockeditor(\.[0-9]+)?$/;
 const BASE = /^[0-9a-f]{64}$/;
 const EPOCH = /^[A-Za-z0-9-]{1,64}$/;
 

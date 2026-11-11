@@ -8,14 +8,14 @@ import { classifyFile } from "../../src/page/adopt.js";
 const { JSDOM } = await import("jsdom");
 const createDocument = () => new JSDOM("<!doctype html><html><body></body></html>").window.document;
 
-const tag = (record) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(record).replace(/</g, "\\u003c")}</script>`;
+const tag = (record) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(record).replace(/</g, "\\u003c")}</script>`;
 function pageOf(record) {
   const d = createDocument();
   const blocks = blocksOfValues([record]);
   const model = project(blocks);
   const html = renderModel(model, { fallbackOf: () => "", clean: fragmentCleaner(d) });
   const rev = revOf(model);
-  return { rev, file: `<!doctype html>\n<html><head><title>t</title></head><body>\n<article class="page" clay="freeze" data-page="1" data-rev="${rev}">\n${html}\n</article>\n</body></html>\n` };
+  return { rev, file: `<!doctype html>\n<html><head><title>t</title></head><body>\n<article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}">\n${html}\n</article>\n</body></html>\n` };
 }
 const edit = (html, id, text) => html.replace(new RegExp(`(<[^>]+data-id="${id}"[^>]*>)[^<]*`), `$1${text}`);
 
@@ -27,7 +27,7 @@ const base = pageOf(A);
 const stored = pageOf(B);
 const state = { v: 1, rev: stored.rev, tag: tag(B) };
 
-const articleOfHtml = (html) => new JSDOM(html).window.document.querySelector("article[data-page]");
+const articleOfHtml = (html) => new JSDOM(html).window.document.querySelector("article[data-blockeditor]");
 
 test("a writer's edit to a different block lands on the stored page", () => {
   const incoming = edit(base.file, "a", "Hello outside world");
@@ -42,7 +42,7 @@ test("a writer's edit to a different block lands on the stored page", () => {
   const composed = composePage(result.html, state);
   expect(composed).toContain(tag(B));
   const doc = new JSDOM(composed).window.document;
-  const found = classifyFile(doc.querySelector("article[data-page]"), [B]);
+  const found = classifyFile(doc.querySelector("article[data-blockeditor]"), [B]);
   expect(found.kind).toBe("adopt");
 });
 
@@ -84,7 +84,7 @@ test("everything outside the article stays the incoming's", () => {
   const incoming = edit(base.file, "a", "Hello outside world");
   const result = rebasePage({ storedHtml: stored.file, state, incomingHtml: incoming, baseHtml: base.file, createDocument });
   const outside = (html) => {
-    const start = html.search(/<article[^>]*data-page/);
+    const start = html.search(/<article[^>]*data-blockeditor/);
     const end = html.indexOf("</article>") + "</article>".length;
     return [html.slice(0, start), html.slice(end)];
   };
@@ -94,19 +94,19 @@ test("everything outside the article stays the incoming's", () => {
 describe("stampPageRev", () => {
   test("replaces the article's rev and nothing else", async () => {
     const { stampPageRev } = await import("../../src/server/rooms/index.js");
-    const html = `<!doctype html><html><body><template><article data-page data-rev="t"></article></template><article class="page" data-page="1" data-rev='old'><p>x</p></article></body></html>`;
+    const html = `<!doctype html><html><body><template><article data-blockeditor data-rev="t"></article></template><article class="blockeditor" data-blockeditor="1" data-rev='old'><p>x</p></article></body></html>`;
     expect(stampPageRev(html, "new")).toBe(html.replace(`data-rev='old'`, `data-rev="new"`));
   });
   test("a data-rev inside another attribute's value is left alone", async () => {
     const { stampPageRev } = await import("../../src/server/rooms/index.js");
-    const html = `<article data-page data-note="a data-rev=1" data-rev="old"><p>x</p></article>`;
-    expect(stampPageRev(html, "new")).toBe(`<article data-page data-note="a data-rev=1" data-rev="new"><p>x</p></article>`);
+    const html = `<article data-blockeditor data-note="a data-rev=1" data-rev="old"><p>x</p></article>`;
+    expect(stampPageRev(html, "new")).toBe(`<article data-blockeditor data-note="a data-rev=1" data-rev="new"><p>x</p></article>`);
   });
   test("adds a rev to an article that has none, and refuses a document with no lone article", async () => {
     const { stampPageRev } = await import("../../src/server/rooms/index.js");
-    expect(stampPageRev(`<article data-page="1"><p>x</p></article>`, "r1")).toBe(`<article data-page="1" data-rev="r1"><p>x</p></article>`);
+    expect(stampPageRev(`<article data-blockeditor="1"><p>x</p></article>`, "r1")).toBe(`<article data-blockeditor="1" data-rev="r1"><p>x</p></article>`);
     expect(stampPageRev(`<p>no page</p>`, "r1")).toBeNull();
-    expect(stampPageRev(`<article data-page></article><article data-page></article>`, "r1")).toBeNull();
+    expect(stampPageRev(`<article data-blockeditor></article><article data-blockeditor></article>`, "r1")).toBeNull();
   });
 });
 

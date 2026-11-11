@@ -61,11 +61,11 @@ beforeAll(async () => {
     "<!DOCTYPE html>",
     "<html>",
     "<head><title>Notes</title>",
-    `<script type="application/json" merge="page" clay="live">${tag}</script>`,
+    `<script type="application/json" merge="blockeditor" clay="live">${tag}</script>`,
     "</head>",
     "<body>",
     '<div data-id="flags" hidden data-pinned></div>',
-    '<main><article data-page="1" clay="freeze"><p data-id="p">First</p></article></main>',
+    '<main><article data-blockeditor="1" clay="freeze"><p data-id="p">First</p></article></main>',
     "</body>",
     "</html>",
   ].join("\n");
@@ -107,7 +107,7 @@ test("a page with bare empty attributes relays the bytes its save sent", async (
   sync.start("notes.html");
   await sync._ready;
   try {
-    live("page").set("touched", true);
+    live("blockeditor").set("touched", true);
     const result = await save.savePageForce();
     await wait(20);
 

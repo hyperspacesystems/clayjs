@@ -326,9 +326,9 @@ export async function verifyOfflineClosure({ packageRoot, publishedRoot, baseURL
   for (const font of REQUIRED_FONTS) {
     if (!listed.has(font)) problems.push(`${font}: the release does not list it`);
   }
-  const light = textOf("src/page/themes/light-1.css");
-  if (light === undefined) problems.push("src/page/themes/light-1.css: the release does not list it");
-  else if (light.includes("@import")) problems.push("src/page/themes/light-1.css: contains an @import");
+  const light = textOf("src/blockeditor/themes/light-1.css");
+  if (light === undefined) problems.push("src/blockeditor/themes/light-1.css: the release does not list it");
+  else if (light.includes("@import")) problems.push("src/blockeditor/themes/light-1.css: contains an @import");
 
   return result;
 }

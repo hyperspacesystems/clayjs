@@ -16,7 +16,7 @@ import { docFromValue, enc } from '../../../src/page/ybind/provider.js';
 const tag = (name, value, ephemeral = false) =>
   `<script type="application/json" clay="live${ephemeral ? ' ephemeral' : ''}" merge="${name}">${serializeLive(value)}</script>`;
 const page = (value, { head = '<title>Old title</title>', body = '' } = {}) =>
-  `<!doctype html><html><head>${head}</head><body><article data-page data-rev="old">old article</article>${tag('page', value)}${tag('game', { score: 0 })}${body}</body></html>`;
+  `<!doctype html><html><head>${head}</head><body><article data-blockeditor data-rev="old">old article</article>${tag('blockeditor', value)}${tag('game', { score: 0 })}${body}</body></html>`;
 const createDocument = () => new JSDOM('').window.document;
 const head = (html) => html.slice(html.indexOf('<head>'), html.indexOf('</head>') + 7);
 const bodyOf = (html) => html.slice(html.indexOf('<body>'), html.indexOf('</body>') + 7);
@@ -45,12 +45,12 @@ function roomOf(value, options) {
 }
 
 const editPage = (rooms, room, client, n, change) => {
-  const doc = docFromValue(room.stores.get('page').value, { strict: true });
+  const doc = docFromValue(room.stores.get('blockeditor').value, { strict: true });
   doc.clientID = Number(client);
   change(doc.getText('flow'));
   const update = enc(Y.encodeStateAsUpdateV2(doc));
   doc.destroy();
-  const result = rooms.apply(room, client, { name: 'page', n, ops: [{ op: 'set', path: ['y', `edit-${client}-${n}`], value: update }], epoch: room.epoch, pageGeneration: room.pageTransition?.id ?? null });
+  const result = rooms.apply(room, client, { name: 'blockeditor', n, ops: [{ op: 'set', path: ['y', `edit-${client}-${n}`], value: update }], epoch: room.epoch, blockeditorGeneration: room.blockeditorTransition?.id ?? null });
   expect(result.seq).toBeGreaterThan(0);
   return result;
 };
@@ -133,7 +133,7 @@ test('a file with no title gets one after the head start tag', () => {
 
 test('an implicit head receives the title before the body starts', () => {
   const value = seedValue(heading('New title'));
-  const source = `<!doctype html><html><body><article data-page data-rev="old">old article</article>${tag('page', value)}${tag('game', { score: 0 })}</body></html>`;
+  const source = `<!doctype html><html><body><article data-blockeditor data-rev="old">old article</article>${tag('blockeditor', value)}${tag('game', { score: 0 })}</body></html>`;
   const rooms = createRooms({ newEpoch: () => 'checkpoint-title' });
   const room = rooms.open('/page.html', source, { nodeId: 'node-1' });
   const pinned = captureCheckpoint(room, { nodeId: 'node-1', roomKey: '/page.html' });

@@ -11,7 +11,7 @@ import { $, $$, active, hostOf, rootOf } from "./helpers/editor-ui.js";
 const SLOT = "/notes.html";
 const HEAD = '<title>Start title</title><meta name="description" content="Start description">';
 const BODY = '<div id="content">start</div>';
-const DOCUMENT_BODY = '<article data-page><h1>Heading title</h1><p>start</p></article>';
+const DOCUMENT_BODY = '<article data-blockeditor><h1>Heading title</h1><p>start</p></article>';
 const REOPEN_KEY = "clay:doc:/notes.html:reopen-seo";
 
 const settle = async () => {
@@ -366,6 +366,9 @@ test("with clay.undo Apply goes through commit and offers no Undo toast", async 
   const commit = jest.fn((label, fn) => fn());
   window.clay.undo = { commit };
   window.clay.toastPersistent = jest.fn();
+  // The save behind Apply succeeds here, so any toast left would be the Undo one this test forbids.
+  const served = window.fetch;
+  window.fetch = async (input, options = {}) => (options?.method === "POST" ? response({ body: "{}" }) : served(input, options));
   await openSheet();
 
   setValue("description", "A new description");

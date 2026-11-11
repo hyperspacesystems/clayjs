@@ -7,10 +7,10 @@ import { createToolHost } from "../tools.js";
 import { toolBlockViews, toolViews } from "../tool-views.js";
 
 export const TOOL_CSS = `
-.page-tool-block { position: relative; min-height: 48px; border: 1px solid var(--page-rule); border-radius: 8px; padding: 12px; }
-.page-tool-settings { position: absolute; top: 4px; inset-inline-end: 4px; border: 0; border-radius: 5px; background: var(--page-pop-bg); color: var(--page-ink-soft); font: 12px var(--page-font); padding: 5px 8px; cursor: pointer; opacity: 0; }
-.page-tool-block:hover .page-tool-settings, .page-tool-block:focus-within .page-tool-settings { opacity: 1; }
-[data-tool-note], [data-tool-error] { color: var(--page-danger); font-size: 0.85em; }`;
+.blockeditor-tool-block { position: relative; min-height: 48px; border: 1px solid var(--blockeditor-rule); border-radius: 8px; padding: 12px; }
+.blockeditor-tool-settings { position: absolute; top: 4px; inset-inline-end: 4px; border: 0; border-radius: 5px; background: var(--blockeditor-pop-bg); color: var(--blockeditor-ink-soft); font: 12px var(--blockeditor-font); padding: 5px 8px; cursor: pointer; opacity: 0; }
+.blockeditor-tool-block:hover .blockeditor-tool-settings, .blockeditor-tool-block:focus-within .blockeditor-tool-settings { opacity: 1; }
+[data-tool-note], [data-tool-error] { color: var(--blockeditor-danger); font-size: 0.85em; }`;
 
 export class ToolView {
   constructor(node, view, getPos, { host, revise = null, blocks = null }) {
@@ -24,15 +24,15 @@ export class ToolView {
     this.suspended = false;
     const doc = view.dom.ownerDocument;
     this.dom = doc.createElement("section");
-    this.dom.className = "page-tool-block";
+    this.dom.className = "blockeditor-tool-block";
     this.dom.dataset.type = "tool";
     this.dom.dataset.id = node.attrs.id ?? "";
     this.dom.contentEditable = "false";
     this.content = doc.createElement("div");
-    this.content.className = "page-tool-content";
+    this.content.className = "blockeditor-tool-content";
     this.menu = doc.createElement("button");
     this.menu.type = "button";
-    this.menu.className = "page-tool-settings";
+    this.menu.className = "blockeditor-tool-settings";
     this.menu.textContent = "Tool options";
     this.menu.setAttribute("aria-label", "Tool options");
     this.menu.addEventListener("click", () => this.openMenu());

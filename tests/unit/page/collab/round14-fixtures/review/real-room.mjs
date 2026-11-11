@@ -5,7 +5,7 @@ import {serializeLive,stampOf} from '../../../../../../../hyperclay/server-lib/l
 export function makeRoom(sim,initial,{latency=60,answer=60,refuse=()=>null}={}) {
   let epoch=0;
   const rooms=createRooms({newEpoch:()=>`e${++epoch}`,now:sim.now}),clients=new Map(),reads=[],posts=[];
-  const html=(value,at,by)=>`<script type="application/json" merge="page" clay="live"${at?` live-at="${stampOf(at.epoch,at.seq,serializeLive(value))}"`:''}${by?` live-by="${by.client}:${by.n}"`:''}>${serializeLive(value)}</script>`;
+  const html=(value,at,by)=>`<script type="application/json" merge="blockeditor" clay="live"${at?` live-at="${stampOf(at.epoch,at.seq,serializeLive(value))}"`:''}${by?` live-by="${by.client}:${by.n}"`:''}>${serializeLive(value)}</script>`;
   let real=rooms.open('doc',html(initial));
   const state=(id,since)=>{
     const s=structuredClone(rooms.state(real,id,since));
@@ -43,10 +43,10 @@ export function makeRoom(sim,initial,{latency=60,answer=60,refuse=()=>null}={}) 
       for(const id of reopen)sim.after(200,()=>room.open(id));
     },
     fileWritten(name,value,at,by){
-      assert.equal(name,'page');
+      assert.equal(name,'blockeditor');
       const written=rooms.fileWritten('doc',html(value,at,by));
       if(written?.valueChanged)for(const id of clients.keys())deliver(id,'state',rooms.state(real,id));
-      else if(written)for(const id of clients.keys())deliver(id,'writer',{epoch:real.epoch,writer:real.writer,landed:{page:real.stores.get('page').landed}});
+      else if(written)for(const id of clients.keys())deliver(id,'writer',{epoch:real.epoch,writer:real.writer,landed:{page:real.stores.get('blockeditor').landed}});
       return written;
     },
   };

@@ -210,7 +210,7 @@ describe("F8 media and block selection paste", () => {
   });
 
   test("a zero-byte clipboard file keeps its known size", () => {
-    expect(parse('<div class="page-file" data-src="/empty" data-size="0"></div>').firstChild.attrs.size).toBe(0);
+    expect(parse('<div class="blockeditor-file" data-src="/empty" data-size="0"></div>').firstChild.attrs.size).toBe(0);
   });
 
   test.each(["-5.5", "12.7", "Infinity"])("invalid image width %s becomes automatic", (width) => {

@@ -21,6 +21,7 @@ await jest.unstable_mockModule("../../src/live/checkpoint.js", () => ({
   },
 }));
 await jest.unstable_mockModule("../../src/core/save.js", () => ({
+  claimFailure: () => {},
   savePageForce: jest.fn(async () => ({ ok: true })),
   baselineSettled: () => true,
   isSaveConflicted: () => false,

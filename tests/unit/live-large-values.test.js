@@ -6,7 +6,7 @@ import { createFastLane, FRAME_BYTES } from "../../src/live/fast-lane.js";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const doc = (...parts) => `<!doctype html><html><body>${parts.join("")}</body></html>`;
 const tag = (name, value) => `<script type="application/json" merge="${name}" clay="live">${JSON.stringify(value)}</script>`;
-const ERROR_STATUS = { "bad-frame": 400, "unknown-store": 404, "too-large": 413, "bad-op": 422, "receipt-expired": 409, "page-converting": 503, "page-generation": 409, "page-format": 409, "page-conversion-required": 409 };
+const ERROR_STATUS = { "bad-frame": 400, "unknown-store": 404, "too-large": 413, "bad-op": 422, "receipt-expired": 409, "blockeditor-converting": 503, "blockeditor-generation": 409, "blockeditor-format": 409, "blockeditor-conversion-required": 409 };
 const BODY_CAP = 5 * 1024 * 1024;
 const sizeOf = (value) => new TextEncoder().encode(typeof value === "string" ? value : JSON.stringify(value)).length;
 

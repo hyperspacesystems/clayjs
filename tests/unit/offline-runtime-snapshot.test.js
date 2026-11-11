@@ -15,7 +15,7 @@ const documentURL = window.location.href;
 
 const CLAY = "https://clayjs.com/v1/clay.js?plugins=sortable,people,upload,sync,visitor-drafts,unsent,menu&exclude=richclay";
 const SAP = "https://clayjs.com/v1/sap.js";
-const CSS = "https://clayjs.com/v1/src/page/themes/light-1.css";
+const CSS = "https://clayjs.com/v1/src/blockeditor/themes/light-1.css";
 const ROUTER = "https://clayjs.com/v1/clay-router.js";
 
 const AUTHORED = "<!doctype html><html><head>" +
@@ -127,11 +127,11 @@ test("an edit is dirty, the save is canonical, and the saved file reopens to the
 
 test("an author change to a local URL's query saves the authored rolling prefix with the new query", () => {
   const live = document.querySelector('script[src*="/clay.js?"]');
-  live.setAttribute("src", "/_/clayjs/1.15.2/clay.js?plugins=page");
+  live.setAttribute("src", "/_/clayjs/1.15.2/clay.js?plugins=blockeditor");
 
   const bytes = snapshot.captureForSave({ emitForSync: false });
   expect(bytes).not.toContain("/_/clayjs/");
-  expect(runtimeAttributes(bytes)).toContain("https://clayjs.com/v1/clay.js?plugins=page");
+  expect(runtimeAttributes(bytes)).toContain("https://clayjs.com/v1/clay.js?plugins=blockeditor");
 });
 
 test("a local runtime URL with no descriptor saves as the exact public URL", () => {

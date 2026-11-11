@@ -1,4 +1,4 @@
-import { createPageEditor as makePageEditor, pageState, PAGE_EDITOR_CSS } from "../../../src/page/editor.js";
+import { createPageEditor as makePageEditor, blockeditorState, PAGE_EDITOR_CSS } from "../../../src/page/editor.js";
 import { state as pmState } from "../../../src/vendor/prosemirror.vendor.js";
 
 import { trackView, editor } from "./view-helpers.js";
@@ -27,21 +27,21 @@ const caretIn = (view, id, off = 0) => {
 
 afterEach(() => { document.body.innerHTML = ""; document.head.innerHTML = ""; });
 
-test("mounts with the page-editor class and injects the CSS once", () => {
+test("mounts with the blockeditor-editor class and injects the CSS once", () => {
   const a = createPageEditor(mount(), { blocks: { p: { t: "paragraph", pos: "V", c: "Hi" } } });
   createPageEditor(mount());
-  expect(a.dom.classList.contains("page-editor")).toBe(true);
-  const styles = document.querySelectorAll("#page-editor-style");
+  expect(a.dom.classList.contains("blockeditor-editor")).toBe(true);
+  const styles = document.querySelectorAll("#blockeditor-editor-style");
   expect(styles.length).toBe(1);
   expect(styles[0].textContent).toBe(PAGE_EDITOR_CSS);
 });
 
 test("a stale editor style saved into the page gets the current CSS in place, and is no-dirty so the update is never an edit", () => {
   const old = document.head.appendChild(document.createElement("style"));
-  old.id = "page-editor-style";
-  old.textContent = ".page-editor pre { white-space: pre; }";
+  old.id = "blockeditor-editor-style";
+  old.textContent = ".blockeditor-editor pre { white-space: pre; }";
   createPageEditor(mount());
-  const styles = document.querySelectorAll("#page-editor-style");
+  const styles = document.querySelectorAll("#blockeditor-editor-style");
   expect(styles.length).toBe(1);
   expect(styles[0]).toBe(old);
   expect(styles[0].textContent).toBe(PAGE_EDITOR_CSS);
@@ -50,12 +50,12 @@ test("a stale editor style saved into the page gets the current CSS in place, an
 
 test("the editor style stays out of the saved file", () => {
   createPageEditor(mount());
-  const style = document.querySelector("#page-editor-style");
+  const style = document.querySelector("#blockeditor-editor-style");
   expect(style.matches(STRIP_FROM_SAVE)).toBe(true);
 });
 
 test("an empty record starts as one empty paragraph", () => {
-  const s = pageState(null);
+  const s = blockeditorState(null);
   expect(s.doc.childCount).toBe(1);
   expect(s.doc.child(0).type.name).toBe("paragraph");
 });
@@ -100,28 +100,28 @@ test("F18 a bare mount excludes its runtime shell from save capture", async () =
   expect(shell.getAttribute("clay")).toBe("editor-ui");
   expect(shell.hasAttribute("sap-ignore")).toBe(true);
   key(view, "Escape");
-  expect(shell.querySelector(".page-live").textContent).toBe("1 block selected");
+  expect(shell.querySelector(".blockeditor-live").textContent).toBe("1 block selected");
   const { captureForSaveAndComparison } = await import("../../../src/core/snapshot.js");
   const { forSave } = captureForSaveAndComparison({ flushUndo: false, emitForSync: false });
   const saved = new DOMParser().parseFromString(forSave, "text/html");
-  expect(saved.querySelector(".page-shell, .page-live, .page-dock, .page-link")).toBeNull();
+  expect(saved.querySelector(".blockeditor-shell, .blockeditor-live, .blockeditor-dock, .blockeditor-link")).toBeNull();
 });
 
 test("F18 destroying a view removes its live region", () => {
   const view = createPageEditor(mount());
-  const live = view.dom.parentElement.querySelector(".page-live");
+  const live = view.dom.parentElement.querySelector(".blockeditor-live");
   view.destroy();
   expect(live.isConnected).toBe(false);
 });
 
 test("F23 long filenames can shrink and wrap within the file row", () => {
   const rules = document.createElement("style");
-  const css = MEDIA_CSS.match(/\.page-file-name\s*\{[^}]+\}/)?.[0];
+  const css = MEDIA_CSS.match(/\.blockeditor-file-name\s*\{[^}]+\}/)?.[0];
   expect(css).toBeTruthy();
   rules.textContent = css;
   document.head.appendChild(rules);
   const view = editor([["f", "file", "", { src: "/f", name: "verylongfilename".repeat(30) }]]);
-  const style = getComputedStyle(view.dom.querySelector(".page-file-name"));
+  const style = getComputedStyle(view.dom.querySelector(".blockeditor-file-name"));
   expect(style.minWidth).toBe("0");
   expect(style.overflowWrap).toBe("anywhere");
 });

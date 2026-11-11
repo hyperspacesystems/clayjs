@@ -13,8 +13,8 @@ let view, host, live;
 beforeEach(() => {
   globalThis.__mounts = 0;
   globalThis.__cleanups = 0;
-  document.body.innerHTML = '<article data-page="1"></article>';
-  live = createStore({ name: "page.tools", value: { t: { r1: {}, r2: {} } } }).handle;
+  document.body.innerHTML = '<article data-blockeditor="1"></article>';
+  live = createStore({ name: "blockeditor.tools", value: { t: { r1: {}, r2: {} } } }).handle;
   host = createToolHost({ store: live, mode: "edit" });
   view = createPageEditor(document.querySelector("article"), { blocks, toolHost: host, features: toolLoaded });
   installPageFeature({ view, toolHost: host }, "tool", toolFeature);

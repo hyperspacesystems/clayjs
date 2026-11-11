@@ -55,15 +55,15 @@ export function dueLabel(due, today = todayKey(), long = false) {
   return new Date(`${due}T00:00:00Z`).toLocaleDateString("en-US", { ...(long ? { weekday: "short" } : {}), month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }), timeZone: "UTC" });
 }
 export const placeAfter = (ids, index) => (index >= 2 ? ids[index - 2] : null);
-const countOf = (doc, n) => el(doc, "span", "page-board-count", { "aria-label": `${n} ${n === 1 ? "card" : "cards"}` }, String(n));
+const countOf = (doc, n) => el(doc, "span", "blockeditor-board-count", { "aria-label": `${n} ${n === 1 ? "card" : "cards"}` }, String(n));
 const isTyping = (target) => /^(INPUT|TEXTAREA|SELECT)$/.test(target?.tagName ?? "");
 
 function dueBadge(doc, due) {
   const today = todayKey();
   const state = dueState(due, today);
-  const badge = el(doc, "span", "page-board-due", { "data-due": state });
-  badge.append(el(doc, "span", "page-board-sr", {}, "Due "), doc.createTextNode(dueLabel(due, today)));
-  if (state === "overdue") badge.append(el(doc, "span", "page-board-sr", {}, ", overdue"));
+  const badge = el(doc, "span", "blockeditor-board-due", { "data-due": state });
+  badge.append(el(doc, "span", "blockeditor-board-sr", {}, "Due "), doc.createTextNode(dueLabel(due, today)));
+  if (state === "overdue") badge.append(el(doc, "span", "blockeditor-board-sr", {}, ", overdue"));
   return badge;
 }
 
@@ -76,7 +76,7 @@ export class BoardView {
     this.undo = undo;
     this.redo = redo;
     this.panel = panel;
-    this.uid = `page-board-${++boards}`;
+    this.uid = `blockeditor-board-${++boards}`;
     this.menu = null;
     const views = boardViews.get(view) ?? new Map();
     boardViews.set(view, views);
@@ -84,11 +84,11 @@ export class BoardView {
     this.editing = null;
     this.rendering = false;
     const doc = view.dom.ownerDocument;
-    this.dom = el(doc, "div", "page-board", { "data-type": "board", "data-id": node.attrs.id ?? "", role: "group", "aria-label": "Board" });
+    this.dom = el(doc, "div", "blockeditor-board", { "data-type": "board", "data-id": node.attrs.id ?? "", role: "group", "aria-label": "Board" });
     this.dom.contentEditable = "false";
-    this.trays = el(doc, "div", "page-board-trays");
-    this.scroll = el(doc, "div", "page-board-scroll");
-    this.lanes = el(doc, "div", "page-board-lanes");
+    this.trays = el(doc, "div", "blockeditor-board-trays");
+    this.scroll = el(doc, "div", "blockeditor-board-scroll");
+    this.lanes = el(doc, "div", "blockeditor-board-lanes");
     this.scroll.append(this.lanes);
     this.dom.append(this.trays, this.scroll);
     this.dom.addEventListener("click", (event) => this.click(event));
@@ -133,7 +133,7 @@ export class BoardView {
       else this.showDeleted = false;
       const lanes = this.board.columnIds.map((id, index) => this.lane(id, index));
       if (this.editing?.kind === "column") lanes.push(this.newLane());
-      else lanes.push(iconButton(doc, "page-board-addcol", "plus", null, { "aria-label": "Add column", title: "Add column", "data-action": "add-column", "data-focus": "add-column" }));
+      else lanes.push(iconButton(doc, "blockeditor-board-addcol", "plus", null, { "aria-label": "Add column", title: "Add column", "data-action": "add-column", "data-focus": "add-column" }));
       this.lanes.replaceChildren(...lanes);
       if (key && this.focusKey(key) && range) doc.activeElement.setSelectionRange?.(...range);
       this.dragger?.repaint();
@@ -147,16 +147,16 @@ export class BoardView {
     const ids = this.board.lanes.get(colId);
     const name = this.board.columns[colId].name || "Untitled";
     const headingId = `${this.uid}-col-${index}`;
-    const lane = el(doc, "div", "page-board-lane", { role: "group", "aria-labelledby": headingId, "data-col": colId });
-    const head = el(doc, "div", "page-board-head", { "data-col": colId });
+    const lane = el(doc, "div", "blockeditor-board-lane", { role: "group", "aria-labelledby": headingId, "data-col": colId });
+    const head = el(doc, "div", "blockeditor-board-head", { "data-col": colId });
     const renaming = this.editing?.kind === "rename" && this.editing.id === colId;
-    if (renaming) head.append(this.editing.input, el(doc, "span", "page-board-name page-board-sr", { id: headingId }, name), countOf(doc, ids.length));
+    if (renaming) head.append(this.editing.input, el(doc, "span", "blockeditor-board-name blockeditor-board-sr", { id: headingId }, name), countOf(doc, ids.length));
     else {
-      head.append(el(doc, "h4", "page-board-name", { id: headingId }, name), countOf(doc, ids.length));
-      head.append(iconButton(doc, "page-board-icon page-board-colmenu", "more", null, { "aria-haspopup": "menu", "aria-expanded": String(this.menu === colId), "aria-label": `${name} column options`, "data-action": "colmenu", "data-col": colId, "data-focus": `colmenu:${colId}` }));
+      head.append(el(doc, "h4", "blockeditor-board-name", { id: headingId }, name), countOf(doc, ids.length));
+      head.append(iconButton(doc, "blockeditor-board-icon blockeditor-board-colmenu", "more", null, { "aria-haspopup": "menu", "aria-expanded": String(this.menu === colId), "aria-label": `${name} column options`, "data-action": "colmenu", "data-col": colId, "data-focus": `colmenu:${colId}` }));
       if (this.menu === colId) head.append(this.columnMenu(colId, index, name));
     }
-    const list = el(doc, "ol", "page-board-cards");
+    const list = el(doc, "ol", "blockeditor-board-cards");
     for (const id of ids) {
       const item = el(doc, "li");
       item.append(this.card(id));
@@ -164,14 +164,14 @@ export class BoardView {
     }
     lane.append(head, list);
     if (this.editing?.kind === "card" && this.editing.id === colId) lane.append(this.editing.input);
-    else lane.append(iconButton(doc, "page-board-add", "plus", "Add card", { "data-action": "add-card", "data-col": colId, "data-focus": `add:${colId}` }));
+    else lane.append(iconButton(doc, "blockeditor-board-add", "plus", "Add card", { "data-action": "add-card", "data-col": colId, "data-focus": `add:${colId}` }));
     return lane;
   }
 
   newLane() {
     const doc = this.dom.ownerDocument;
-    const lane = el(doc, "div", "page-board-lane", { role: "group", "aria-label": "New column" });
-    const head = el(doc, "div", "page-board-head");
+    const lane = el(doc, "div", "blockeditor-board-lane", { role: "group", "aria-label": "New column" });
+    const head = el(doc, "div", "blockeditor-board-head");
     head.append(this.editing.input);
     lane.append(head);
     return lane;
@@ -180,13 +180,13 @@ export class BoardView {
   card(id) {
     const doc = this.dom.ownerDocument;
     const card = this.board.cards[id];
-    const button = el(doc, "button", "page-board-card", { type: "button", "aria-haspopup": "dialog", "aria-expanded": String(this.isOpen(id)), "data-action": "card", "data-card": id, "data-focus": `card:${id}` });
-    button.append(el(doc, "span", "page-board-title", {}, card.title || "Untitled"));
+    const button = el(doc, "button", "blockeditor-board-card", { type: "button", "aria-haspopup": "dialog", "aria-expanded": String(this.isOpen(id)), "data-action": "card", "data-card": id, "data-focus": `card:${id}` });
+    button.append(el(doc, "span", "blockeditor-board-title", {}, card.title || "Untitled"));
     if (card.owner || card.due) {
-      const meta = el(doc, "span", "page-board-meta");
+      const meta = el(doc, "span", "blockeditor-board-meta");
       if (card.owner) {
-        const owner = el(doc, "span", "page-board-owner");
-        owner.append(cardFace(doc, card.owner), el(doc, "span", "page-board-owner-name", {}, card.owner));
+        const owner = el(doc, "span", "blockeditor-board-owner");
+        owner.append(cardFace(doc, card.owner), el(doc, "span", "blockeditor-board-owner-name", {}, card.owner));
         meta.append(owner);
       }
       if (card.due) meta.append(dueBadge(doc, card.due));
@@ -198,11 +198,11 @@ export class BoardView {
   tray(col, ids, index, removed) {
     const doc = this.dom.ownerDocument;
     const headingId = `${this.uid}-missing-${index}`;
-    const tray = el(doc, "div", "page-board-tray", { role: "group", "aria-labelledby": headingId, "data-col": col });
-    const head = el(doc, "div", "page-board-tray-head");
-    head.append(el(doc, "h4", "page-board-name", { id: headingId }, removed ? `Cards from deleted column “${removed.name || "Untitled"}”` : "Cards from a deleted column"), countOf(doc, ids.length));
-    if (removed) head.append(iconButton(doc, "page-board-btn page-board-restore", "restore", "Restore column", { "data-action": "restore-column", "data-col": col, "data-focus": `restore:${col}` }));
-    const list = el(doc, "ol", "page-board-cards");
+    const tray = el(doc, "div", "blockeditor-board-tray", { role: "group", "aria-labelledby": headingId, "data-col": col });
+    const head = el(doc, "div", "blockeditor-board-tray-head");
+    head.append(el(doc, "h4", "blockeditor-board-name", { id: headingId }, removed ? `Cards from deleted column “${removed.name || "Untitled"}”` : "Cards from a deleted column"), countOf(doc, ids.length));
+    if (removed) head.append(iconButton(doc, "blockeditor-board-btn blockeditor-board-restore", "restore", "Restore column", { "data-action": "restore-column", "data-col": col, "data-focus": `restore:${col}` }));
+    const list = el(doc, "ol", "blockeditor-board-cards");
     for (const id of ids) {
       const item = el(doc, "li");
       item.append(this.card(id), this.moveSelect(id));
@@ -214,16 +214,16 @@ export class BoardView {
 
   deletedTray(ids, cards) {
     const doc = this.dom.ownerDocument;
-    const tray = el(doc, "div", "page-board-tray page-board-deleted", { role: "group", "aria-label": "Deleted cards" });
-    const head = el(doc, "div", "page-board-tray-head");
-    head.append(iconButton(doc, "page-board-btn page-board-deleted-toggle", "chevron", `Deleted cards (${ids.length})`, { "aria-expanded": String(!!this.showDeleted), "data-action": "toggle-deleted", "data-focus": "toggle-deleted" }));
+    const tray = el(doc, "div", "blockeditor-board-tray blockeditor-board-deleted", { role: "group", "aria-label": "Deleted cards" });
+    const head = el(doc, "div", "blockeditor-board-tray-head");
+    head.append(iconButton(doc, "blockeditor-board-btn blockeditor-board-deleted-toggle", "chevron", `Deleted cards (${ids.length})`, { "aria-expanded": String(!!this.showDeleted), "data-action": "toggle-deleted", "data-focus": "toggle-deleted" }));
     tray.append(head);
     if (!this.showDeleted) return tray;
-    const list = el(doc, "ol", "page-board-deleted-list");
+    const list = el(doc, "ol", "blockeditor-board-deleted-list");
     for (const id of ids.sort((a, b) => (cards[a].pos ?? "") < (cards[b].pos ?? "") ? -1 : 1)) {
       const title = cards[id].title || "Untitled";
-      const item = el(doc, "li", "page-board-deleted-item");
-      item.append(el(doc, "span", "page-board-title", {}, title), iconButton(doc, "page-board-btn page-board-restore", "restore", "Restore", { "aria-label": `Restore ${title}`, "data-action": "restore-card", "data-card": id, "data-focus": `restore-card:${id}` }));
+      const item = el(doc, "li", "blockeditor-board-deleted-item");
+      item.append(el(doc, "span", "blockeditor-board-title", {}, title), iconButton(doc, "blockeditor-board-btn blockeditor-board-restore", "restore", "Restore", { "aria-label": `Restore ${title}`, "data-action": "restore-card", "data-card": id, "data-focus": `restore-card:${id}` }));
       list.append(item);
     }
     tray.append(list);
@@ -232,7 +232,7 @@ export class BoardView {
 
   moveSelect(id) {
     const doc = this.dom.ownerDocument;
-    const wrap = el(doc, "span", "page-board-select page-board-move");
+    const wrap = el(doc, "span", "blockeditor-board-select blockeditor-board-move");
     const select = el(doc, "select", null, { "aria-label": `Move ${this.board.cards[id].title || "Untitled"} to column`, "data-action": "orphan-move", "data-card": id, "data-focus": `move:${id}`, disabled: !this.board.columnIds.length });
     select.append(el(doc, "option", null, { value: "", selected: true, disabled: true, hidden: true }, "Move to column"));
     for (const col of this.board.columnIds) select.append(el(doc, "option", null, { value: col }, this.board.columns[col].name || "Untitled"));
@@ -244,9 +244,9 @@ export class BoardView {
   columnMenu(colId, index, name) {
     const doc = this.dom.ownerDocument;
     const last = this.board.columnIds.length - 1;
-    const menu = el(doc, "div", "page-board-pop page-board-menu", { role: "menu", "aria-label": `${name} column` });
-    const item = (action, label, icon, disabled = false) => iconButton(doc, `page-board-option${action === "delete-column" ? " is-danger" : ""}`, icon, label, { role: "menuitem", "data-action": action, "data-col": colId, "data-focus": `${action}:${colId}`, disabled });
-    menu.append(item("rename", "Rename", "pencil"), item("left", "Move left", "left", index === 0), item("right", "Move right", "right", index === last), el(doc, "div", "page-board-sep", { role: "separator" }), item("delete-column", "Delete column", "trash"));
+    const menu = el(doc, "div", "blockeditor-board-pop blockeditor-board-menu", { role: "menu", "aria-label": `${name} column` });
+    const item = (action, label, icon, disabled = false) => iconButton(doc, `blockeditor-board-option${action === "delete-column" ? " is-danger" : ""}`, icon, label, { role: "menuitem", "data-action": action, "data-col": colId, "data-focus": `${action}:${colId}`, disabled });
+    menu.append(item("rename", "Rename", "pencil"), item("left", "Move left", "left", index === 0), item("right", "Move right", "right", index === last), el(doc, "div", "blockeditor-board-sep", { role: "separator" }), item("delete-column", "Delete column", "trash"));
     return menu;
   }
 
@@ -255,19 +255,19 @@ export class BoardView {
   openMenu(colId) {
     this.menu = colId;
     this.render();
-    this.dom.querySelector(".page-board-menu .page-board-option:not(:disabled)")?.focus();
+    this.dom.querySelector(".blockeditor-board-menu .blockeditor-board-option:not(:disabled)")?.focus();
   }
 
   closeMenu(refocus) {
     const colId = this.menu;
     this.menu = null;
-    this.dom.querySelector(".page-board-menu")?.remove();
-    for (const button of this.dom.querySelectorAll(".page-board-colmenu")) button.setAttribute("aria-expanded", "false");
+    this.dom.querySelector(".blockeditor-board-menu")?.remove();
+    for (const button of this.dom.querySelectorAll(".blockeditor-board-colmenu")) button.setAttribute("aria-expanded", "false");
     if (refocus) this.focusKey(`colmenu:${colId}`);
   }
 
   inlineInput(cls, label, key, value = "") {
-    const input = el(this.dom.ownerDocument, "input", cls, { type: "text", "aria-label": label, "data-focus": key, placeholder: cls === "page-board-new" ? "Card title" : "Column name" });
+    const input = el(this.dom.ownerDocument, "input", cls, { type: "text", "aria-label": label, "data-focus": key, placeholder: cls === "blockeditor-board-new" ? "Card title" : "Column name" });
     input.value = value;
     input.addEventListener("keydown", (event) => {
       if (event.isComposing || event.keyCode === 229) return;
@@ -286,7 +286,7 @@ export class BoardView {
     this.menu = null;
     const name = kind === "rename" ? this.board.columns[colId]?.name ?? "" : "";
     const key = kind === "card" ? `new:${colId}` : kind === "column" ? "new-column" : `name:${colId}`;
-    const input = this.inlineInput(kind === "card" ? "page-board-new" : "page-board-rename", kind === "card" ? "New card title" : "Column name", key, name);
+    const input = this.inlineInput(kind === "card" ? "blockeditor-board-new" : "blockeditor-board-rename", kind === "card" ? "New card title" : "Column name", key, name);
     this.editing = { kind, id: colId, input };
     this.render();
     input.focus();
@@ -356,7 +356,7 @@ export class BoardView {
 
   openCard(cardId) {
     this.menu = null;
-    this.dom.querySelector(".page-board-menu")?.remove();
+    this.dom.querySelector(".blockeditor-board-menu")?.remove();
     this.panel?.open(this.blockId, cardId, { commands: this.commands, undo: this.undo, redo: this.redo });
   }
 
@@ -393,14 +393,14 @@ export class BoardView {
       else this.undo?.();
       return;
     }
-    const menu = event.target.closest?.(".page-board-menu");
+    const menu = event.target.closest?.(".blockeditor-board-menu");
     if (!menu) return;
     if (event.key === "Escape" || event.key === "Tab") {
       event.preventDefault();
       this.closeMenu(true);
     } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      const items = [...menu.querySelectorAll(".page-board-option:not(:disabled)")];
+      const items = [...menu.querySelectorAll(".blockeditor-board-option:not(:disabled)")];
       const at = items.indexOf(event.target);
       items[(at + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
     }
@@ -408,7 +408,7 @@ export class BoardView {
 
   focusout(event) {
     if (this.rendering || this.menu === null) return;
-    const menu = this.dom.querySelector(".page-board-menu");
+    const menu = this.dom.querySelector(".blockeditor-board-menu");
     if (menu?.contains(event.target) && !menu.contains(event.relatedTarget)) this.closeMenu(false);
   }
 

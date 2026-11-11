@@ -34,12 +34,12 @@ const until = async (check, tries = 300) => {
 };
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const seedTags = () => document.querySelectorAll('script[type="application/json"][merge="page"]');
+const seedTags = () => document.querySelectorAll('script[type="application/json"][merge="blockeditor"]');
 
 const marks = [];
 const cleanups = [];
@@ -98,7 +98,7 @@ test("disposing a boot releases readiness even if a branch never answers", async
 async function open({
   html = articleHtml(),
   head = tagHtml(seedValue(BLOCKS)),
-  extensions = ["page"],
+  extensions = ["blockeditor"],
   editorGate = null,
   saveGate = null,
 } = {}) {
@@ -117,7 +117,7 @@ async function open({
     seq: room.seq,
     writer: room.writer,
     conn: 0,
-    stores: { page: { value: pageValue(), ephemeral: false, last: 0, landed: 0 } },
+    stores: { blockeditor: { value: pageValue(), ephemeral: false, last: 0, landed: 0 } },
   });
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
@@ -129,6 +129,7 @@ async function open({
   }));
 
   await jest.unstable_mockModule("../../../src/core/save.js", () => ({
+    claimFailure: () => {},
     savesAdmitted: () => true,
     savePageForce: async () => { saves.push(1); return saveGate ? saveGate.promise : { ok: true, msgType: "success" }; },
     savePage: async () => ({ ok: true, msgType: "success" }),
@@ -201,8 +202,8 @@ async function open({
 
   const states = [];
   const onState = (event) => states.push(event.detail);
-  document.addEventListener("clay:page-save-state", onState);
-  cleanups.push(() => document.removeEventListener("clay:page-save-state", onState));
+  document.addEventListener("clay:blockeditor-save-state", onState);
+  cleanups.push(() => document.removeEventListener("clay:blockeditor-save-state", onState));
 
   const liveCalls = [];
   const { live } = await import("../../../src/plugins/live.js");
@@ -232,7 +233,7 @@ test("a blocked boot releases the room the other branch had already taken", asyn
     // coming, so what the failure below has to release is already there.
     expect(await until(() => registrations.some((entry) => entry.id === "page:live"))).toBe(true);
     expect(page.status).toMatchObject({ phase: "joining" });
-    expect(liveCalls).toEqual(["page"]);
+    expect(liveCalls).toEqual(["blockeditor"]);
 
     editor.state = "throw";
     editorGate.resolve();
@@ -241,9 +242,9 @@ test("a blocked boot releases the room the other branch had already taken", asyn
 
     expect(result).toMatchObject({ phase: "blocked", reason: "editor-assets-failed" });
     expect(page.view).toBe(null);
-    expect(document.querySelectorAll(".page-shell")).toHaveLength(0);
+    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
     expect(registrations.filter((entry) => entry.id === "page:live" && !entry.disposed)).toEqual([]);
-    expect(ownerOf(document.querySelector("article[data-page]"))).toBe(null);
+    expect(ownerOf(document.querySelector("article[data-blockeditor]"))).toBe(null);
     expect(marks.filter((entry) => entry.name === "document:input-ready")).toEqual([]);
   } finally {
     page.dispose();
@@ -252,13 +253,13 @@ test("a blocked boot releases the room the other branch had already taken", asyn
 });
 
 test("a replacement install of a seeded page stages its own store and leaves no tag behind", async () => {
-  const { page, saves, liveCalls } = await open({ head: "", extensions: ["page", "live-data"] });
+  const { page, saves, liveCalls } = await open({ head: "", extensions: ["blockeditor", "live-data"] });
   try {
     await page.ready;
     expect(saves).toEqual([]);
     expect(liveCalls).toEqual([]);
     expect(seedTags()).toHaveLength(0);
-    expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
+    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
 
     const result = await page.install();
     await flushAsync();
@@ -269,7 +270,7 @@ test("a replacement install of a seeded page stages its own store and leaves no 
     expect(saves).toEqual([]);
     expect(liveCalls).toEqual([]);
     expect(seedTags()).toHaveLength(0);
-    expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
+    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
   } finally {
     page.dispose();
   }

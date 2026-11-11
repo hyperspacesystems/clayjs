@@ -41,12 +41,12 @@ const until = async (check, tries = 300) => {
 };
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const handEdit = (doc) => { doc.querySelector('article[data-page] [data-id="p"]').textContent = "Hello, edited by hand"; };
+const handEdit = (doc) => { doc.querySelector('article[data-blockeditor] [data-id="p"]').textContent = "Hello, edited by hand"; };
 
 const marks = [];
 const cleanups = [];
@@ -62,7 +62,7 @@ async function open({
   html = articleHtml(),
   head = tagHtml(seedValue(BLOCKS)),
   edit = null,
-  extensions = ["page"],
+  extensions = ["blockeditor"],
   metaGate = null,
   saveGate = null,
   roomGate = null,
@@ -87,7 +87,7 @@ async function open({
     seq: room.seq,
     writer: room.writer,
     conn: 0,
-    stores: { page: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
+    stores: { blockeditor: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
   });
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
@@ -102,6 +102,7 @@ async function open({
   }));
 
   await jest.unstable_mockModule("../../../src/core/save.js", () => ({
+    claimFailure: () => {},
     savesAdmitted: () => true,
     savePageForce: async () => { saves.push(1); return saveGate ? saveGate.promise : { ok: true, msgType: "success" }; },
     savePage: async () => ({ ok: true, msgType: "success" }),
@@ -174,15 +175,15 @@ async function open({
 
   const states = [];
   const onState = (event) => states.push(event.detail);
-  document.addEventListener("clay:page-save-state", onState);
-  cleanups.push(() => document.removeEventListener("clay:page-save-state", onState));
+  document.addEventListener("clay:blockeditor-save-state", onState);
+  cleanups.push(() => document.removeEventListener("clay:blockeditor-save-state", onState));
 
   const liveCalls = [];
   const { live } = await import("../../../src/plugins/live.js");
   window.clay = {
     live: (name) => {
       liveCalls.push(name);
-      if (name !== "page") return live(name);
+      if (name !== "blockeditor") return live(name);
       const handle = live(name);
       return roomGate ? { ready: roomGate.promise.then(() => handle.ready) } : handle;
     },
@@ -203,10 +204,10 @@ afterEach(() => {
 async function expectSettled(page, { ownerOf, registrations, stable, since = 0 }) {
   const fresh = marks.slice(since);
   expect(page.status).toMatchObject({ phase: "ready", reason: null });
-  expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
-  expect(document.querySelectorAll(".page-editor")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(1);
   expect(document.querySelectorAll('[contenteditable="true"]')).toHaveLength(1);
-  expect(ownerOf(document.querySelector("article[data-page]"))).toBe("editor");
+  expect(ownerOf(document.querySelector("article[data-blockeditor]"))).toBe("editor");
   expect(page.view).toBeTruthy();
   expect(page.view.editable).toBe(true);
 
@@ -217,7 +218,7 @@ async function expectSettled(page, { ownerOf, registrations, stable, since = 0 }
 
   // No old notice and no waiting line: the settled boot left nothing of its own.
   expect(document.querySelectorAll("[data-clay-toast]")).toHaveLength(0);
-  expect(document.querySelectorAll(".page-boot-status")).toHaveLength(0);
+  expect(document.querySelectorAll(".blockeditor-boot-status")).toHaveLength(0);
 
   const pageLive = registrations.filter((entry) => entry.id === "page:live");
   expect(pageLive.filter((entry) => !entry.disposed)).toHaveLength(1);
@@ -232,7 +233,7 @@ async function expectSettled(page, { ownerOf, registrations, stable, since = 0 }
 // A cancelled installation's delayed status must never appear: its timer goes with it.
 async function expectNoLateStatus() {
   await new Promise((resolve) => setTimeout(resolve, 220));
-  expect(document.querySelectorAll(".page-boot-status")).toHaveLength(0);
+  expect(document.querySelectorAll(".blockeditor-boot-status")).toHaveLength(0);
 }
 
 test("a boot cancelled while the shared metadata is out leaves the new one alone", async () => {
@@ -255,7 +256,7 @@ test("a boot cancelled while the shared metadata is out leaves the new one alone
 test("a seeded boot writes nothing and joins no room, so a replacement owns the only editor", async () => {
   const { page, ownerOf, registrations, saves, liveCalls } = await open({
     head: "",
-    extensions: ["page", "live-data"],
+    extensions: ["blockeditor", "live-data"],
   });
   const stable = page;
   await flushAsync();
@@ -263,7 +264,7 @@ test("a seeded boot writes nothing and joins no room, so a replacement owns the 
   // The seed is staged in memory: no write and no room at entry.
   expect(saves).toEqual([]);
   expect(liveCalls).toEqual([]);
-  expect(document.querySelectorAll('script[merge="page"]')).toHaveLength(0);
+  expect(document.querySelectorAll('script[merge="blockeditor"]')).toHaveLength(0);
 
   const since = marks.length;
   const next = page.install();
@@ -272,9 +273,9 @@ test("a seeded boot writes nothing and joins no room, so a replacement owns the 
   await flushAsync();
 
   expect(liveCalls).toEqual([]);
-  expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
-  expect(document.querySelectorAll(".page-editor")).toHaveLength(1);
-  expect(ownerOf(document.querySelector("article[data-page]"))).toBe("editor");
+  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(1);
+  expect(ownerOf(document.querySelector("article[data-blockeditor]"))).toBe("editor");
   // The replaced installation left no participant behind, and the page object a
   // caller holds answers for what is there now.
   expect(registrations.filter((entry) => !entry.disposed && entry.id === "page:live")).toHaveLength(1);
@@ -324,13 +325,13 @@ test("a boot cancelled while a demanded view part is coming takes its editor wit
   const tableGate = deferred();
   const { page, ownerOf, registrations } = await open({
     head: tagHtml(value),
-    html: `<article data-page="1" data-rev="${rev}">${html}</article>`,
+    html: `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`,
     tableGate,
   });
   const stable = page;
   expect(await until(() => page.status.phase === "adopting")).toBe(true);
   // The old installation has its shell on screen and input still off.
-  expect(document.querySelectorAll(".page-editor")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(1);
   const since = marks.length;
 
   const next = page.install();
@@ -353,7 +354,7 @@ test("a boot cancelled while adoption waits on the engine restores nothing from 
 
   // The article is what the new installation reads; the old one already captured its
   // own source, so putting the file back changes nothing for it.
-  document.querySelector('article[data-page] [data-id="p"]').textContent = "Hello";
+  document.querySelector('article[data-blockeditor] [data-id="p"]').textContent = "Hello";
   const next = page.install();
   await flushAsync();
   adoptGate.resolve();

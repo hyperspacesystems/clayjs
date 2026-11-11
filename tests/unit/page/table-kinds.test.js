@@ -13,7 +13,7 @@ const table = {
     r2: { pos: "2", cells: { c1: "Sep 28", c2: "2", c3: "" } },
   },
 };
-const menu = (view) => view.dom.parentElement.querySelector(".page-menu");
+const menu = (view) => view.dom.parentElement.querySelector(".blockeditor-menu");
 const item = (view, label) => [...menu(view).querySelectorAll("button")].find((button) => button.textContent.includes(label));
 const record = (view) => blockJson(view.state.doc.child(0));
 const cellPos = (view, row, col) => {
@@ -54,8 +54,8 @@ test("the column menu shows the kind as an icon and changes it, Auto clears it",
   const view = editor([], { blocks: { tbl: table } });
   view.dom.querySelector('th[data-col="c2"] button').click();
   const kind = item(view, "Kind");
-  expect(kind.querySelector(".page-menu-icon").textContent).toBe("#");
-  expect(kind.querySelector(".page-menu-hint").textContent).toBe("Auto: Number");
+  expect(kind.querySelector(".blockeditor-menu-icon").textContent).toBe("#");
+  expect(kind.querySelector(".blockeditor-menu-hint").textContent).toBe("Auto: Number");
   kind.click();
   expect(item(view, "Auto").getAttribute("aria-checked")).toBe("true");
   item(view, "Text").click();
@@ -82,18 +82,18 @@ test("sort and Chart this table use the inferred kind", () => {
 test("a click in a date cell opens a date picker that writes an ISO date", () => {
   const view = editor([], { blocks: { tbl: table } });
   click(view, 1, 0);
-  expect(view.dom.querySelector(".page-table-date")).toBeNull();
+  expect(view.dom.querySelector(".blockeditor-table-date")).toBeNull();
   click(view, 1, 2);
   const input = view.dom.querySelector('td[data-col="c3"] input[type="date"]');
   expect(input.getAttribute("aria-label")).toBe("Pick a date");
   input.value = "2026-10-23";
   input.dispatchEvent(new Event("change"));
   expect(record(view).rows.r2.cells.c3).toBe("2026-10-23");
-  expect(view.dom.querySelector(".page-table-date")).toBeNull();
+  expect(view.dom.querySelector(".blockeditor-table-date")).toBeNull();
   click(view, 0, 2);
-  const again = view.dom.querySelector(".page-table-date");
+  const again = view.dom.querySelector(".blockeditor-table-date");
   expect(again.value).toBe("2026-10-20");
   again.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  expect(view.dom.querySelector(".page-table-date")).toBeNull();
+  expect(view.dom.querySelector(".blockeditor-table-date")).toBeNull();
   expect(record(view).rows.r1.cells.c3).toBe("2026-10-20");
 });

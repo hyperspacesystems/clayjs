@@ -24,8 +24,8 @@ const BLOCKS = [
   { id: "h", t: "heading", text: "Notes" },
   { id: "p", t: "paragraph", text: "Hello" },
 ];
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
-const ARTICLE_SEL = "article[data-page]";
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
+const ARTICLE_SEL = "article[data-blockeditor]";
 const PART_KEY = /^.+\.\d+\.\d+$/;
 const ROOM_ROUTE = "/_/sync/data";
 
@@ -38,10 +38,10 @@ const until = async (predicate, timeout = 6000) => {
 };
 
 const renderOf = (value) => renderFromTags([JSON.stringify(value)]);
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value) => {
   const { html, rev } = renderOf(value);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 const fileHtml = (value) =>
   `<!doctype html><html><head><title>Notes</title>${tagHtml(value)}</head><body>${articleHtml(value)}</body></html>`;
@@ -147,7 +147,7 @@ async function load({ liveData = false, value = seedValue(BLOCKS) } = {}) {
   document.head.innerHTML = tagHtml(value);
   document.body.innerHTML = articleHtml(value);
 
-  const extensions = liveData ? ["page", "live-data", "sync"] : ["page", "sync"];
+  const extensions = liveData ? ["blockeditor", "live-data", "sync"] : ["blockeditor", "sync"];
   const requests = [];
   const saves = [];
 
@@ -260,7 +260,7 @@ const type = (page, text) => {
 // The room has taken the edit, and this tab holds it as the room's own value: what a
 // save writes into the file.
 const accepted = (harness, text) => until(() => {
-  const store = harness.storeOf("page");
+  const store = harness.storeOf("blockeditor");
   if (!store || store.pending.length) return false;
   try {
     return Object.values(blocksFromYValue(store.authoritative)).some((block) => block.c?.includes(text));
@@ -287,11 +287,11 @@ test("a page on a host without live-data saves and reopens with its whole page v
 
   // The lane this tab runs is the local one, in the document's room scope.
   expect(await until(() => harness.localLane() !== null)).toBe(true);
-  expect(harness.localLane().scope).toContain("page-rooms:2");
+  expect(harness.localLane().scope).toContain("blockeditor-rooms:2");
   expect(await until(() => harness.localLane().isSequencer === true)).toBe(true);
 
   type(harness.page, typed);
-  expect(blocksFromYValue(harness.storeOf("page").value).p.c).toContain(typed);
+  expect(blocksFromYValue(harness.storeOf("blockeditor").value).p.c).toContain(typed);
   expect(await accepted(harness, typed)).toBe(true);
 
   const result = await harness.save.savePageForce();
@@ -319,7 +319,7 @@ test("a page on a host without live-data saves and reopens with its whole page v
 
   // The same file reopens: a fresh page holds the whole value and the typed text.
   const reopened = await load({ liveData: false, value });
-  expect(blocksFromYValue(reopened.storeOf("page").value).p.c).toContain(typed);
+  expect(blocksFromYValue(reopened.storeOf("blockeditor").value).p.c).toContain(typed);
   expect(reopened.page.view.dom.textContent).toContain(typed);
   expect(reopened.requests.filter((entry) => entry.url.includes(ROOM_ROUTE))).toEqual([]);
   reopened.close();
@@ -345,12 +345,12 @@ test("a file saved by a compacting room opens and saves on a host without compac
   for (const host of [{ name: "a legacy room", liveData: true }, { name: "the local lane", liveData: false }]) {
     const harness = await load({ liveData: host.liveData, value: compacted.value });
     expect(harness.page.view).toBeTruthy();
-    expect(await until(() => harness.storeOf("page")?.handle.status.mode === "fast")).toBe(true);
-    expect(Object.keys(harness.storeOf("page").authoritative.y).sort()).toEqual([...compacted.keys].sort());
+    expect(await until(() => harness.storeOf("blockeditor")?.handle.status.mode === "fast")).toBe(true);
+    expect(Object.keys(harness.storeOf("blockeditor").authoritative.y).sort()).toEqual([...compacted.keys].sort());
 
     // The file-only host runs the same room in this tab, and asks no route for it.
     if (!host.liveData) {
-      expect(await until(() => harness.localLane()?.scope?.includes("page-rooms:2") === true)).toBe(true);
+      expect(await until(() => harness.localLane()?.scope?.includes("blockeditor-rooms:2") === true)).toBe(true);
     }
 
     type(harness.page, typed);
@@ -385,7 +385,7 @@ test("a file saved by a compacting room opens and saves on a host without compac
 
     // The same file opens again on the same host with every word still in it.
     const reopened = await load({ liveData: host.liveData, value });
-    const all = Object.values(blocksFromYValue(reopened.storeOf("page").value)).map((block) => block.c ?? "").join("\n");
+    const all = Object.values(blocksFromYValue(reopened.storeOf("blockeditor").value)).map((block) => block.c ?? "").join("\n");
     for (const text of [folded, first, second, typed]) {
       expect({ host: host.name, text, held: all.includes(text) }).toEqual({ host: host.name, text, held: true });
     }

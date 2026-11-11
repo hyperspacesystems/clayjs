@@ -22,7 +22,7 @@ const flush = async () => {
   for (let i = 0; i < 20; i++) await sleep(0);
 };
 
-const PAGE_HOST = { spec: 1, extensions: ["page", "live-data", "sync", "upload"], document: {} };
+const PAGE_HOST = { spec: 1, extensions: ["blockeditor", "live-data", "sync", "upload"], document: {} };
 
 const routeHost = async () => {
   const inner = globalThis.fetch;
@@ -67,7 +67,7 @@ const openReader = async (boot) => {
 // The unsaved-state registry the page's own modules registered in: this file asks for it
 // after the boot, because the harness resets the module registry a boot starts from.
 const pendingIds = async () => (await import("../../../src/lib/unsaved-state.js")).pendingIds();
-const panel = () => document.querySelector(".page-import-preview");
+const panel = () => document.querySelector(".blockeditor-import-preview");
 const click = (what) => panel().querySelector(`[data-import="${what}"]`).click();
 const file = (name, text) => ({ name, size: new TextEncoder().encode(text).length, text: async () => text });
 
@@ -153,7 +153,7 @@ test("a committed exit disposes the installed command and its preview", async ()
 
     expect(tracked.calls.disposes).toBe(1);
     expect(panel()).toBeNull();
-    expect(document.querySelector(".page-import-preview")).toBeNull();
+    expect(document.querySelector(".blockeditor-import-preview")).toBeNull();
     expect(await pendingIds()).toEqual([]);
     expect(boot.counters().listeners.document).toBeLessThan(withPreview);
   } finally {

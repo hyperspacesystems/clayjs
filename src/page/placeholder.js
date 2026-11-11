@@ -14,7 +14,7 @@ function titlePlaceholder(doc) {
     if (done) return;
     if (node.type !== schema.nodes.heading || node.attrs.level !== 1 || (node.attrs.parent ?? null) !== null) return;
     done = true;
-    if (!node.content.size) decoration = Decoration.node(offset, offset + node.nodeSize, { class: "page-title-placeholder", "data-placeholder": TITLE_PLACEHOLDER });
+    if (!node.content.size) decoration = Decoration.node(offset, offset + node.nodeSize, { class: "blockeditor-title-placeholder", "data-placeholder": TITLE_PLACEHOLDER });
   });
   return decoration;
 }
@@ -26,7 +26,7 @@ function checkPlaceholders(doc) {
   doc.forEach((node, offset) => {
     if (node.type !== schema.nodes.list_item || node.attrs.kind !== "check") return;
     if (node.content.size || node.attrs.checked) return;
-    decorations.push(Decoration.node(offset, offset + node.nodeSize, { class: "page-check-placeholder", "data-placeholder": CHECK_PLACEHOLDER }));
+    decorations.push(Decoration.node(offset, offset + node.nodeSize, { class: "blockeditor-check-placeholder", "data-placeholder": CHECK_PLACEHOLDER }));
   });
   return decorations;
 }
@@ -45,7 +45,7 @@ export function placeholderPlugin(text = PLACEHOLDER_TEXT) {
             const node = $from.parent;
             if (node.type === schema.nodes.paragraph && !node.content.size) {
               const pos = $from.before(1);
-              decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: "page-placeholder", "data-placeholder": text }));
+              decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: "blockeditor-placeholder", "data-placeholder": text }));
             }
           }
         }

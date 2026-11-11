@@ -17,7 +17,7 @@ const legacy = scenario === 'editor';
 const bootCase = scenario.startsWith('boot-');
 const inline = '<style data-name="saved" clay="no-data">.item { color: red; }</style>';
 const link = '<link rel="stylesheet" href="/app.css?v=1" clay="no-data">';
-const editorStyles = '<style id="page-editor-style">.old { color: red; }</style>\n<style id="page-editor-style">.old { color: pink; }</style>';
+const editorStyles = '<style id="blockeditor-editor-style">.old { color: red; }</style>\n<style id="blockeditor-editor-style">.old { color: pink; }</style>';
 const dom = new JSDOM(`<!DOCTYPE html><html autosave><head>${legacy ? editorStyles : inline + link}</head><body><p id="content">Original</p><div id="batch" clay="no-trigger-autosave">Batch original</div><div id="mount"></div><div id="ordinary">Normal policy</div><style data-name="saved">.duplicate { color: pink; }</style></body></html>`, {
   url: 'https://fixture.invalid/document.html', pretendToBeVisual: true, virtualConsole: vc,
 });
@@ -219,10 +219,10 @@ if (scenario === 'refresh-marked') {
 } else if (scenario === 'editor') {
   const { createPageEditor, PAGE_EDITOR_CSS } = await import(`${repo}/src/page/editor.js`);
   const editor = createPageEditor(document.getElementById('mount'));
-  const tags = document.querySelectorAll('style#page-editor-style');
+  const tags = document.querySelectorAll('style#blockeditor-editor-style');
   assert.equal(tags.length, 1);
   assert.equal(tags[0].textContent, PAGE_EDITOR_CSS);
-  assert.equal(tags[0].dataset.name, 'page-editor-style');
+  assert.equal(tags[0].dataset.name, 'blockeditor-editor-style');
   assert.equal(tags[0].getAttribute('clay'), 'no-dirty editor-ui');
   await assertClean();
   window.clay.undo.flush();

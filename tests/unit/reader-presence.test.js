@@ -98,7 +98,7 @@ beforeEach(() => {
   global.fetch = jest.fn((url, init = {}) => {
     fetchCalls.push({ url: String(url), init });
     if (String(url).includes("/_/meta")) return Promise.resolve(response(200, JSON.stringify(metaAnswer)));
-    return Promise.resolve(response(200, "<!DOCTYPE html><html><body><article data-page><p>one</p></article></body></html>"));
+    return Promise.resolve(response(200, "<!DOCTYPE html><html><body><article data-blockeditor><p>one</p></article></body></html>"));
   });
   fetchCalls = [];
 });
@@ -202,7 +202,7 @@ test("a reader joins no durable room and publishes no target", async () => {
   // View mode marks a page target the way a page would; a reader's transport has
   // no write half, so nothing leaves and nothing is asked of the relay.
   expect(presence.setTarget({
-    kind: "page",
+    kind: "blockeditor",
     v: 1,
     epoch: "room-7",
     generation: 0,

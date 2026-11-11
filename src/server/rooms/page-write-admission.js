@@ -6,7 +6,7 @@ import { PageFormatError } from './page-write-guard.js';
 import { ifMatchSatisfied } from './spec-wire.js';
 import { checkInitialLineage, checkOrdinaryLineage } from './page-lineage.js';
 
-const PAGE = /^page(\.[0-9]+)?$/;
+const PAGE = /^blockeditor(\.[0-9]+)?$/;
 const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const refuse = (reason) => { throw new PageConversionError(reason); };
 
@@ -26,7 +26,7 @@ function claimsYPage(html) {
 function checkInitialRoom(room) {
   if ([...(room?.stores.keys() ?? [])].some((name) => PAGE.test(name)) ||
     [...(room?.lastN.keys() ?? [])].some((key) => PAGE.test(key.slice(0, key.indexOf('\n')))) ||
-    (room?.pageTransition && room.pageTransition.format !== 'none')) refuse('room-page-authority');
+    (room?.blockeditorTransition && room.blockeditorTransition.format !== 'none')) refuse('room-blockeditor-authority');
 }
 
 function checkInitialCondition(ifMatch, currentHtml) {
@@ -34,18 +34,18 @@ function checkInitialCondition(ifMatch, currentHtml) {
     !ifMatchSatisfied(ifMatch, currentHtml)) refuse('file-changed');
 }
 
-export function checkPageInitial({ currentHtml, html, ifMatch, room = null, pageWrite = null, createDocument }) {
+export function checkPageInitial({ currentHtml, html, ifMatch, room = null, blockeditorWrite = null, createDocument }) {
   if (typeof currentHtml !== 'string' || inspectPage(currentHtml).kind !== 'none') refuse('invalid-source');
   if (typeof html !== 'string' || inspectPage(html).kind !== 'yjs') refuse('invalid-capture');
   checkInitialRoom(room);
   checkInitialCondition(ifMatch, currentHtml);
-  checkInitialLineage({ currentHtml, html, pageWrite, createDocument });
+  checkInitialLineage({ currentHtml, html, blockeditorWrite, createDocument });
 }
 
-export function checkPageWriteAdmission({ currentHtml, html, header = null, ifMatch, room = null, pageWrite = null, createDocument }) {
+export function checkPageWriteAdmission({ currentHtml, html, header = null, ifMatch, room = null, blockeditorWrite = null, createDocument }) {
   const before = inspectPage(currentHtml ?? '');
   const after = inspectPage(html ?? '');
-  const converted = before.kind === 'yjs' || room?.pageTransition?.format === 'yjs';
+  const converted = before.kind === 'yjs' || room?.blockeditorTransition?.format === 'yjs';
   if (converted && after.kind === 'none' && header == null) return 'ordinary';
   if (converted && after.kind !== 'yjs') throw new PageFormatError();
   if (header !== null && header !== undefined) {
@@ -64,6 +64,6 @@ export function checkPageWriteAdmission({ currentHtml, html, header = null, ifMa
   if (before.kind !== 'none' || typeof currentHtml !== 'string') refuse('invalid-source');
   checkInitialRoom(room);
   checkInitialCondition(ifMatch, currentHtml);
-  checkInitialLineage({ currentHtml, html, pageWrite, createDocument });
+  checkInitialLineage({ currentHtml, html, blockeditorWrite, createDocument });
   return 'initial';
 }

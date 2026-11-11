@@ -26,8 +26,8 @@ const BLOCKS = [
   { id: "h", t: "heading", text: "Notes" },
   { id: "p", t: "paragraph", text: "Hello" },
 ];
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
-const ARTICLE_SEL = "article[data-page]";
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
+const ARTICLE_SEL = "article[data-blockeditor]";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
@@ -43,19 +43,19 @@ const tick = async (turns = 40) => { for (let i = 0; i < turns; i++) await Promi
 const render = (blocks) => renderFromTags([JSON.stringify(seedValue(blocks))]);
 const articleHtml = (blocks = BLOCKS) => {
   const { html, rev } = render(blocks);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const tagHtml = (blocks = BLOCKS) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(seedValue(blocks))}</script>`;
+const tagHtml = (blocks = BLOCKS) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(seedValue(blocks))}</script>`;
 const articleOf = (html) => new DOMParser().parseFromString(html, "text/html").querySelector(ARTICLE_SEL);
 // A page tag stating a value this module built, rather than one a seed wrote.
-const tagValueHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagValueHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 
 // The page a peer saved from the page this tab holds: the same blocks plus one edit, so
 // the value it states descends from the tag the tab was served.
 async function descendantValue(blocks, edit) {
   const { createStore } = await import("../../../src/live/store.js");
   const { createYPageBinding, LOCAL, yValueOf } = await import("../../../src/page/ybind/index.js");
-  const store = createStore({ name: "page", value: seedValue(blocks) });
+  const store = createStore({ name: "blockeditor", value: seedValue(blocks) });
   const binding = createYPageBinding({ store });
   binding.ydoc.transact(() => binding.pd.flow.insert(binding.pd.flow.length, edit), LOCAL);
   const value = yValueOf(binding.ydoc);
@@ -69,7 +69,7 @@ async function descendantValue(blocks, edit) {
 const FILE = (body, { head = "", rev = "r1" } = {}) =>
   `<!doctype html><html><head><title>Notes</title>${head}</head><body>${body.replace("<article", `<article data-rev="${rev}"`)}</body></html>`;
 
-const readerHtml = (body) => `<!doctype html><html><head><title>Notes</title></head><body><article data-page="1">${body}</article></body></html>`;
+const readerHtml = (body) => `<!doctype html><html><head><title>Notes</title></head><body><article data-blockeditor="1">${body}</article></body></html>`;
 
 const context = ({ represented = null, reader = null, initial = false } = {}) => ({
   generation: 1,
@@ -120,7 +120,7 @@ async function load({
   document.head.innerHTML = head;
   document.body.innerHTML = html;
 
-  const extensions = ["page", "sync", "live-data"];
+  const extensions = ["blockeditor", "sync", "live-data"];
   const saves = [];
   const sent = [];
   const sources = [];
@@ -165,7 +165,7 @@ async function load({
     ...realEditor,
     createPageEditor: (mount, options) => {
       if (MODE.factory === "throw") {
-        mount.appendChild(document.createElement("div")).className = "page-shell";
+        mount.appendChild(document.createElement("div")).className = "blockeditor-shell";
         throw new Error("the editor could not be built");
       }
       return realEditor.createPageEditor(mount, options);
@@ -264,7 +264,7 @@ test("in a live room with no writer yet, an adopting entry frames its claim at p
   // 400, so the page prepares after the lane\u0027s own preparation: what its adoption waits
   // on has to be something the lane settles without the commit that enables it.
   const handEdited = "Edited by hand";
-  const harness = await load({ head: tagHtml(), roomStores: { page: { value: seedValue(BLOCKS), ephemeral: false, last: 0, landed: 0 } } });
+  const harness = await load({ head: tagHtml(), roomStores: { blockeditor: { value: seedValue(BLOCKS), ephemeral: false, last: 0, landed: 0 } } });
   const bytes = `<!doctype html><html><head><title>Notes</title>${tagHtml()}</head><body>${articleHtml().replace("Hello", handEdited)}</body></html>`;
   const reader = await harness.openReader(bytes, { etag: "stamp-2", seq: 2 });
   const handoff = await reader.prepareHandoff({});
@@ -284,7 +284,7 @@ test("in a live room with no writer yet, an adopting entry frames its claim at p
     expect(Date.now() - began).toBeLessThan(4000);
     expect(harness.room.writer).not.toBe(null);
     // The hand edit is in the page the session stages, so the client is the adopter.
-    expect(blocksFromYValue(harness.storeOf("page").value).p.c).toBe(handEdited);
+    expect(blocksFromYValue(harness.storeOf("blockeditor").value).p.c).toBe(handEdited);
     expect(harness.page.view.editable).toBe(false);
     const facts = await import("../../../src/core/is-edit-mode.js");
     const save = await import("../../../src/core/save.js");
@@ -325,7 +325,7 @@ test("a tab holding nothing of its own leaves the live room without a save or a 
   // a tab that typed nothing owes the file nothing, so the exit writes nothing at all.
   const harness = await load({
     head: tagHtml(),
-    roomStores: { page: { value: seedValue(BLOCKS), ephemeral: false, last: 0, landed: 0 } },
+    roomStores: { blockeditor: { value: seedValue(BLOCKS), ephemeral: false, last: 0, landed: 0 } },
   });
   // Another tab is the room's writer: the leave is still this tab's own conditional
   // save of its own input, not a background writer-election write.
@@ -337,7 +337,7 @@ test("a tab holding nothing of its own leaves the live room without a save or a 
     const result = await transition.runSaveBarrier({ timeoutMs: 8000 });
     expect(result.ok).toBe(true);
     expect(harness.saves).toHaveLength(0);
-    expect(harness.storeOf("page").pending).toEqual([]);
+    expect(harness.storeOf("blockeditor").pending).toEqual([]);
   } finally {
     session.lease.dispose();
     session.liveLease.dispose();
@@ -353,7 +353,7 @@ test("own typing while another tab is the writer never leaves as a clean unsaved
   // the exit has to refuse.
   const harness = await load({
     head: tagHtml(),
-    roomStores: { page: { value: seedValue(BLOCKS), ephemeral: false, last: 0, landed: 0 } },
+    roomStores: { blockeditor: { value: seedValue(BLOCKS), ephemeral: false, last: 0, landed: 0 } },
   });
   harness.room.writer = "peer-tab";
   const session = await openEditInRoom(harness);

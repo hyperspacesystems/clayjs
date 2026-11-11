@@ -15,7 +15,7 @@ beforeEach(() => { tabs = []; });
 afterEach(() => { for (const tab of tabs) { tab.view.destroy(); tab.binding.dispose(); tab.binding.ydoc.destroy(); } });
 
 const open = (value = seedValue(blocks())) => {
-  const store = createStore({ name: "page", value });
+  const store = createStore({ name: "blockeditor", value });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const view = new pmView.EditorView(document.body.appendChild(document.createElement("div")), { state: pmState.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }), dispatchTransaction: (tr) => binding.dispatch(tr) });
   binding.attach(view);

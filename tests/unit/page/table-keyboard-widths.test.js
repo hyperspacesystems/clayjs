@@ -19,7 +19,7 @@ const tbl = {
 };
 const cols = (view) => blockJson(view.state.doc.child(0)).cols;
 const colWidth = (view, id) => view.dom.querySelector(`col[data-col="${id}"]`).style.width;
-const handle = (view, id = "c1") => view.dom.querySelector(`th[data-col="${id}"] .page-table-resize`);
+const handle = (view, id = "c1") => view.dom.querySelector(`th[data-col="${id}"] .blockeditor-table-resize`);
 const press = (el, type, key, shiftKey = false) => el.dispatchEvent(new KeyboardEvent(type, { key, shiftKey, bubbles: true, cancelable: true }));
 
 const open = () => {
@@ -183,8 +183,8 @@ test("a width set from the keyboard joins the pointer's width, not a second form
   expect(view.dom.querySelector("table").style.width).toBe(`${MAX_WIDTH + 160}px`);
 });
 
-const tableView = (view, index) => [...view.dom.querySelectorAll(".page-table")][index];
-const handleIn = (view, index, id = "c1") => tableView(view, index).querySelector(`th[data-col="${id}"] .page-table-resize`);
+const tableView = (view, index) => [...view.dom.querySelectorAll(".blockeditor-table")][index];
+const handleIn = (view, index, id = "c1") => tableView(view, index).querySelector(`th[data-col="${id}"] .blockeditor-table-resize`);
 const widthIn = (view, index, id = "c1") => tableView(view, index).querySelector(`col[data-col="${id}"]`).style.width;
 const colsAt = (view, index) => blockJson(view.state.doc.child(index)).cols;
 

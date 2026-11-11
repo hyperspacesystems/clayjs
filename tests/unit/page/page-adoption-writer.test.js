@@ -28,16 +28,16 @@ async function load({ writer, delayed, failProvenance = false, neverElects = fal
   const room = { epoch: "e1", seq: 0, writer, conn: 0 };
   const state = () => ({
     epoch: room.epoch, seq: room.seq, writer: room.writer, conn: 0,
-    stores: { page: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
+    stores: { blockeditor: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
   });
   const sent = [];
   const handlersRef = { h: null };
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
-    hostMeta: async () => ({ spec: 1, extensions: ["page", "live-data"], document: null }),
+    hostMeta: async () => ({ spec: 1, extensions: ["blockeditor", "live-data"], document: null }),
     hostSupports: async (name) => {
       if (failProvenance && name === "live-provenance") throw new Error("metadata unavailable");
-      return ["page", "live-data"].includes(name);
+      return ["blockeditor", "live-data"].includes(name);
     },
     hostMetaOutcome: () => "ok",
     querySaveOutcome: () => null,
@@ -45,6 +45,7 @@ async function load({ writer, delayed, failProvenance = false, neverElects = fal
   }));
 
   await jest.unstable_mockModule("../../../src/core/save.js", () => ({
+    claimFailure: () => {},
     savesAdmitted: () => true,
     savePageForce: async () => ({ ok: true, msgType: "success" }),
     savePage: async () => ({ ok: true, msgType: "success" }),
@@ -94,9 +95,9 @@ async function load({ writer, delayed, failProvenance = false, neverElects = fal
   }));
 
   const rendered = renderFromTags([JSON.stringify(value)]);
-  document.head.innerHTML = `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
-  document.body.innerHTML = `<article data-page="1" data-rev="${rendered.rev}">${rendered.html}</article>`;
-  document.querySelector('article[data-page] [data-id="p"]').textContent = "Hello, edited";
+  document.head.innerHTML = `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
+  document.body.innerHTML = `<article data-blockeditor="1" data-rev="${rendered.rev}">${rendered.html}</article>`;
+  document.querySelector('article[data-blockeditor] [data-id="p"]').textContent = "Hello, edited";
 
   window.clayEditMode = true;
   const { live, storeOf, fastLane } = await import("../../../src/plugins/live.js");
@@ -114,7 +115,7 @@ test("a brand-new room: one redundant claim elects this tab, which adopts the ha
   const { page, storeOf, sent, value } = await load({ writer: null, delayed: true });
   const adopted = [];
   const onAdopted = (event) => adopted.push({ detail: event.detail, sent: sent.length });
-  document.addEventListener("clay:page-adopted", onAdopted);
+  document.addEventListener("clay:blockeditor-adopted", onAdopted);
   const key = Object.keys(value.y)[0];
 
   try {
@@ -126,10 +127,10 @@ test("a brand-new room: one redundant claim elects this tab, which adopts the ha
     expect(claims).toHaveLength(1);
     expect(sent[0]).toBe(claims[0]);
     expect(adopted).toEqual([{ detail: { edited: 1, created: 0, deleted: 0, moved: false }, sent: 1 }]);
-    expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello, edited");
+    expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello, edited");
     expect(page.view.editable).toBe(true);
   } finally {
-    document.removeEventListener("clay:page-adopted", onAdopted);
+    document.removeEventListener("clay:blockeditor-adopted", onAdopted);
     page.dispose();
   }
 });
@@ -138,7 +139,7 @@ test("a room whose writer is another tab: no claim is sent and the hand edit is 
   const { page, storeOf, sent } = await load({ writer: "other", delayed: false });
   const adopted = [];
   const onAdopted = (event) => adopted.push(event.detail);
-  document.addEventListener("clay:page-adopted", onAdopted);
+  document.addEventListener("clay:blockeditor-adopted", onAdopted);
 
   try {
     // Another tab holds the seat, so this one neither claims nor adopts: it waits in
@@ -148,9 +149,9 @@ test("a room whose writer is another tab: no claim is sent and the hand edit is 
 
     expect(sent).toEqual([]);
     expect(adopted).toEqual([]);
-    expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello");
+    expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello");
   } finally {
-    document.removeEventListener("clay:page-adopted", onAdopted);
+    document.removeEventListener("clay:blockeditor-adopted", onAdopted);
     page.dispose();
   }
 });
@@ -160,7 +161,7 @@ test("a failed live-provenance lookup settles the no-lane gate and adopts in fil
   try {
     await page.ready;
     expect(sent).toEqual([]);
-    expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello, edited");
+    expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello, edited");
     expect(page.view.editable).toBe(true);
   } finally {
     page.dispose();
@@ -175,7 +176,7 @@ test("a lane that never reports a writer still adopts the hand edit, after the w
     await page.ready;
     expect(Date.now() - started).toBeGreaterThanOrEqual(WRITER_WAIT_MS - 50);
     expect(sent.length).toBeGreaterThan(0);
-    expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello, edited");
+    expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello, edited");
     expect(page.view.editable).toBe(true);
   } finally {
     page.dispose();

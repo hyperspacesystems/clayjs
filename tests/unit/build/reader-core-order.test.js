@@ -27,7 +27,7 @@ const ALWAYS = CORE_WAVES.always;
 const CORE = [...CORE_WAVES.always, ...CORE_WAVES.editOnly];
 // src/loader.js imports these three through MODULES before it resolves a plan.
 const PREFIX = ["core/draft-mode.js", "core/is-edit-mode.js", "lib/region-policy.js"];
-const BODY = `<article class="page" clay="freeze"><p data-id="p1">Keep me</p></article>`;
+const BODY = `<article class="blockeditor" clay="freeze"><p data-id="p1">Keep me</p></article>`;
 
 let built;
 let source;
@@ -145,7 +145,7 @@ async function bootCopy(editMode) {
   const edit = { ...(await import(new URL(manifest.edit, base).href)).default };
   const { boot } = await import(new URL(manifest.entries["loader.js"], base).href);
   let ready = null;
-  await boot("https://clayjs.com/1.0.0", new URLSearchParams("plugins=page"), (clay) => { ready = clay; }, runtime, editMode ? edit : null);
+  await boot("https://clayjs.com/1.0.0", new URLSearchParams("plugins=blockeditor"), (clay) => { ready = clay; }, runtime, editMode ? edit : null);
   return { ready, runtime: mergeManifests(runtime, edit), record: [...recorded] };
 }
 
@@ -156,7 +156,7 @@ async function bootSource(editMode) {
   freshDocument(editMode);
   const { boot } = await import(pathToFileURL(path.join(dir, "loader.js")).href);
   let ready = null;
-  await boot("https://clayjs.com/1.0.0", new URLSearchParams("plugins=page"), (clay) => { ready = clay; }, null);
+  await boot("https://clayjs.com/1.0.0", new URLSearchParams("plugins=blockeditor"), (clay) => { ready = clay; }, null);
   return { ready, record: [...recorded] };
 }
 
@@ -197,7 +197,7 @@ for (const editMode of [false, true]) {
 
   test(`the built ${mode} graph activates every core module before any plugin`, async () => {
     const { record } = await bootCopy(editMode);
-    const plan = resolveModules(new URLSearchParams("plugins=page"), editMode, { isDraftMode: false, hasSap: false });
+    const plan = resolveModules(new URLSearchParams("plugins=blockeditor"), editMode, { isDraftMode: false, hasSap: false });
     const plugins = named(plan.plugins);
 
     expect(plan.core.length).toBeGreaterThanOrEqual(ALWAYS.length);

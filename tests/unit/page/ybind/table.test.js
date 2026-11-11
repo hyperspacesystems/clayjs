@@ -24,7 +24,7 @@ afterEach(() => {
   for (const tab of tabs) { tab.editor.destroy(); tab.mount.remove(); tab.binding.dispose(); tab.binding.ydoc.destroy(); }
 });
 const open = (initial = migrateHybridValues([source])) => {
-  const store = createStore({ name: "page", value: clone(initial) });
+  const store = createStore({ name: "blockeditor", value: clone(initial) });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const mount = document.body.appendChild(document.createElement("div"));
   const editor = new view.EditorView(mount, {

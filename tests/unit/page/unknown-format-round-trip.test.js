@@ -50,7 +50,7 @@ const model = project(blocks);
 const byId = (items) => new Map(items.map((item) => [item.id, item]));
 const html = renderModel(model, { clean });
 const articleOf = (inner, rev = revOf(model)) => {
-  const doc = new DOMParser().parseFromString(`<!DOCTYPE html><html><body><article class="page" data-page="1" data-rev="${rev}">\n${inner}\n</article></body></html>`, "text/html");
+  const doc = new DOMParser().parseFromString(`<!DOCTYPE html><html><body><article class="blockeditor" data-blockeditor="1" data-rev="${rev}">\n${inner}\n</article></body></html>`, "text/html");
   return doc.querySelector("article");
 };
 const article = articleOf(html);
@@ -63,11 +63,11 @@ const b64encode = (text) => {
   for (const byte of new TextEncoder().encode(text)) bin += String.fromCharCode(byte);
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
-const envelopeOf = (value) => `data-clay-page-opaque="1" ${VALUE}="${b64encode(JSON.stringify(value))}"`;
+const envelopeOf = (value) => `data-clay-blockeditor-opaque="1" ${VALUE}="${b64encode(JSON.stringify(value))}"`;
 const envelopeIn = (el) => JSON.parse(b64decode(el.getAttribute(VALUE)));
 
 const throughBytes = () => {
-  const page = `<!DOCTYPE html><html><body><article class="page" data-page="1" data-rev="${revOf(model)}">\n${html}\n</article></body></html>`;
+  const page = `<!DOCTYPE html><html><body><article class="blockeditor" data-blockeditor="1" data-rev="${revOf(model)}">\n${html}\n</article></body></html>`;
   const first = new DOMParser().parseFromString(page, "text/html");
   const bytes = "<!DOCTYPE html>" + first.documentElement.outerHTML;
   return new DOMParser().parseFromString(bytes, "text/html").querySelector("article");
@@ -142,11 +142,11 @@ test("the projection, the article's bytes and the projection again are one recor
 
 test("a file stripped of its page tags is adopted, edited and saved keeping every record and revision", () => {
   const file = new DOMParser().parseFromString(
-    `<!DOCTYPE html><html><head><script type="application/json" merge="page" clay="live">${JSON.stringify(RECORD)}</script></head><body><article data-page="1" data-rev="${revOf(model)}">\n${html}\n</article></body></html>`,
+    `<!DOCTYPE html><html><head><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(RECORD)}</script></head><body><article data-blockeditor="1" data-rev="${revOf(model)}">\n${html}\n</article></body></html>`,
     "text/html",
   );
-  for (const tag of [...file.querySelectorAll('script[merge="page"]')]) tag.remove();
-  expect(file.querySelector('script[merge="page"]')).toBeNull();
+  for (const tag of [...file.querySelectorAll('script[merge="blockeditor"]')]) tag.remove();
+  expect(file.querySelector('script[merge="blockeditor"]')).toBeNull();
   const edited = file.querySelector("article");
   edited.querySelector('[data-id="z"]').textContent = "Nothing unfamiliar here, edited by hand";
 
@@ -304,7 +304,7 @@ test("a saved file with newer content reopens through the seed and takes a neigh
   expect(canon(byId(project(seeded)).get("w"))).toBe(canon(byId(newer).get("w")));
   expect(canon(byId(project(seeded)).get("a"))).toBe(canon(byId(newer).get("a")));
 
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(value)) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(value)) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = new pmView.EditorView(mount, {

@@ -22,12 +22,12 @@ const BLOCKS = [{ id: "p", t: "paragraph", text: "Hello" }];
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const flushAsync = async (turns = 60) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
 
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const handEdit = (doc) => { doc.querySelector('article[data-page] [data-id="p"]').textContent = "Hello, edited by hand"; };
+const handEdit = (doc) => { doc.querySelector('article[data-blockeditor] [data-id="p"]').textContent = "Hello, edited by hand"; };
 
 const marks = [];
 const cleanups = [];
@@ -45,7 +45,7 @@ async function open({
   html = articleHtml(),
   head = tagHtml(seedValue(BLOCKS)),
   edit = null,
-  extensions = ["page"],
+  extensions = ["blockeditor"],
   writer = null,
   readerOwns = false,
   holdFails = false,
@@ -67,7 +67,7 @@ async function open({
     seq: room.seq,
     writer: room.writer,
     conn: 0,
-    stores: { page: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
+    stores: { blockeditor: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
   });
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
@@ -79,6 +79,7 @@ async function open({
   }));
 
   await jest.unstable_mockModule("../../../src/core/save.js", () => ({
+    claimFailure: () => {},
     savePageForce: async () => ({ ok: true, msgType: "success" }),
     savePage: async () => ({ ok: true, msgType: "success" }),
     savePageThrottled: () => {},
@@ -154,12 +155,12 @@ async function open({
 
   const { live } = await import("../../../src/plugins/live.js");
   window.clay = { live: (name) => live(name) };
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   const { claim, ownerOf } = await import("../../../src/page/runtime-owner.js");
   let release = null;
   if (readerOwns) {
     release = claim(article, "reader");
-    article.innerHTML = '<div class="page-shell"><p>Current owner content</p></div>';
+    article.innerHTML = '<div class="blockeditor-shell"><p>Current owner content</p></div>';
   }
   const { page } = await import("../../../src/plugins/page.js");
 
@@ -167,7 +168,7 @@ async function open({
   const frame = (key, update) => {
     room.seq += 1;
     handlersRef.h.frame({
-      epoch: room.epoch, seq: room.seq, name: "page", from: "other", n: room.seq,
+      epoch: room.epoch, seq: room.seq, name: "blockeditor", from: "other", n: room.seq,
       ops: [{ op: "set", path: ["y", key], value: Y.toBase64(update) }],
     });
   };
@@ -192,7 +193,7 @@ test("a failed adoption gives up the binding, its subscriptions and the article 
   const { page, article, ownerOf, registrations, bindings, frame } = await open({
     edit: handEdit,
     holdFails: true,
-    extensions: ["page", "live-data"],
+    extensions: ["blockeditor", "live-data"],
   });
   try {
     await page.ready;
@@ -200,7 +201,7 @@ test("a failed adoption gives up the binding, its subscriptions and the article 
 
     expect(page.status).toMatchObject({ phase: "blocked", reason: "adoption-error" });
     expect(page.view.isDestroyed).toBe(true);
-    expect(article.querySelectorAll(".page-shell")).toHaveLength(0);
+    expect(article.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
     expect(article.textContent.trim()).toBe("Hello");
     // The save participant and the claim went with the view.
     expect(registrations.filter((entry) => entry.id === "page:live" && !entry.disposed)).toEqual([]);
@@ -226,7 +227,7 @@ test("a failed adoption gives up the binding, its subscriptions and the article 
     // The replacement listener went too: a sync frame cannot set a notice over an
     // article this tab no longer owns.
     document.dispatchEvent(new CustomEvent("clay:sync-applied", {
-      detail: { html: '<!DOCTYPE html><html><head></head><body><article data-page="1" data-rev="zzz"><p>Someone replaced this page</p></article></body></html>' },
+      detail: { html: '<!DOCTYPE html><html><head></head><body><article data-blockeditor="1" data-rev="zzz"><p>Someone replaced this page</p></article></body></html>' },
     }));
     await flushAsync();
     expect(document.body.textContent).not.toContain("changed outside the editor");
@@ -248,8 +249,8 @@ test("a refused article claim leaves the owner's article as it is and says so", 
     // The runtime that held the article keeps it, and what it mounted is untouched.
     expect(ownerOf(article)).toBe("reader");
     expect(article.textContent).toBe("Current owner content");
-    expect(article.querySelectorAll(".page-shell")).toHaveLength(1);
-    expect(document.querySelectorAll(".page-editor")).toHaveLength(0);
+    expect(article.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
+    expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(0);
     noInput(page);
     page.dispose();
     expect(ownerOf(article)).toBe("reader");
@@ -269,7 +270,7 @@ test("a boot that fails after the join reports the error phase, never nothing", 
 
     expect(result).toMatchObject({ phase: "error", reason: "boot-failed" });
     expect(page.status).toMatchObject({ phase: "error", reason: "boot-failed" });
-    expect(article.querySelectorAll(".page-shell")).toHaveLength(0);
+    expect(article.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
     expect(article.textContent.trim()).toBe("Hello");
     noInput(page);
   } finally {

@@ -15,7 +15,7 @@ import { EditingSender } from "../../src/sync/editing-sender.js";
  */
 
 const PAGE = {
-  kind: "page",
+  kind: "blockeditor",
   v: 1,
   epoch: "room-7",
   generation: 0,
@@ -372,7 +372,7 @@ describe("the page's caret at the gate a leave closes", () => {
 
   // The page editor this tab mounted, publishing through the document's one store.
   function page() {
-    const store = createStore({ name: "page", value: seedValue([{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }]) });
+    const store = createStore({ name: "blockeditor", value: seedValue([{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }]) });
     const binding = createYPageBinding({ store });
     const editor = new EditorView(document.body.appendChild(document.createElement("div")), {
       state: EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }),
@@ -393,7 +393,7 @@ describe("the page's caret at the gate a leave closes", () => {
     return one;
   }
 
-  const pagePosts = (sent) => sent.filter((body) => body.editing && body.editing.kind === "page");
+  const pagePosts = (sent) => sent.filter((body) => body.editing && body.editing.kind === "blockeditor");
 
   // A page caret on the wire, then the exit: the participant's quiesce and its clear.
   async function leaving() {
@@ -444,7 +444,7 @@ describe("the page's caret at the gate a leave closes", () => {
     // The clear went with the quiesce, so the target the caret still holds goes again.
     expect(pagePosts(sent)).toHaveLength(2);
     expect(pagePosts(sent)[1].editing).toEqual(one.awareness.target);
-    expect(sent.at(-1)).toMatchObject({ v: 1, session: "token-a", editing: { kind: "page", epoch: "id:doc-1" } });
+    expect(sent.at(-1)).toMatchObject({ v: 1, session: "token-a", editing: { kind: "blockeditor", epoch: "id:doc-1" } });
   });
 
   test("a committed exit leaves the last word a clear (pa1 commit)", async () => {
@@ -577,7 +577,7 @@ describe("one stream and one sender in an editor", () => {
 
   const HTML_CLAY = {
     extensions: [
-      "conditional", "data-read", "data-write", "page", "page-awareness-v1", "receipts",
+      "conditional", "data-read", "data-write", "blockeditor", "blockeditor-awareness-v1", "receipts",
       "record-awareness-v1", "sync", "sync-worker", "upload", "wire",
     ],
     document: { awareness: { transport: "broadcast", scope: "id:doc-1", label: "This computer" } },

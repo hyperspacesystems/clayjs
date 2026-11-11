@@ -23,7 +23,7 @@ const decision = (write) => {
   const ifMatch = stampFor(write);
   if (ifMatch !== undefined && !ifMatchSatisfied(ifMatch, write.current)) return "412";
   try {
-    return checkPageWriteAdmission({ currentHtml: write.current, html: write.body, ifMatch, pageWrite: write.pageWrite ?? null, createDocument });
+    return checkPageWriteAdmission({ currentHtml: write.current, html: write.body, ifMatch, blockeditorWrite: write.blockeditorWrite ?? null, createDocument });
   } catch (error) {
     if (error instanceof PageConversionError) return error.reason;
     throw error;
@@ -35,7 +35,7 @@ const initialOf = (write) => createRooms().reservePageInitial("k", {
   currentHtml: write.current,
   html: write.body,
   ifMatch: stampFor(write),
-  pageWrite: write.pageWrite ?? null,
+  blockeditorWrite: write.blockeditorWrite ?? null,
   createDocument,
 });
 
@@ -83,12 +83,12 @@ test("seedLineage reports the client the seed itself carries", () => {
 test("a first write over a page document without a factory throws a TypeError", () => {
   const currentHtml = fileOf(vectors.seeds.find((entry) => entry.name === "irregular-entities"));
   const write = byName.get("first-edit");
-  expect(() => createRooms().reservePageInitial("k", { nodeId: 1, currentHtml, html: write.body, ifMatch: documentEtag(currentHtml), pageWrite: write.pageWrite })).toThrow(TypeError);
+  expect(() => createRooms().reservePageInitial("k", { nodeId: 1, currentHtml, html: write.body, ifMatch: documentEtag(currentHtml), blockeditorWrite: write.blockeditorWrite })).toThrow(TypeError);
 });
 
 test("a refused reservation leaves none behind", () => {
   const rooms = createRooms();
   const write = byName.get("stale-seed-edit");
-  expect(reasonOf(() => rooms.reservePageInitial("k", { nodeId: 1, currentHtml: write.current, html: write.body, ifMatch: stampFor(write), pageWrite: write.pageWrite, createDocument }))).toBe("seed-lineage");
+  expect(reasonOf(() => rooms.reservePageInitial("k", { nodeId: 1, currentHtml: write.current, html: write.body, ifMatch: stampFor(write), blockeditorWrite: write.blockeditorWrite, createDocument }))).toBe("seed-lineage");
   expect(rooms.pageReserved("k")).toBe(false);
 });

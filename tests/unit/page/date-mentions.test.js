@@ -75,8 +75,8 @@ const blockPos = (view, id) => {
 };
 const endOf = (view, id) => blockPos(view, id) + 1 + view.state.doc.nodeAt(blockPos(view, id)).textContent.length;
 const caret = (view, pos) => view.dispatch(view.state.tr.setSelection(pmState.TextSelection.create(view.state.doc, pos)));
-const pickerEl = () => document.querySelector(".page-mention-picker");
-const options = () => [...document.querySelectorAll(".page-mention-picker .page-menu-item")];
+const pickerEl = () => document.querySelector(".blockeditor-mention-picker");
+const options = () => [...document.querySelectorAll(".blockeditor-mention-picker .blockeditor-menu-item")];
 const keys = (view, key) => view.dom.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
 const start = (view) => runPageCommand(view, "dates", {});
 // The date the command just wrote, read back from the record rather than predicted, so the
@@ -84,7 +84,7 @@ const start = (view) => runPageCommand(view, "dates", {});
 const written = (view, id) => String(/^\D*(\d{4}-\d{2}-\d{2}) /.exec(record(view, id).c)?.[1] ?? "");
 
 function articleOf(html, rev) {
-  const parsed = new DOMParser().parseFromString(`<!DOCTYPE html><html><body><article data-page="1" data-rev="${rev}">\n${html}\n</article></body></html>`, "text/html");
+  const parsed = new DOMParser().parseFromString(`<!DOCTYPE html><html><body><article data-blockeditor="1" data-rev="${rev}">\n${html}\n</article></body></html>`, "text/html");
   return parsed.querySelector("article");
 }
 // The page value a document opens with, from the projection's own bytes.
@@ -155,7 +155,7 @@ test("the date is ISO text with the date mark, in a paragraph and in a table cel
   // The article states the day twice, as the text and as `datetime`, inside a `time`.
   const saved = blockMap(view.state.doc);
   const article = articleOf(renderModel(project(saved)), revOf(project(saved)));
-  expect(article.innerHTML).toContain(`<time datetime="${date}" data-page-date=""`);
+  expect(article.innerHTML).toContain(`<time datetime="${date}" data-blockeditor-date=""`);
   const reopened = reopen(saved).find((item) => item.id === "a");
   expect(reopened.c).toBe(`Hello ${date} `);
   expect(reopened.m).toEqual(runsOf(saved.a.m));
@@ -247,7 +247,7 @@ test("an older writer's neighbour edit keeps the date and its mark", () => {
     a: { t: "paragraph", pos: "00000001", c: "Due 2024-02-29", m: [[4, ""], [10, DATE_KEY(date)]] },
     z: { t: "paragraph", pos: NEIGHBOUR.pos, c: NEIGHBOUR.c },
   }));
-  const store = createStore({ name: "page", value: seed(blocks) });
+  const store = createStore({ name: "blockeditor", value: seed(blocks) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   cleanups.push(() => { binding.dispose(); binding.ydoc.destroy(); });
   const view = bindingView(binding);
@@ -262,7 +262,7 @@ test("an older writer's neighbour edit keeps the date and its mark", () => {
   expect(after.z.c).toBe(NEIGHBOUR.c + NEIGHBOUR.add);
 
   const article = articleOf(renderModel(project(after)), revOf(project(after)));
-  expect(article.innerHTML).toContain(`<time datetime="${date}" data-page-date=""`);
+  expect(article.innerHTML).toContain(`<time datetime="${date}" data-blockeditor-date=""`);
   expect(article.textContent).toContain("2024-02-29");
   expect(after.a.c.slice(0, 4)).toBe("Due ");
 });
@@ -282,10 +282,10 @@ test("view, edit, view leaves no picker and no listener behind", async () => {
   setEditorActive(view, true);
   caret(view, endOf(view, "a"));
   expect(await start(view)).toEqual({ ok: true, picker: true });
-  expect(document.querySelectorAll(".page-mention-picker")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-mention-picker")).toHaveLength(1);
   keys(view, "ArrowDown");
   keys(view, "Enter");
-  expect(document.querySelectorAll(".page-mention-picker")).toHaveLength(0);
+  expect(document.querySelectorAll(".blockeditor-mention-picker")).toHaveLength(0);
   expect(record(view, "a").c).toMatch(/^Hello \d{4}-\d{2}-\d{2} $/);
   expect(view.dom.hasAttribute("aria-activedescendant")).toBe(false);
   expect(schema.marks.date.spec.excludes).toBe("mention date link");
@@ -297,7 +297,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 test("a gate that refuses writes no date, marks nothing and leaves no undo entry", async () => {
   const view = open();
   const asked = [];
-  view.runFormatCommand = async () => { asked.push(true); return { status: "upgrade-required", code: "page-format-upgrade-required" }; };
+  view.runFormatCommand = async () => { asked.push(true); return { status: "upgrade-required", code: "blockeditor-format-upgrade-required" }; };
   caret(view, endOf(view, "a"));
   expect(await start(view)).toEqual({ ok: true, picker: true });
   const before = view.state.doc;
@@ -315,7 +315,7 @@ test("a gate that refuses writes no date, marks nothing and leaves no undo entry
 
   // The answer is the gate's own refusal, so a caller reads the code rather than a date.
   expect(await runFormatted(view, () => { throw new Error("a refused command writes nothing"); }))
-    .toEqual({ ok: false, code: "page-format-upgrade-required", retry: false });
+    .toEqual({ ok: false, code: "blockeditor-format-upgrade-required", retry: false });
 });
 
 test("the gate is asked once per date, and the written day is its answer", async () => {
@@ -378,12 +378,12 @@ test("a date waiting on activation refuses the exit by name and applies once act
   options()[0].click();
   await settle();
   expect(release).not.toBeNull();
-  expect(pendingIds()).toEqual(["page-format-command"]);
+  expect(pendingIds()).toEqual(["blockeditor-format-command"]);
 
   const refused = await runSaveBarrier({ timeoutMs: 1000 });
   expect(refused).toMatchObject({ ok: false, code: "pending-input" });
-  expect(refused.pending).toEqual(["page-format-command"]);
-  expect(document.querySelector(".page-mention-picker")).toBeNull();
+  expect(refused.pending).toEqual(["blockeditor-format-command"]);
+  expect(document.querySelector(".blockeditor-mention-picker")).toBeNull();
   expect(record(view, "a").c).toBe("Hello ");
 
   release();

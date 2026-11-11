@@ -18,7 +18,7 @@ const fake = () => {
   const calls = [];
   const run = (code, lang) => {
     calls.push([code, lang]);
-    return Promise.resolve([[{ content: code.slice(0, 5), offset: 0, color: "var(--page-code-token-keyword)", fontStyle: 0 }]]);
+    return Promise.resolve([[{ content: code.slice(0, 5), offset: 0, color: "var(--blockeditor-code-token-keyword)", fontStyle: 0 }]]);
   };
   return { calls, run };
 };
@@ -38,7 +38,7 @@ test("a code block with a language gets colours without a document change or an 
   await until(() => calls.length === 1);
   expect(calls).toEqual([["const x = 1", "javascript"]]);
   expect(decos(view).map((d) => [d.from, d.to])).toEqual([[1, 6]]);
-  expect(decos(view)[0].type.attrs.style).toBe("color: var(--page-code-token-keyword)");
+  expect(decos(view)[0].type.attrs.style).toBe("color: var(--blockeditor-code-token-keyword)");
   expect(view.state.doc).toBe(doc);
   expect(history.undoDepth(view.state)).toBe(depth);
 });
@@ -64,7 +64,7 @@ test("typing highlights once after the pause, not on every keystroke", async () 
 
 test("a result for text that has since changed is dropped", async () => {
   let release;
-  const run = () => new Promise((r) => { release = () => r([[{ content: "abc", offset: 0, color: "var(--page-code-token-keyword)", fontStyle: 0 }]]); });
+  const run = () => new Promise((r) => { release = () => r([[{ content: "abc", offset: 0, color: "var(--blockeditor-code-token-keyword)", fontStyle: 0 }]]); });
   const view = editor([["c", "code_block", "abc", { lang: "javascript" }]], { highlight: { tokenize: run, delay: 0 } });
   await wait();
   select(view, posOf(view, "c"));
@@ -78,7 +78,7 @@ test("the picker sets the language as one undo step, and Plain text clears the c
   const { calls, run } = fake();
   const view = editor([["c", "code_block", "print(1)"]], { highlight: { tokenize: run, delay: 0 } });
   view.coordsAtPos = () => ({ left: 0, right: 0, top: 0, bottom: 0 });
-  const picker = code(view).querySelector("select.page-code-lang");
+  const picker = code(view).querySelector("select.blockeditor-code-lang");
   expect(picker.value).toBe("");
   picker.value = "python";
   picker.dispatchEvent(new Event("change"));
@@ -97,16 +97,16 @@ test("the picker sets the language as one undo step, and Plain text clears the c
 test("the real Pierre bundle loads on demand and colours JavaScript keywords", async () => {
   const lines = await tokenize("const x = 1 // note", "javascript");
   const byText = Object.fromEntries(lines.flat().map((t) => [t.content.trim(), t.color]));
-  expect(byText.const).toBe("var(--page-code-token-keyword)");
-  expect(byText["// note"]).toBe("var(--page-code-token-comment)");
-  expect(byText["1"]).toBe("var(--page-code-token-constant)");
+  expect(byText.const).toBe("var(--blockeditor-code-token-keyword)");
+  expect(byText["// note"]).toBe("var(--blockeditor-code-token-comment)");
+  expect(byText["1"]).toBe("var(--blockeditor-code-token-constant)");
 });
 
 test("the real Pierre bundle colours a Python parameter and reports offsets", async () => {
   const code = "def f(a):\n  return a";
   const tokens = (await tokenize(code, "python")).flat();
-  expect(tokens.find((t) => t.content.trim() === "def").color).toBe("var(--page-code-token-keyword)");
-  expect(tokens.find((t) => t.content.trim() === "a").color).toBe("var(--page-code-token-parameter)");
+  expect(tokens.find((t) => t.content.trim() === "def").color).toBe("var(--blockeditor-code-token-keyword)");
+  expect(tokens.find((t) => t.content.trim() === "a").color).toBe("var(--blockeditor-code-token-parameter)");
   const ret = tokens.find((t) => t.content.trim() === "return");
   expect(ret.offset).toBe(code.indexOf("return"));
 });
@@ -177,7 +177,7 @@ describe("review round 1", () => {
 
 test("typing in a coloured block keeps its colours until the new ones arrive, so it never flashes uncoloured", async () => {
   const held = [];
-  const run = (code) => new Promise((r) => held.push(() => r([[{ content: code.slice(0, 5), offset: 0, color: "var(--page-code-token-keyword)", fontStyle: 0 }]])));
+  const run = (code) => new Promise((r) => held.push(() => r([[{ content: code.slice(0, 5), offset: 0, color: "var(--blockeditor-code-token-keyword)", fontStyle: 0 }]])));
   const view = editor([["c", "code_block", "const x = 1", { lang: "javascript" }]], { highlight: { tokenize: run, delay: 0 } });
   await until(() => held.length === 1);
   held.shift()();

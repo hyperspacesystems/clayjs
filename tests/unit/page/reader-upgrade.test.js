@@ -62,7 +62,7 @@ async function until(predicate, ms = 2000) {
 const FILE = (inner, { version = "1.0.0", rev = "r1", title = "Reader" } = {}) =>
   `<!doctype html><html><head>${
     version ? `<meta name="hyper-version" content="${version}">` : ""
-  }<title>${title}</title></head><body><article class="page" clay="freeze" data-page="1" data-rev="${rev}">${inner}</article></body></html>`;
+  }<title>${title}</title></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}">${inner}</article></body></html>`;
 
 const load = (html) => {
   document.documentElement.innerHTML = new DOMParser().parseFromString(html, "text/html").documentElement.innerHTML;

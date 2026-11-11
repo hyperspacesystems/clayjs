@@ -12,7 +12,7 @@ const artifact = (label) => ({
 const page = (rev, label, state = { count: 1 }) => {
   const value = seedValue([{ id: "tool-1", t: "tool", attrs: { artifact: artifact(label), rev, state } }]);
   const rendered = renderFromTags([JSON.stringify(value)]);
-  return `<!DOCTYPE html><html><head><script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script><script type="application/json" merge="page.tools" clay="live">${JSON.stringify({ "tool-1": { [rev]: state } })}</script></head><body><article data-page="1" data-rev="${rendered.rev}">${rendered.html}</article></body></html>`;
+  return `<!DOCTYPE html><html><head><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script><script type="application/json" merge="blockeditor.tools" clay="live">${JSON.stringify({ "tool-1": { [rev]: state } })}</script></head><body><article data-blockeditor="1" data-rev="${rendered.rev}">${rendered.html}</article></body></html>`;
 };
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 Object.defineProperty(globalThis, "crypto", { value: webcrypto, configurable: true });
@@ -25,7 +25,7 @@ test("saved tools mount for readers, stay local, and remount on revision changes
   expect(first.querySelector("output").textContent).toBe("1");
   first.querySelector("button").click();
   expect(first.querySelector("output").textContent).toBe("2");
-  expect(JSON.parse(document.querySelector('script[merge="page.tools"]').textContent)["tool-1"].r1.count).toBe(1);
+  expect(JSON.parse(document.querySelector('script[merge="blockeditor.tools"]').textContent)["tool-1"].r1.count).toBe(1);
   const button = first.querySelector("button");
   document.dispatchEvent(new CustomEvent("clay:sync-applied", { detail: { html: page("r1", "First") } }));
   await settle();
@@ -49,7 +49,7 @@ test("decode failure leaves the saved fallback", async () => {
 });
 
 test("a page without tool sections does not load the decoder", () => {
-  document.body.innerHTML = '<article data-page="1"><p>Plain</p></article>';
+  document.body.innerHTML = '<article data-blockeditor="1"><p>Plain</p></article>';
   const stop = startPageView(document);
   expect(document.querySelector("article").textContent).toBe("Plain");
   stop();

@@ -9,7 +9,7 @@ import { merge3, mergeJson } from 'hyper-morph';
 import { mergePageModels } from '../../page/merge.js';
 import { documentTitle } from '../../page/document-title.js';
 
-const PAGE = /^page(\.[0-9]+)?$/;
+const PAGE = /^blockeditor(\.[0-9]+)?$/;
 const TITLE_MODE = 'clay-seo-title-mode';
 const NAME = /^[A-Za-z0-9_.:-]{1,64}$/;
 const attr = (node, name) => node.attrs.find((item) => item.name === name)?.value;
@@ -25,7 +25,7 @@ function provenanceOf(room, store) {
 export function captureCheckpoint(room, { nodeId, roomKey }) {
   if (!room || room.key !== roomKey || String(room.nodeId) !== String(nodeId)) throw new TypeError('The room identity changed');
   const { epoch, seq } = room;
-  const generation = room.pageTransition?.id ?? null;
+  const generation = room.blockeditorTransition?.id ?? null;
   const stores = [...room.stores].filter(([, store]) => !store.ephemeral).map(([name, store]) => {
     const text = serializeLive(store.value);
     return { name, value: cloneJson(store.value), text, liveAt: stampOf(epoch, seq, text), provenance: provenanceOf(room, store) };
@@ -51,7 +51,7 @@ function inspect(html) {
     if (!blocked && node.parentNode === head && node.tagName === 'meta' && (attr(node, 'name') ?? '').trim().toLowerCase() === TITLE_MODE) {
       titleModes.push(attr(node, 'content'));
     }
-    if (!blocked && node.tagName === 'article' && attr(node, 'data-page') !== undefined) articles.push(node);
+    if (!blocked && node.tagName === 'article' && attr(node, 'data-blockeditor') !== undefined) articles.push(node);
     if (!blocked && node.tagName === 'script' && attr(node, 'src') === undefined &&
       (attr(node, 'clay') ?? '').split(/\s+/).includes('live')) {
       const type = (attr(node, 'type') ?? '').split(';')[0].trim().toLowerCase();
@@ -81,8 +81,8 @@ function startTag(html, node, store) {
 }
 
 function projection(capture) {
-  const page = capture.stores.find((store) => store.name === 'page');
-  if (!page || capture.stores.some((store) => PAGE.test(store.name) && store.name !== 'page')) return { kind: 'refused', reason: 'invalid-document' };
+  const page = capture.stores.find((store) => store.name === 'blockeditor');
+  if (!page || capture.stores.some((store) => PAGE.test(store.name) && store.name !== 'blockeditor')) return { kind: 'refused', reason: 'invalid-document' };
   try {
     const blocks = blocksFromYValue(page.value);
     if (Object.values(blocks).some((block) => block.t === 'tool' || (block.t === 'table' && !Object.keys(block.cols ?? {}).length))) {
@@ -91,8 +91,8 @@ function projection(capture) {
     return { kind: 'ok', blocks };
   } catch (error) {
     if (error instanceof YDecodeError) {
-      return { kind: 'refused', reason: error.code === 'incomplete-update' || error.code === 'unresolved-update' ? 'incomplete-page'
-        : error.code === 'unsupported-content' ? 'unknown-page-content' : 'invalid-document' };
+      return { kind: 'refused', reason: error.code === 'incomplete-update' || error.code === 'unresolved-update' ? 'incomplete-blockeditor'
+        : error.code === 'unsupported-content' ? 'unknown-blockeditor-content' : 'invalid-document' };
     }
     throw error;
   }
@@ -234,7 +234,7 @@ export function renderCheckpoint(currentHtml, capture, { createDocument, recover
     if (!recovery && found.kind === 'adopt' && capture.adopted !== found.A && !holdsEdit(found, decoded.blocks, doc)) return { kind: 'refused', reason: 'needs-adoption' };
     const current = currentHtml.slice(articleLoc.startTag.endOffset, articleLoc.endTag.startOffset);
     rendered = renderBlocks(decoded.blocks, { clean: fragmentCleaner(doc) });
-    if (current !== rendered.html && holdsEnvelope(current)) return { kind: 'refused', reason: 'unknown-page-content' };
+    if (current !== rendered.html && holdsEnvelope(current)) return { kind: 'refused', reason: 'unknown-blockeditor-content' };
   }
   catch (error) {
     if (error instanceof YDecodeError || error instanceof SyntaxError) return { kind: 'refused', reason: 'invalid-document' };

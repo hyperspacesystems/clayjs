@@ -93,9 +93,9 @@ function many(n) {
 }
 
 const shell = (view) => view.dom.parentElement;
-const grip = (view) => shell(view).querySelector(".page-grip");
-const dropLine = (view) => shell(view).querySelector(".page-drop");
-const plus = (view) => shell(view).querySelector(".page-plus");
+const grip = (view) => shell(view).querySelector(".blockeditor-grip");
+const dropLine = (view) => shell(view).querySelector(".blockeditor-drop");
+const plus = (view) => shell(view).querySelector(".blockeditor-plus");
 const pointer = (type, x, y) => {
   const e = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
   Object.defineProperty(e, "pointerId", { value: 1 });
@@ -114,8 +114,8 @@ function drag(view, from, to) {
   slide(view, 5, to);
 }
 const drop = (view) => grip(view).dispatchEvent(pointer("pointerup", 0, 0));
-const dropY = (view) => parseFloat(dropLine(view).style.getPropertyValue("--page-drop-y"));
-const dropX = (view) => parseFloat(dropLine(view).style.getPropertyValue("--page-drop-x"));
+const dropY = (view) => parseFloat(dropLine(view).style.getPropertyValue("--blockeditor-drop-y"));
+const dropX = (view) => parseFloat(dropLine(view).style.getPropertyValue("--blockeditor-drop-x"));
 
 const FOUR = [["a", "paragraph", "A"], ["b", "paragraph", "B"], ["c", "paragraph", "C"], ["d", "paragraph", "D"]];
 
@@ -131,7 +131,7 @@ test("a hundred pointer moves before one frame cost one hover read, one paint pa
   let paints = 0;
   const setProperty = plus(view).style.setProperty.bind(plus(view).style);
   plus(view).style.setProperty = (name, value, priority) => {
-    if (name === "--page-text-left") paints++;
+    if (name === "--blockeditor-text-left") paints++;
     setProperty(name, value, priority);
   };
   builds.n = 0;
@@ -148,7 +148,7 @@ test("a hundred pointer moves before one frame cost one hover read, one paint pa
   expect(builds.n).toBe(1);
   expect(paints).toBe(1);
   expect(counter.live.size).toBe(0);
-  expect(plus(view).style.getPropertyValue("--page-plus-top")).toBe(`${3 * ROW + 10}px`);
+  expect(plus(view).style.getPropertyValue("--blockeditor-plus-top")).toBe(`${3 * ROW + 10}px`);
 });
 
 test("a drag frame on 2,000 blocks reads rectangles around the pointer, not around the document", async () => {

@@ -59,7 +59,7 @@ const open = (blocks, { load = realLoad } = {}) => {
 };
 
 const openTab = (initial, { load = realLoad } = {}) => {
-  const store = createStore({ name: "page", value: initial });
+  const store = createStore({ name: "blockeditor", value: initial });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const calls = [];
   const holder = { view: null };
@@ -86,16 +86,16 @@ const slash = (view) => {
   view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.content.size - 1)));
   const { from, to } = view.state.selection;
   view.someProp("handleTextInput", (handler) => handler(view, from, to, "/", () => view.state.tr.insertText("/", from, to)));
-  return view.dom.parentElement.querySelector(".page-menu");
+  return view.dom.parentElement.querySelector(".blockeditor-menu");
 };
-const pick = (menu, label) => [...menu.querySelectorAll(".page-menu-item")].find((row) => row.querySelector(".page-menu-label")?.textContent === label);
+const pick = (menu, label) => [...menu.querySelectorAll(".blockeditor-menu-item")].find((row) => row.querySelector(".blockeditor-menu-label")?.textContent === label);
 
 test("a text-only document's editor boots without loading the table view part", async () => {
   const { view, calls } = open({ p: PARAGRAPH });
   expect(calls).toEqual([]);
   await flush();
   expect(calls).toEqual([]);
-  expect(view.dom.querySelector(".page-table")).toBe(null);
+  expect(view.dom.querySelector(".blockeditor-table")).toBe(null);
 });
 
 test("opening the slash menu loads nothing", async () => {
@@ -109,8 +109,8 @@ test("opening the slash menu loads nothing", async () => {
 test("a document with a table boots with the table view part loaded", async () => {
   const { view, calls } = open({ tbl: TABLE });
   expect(calls).toEqual(["table"]);
-  expect(view.dom.querySelector(".page-table")).toBe(null);
-  expect(await waitFor(() => view.dom.querySelector(".page-table"))).toBe(true);
+  expect(view.dom.querySelector(".blockeditor-table")).toBe(null);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
   expect(view.dom.querySelectorAll("thead th").length).toBe(2);
 });
 
@@ -120,7 +120,7 @@ test("inserting a table into a text-only document inserts one table and loads th
   pick(menu, "Table").click();
   expect(tables(view)).toHaveLength(1);
   expect(calls).toEqual(["table"]);
-  expect(await waitFor(() => view.dom.querySelector(".page-table"))).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
   expect(calls).toEqual(["table"]);
   expect(tables(view)).toHaveLength(1);
 });
@@ -137,7 +137,7 @@ test("a table that arrives from a peer loads the view part", async () => {
   const base = b.store.authoritative;
   b.store.rebase({ ...base, y: { ...base.y, "peer-1": value } }, { source: "remote", frame: { ops: [{ op: "set", path: ["y", "peer-1"], value }] } });
   expect(b.calls).toEqual(["table"]);
-  expect(await waitFor(() => b.view.dom.querySelector(".page-table"))).toBe(true);
+  expect(await waitFor(() => b.view.dom.querySelector(".blockeditor-table"))).toBe(true);
   expect(tables(b.view)).toHaveLength(1);
 });
 
@@ -145,7 +145,7 @@ test("a failing load leaves the text editable and the table's cell text intact",
   const { view } = open({ p: PARAGRAPH, tbl: TABLE }, { load: () => Promise.reject(new Error("no network")) });
   await flush();
   await flush();
-  expect(view.dom.querySelector(".page-table")).toBe(null);
+  expect(view.dom.querySelector(".blockeditor-table")).toBe(null);
   expect(view.editable).toBe(true);
   expect(tables(view)).toHaveLength(1);
   expect(tables(view)[0].textContent).toBe("A10B2");
@@ -162,9 +162,9 @@ test("an install while composing waits for compositionend", async () => {
   release();
   await flush();
   await flush();
-  expect(view.dom.querySelector(".page-table")).toBe(null);
+  expect(view.dom.querySelector(".blockeditor-table")).toBe(null);
   view.dom.dispatchEvent(new CompositionEvent("compositionend"));
-  expect(await waitFor(() => view.dom.querySelector(".page-table"))).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
 });
 
 test("selection, the undo stack and the save output are the same before and after the view part installs", async () => {
@@ -181,7 +181,7 @@ test("selection, the undo stack and the save output are the same before and afte
   });
   const before = snap();
   release();
-  expect(await waitFor(() => view.dom.querySelector(".page-table"))).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
   expect(snap()).toEqual(before);
   expect(history.undo(view.state)).toBe(true);
 });
@@ -197,7 +197,7 @@ test("after relaying both ways, two peers have the same projection", async () =>
   };
   pick(slash(a.view), "Table").click();
   send(a, b, "peer-1");
-  await waitFor(() => b.view.dom.querySelector(".page-table"));
+  await waitFor(() => b.view.dom.querySelector(".blockeditor-table"));
   b.view.dispatch(b.view.state.tr.insertText("!", 2));
   send(b, a, "peer-2");
   await flush();

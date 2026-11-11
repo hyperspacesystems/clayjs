@@ -35,8 +35,8 @@ const page = (spec = [["p", "paragraph", "P"], ["e", "paragraph", ""], ["z", "pa
 };
 const items = (view) => mediaKey.getState(view.state).items;
 const names = (view) => { const r = []; view.state.doc.forEach((n) => r.push(n.type.name === "image" || n.type.name === "file" ? n.attrs.src : n.textContent)); return r; };
-const widget = (view) => view.dom.querySelector(".page-upload");
-const click = (view, act) => view.dom.querySelector(`.page-upload-btn[data-act="${act}"]`).click();
+const widget = (view) => view.dom.querySelector(".blockeditor-upload");
+const click = (view, act) => view.dom.querySelector(`.blockeditor-upload-btn[data-act="${act}"]`).click();
 
 describe("placement", () => {
   test("three files finishing out of order land in drop order, the first replacing the empty paragraph", async () => {
@@ -124,10 +124,10 @@ describe("the widget", () => {
     select(view, posOf(view, "e"));
     insertFiles(view, [file("big.png")]);
     expect(widget(view).dataset.state).toBe("uploading");
-    expect(widget(view).querySelector(".page-upload-name").textContent).toBe("big.png");
+    expect(widget(view).querySelector(".blockeditor-upload-name").textContent).toBe("big.png");
     up.calls[0].opts.onProgress({ percent: 40 });
     expect(widget(view).querySelector('[role="progressbar"]').getAttribute("aria-valuenow")).toBe("40");
-    expect(widget(view).querySelector(".page-upload-btn").textContent).toBe("Cancel");
+    expect(widget(view).querySelector(".blockeditor-upload-btn").textContent).toBe("Cancel");
   });
 
   test("progress below five points of the last drawn value is not redrawn", () => {
@@ -168,12 +168,12 @@ describe("when the upload does not succeed", () => {
     up.calls[0].resolve(result); await tick();
     return { view, up };
   };
-  const buttons = (view) => [...view.dom.querySelectorAll(".page-upload-btn")].map((b) => b.dataset.act);
+  const buttons = (view) => [...view.dom.querySelectorAll(".blockeditor-upload-btn")].map((b) => b.dataset.act);
 
   test("a host without uploads offers to keep a small image inside the document, and embeds nothing until asked", async () => {
     const { view } = await settled(fail("unsupported"));
     expect(widget(view).dataset.state).toBe("embed-choice");
-    expect(widget(view).querySelector(".page-upload-msg").textContent).toMatch(/doesn't store files/);
+    expect(widget(view).querySelector(".blockeditor-upload-msg").textContent).toMatch(/doesn't store files/);
     expect(buttons(view)).toEqual(["embed", "remove"]);
     expect(widget(view).querySelector('[data-act="embed"]').textContent).toBe("Keep this image inside the document");
     expect(names(view)).toEqual(["P", "", "Z"]);
@@ -186,7 +186,7 @@ describe("when the upload does not succeed", () => {
     expect(view.state.doc.child(1).type.name).toBe("image");
     expect(view.state.doc.child(1).attrs.src).toMatch(/^data:image\/png;base64,/);
     expect(items(view)).toEqual([]);
-    expect(view.dom.parentElement.querySelector(".page-live").textContent).toBe("Saved inside the document");
+    expect(view.dom.parentElement.querySelector(".blockeditor-live").textContent).toBe("Saved inside the document");
   });
 
   test("an image over the embed cap, and any file, get an error with Remove only", async () => {
@@ -195,14 +195,14 @@ describe("when the upload does not succeed", () => {
     expect(buttons(big.view)).toEqual(["remove"]);
     document.body.innerHTML = "";
     const doc = await settled(fail("unsupported"), file("a.pdf", "application/pdf"));
-    expect(widget(doc.view).querySelector(".page-upload-msg").textContent).toBe("This host doesn't store files.");
+    expect(widget(doc.view).querySelector(".blockeditor-upload-msg").textContent).toBe("This host doesn't store files.");
     expect(buttons(doc.view)).toEqual(["remove"]);
   });
 
   test.each(["forbidden", "payment-required", "too-large", "unsupported-type"])("%s shows the host's message with Remove only and never offers to embed", async (code) => {
     const { view } = await settled(fail(code, "Host says no"));
     expect(widget(view).dataset.state).toBe("error");
-    expect(widget(view).querySelector(".page-upload-msg").textContent).toBe("Host says no");
+    expect(widget(view).querySelector(".blockeditor-upload-msg").textContent).toBe("Host says no");
     expect(buttons(view)).toEqual(["remove"]);
   });
 
@@ -214,7 +214,7 @@ describe("when the upload does not succeed", () => {
 
   test("a timeout says the upload may have arrived", async () => {
     const { view } = await settled(fail("timeout"));
-    expect(widget(view).querySelector(".page-upload-msg").textContent).toMatch(/may have arrived/);
+    expect(widget(view).querySelector(".blockeditor-upload-msg").textContent).toMatch(/may have arrived/);
   });
 
   test("Retry runs the upload again and a second answer places the block", async () => {
@@ -297,7 +297,7 @@ describe("paste, drop and the picker", () => {
 
   test("the menu's picker sets the accept filter, opens the system dialog, and uploads what was chosen at the given place", async () => {
     const { view, up } = page();
-    const input = view.dom.parentElement.querySelector(".page-file-input");
+    const input = view.dom.parentElement.querySelector(".blockeditor-file-input");
     input.click = jest.fn();
     expect(pickFiles(view, "image/*", hostPlace(view.state, 1))).toBe(true);
     expect([input.accept, input.click.mock.calls.length]).toEqual(["image/*", 1]);
@@ -312,7 +312,7 @@ describe("paste, drop and the picker", () => {
     const { view, up } = page();
     select(view, posOf(view, "e"));
     insertFiles(view, [file()]);
-    const input = view.dom.parentElement.querySelector(".page-file-input");
+    const input = view.dom.parentElement.querySelector(".blockeditor-file-input");
     view.destroy();
     expect(up.calls[0].opts.signal.aborted).toBe(true);
     expect(input.isConnected).toBe(false);
@@ -432,7 +432,7 @@ test("F10 a file chooser follows its host through a remote insertion", async () 
   try {
     pickFiles(view, "", hostPlace(view.state, 0));
     view.dispatch(view.state.tr.insert(0, view.state.schema.nodes.paragraph.create({ id: "r", pos: "A" }, view.state.schema.text("RRRR"))).setMeta(REMOTE, true));
-    const input = view.dom.parentElement.querySelector(".page-file-input");
+    const input = view.dom.parentElement.querySelector(".blockeditor-file-input");
     Object.defineProperty(input, "files", { value: [file("a.txt", "text/plain")] });
     input.dispatchEvent(new Event("change"));
     up.calls[0].resolve(ok("/a.txt"));
@@ -446,7 +446,7 @@ test("F10 accepting a chooser removes only its mapped slash query", async () => 
   try {
     pickFiles(view, "image/*", hostPlace(view.state, 0), { from: 1, to: 7 });
     view.dispatch(view.state.tr.insertText("prefix ", 1).setMeta(REMOTE, true));
-    const input = view.dom.parentElement.querySelector(".page-file-input");
+    const input = view.dom.parentElement.querySelector(".blockeditor-file-input");
     Object.defineProperty(input, "files", { value: [file()] });
     input.dispatchEvent(new Event("change"));
     up.calls[0].resolve(ok("/a.png"));

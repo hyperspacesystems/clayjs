@@ -189,9 +189,9 @@ test("a value larger than a frame is posted whole", async () => {
 
 test("a page store's too-large refusal raises no undo notice", async () => {
   const before = room;
-  room = { ...room, stores: { page: { value: { blocks: {} }, ephemeral: true, last: 0, landed: 0 } } };
-  document.body.innerHTML = '<script type="application/json" merge="page" clay="live ephemeral">{"blocks":{}}</script>';
-  const p = live("page");
+  room = { ...room, stores: { blockeditor: { value: { blocks: {} }, ephemeral: true, last: 0, landed: 0 } } };
+  document.body.innerHTML = '<script type="application/json" merge="blockeditor" clay="live ephemeral">{"blocks":{}}</script>';
+  const p = live("blockeditor");
   await flushAsync();
   bridge.streamOpened({ clientId: "tab-1", lane: "live" });
   await flushAsync();

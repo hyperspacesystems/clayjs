@@ -14,7 +14,7 @@ const SAMPLES = 200;
 
 test("700 paragraphs of 350 characters keep delivered text transactions under the p95 target through the real editor", () => {
   const blocks = Array.from({ length: BLOCKS }, (_, i) => ({ id: `p${i}`, text: "x".repeat(CHARS) }));
-  const store = createStore({ name: "page", value: seedValue(blocks) });
+  const store = createStore({ name: "blockeditor", value: seedValue(blocks) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = createPageEditor(mount, {
@@ -90,7 +90,7 @@ const TEXT_BLOCKS = new Set(["paragraph", "heading", "list_item", "callout", "qu
 
 test("2,000 real blocks keep delivered text transactions under the timing targets", () => {
   const fixture = buildLongDocument();
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(fixture.value)) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(fixture.value)) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = createPageEditor(mount, {
@@ -175,7 +175,7 @@ test("2,000 real blocks keep delivered text transactions under the timing target
 // document's history shows (Document 14).
 test("2,000 real blocks after 100 block deletes and 300 backspaces keep typing under the timing targets", () => {
   const fixture = buildLongDocument();
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(fixture.value)) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(fixture.value)) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = createPageEditor(mount, {

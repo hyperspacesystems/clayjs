@@ -391,7 +391,7 @@ const elementFor = (target) => searchRoots().map((root) => root.getElementById(t
 
 // The page under test's own live store, as the value a peer's frames land in and the
 // article it projects onto.
-const pageStore = (clay) => (typeof clay?.live === "function" ? clay.live("page") : null);
+const pageStore = (clay) => (typeof clay?.live === "function" ? clay.live("blockeditor") : null);
 
 const pageSeed = (clay) => pageStore(clay)?.data ?? null;
 

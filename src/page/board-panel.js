@@ -26,15 +26,15 @@ export class CardPanel {
     this.titleBase = "";
     this.ownerBase = "";
     const doc = view.dom.ownerDocument;
-    const id = `page-board-panel-${++count}`;
-    this.scrim = el(doc, "div", "page-board-scrim", { "aria-hidden": "true" });
-    this.dom = el(doc, "aside", "page-board-panel", { role: "dialog", "aria-modal": "false", "aria-labelledby": `${id}-title` });
-    const top = el(doc, "div", "page-board-panel-top");
-    this.title = el(doc, "textarea", "page-board-panel-title", { id: `${id}-title`, rows: 2, "aria-label": "Card title", spellcheck: "false", "data-focus": "title" });
-    top.append(this.title, iconButton(doc, "page-board-icon page-board-close", "close", null, { "aria-label": "Close", "aria-keyshortcuts": "Escape", "data-action": "close", "data-focus": "close" }));
-    this.ownerInput = el(doc, "input", "page-board-owner-input", { type: "text", "aria-label": "Owner name", placeholder: "Or type a name…", "data-focus": "owner-name" });
-    this.fields = el(doc, "div", "page-board-fields");
-    this.actions = el(doc, "div", "page-board-actions");
+    const id = `blockeditor-board-panel-${++count}`;
+    this.scrim = el(doc, "div", "blockeditor-board-scrim", { "aria-hidden": "true" });
+    this.dom = el(doc, "aside", "blockeditor-board-panel", { role: "dialog", "aria-modal": "false", "aria-labelledby": `${id}-title` });
+    const top = el(doc, "div", "blockeditor-board-panel-top");
+    this.title = el(doc, "textarea", "blockeditor-board-panel-title", { id: `${id}-title`, rows: 2, "aria-label": "Card title", spellcheck: "false", "data-focus": "title" });
+    top.append(this.title, iconButton(doc, "blockeditor-board-icon blockeditor-board-close", "close", null, { "aria-label": "Close", "aria-keyshortcuts": "Escape", "data-action": "close", "data-focus": "close" }));
+    this.ownerInput = el(doc, "input", "blockeditor-board-owner-input", { type: "text", "aria-label": "Owner name", placeholder: "Or type a name…", "data-focus": "owner-name" });
+    this.fields = el(doc, "div", "blockeditor-board-fields");
+    this.actions = el(doc, "div", "blockeditor-board-actions");
     this.dom.append(top, this.fields, this.actions);
     this.labels = { column: `${id}-column`, owner: `${id}-owner`, due: `${id}-due` };
     this.textField(this.title, () => this.commitTitle());
@@ -71,7 +71,7 @@ export class CardPanel {
   card() { return this.boardNode()?.attrs.cards?.[this.cardId] ?? null; }
 
   boardButton(blockId, key) {
-    const board = [...this.view.dom.querySelectorAll(".page-board")].find((node) => node.dataset.id === blockId);
+    const board = [...this.view.dom.querySelectorAll(".blockeditor-board")].find((node) => node.dataset.id === blockId);
     return board ? [...board.querySelectorAll("[data-focus]")].find((node) => node.dataset.focus === key && !node.disabled) ?? null : null;
   }
 
@@ -159,7 +159,7 @@ export class CardPanel {
 
   openDue() {
     const doc = this.view.dom.ownerDocument;
-    const input = el(doc, "input", "page-board-control page-board-date", { type: "date", "aria-labelledby": this.labels.due, "data-focus": "due-input" });
+    const input = el(doc, "input", "blockeditor-board-control blockeditor-board-date", { type: "date", "aria-labelledby": this.labels.due, "data-focus": "due-input" });
     input.value = this.card()?.due ?? "";
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter") { event.preventDefault(); this.commitDue(); this.focusKey("due"); }
@@ -224,15 +224,15 @@ export class CardPanel {
 
   field(name, label, control, owner = false) {
     const doc = this.view.dom.ownerDocument;
-    const row = el(doc, "div", `page-board-field${owner ? " is-owner" : ""}`);
-    row.append(el(doc, "span", "page-board-label", { id: this.labels[name] }, label), control);
+    const row = el(doc, "div", `blockeditor-board-field${owner ? " is-owner" : ""}`);
+    row.append(el(doc, "span", "blockeditor-board-label", { id: this.labels[name] }, label), control);
     return row;
   }
 
   columnField(board, card) {
     const doc = this.view.dom.ownerDocument;
-    const wrap = el(doc, "span", "page-board-select");
-    const select = el(doc, "select", "page-board-control", { "aria-labelledby": this.labels.column, "data-focus": "column", disabled: !board.columnIds.length });
+    const wrap = el(doc, "span", "blockeditor-board-select");
+    const select = el(doc, "select", "blockeditor-board-control", { "aria-labelledby": this.labels.column, "data-focus": "column", disabled: !board.columnIds.length });
     if (!board.lanes.has(card.col)) select.append(el(doc, "option", null, { value: "", selected: true, disabled: true }, "Deleted column"));
     for (const col of board.columnIds) select.append(el(doc, "option", null, { value: col, selected: col === card.col }, board.columns[col].name || "Untitled"));
     wrap.append(select);
@@ -242,14 +242,14 @@ export class CardPanel {
 
   ownerField(card) {
     const doc = this.view.dom.ownerDocument;
-    const box = el(doc, "div", "page-board-owners");
-    const people = el(doc, "div", "page-board-people", { role: "group", "aria-labelledby": this.labels.owner });
+    const box = el(doc, "div", "blockeditor-board-owners");
+    const people = el(doc, "div", "blockeditor-board-people", { role: "group", "aria-labelledby": this.labels.owner });
     for (const person of this.people) {
-      const chip = el(doc, "button", "page-board-person", { type: "button", "aria-pressed": String(person.name === card.owner), "data-action": "owner", "data-owner": person.name, "data-focus": `owner:${person.id ?? person.name}` });
+      const chip = el(doc, "button", "blockeditor-board-person", { type: "button", "aria-pressed": String(person.name === card.owner), "data-action": "owner", "data-owner": person.name, "data-focus": `owner:${person.id ?? person.name}` });
       chip.append(cardFace(doc, person.name), el(doc, "span", null, {}, person.name));
       people.append(chip);
     }
-    people.append(el(doc, "button", "page-board-person is-none", { type: "button", "aria-pressed": String(!card.owner), "data-action": "owner-none", "data-focus": "owner-none" }, "No owner"));
+    people.append(el(doc, "button", "blockeditor-board-person is-none", { type: "button", "aria-pressed": String(!card.owner), "data-action": "owner-none", "data-focus": "owner-none" }, "No owner"));
     box.append(people, this.ownerInput);
     return this.field("owner", "Owner", box, true);
   }
@@ -260,11 +260,11 @@ export class CardPanel {
     const today = todayKey();
     const state = card.due ? dueState(card.due, today) : null;
     const label = card.due ? dueLabel(card.due, today, true) : null;
-    const button = el(doc, "button", "page-board-control", { type: "button", "aria-label": card.due ? `Due ${label}${state === "overdue" ? ", overdue" : ""}` : "Set due date", "data-action": "due", "data-focus": "due" });
+    const button = el(doc, "button", "blockeditor-board-control", { type: "button", "aria-label": card.due ? `Due ${label}${state === "overdue" ? ", overdue" : ""}` : "Set due date", "data-action": "due", "data-focus": "due" });
     if (card.due) {
-      button.append(el(doc, "span", "page-board-due", { "data-due": state }, label));
-      if (state === "overdue") button.append(el(doc, "span", "page-board-due-note", {}, "Overdue"));
-    } else button.append(el(doc, "span", "page-board-control-text page-board-none", {}, "No date"));
+      button.append(el(doc, "span", "blockeditor-board-due", { "data-due": state }, label));
+      if (state === "overdue") button.append(el(doc, "span", "blockeditor-board-due-note", {}, "Overdue"));
+    } else button.append(el(doc, "span", "blockeditor-board-control-text blockeditor-board-none", {}, "No date"));
     button.insertAdjacentHTML("beforeend", BOARD_ICONS.calendar);
     return this.field("due", "Due", button);
   }
@@ -274,9 +274,9 @@ export class CardPanel {
     const ids = board.lanes.get(card.col);
     const index = ids ? ids.indexOf(this.cardId) : -1;
     return [
-      iconButton(doc, "page-board-btn", "up", "Move up", { "data-action": "up", "data-focus": "up", disabled: index <= 0 }),
-      iconButton(doc, "page-board-btn", "down", "Move down", { "data-action": "down", "data-focus": "down", disabled: index < 0 || index >= ids.length - 1 }),
-      iconButton(doc, "page-board-btn page-board-delete", "trash", "Delete card", { "data-action": "delete", "data-focus": "delete" }),
+      iconButton(doc, "blockeditor-board-btn", "up", "Move up", { "data-action": "up", "data-focus": "up", disabled: index <= 0 }),
+      iconButton(doc, "blockeditor-board-btn", "down", "Move down", { "data-action": "down", "data-focus": "down", disabled: index < 0 || index >= ids.length - 1 }),
+      iconButton(doc, "blockeditor-board-btn blockeditor-board-delete", "trash", "Delete card", { "data-action": "delete", "data-focus": "delete" }),
     ];
   }
 

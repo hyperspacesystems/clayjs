@@ -42,10 +42,10 @@ const withPhone = async (run, viewport = { offsetLeft: 0, offsetTop: 0, width: 3
 // after one frame.
 const frame = () => new Promise((done) => window.requestAnimationFrame(() => done()));
 
-const dock = (view) => view.dom.parentElement.querySelector(".page-dock");
-const menu = (view) => view.dom.parentElement.querySelector(".page-menu");
-const rows = (view) => [...menu(view).querySelectorAll(".page-menu-item")];
-const row = (view, label) => rows(view).find((r) => r.querySelector(".page-menu-label").textContent === label);
+const dock = (view) => view.dom.parentElement.querySelector(".blockeditor-dock");
+const menu = (view) => view.dom.parentElement.querySelector(".blockeditor-menu");
+const rows = (view) => [...menu(view).querySelectorAll(".blockeditor-menu-item")];
+const row = (view, label) => rows(view).find((r) => r.querySelector(".blockeditor-menu-label").textContent === label);
 
 test("the bar centres itself inside a 390 px viewport, just above its bottom edge", () => {
   expect(phoneBarBox({ left: 0, top: 0, width: 390, height: 844 }, 204, 52)).toEqual({ left: 93, top: 784, width: 204 });
@@ -89,28 +89,28 @@ test("without a visual viewport the layout viewport stands in", () => {
 
 test("the phone bar draws exactly four primary controls in order, labelled", () => {
   const view = editor([["a", "paragraph", "A"]]);
-  const primary = [...dock(view).querySelectorAll(".page-tool-primary")];
+  const primary = [...dock(view).querySelectorAll(".blockeditor-tool-primary")];
   expect(primary.map((b) => b.dataset.cmd ?? "more")).toEqual(["strong", "em", "link", "more"]);
   expect(primary.map((b) => b.getAttribute("aria-label"))).toEqual(["Bold", "Italic", "Link", "More"]);
-  expect(dock(view).querySelector(".page-tool-more").textContent).toBe("");
+  expect(dock(view).querySelector(".blockeditor-tool-more").textContent).toBe("");
   // The desktop tools are still there, marked so only the phone hides them.
   expect([...dock(view).querySelectorAll("[data-cmd]")].map((b) => b.dataset.cmd))
     .toEqual(["strong", "em", "strike", "link", "bullet", "ordered", "check", "code"]);
-  expect(dock(view).querySelectorAll(".page-tool-desk").length).toBeGreaterThan(0);
+  expect(dock(view).querySelectorAll(".blockeditor-tool-desk").length).toBeGreaterThan(0);
 });
 
 test("the phone stylesheet keeps 44 px targets, 4 px gaps, 8 px padding and one bar", () => {
   const css = phoneCss();
-  expect(css).toContain(".page-dock .page-tool { min-width: 44px; height: 44px; }");
+  expect(css).toContain(".blockeditor-dock .blockeditor-tool { min-width: 44px; height: 44px; }");
   expect(css).toContain("gap: 4px");
   expect(css).toContain("padding: 8px");
   expect(css).toContain("min-width: 204px");
-  expect(css).toContain(".page-tool-desk { display: none; }");
-  expect(css).toContain(".page-dock .page-tool-more { display: inline-flex; }");
+  expect(css).toContain(".blockeditor-tool-desk { display: none; }");
+  expect(css).toContain(".blockeditor-dock .blockeditor-tool-more { display: inline-flex; }");
   // One bar: the selection bubble stands down and the dock stays visible.
-  expect(css).toContain(".page-bubble { display: none; }");
-  expect(css).toContain(".page-shell:has(.page-bubble:not([hidden])) .page-dock { visibility: visible; }");
-  expect(PAGE_EDITOR_CSS).toContain(".page-safe-probe { position: fixed; left: 0; bottom: 0; width: 0; height: 0; padding-bottom: env(safe-area-inset-bottom);");
+  expect(css).toContain(".blockeditor-bubble { display: none; }");
+  expect(css).toContain(".blockeditor-shell:has(.blockeditor-bubble:not([hidden])) .blockeditor-dock { visibility: visible; }");
+  expect(PAGE_EDITOR_CSS).toContain(".blockeditor-safe-probe { position: fixed; left: 0; bottom: 0; width: 0; height: 0; padding-bottom: env(safe-area-inset-bottom);");
 });
 
 test("the bar is fixed to the visible viewport and follows it", async () => {
@@ -129,18 +129,18 @@ test("the bar is fixed to the visible viewport and follows it", async () => {
 test("the More menu stays inside the visible viewport, above the bar", async () => {
   await withPhone(async () => {
     const view = editor([["a", "paragraph", "A"]]);
-    dock(view).querySelector(".page-tool-more").click();
+    dock(view).querySelector(".blockeditor-tool-more").click();
     await frame();
     const box = menu(view);
     expect(box.hidden).toBe(false);
-    const x = parseFloat(box.style.getPropertyValue("--page-pop-x"));
-    const y = parseFloat(box.style.getPropertyValue("--page-pop-y"));
+    const x = parseFloat(box.style.getPropertyValue("--blockeditor-pop-x"));
+    const y = parseFloat(box.style.getPropertyValue("--blockeditor-pop-y"));
     expect(x).toBeGreaterThanOrEqual(0);
-    expect(x + parseFloat(box.style.getPropertyValue("--page-pop-width"))).toBeLessThanOrEqual(390);
+    expect(x + parseFloat(box.style.getPropertyValue("--blockeditor-pop-width"))).toBeLessThanOrEqual(390);
     expect(y).toBeGreaterThanOrEqual(0);
     expect(y).toBeLessThanOrEqual(784);
-    expect(box.style.getPropertyValue("--page-pop-max")).toBe("828px");
-    expect(phoneCss()).toContain("max-height: min(70vh, var(--page-pop-max, 70vh))");
+    expect(box.style.getPropertyValue("--blockeditor-pop-max")).toBe("828px");
+    expect(phoneCss()).toContain("max-height: min(70vh, var(--blockeditor-pop-max, 70vh))");
     expect(phoneCss()).toContain("overflow-y: auto");
   });
 });
@@ -148,8 +148,8 @@ test("the More menu stays inside the visible viewport, above the bar", async () 
 test("the More menu carries the rest of the formatting and the block actions", () => {
   withPhone(() => {
     const view = editor([["a", "paragraph", "A"], ["b", "paragraph", "B"]]);
-    dock(view).querySelector(".page-tool-more").click();
-    expect(rows(view).map((r) => r.querySelector(".page-menu-label").textContent)).toEqual([
+    dock(view).querySelector(".blockeditor-tool-more").click();
+    expect(rows(view).map((r) => r.querySelector(".blockeditor-menu-label").textContent)).toEqual([
       "Strikethrough", "Bulleted list", "Numbered list", "Checklist", "Code",
       "Underline", "Text color", "Highlight", "Turn into", "Insert", "Move up", "Move down", "Indent", "Outdent",
       "Page icon", "Add cover", "Export reading copy", "Export as Markdown",
@@ -167,7 +167,7 @@ test("a phone tool marks the selection without losing it, and Turn into retypes 
     dock(view).querySelector('[data-cmd="strong"]').click();
     expect(view.state.doc.rangeHasMark(from, from + 1, view.state.schema.marks.strong)).toBe(true);
     expect(view.state.selection.from).toBe(from);
-    dock(view).querySelector(".page-tool-more").click();
+    dock(view).querySelector(".blockeditor-tool-more").click();
     row(view, "Turn into").click();
     expect(view.state.selection.from).toBe(posOf(view, "a"));
     row(view, "Heading 2").click();
@@ -179,8 +179,8 @@ test("a phone tool marks the selection without losing it, and Turn into retypes 
 test("Escape on the bar hands the keyboard back to the editor", () => {
   withPhone(() => {
     const view = editor([["a", "paragraph", "A"]]);
-    dock(view).querySelector(".page-tool-more").focus();
-    dock(view).querySelector(".page-tool-more").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    dock(view).querySelector(".blockeditor-tool-more").focus();
+    dock(view).querySelector(".blockeditor-tool-more").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     expect(view.hasFocus()).toBe(true);
   });
 });
@@ -202,7 +202,7 @@ test("destroying the editor removes the visual viewport listeners it added", () 
   }
 });
 
-describe("the phone's Move buttons take the validated page-move port", () => {
+describe("the phone's Move buttons take the validated blockeditor-move port", () => {
   const opened = [];
   afterEach(() => {
     for (const { view, bridge, mount } of opened.splice(0)) {
@@ -246,8 +246,8 @@ describe("the phone's Move buttons take the validated page-move port", () => {
     caretIn(tab, "q", 2);
     const groups = tab.stats.groups;
     const start = tab.seen.length;
-    tab.mount.querySelector(".page-tool-more").click();
-    [...tab.mount.querySelectorAll(".page-menu-item")].find((row) => row.textContent.includes("Move down")).click();
+    tab.mount.querySelector(".blockeditor-tool-more").click();
+    [...tab.mount.querySelectorAll(".blockeditor-menu-item")].find((row) => row.textContent.includes("Move down")).click();
     const changed = tab.seen.slice(start).filter((tr) => tr.docChanged && !tr.getMeta(REMOTE_META));
     expect(changed.length).toBe(1);
     expect(changed[0].getMeta(MOVE)).toBeTruthy();
@@ -265,8 +265,8 @@ describe("the phone's Move buttons take the validated page-move port", () => {
     const tab = open([{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
     caretIn(tab, "q", 2);
     const start = tab.seen.length;
-    tab.mount.querySelector(".page-tool-more").click();
-    [...tab.mount.querySelectorAll(".page-menu-item")].find((row) => row.textContent.includes("Move up")).click();
+    tab.mount.querySelector(".blockeditor-tool-more").click();
+    [...tab.mount.querySelectorAll(".blockeditor-menu-item")].find((row) => row.textContent.includes("Move up")).click();
     const changed = tab.seen.slice(start).filter((tr) => tr.docChanged && !tr.getMeta(REMOTE_META));
     expect(changed.length).toBe(1);
     expect(changed[0].getMeta(MOVE).ids).toEqual(["q"]);
@@ -282,8 +282,8 @@ test("the block grip sits above the bar instead of under it at 320, 360 and 390 
       const view = editor([["a", "paragraph", "A"]]);
       await frame();
       const bar = { left: parseFloat(dock(view).style.left), top: parseFloat(dock(view).style.top), width: parseFloat(dock(view).style.width), height: 52 };
-      const grip = view.dom.parentElement.querySelector(".page-grip");
-      const lift = parseFloat(grip.style.getPropertyValue("--page-grip-lift")) || 0;
+      const grip = view.dom.parentElement.querySelector(".blockeditor-grip");
+      const lift = parseFloat(grip.style.getPropertyValue("--blockeditor-grip-lift")) || 0;
       expect(lift).toBe(bar.height);
       const box = { left, top: height - gap - lift - size, width: size, height: size };
       const overlap = box.left < bar.left + bar.width && bar.left < box.left + box.width
@@ -294,5 +294,5 @@ test("the block grip sits above the bar instead of under it at 320, 360 and 390 
 });
 
 test("the phone stylesheet lifts the grip by the bar's height and keeps the safe-area inset", () => {
-  expect(phoneCss()).toContain(".page-grip { position: fixed; top: auto; left: 68px; bottom: calc(16px + var(--page-grip-lift, 0px) + env(safe-area-inset-bottom));");
+  expect(phoneCss()).toContain(".blockeditor-grip { position: fixed; top: auto; left: 68px; bottom: calc(16px + var(--blockeditor-grip-lift, 0px) + env(safe-area-inset-bottom));");
 });

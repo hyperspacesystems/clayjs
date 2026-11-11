@@ -27,5 +27,5 @@ test("Mod+A twice does not throw", () => {
 test("with the whole page selected the toolbar names the last block's type", () => {
   const view = editor([["a", "paragraph", "A"], ["h", "heading", "H", { level: 1 }]]);
   view.dispatch(view.state.tr.setSelection(new AllSelection(view.state.doc)));
-  expect(view.dom.parentElement.querySelector(".page-tool-turn").textContent).toBe("Heading 1 ▾");
+  expect(view.dom.parentElement.querySelector(".blockeditor-tool-turn").textContent).toBe("Heading 1 ▾");
 });

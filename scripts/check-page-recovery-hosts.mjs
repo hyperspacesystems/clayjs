@@ -5,7 +5,7 @@
 // production host, never the network beyond loopback), serves a page document, saves
 // one whose page state carries a DELETION, stops the adapter, starts it again on the
 // same directory, and asks the host for the page state of that revision, conditionally
-// on the stamp the save returned. Per host it prints the persisted page-state byte hash
+// on the stamp the save returned. Per host it prints the persisted blockeditor-state byte hash
 // and the text the state reopens to, and it fails when a host answers nothing or answers
 // something other than what was saved.
 //
@@ -13,7 +13,7 @@
 //   node scripts/check-page-recovery-hosts.mjs --fixtures --htmlclay <dir> --hyperclay-local <dir>
 //
 // A host with no runnable local fixture adapter is reported as skipped, never faked:
-// hyperclay's page-state tests need its Postgres test database, which is not a fixture
+// hyperclay's blockeditor-state tests need its Postgres test database, which is not a fixture
 // adapter that can be launched against a temporary directory.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -76,12 +76,12 @@ function savedValue() {
   const page = createPageDoc(ydoc);
   const at = flowOffset(page, DELETED);
   if (at < 0) throw new Error(`the seeded page does not carry ${JSON.stringify(DELETED)}`);
-  ydoc.transact(() => page.flow.delete(at, DELETED.length), "page-local");
+  ydoc.transact(() => page.flow.delete(at, DELETED.length), "blockeditor-local");
   return { v: 1, g: 0, y: { ...seed.y, "u2-0": Y.toBase64(Y.encodeStateAsUpdateV2(ydoc, before)) } };
 }
 
 const VALUE = savedValue();
-const TAG = `<script type="application/json" merge="page" clay="live">${JSON.stringify(VALUE)}</script>`;
+const TAG = `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(VALUE)}</script>`;
 
 function articleOf(value) {
   const model = project(blocksFromPageValues([value]));
@@ -100,7 +100,7 @@ function pageDocument() {
     "</head>",
     "<body>",
     TAG,
-    `<article data-page data-rev="${ARTICLE.rev}">${ARTICLE.html}</article>`,
+    `<article data-blockeditor data-rev="${ARTICLE.rev}">${ARTICLE.html}</article>`,
     "</body>",
     "</html>",
     "",
@@ -123,19 +123,19 @@ const HOSTS = [
     name: "htmlclay",
     flag: "--htmlclay",
     dir: path.resolve(REPO, "../htmlclay"),
-    // The sidecar lives under the history key, and this host names its page-state
+    // The sidecar lives under the history key, and this host names its blockeditor-state
     // resource per session token, the one it stamps on the served document.
     pageStateRequest: (ready, doc, served) => {
       const token = /\shtmlclaytoken="([^"]*)"/.exec(served)?.[1];
       if (!token) throw new Error("the served document carries no htmlclaytoken");
-      return { url: `${ready.baseURL}/_/page-state/${token}`, headers: { "Document-URL": doc.url } };
+      return { url: `${ready.baseURL}/_/blockeditor-state/${token}`, headers: { "Document-URL": doc.url } };
     },
   },
   {
     name: "hyperclay-local",
     flag: "--hyperclay-local",
     dir: path.resolve(REPO, "../hyperclay-local"),
-    pageStateRequest: (ready, doc) => ({ url: `${ready.baseURL}/_/page-state`, headers: { "Document-URL": doc.url } }),
+    pageStateRequest: (ready, doc) => ({ url: `${ready.baseURL}/_/blockeditor-state`, headers: { "Document-URL": doc.url } }),
   },
   {
     name: "hyperclay",
@@ -231,7 +231,7 @@ async function save(ready) {
 
 // After the restart the host serves the document again: the stamp it prints is the one
 // its stored bytes have (the save's, when nothing moved), and the session token a page
-// asks the page-state resource with belongs to the process that served the document.
+// asks the blockeditor-state resource with belongs to the process that served the document.
 async function readState(host, ready, doc, etag, value) {
   const served = await (await fetched(doc.url)).text();
   const reopenedEtag = /\sdocumentetag="([^"]*)"/.exec(served)?.[1];
@@ -245,10 +245,10 @@ async function readState(host, ready, doc, etag, value) {
   const text = await answer.text();
   if (!answer.ok) throw new Error(`no page state for the saved bytes (${answer.status} ${text.trim().slice(0, 160)})`);
   let body;
-  try { body = JSON.parse(text); } catch { throw new Error("the page-state answer is not JSON"); }
-  if (body.version !== 1) throw new Error(`the page-state answer is version ${JSON.stringify(body.version)}`);
-  if (typeof body.tag !== "string" || !body.tag) throw new Error("the page-state answer carries no tag");
-  if (typeof body.stateHash !== "string" || !body.stateHash) throw new Error("the page-state answer carries no state digest");
+  try { body = JSON.parse(text); } catch { throw new Error("the blockeditor-state answer is not JSON"); }
+  if (body.version !== 1) throw new Error(`the blockeditor-state answer is version ${JSON.stringify(body.version)}`);
+  if (typeof body.tag !== "string" || !body.tag) throw new Error("the blockeditor-state answer carries no tag");
+  if (typeof body.stateHash !== "string" || !body.stateHash) throw new Error("the blockeditor-state answer carries no state digest");
   if (body.etag !== etag) throw new Error(`the page state belongs to ${JSON.stringify(body.etag)}, not the saved ${JSON.stringify(etag)}`);
   const digest = sha256(body.tag);
   if (digest !== body.stateHash) throw new Error(`the stored tag hashes to ${digest}, not the state digest ${body.stateHash}`);
@@ -329,7 +329,7 @@ async function main() {
         continue;
       }
       console.log(
-        `${host.name}: page-state sha256 ${result.stateHash} (${result.bytes} B, generation ${result.generation}), ` +
+        `${host.name}: blockeditor-state sha256 ${result.stateHash} (${result.bytes} B, generation ${result.generation}), ` +
           `reopened ${JSON.stringify(result.text)}`,
       );
     } catch (error) {

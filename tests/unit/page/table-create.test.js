@@ -172,7 +172,7 @@ test("one Undo restores three whole paragraphs replaced by a multi-block paste",
 
 test("one Undo through the Yjs binding restores three whole paragraphs replaced by a multi-block paste", () => {
   const value = seedValue([0, 1, 2, 3, 4].map((i) => ({ id: `b${i}`, text: `block${i}` })));
-  const store = createStore({ name: "page", value });
+  const store = createStore({ name: "blockeditor", value });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const view = createPageEditor(document.body.appendChild(document.createElement("div")), { doc: binding.doc(), dispatch: binding.dispatch, history: false, undo: binding.undo, redo: binding.redo, board: binding.board });
   binding.attach(view);

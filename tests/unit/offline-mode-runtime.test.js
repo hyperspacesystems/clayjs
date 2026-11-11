@@ -17,8 +17,8 @@ const root = path.resolve(new URL("../..", import.meta.url).pathname);
 // any page code: a source import here would load a second Yjs beside the built chunks'.
 const FIXTURE = new DOMParser().parseFromString(
   readFileSync(path.join(root, "tests/fixtures/load/document.html"), "utf8"), "text/html");
-const HEAD = FIXTURE.querySelector('script[merge="page"]')?.outerHTML ?? "";
-const BODY = FIXTURE.querySelector("article[data-page]").outerHTML;
+const HEAD = FIXTURE.querySelector('script[merge="blockeditor"]')?.outerHTML ?? "";
+const BODY = FIXTURE.querySelector("article[data-blockeditor]").outerHTML;
 
 let outdir;
 const dirs = [];
@@ -57,8 +57,8 @@ function localHost() {
     return {
       ok: true,
       status: 200,
-      json: async () => (url.pathname === "/_/meta" ? { spec: 1, extensions: ["page"], document: null } : {}),
-      text: async () => (url.pathname === "/_/meta" ? JSON.stringify({ spec: 1, extensions: ["page"], document: null }) : url.pathname === "/" ? `<!DOCTYPE html><html><head>${HEAD}</head><body>${BODY}</body></html>` : ""),
+      json: async () => (url.pathname === "/_/meta" ? { spec: 1, extensions: ["blockeditor"], document: null } : {}),
+      text: async () => (url.pathname === "/_/meta" ? JSON.stringify({ spec: 1, extensions: ["blockeditor"], document: null }) : url.pathname === "/" ? `<!DOCTYPE html><html><head>${HEAD}</head><body>${BODY}</body></html>` : ""),
       headers: { get: () => null },
     };
   };
@@ -87,7 +87,7 @@ test("the first switch's edit boot loads the editor from the built release with 
   const edit = { ...(await import(new URL(manifest.edit, base).href)).default, base };
   const { boot } = await import(new URL(manifest.entries["loader.js"], base).href);
   let ready = null;
-  await boot("https://clayjs.com/1.0.0", new URLSearchParams("plugins=page"), (clay) => { ready = clay; }, runtime, edit);
+  await boot("https://clayjs.com/1.0.0", new URLSearchParams("plugins=blockeditor"), (clay) => { ready = clay; }, runtime, edit);
 
   expect(ready).toBe(window.clay);
   const mounted = await settle(() => document.querySelector(".ProseMirror"));

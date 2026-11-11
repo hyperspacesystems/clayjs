@@ -5,9 +5,9 @@ import { liveTags } from './live-data-tags.js';
 import { recent } from './recent.js';
 import { project } from '../../page/projection.js';
 import { blocksFromPageValues } from '../../page/ybind/decode.js';
-import { pageFormatDecision, pageFormatFloor, pageFormatRefusal, requiredPageFormat, withPageFormatFloor } from '../../page/format-level.js';
+import { pageFormatDecision, blockeditorFormatFloor, pageFormatRefusal, requiredPageFormat, withPageFormatFloor } from '../../page/format-level.js';
 
-const PAGE = /^page(\.[0-9]+)?$/;
+const PAGE = /^blockeditor(\.[0-9]+)?$/;
 const PART = /^(.+)\.(\d+)\.(\d+)$/;
 const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 export const isHybridPageValue = (value) => record(value) && record(value.blocks) && (value.deleted == null || record(value.deleted)) && Object.keys(value).every((key) => key === 'blocks' || key === 'deleted');
@@ -37,6 +37,34 @@ export function isYPageValue(value, { complete = true } = {}) {
   return true;
 }
 
+// A live tag in the format before 1.24.0 (`merge="page"` or `page.N`) holding a Yjs envelope.
+// Hosts refuse such a write, because 1.24.0 reads none of it. An author's own live store
+// named `page` with ordinary JSON is not the block editor's and is never refused.
+const OLD_TAG = /^page(\.[0-9]+)?$/;
+const OLD_FORMAT_MSG = 'This document now uses the new Block editor format, so this change was not saved. Copy any text you need from this tab, then reload.';
+
+// Thrown by a host's save path; hosts answer it like a format refusal: 409, code and message.
+export function oldFormatRefusal() {
+  const error = new Error(OLD_FORMAT_MSG);
+  error.name = 'BlockeditorOldFormat';
+  error.code = 'blockeditor-old-format';
+  error.statusCode = 409;
+  return error;
+}
+
+export function oldBlockeditorFormat(html) {
+  if (typeof html !== 'string' || !/merge/i.test(html)) return false;
+  return liveTags(html, { includeDuplicates: true }).some((tag) => {
+    if (!OLD_TAG.test(tag.name)) return false;
+    try {
+      const value = parseJsonRelaxed(tag.text);
+      return record(value) && (Object.hasOwn(value, 'y') || Object.hasOwn(value, 'v'));
+    } catch {
+      return false;
+    }
+  });
+}
+
 // Callers get their own copy of the tags, so none can change another's answer.
 export function inspectPage(html) {
   const answer = inspected(html);
@@ -60,7 +88,7 @@ const inspected = recent(4, (html) => {
     }
   }
   if (tags.some(([, value]) => record(value) && (Object.hasOwn(value, 'y') || Object.hasOwn(value, 'v')))) {
-    if (tags.length !== 1 || tags[0][0] !== 'page' || !isYPageValue(tags[0][1])) return { kind: 'invalid', reason: 'invalid-yjs', tags };
+    if (tags.length !== 1 || tags[0][0] !== 'blockeditor' || !isYPageValue(tags[0][1])) return { kind: 'invalid', reason: 'invalid-yjs', tags };
     return { kind: 'yjs', tags };
   }
   return { kind: tags.every(([, value]) => isHybridPageValue(value)) ? 'hybrid' : 'other', tags };
@@ -94,16 +122,16 @@ export function captureFormat(html) {
 // The floor decision for one page write, taken before anything is mutated.
 // `floor` is the document's established floor, `required` what the captured
 // content needs (its own marker included) and `capability` what the writer
-// declares in X-Clay-Page-Format. `admitted` lists the capabilities of the page
+// declares in X-Clay-Blockeditor-Format. `admitted` lists the capabilities of the page
 // editors the room has admitted, so a floor rise is refused while an editor that
 // could not read the result is connected. On success the returned body carries
 // the marker the room must persist, so a stale save that omitted it cannot lower
 // the floor.
 export function checkPageFormatAdmission({ currentHtml, html, capability = 0, admitted = [] }) {
-  const established = pageFormatFloor(currentHtml ?? '');
+  const established = blockeditorFormatFloor(currentHtml ?? '');
   const decision = pageFormatDecision({
     floor: established,
-    required: Math.max(captureFormat(html), pageFormatFloor(html ?? '')),
+    required: Math.max(captureFormat(html), blockeditorFormatFloor(html ?? '')),
     capability,
     admitted,
   });

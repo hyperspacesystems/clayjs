@@ -8,7 +8,7 @@ import { createYPageBinding, seedValue, removeKey, attrKey, boundaryKey, canonic
 import { yValueOf } from "../../../../src/page/ybind/provider.js";
 
 const open = (blocks, extra = {}) => {
-  const store = createStore({ name: "page", value: seedValue(blocks) });
+  const store = createStore({ name: "blockeditor", value: seedValue(blocks) });
   const binding = createYPageBinding({ store, ...extra });
   const view = new pmView.EditorView(document.body.appendChild(document.createElement("div")), { state: pmState.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }), dispatchTransaction: (tr) => binding.dispatch(tr) });
   binding.attach(view);
@@ -90,7 +90,7 @@ test("disposal stops recovery notifications", () => {
 });
 
 test("a subscription receives remote recovery changes before a view attaches", () => {
-  const store = createStore({ name: "page", value: seedValue(seed()) });
+  const store = createStore({ name: "blockeditor", value: seedValue(seed()) });
   const binding = createYPageBinding({ store });
   const events = [];
   binding.subscribeRecovery((snapshot) => events.push(snapshot));

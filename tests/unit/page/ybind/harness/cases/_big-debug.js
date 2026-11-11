@@ -24,14 +24,14 @@ export async function runBig(seed, o = {}) {
   const initial = { blocks: { p: { t: 'paragraph', pos: 'B', c: text } }, deleted: {} };
   const sim = new Sim(seed);
   const refuse = new Map();
-  const room = createRoom(sim, { page: initial }, {
+  const room = createRoom(sim, { blockeditor: initial }, {
     latency: () => 20 + sim.rand() * 100, answerLatency: () => 20 + sim.rand() * 100,
     refuse: (id) => (sim.now() < (refuse.get(id) ?? -1) ? { status: 503, body: { code: 'busy' }, retryAfter: 2 } : null),
   });
   const tabs = new Map(cfg.tabs.map((id) => [id, makeTab(sim, room, id, JSON.parse(JSON.stringify(initial)), { quiet: 500 })]));
   for (const t of tabs.values()) t.start();
   const typed = [], touched = new Set(), errors = [];
-  let counter = 0, file = JSON.parse(JSON.stringify(room.stores.get('page').value));
+  let counter = 0, file = JSON.parse(JSON.stringify(room.stores.get('blockeditor').value));
   const losses = [];
   const plan = [];
   for (const id of cfg.tabs) for (let k = 0; k < cfg.per; k++) plan.push({ at: 800 + Math.floor(R.next() * cfg.span), tab: id, kind: R.next() < 0.6 ? 'type' : 'del', f: [R.next(), R.next()] });
@@ -45,7 +45,7 @@ export async function runBig(seed, o = {}) {
     const t = a.tab ? tabs.get(a.tab) : null;
     try {
       if (a.kind === 'offline') { if (room.clients.get(t.id)?.connected) { room.close(t.id); sim.after(a.len, () => { if (!room.clients.get(t.id)?.connected) room.open(t.id); }); } return; }
-      if (a.kind === 'loss') { if (a.fresh) { file = JSON.parse(JSON.stringify(room.stores.get('page').value)); room.land('page', room.seq); } sim.after(5, () => { losses.push(sim.now()); room.restart({ page: file }); }); return; }
+      if (a.kind === 'loss') { if (a.fresh) { file = JSON.parse(JSON.stringify(room.stores.get('blockeditor').value)); room.land('blockeditor', room.seq); } sim.after(5, () => { losses.push(sim.now()); room.restart({ blockeditor: file }); }); return; }
       if (a.kind === 'busy') { refuse.set(t.id, sim.now() + a.len); return; }
       if (a.kind === 'save') { t.save({ answer: a.answer }); return; }
       const view = t.view;

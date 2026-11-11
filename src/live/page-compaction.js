@@ -16,8 +16,8 @@ export const COMPACTION = Object.freeze({
 });
 
 export const ROOM_ERROR_STATUS = Object.freeze({
-  'checkpoint-required': 503, 'page-full': 409, 'compaction-failed': 409,
-  'page-immutable': 409, 'page-batch': 409, 'page-update-invalid': 422, 'page-upgrade': 404,
+  'checkpoint-required': 503, 'blockeditor-full': 409, 'compaction-failed': 409,
+  'blockeditor-immutable': 409, 'blockeditor-batch': 409, 'blockeditor-update-invalid': 422, 'blockeditor-upgrade': 404,
 });
 
 export const CLIENT_KEY = /^[ur][0-9a-z]+(-[0-9a-z]+){2}$/;
@@ -98,25 +98,25 @@ export function checkUpdate(text) {
 }
 
 export function admitPageOps({ y, ops, state, limits }) {
-  if (state.compaction !== limits.version) return { error: 'page-upgrade' };
+  if (state.compaction !== limits.version) return { error: 'blockeditor-upgrade' };
   let added = 0;
   let deleted = 0;
   let inserts = false;
   for (const op of ops) {
     const key = op.path?.[1];
-    if (op.op !== 'set' || typeof key !== 'string' || !CLIENT_KEY.test(key)) return { error: 'page-immutable' };
+    if (op.op !== 'set' || typeof key !== 'string' || !CLIENT_KEY.test(key)) return { error: 'blockeditor-immutable' };
     if (Object.hasOwn(y, key)) {
-      if (y[key] !== op.value) return { error: 'page-immutable' };
+      if (y[key] !== op.value) return { error: 'blockeditor-immutable' };
       continue;
     }
-    if (state.retired.has(key)) return { error: 'page-immutable' };
+    if (state.retired.has(key)) return { error: 'blockeditor-immutable' };
     const checked = checkUpdate(op.value);
-    if (!checked) return { error: 'page-update-invalid' };
+    if (!checked) return { error: 'blockeditor-update-invalid' };
     added += 1;
     deleted += checked.deleted;
     inserts ||= checked.inserts;
   }
-  if (added > limits.newPerFrame) return { error: 'page-batch' };
+  if (added > limits.newPerFrame) return { error: 'blockeditor-batch' };
   // A page whose compaction failed keeps taking edits up to its byte limit, as a room
   // without compaction does, and refuses past it as full instead of waiting for a fold.
   if (state.failed) return { added, deleted, inserts, limit: limits.activeBytes + (inserts ? 0 : limits.deleteReserve), shape: null, failed: true };

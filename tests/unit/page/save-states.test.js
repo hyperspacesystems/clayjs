@@ -9,7 +9,7 @@ import { blocksFromYValue } from "../../../src/page/ybind/decode.js";
  * persistent toast's detail and actions.
  */
 
-let extensions = ["page"];
+let extensions = ["blockeditor"];
 
 await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
   hostMeta: async () => ({ spec: 1, extensions, document: null }),
@@ -20,6 +20,7 @@ await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
 }));
 
 await jest.unstable_mockModule("../../../src/core/save.js", () => ({
+  claimFailure: () => {},
   savesAdmitted: () => true,
   savePageForce: async () => ({ ok: true, msgType: "success" }),
   savePage: async () => ({ ok: true, msgType: "success" }),
@@ -51,29 +52,29 @@ const saveStates = await import("../../../src/page/save-states.js");
 const { toastPersistent } = await import("../../../src/ui/toast.js");
 
 const RETRYING = [
-  "page-converting", "page-capacity", "busy", "rate-limited", "offline",
+  "blockeditor-converting", "blockeditor-capacity", "busy", "rate-limited", "offline",
   "network", "network-error", "timeout", "save-history-pending",
 ];
 const BLOCKED = [
-  "page-condition-required", "page-conversion-refused", "page-conversion-required",
-  "page-conversion-stale", "save-id-reused", "too-large", "unsupported-host",
+  "blockeditor-condition-required", "blockeditor-conversion-refused", "blockeditor-conversion-required",
+  "blockeditor-conversion-stale", "save-id-reused", "too-large", "unsupported-host",
   "save-history-refresh-required", "provenance-unsupported", "receipt-expired",
-  "page-full", "compaction-failed",
+  "blockeditor-full", "compaction-failed",
 ];
 
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value) => {
   const { html, rev } = projection.renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 
 function setPage(blocks) {
   const value = seedValue(blocks);
   document.head.innerHTML = tagHtml(value);
   document.body.innerHTML = articleHtml(value);
-  if (!storeOf("page")) live("page");
-  const store = storeOf("page");
-  live("page").update((data) => {
+  if (!storeOf("blockeditor")) live("blockeditor");
+  const store = storeOf("blockeditor");
+  live("blockeditor").update((data) => {
     for (const key of Object.keys(data)) delete data[key];
     Object.assign(data, JSON.parse(JSON.stringify(value)));
   });
@@ -83,7 +84,7 @@ function setPage(blocks) {
 
 afterEach(() => {
   page.dispose();
-  extensions = ["page"];
+  extensions = ["blockeditor"];
   document.head.innerHTML = "";
   document.body.innerHTML = "";
 });
@@ -108,7 +109,7 @@ test("every code maps to exactly one state, unknown codes fall to error, saved a
 });
 
 test("a compacting room with no room left, and a room whose compaction failed, both block", () => {
-  for (const code of ["page-full", "compaction-failed"]) {
+  for (const code of ["blockeditor-full", "compaction-failed"]) {
     expect(saveStates.SAVE_STATE_BY_CODE[code]).toBe("blocked");
     expect(saveStates.saveStateFor({ code })).toBe("blocked");
     expect(saveStates.saveStateFor({ code, offline: true })).toBe("retrying");
@@ -137,7 +138,7 @@ test("Download a copy writes one html blob with the projected article and no pag
   const create = URL.createObjectURL;
   const revoke = URL.revokeObjectURL;
   const click = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () { anchors.push(this); });
-  URL.createObjectURL = jest.fn((blob) => { blobs.push(blob); return "blob:page-copy"; });
+  URL.createObjectURL = jest.fn((blob) => { blobs.push(blob); return "blob:blockeditor-copy"; });
   URL.revokeObjectURL = jest.fn();
   try {
     expect(await saveStates.downloadPageCopy()).toBe(true);
@@ -146,19 +147,19 @@ test("Download a copy writes one html blob with the projected article and no pag
 
     const html = await blobText(blobs[0]);
     const saved = new DOMParser().parseFromString(html, "text/html");
-    const expected = projection.renderFromTags([JSON.stringify(storeOf("page").value)]);
-    expect(saved.querySelector("article[data-page]").innerHTML).toBe(expected.html);
-    expect(saved.querySelector("article[data-page]").getAttribute("data-rev")).toBe(expected.rev);
+    const expected = projection.renderFromTags([JSON.stringify(storeOf("blockeditor").value)]);
+    expect(saved.querySelector("article[data-blockeditor]").innerHTML).toBe(expected.html);
+    expect(saved.querySelector("article[data-blockeditor]").getAttribute("data-rev")).toBe(expected.rev);
 
     // A copy opens through the article rebuild, so it carries no merge state:
     // the page editor's state is the host's, never a downloaded file's.
-    expect(saved.querySelector('script[merge="page"]')).toBe(null);
-    expect(html).not.toContain('merge="page"');
+    expect(saved.querySelector('script[merge="blockeditor"]')).toBe(null);
+    expect(html).not.toContain('merge="blockeditor"');
     expect(blocksFromYValue(store.value).p.c).toBe("Hello!");
 
     expect(anchors).toHaveLength(1);
     expect(anchors[0].download).toBe("index.html");
-    expect(anchors[0].href).toContain("blob:page-copy");
+    expect(anchors[0].href).toContain("blob:blockeditor-copy");
   } finally {
     click.mockRestore();
     URL.createObjectURL = create;
@@ -180,7 +181,7 @@ test("Download a copy drops copy-only content the saved file keeps", async () =>
   const create = URL.createObjectURL;
   const revoke = URL.revokeObjectURL;
   const click = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-  URL.createObjectURL = jest.fn((blob) => { blobs.push(blob); return "blob:page-copy"; });
+  URL.createObjectURL = jest.fn((blob) => { blobs.push(blob); return "blob:blockeditor-copy"; });
   URL.revokeObjectURL = jest.fn();
   try {
     expect(await saveStates.downloadPageCopy()).toBe(true);
@@ -204,7 +205,7 @@ test("Copy text hands the article's plain text to the clipboard, never the edito
   // and must not reach the clipboard.
   const chrome = document.createElement("div");
   chrome.textContent = "EDITOR-CHROME-MARKER";
-  document.querySelector("article[data-page]").appendChild(chrome);
+  document.querySelector("article[data-blockeditor]").appendChild(chrome);
 
   const writeText = jest.fn(async () => {});
   const had = Object.getOwnPropertyDescriptor(navigator, "clipboard");
@@ -232,7 +233,7 @@ test("Copy text reports failure when the clipboard refuses, and when there is no
   });
   try {
     await expect(saveStates.copyPageText()).resolves.toBe(false);
-    document.querySelector("article[data-page]").remove();
+    document.querySelector("article[data-blockeditor]").remove();
     await expect(saveStates.copyPageText()).resolves.toBe(false);
   } finally {
     if (had) Object.defineProperty(navigator, "clipboard", had);

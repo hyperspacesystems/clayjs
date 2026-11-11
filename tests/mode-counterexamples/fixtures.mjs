@@ -72,14 +72,14 @@ const UNSENT_PAGE = {
 };
 
 const PAGE_HOST_HEAD =
-  '<script type="application/json" merge="page" clay="live">{"v":1,"g":0,"y":{"seed":"AAACQQMEAQAIQgALJwAoAQUAJwAoAIUkHGF0dHJzdGl0bGVsZXZlbHRmbG93YXR0cnNwMXRFAQEEBQIBBwEAAAEBAQACQQACQQEBBwB9AXcHaGVhZGluZ3YBAWJ3BXRpdGxldwlwYXJhZ3JhcGh2AQFidwJwMQA="}}</script>' +
-  '<script type="application/json" merge="page.tools" clay="live">{}</script>';
+  '<script type="application/json" merge="blockeditor" clay="live">{"v":1,"g":0,"y":{"seed":"AAACQQMEAQAIQgALJwAoAQUAJwAoAIUkHGF0dHJzdGl0bGVsZXZlbHRmbG93YXR0cnNwMXRFAQEEBQIBBwEAAAEBAQACQQACQQEBBwB9AXcHaGVhZGluZ3YBAWJ3BXRpdGxldwlwYXJhZ3JhcGh2AQFidwJwMQA="}}</script>' +
+  '<script type="application/json" merge="blockeditor.tools" clay="live">{}</script>';
 
 const PAGE_HOST = {
-  params: "plugins=page",
+  params: "plugins=blockeditor",
   head: PAGE_HOST_HEAD,
   body:
-    '<article class="page" clay="freeze" data-page="1" data-rev="093360993130d818">' +
+    '<article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="093360993130d818">' +
     '<h1 data-id="title"></h1>\n<p data-id="p1"></p></article>',
   path: "/notes.html",
 };
@@ -166,15 +166,15 @@ export const FIXTURES = {
     lanes: false,
     host: { served: { path: SOURCE_PAGE.path, html: servedDocument(SOURCE_PAGE), etag: "etag-1", contentType: "text/html; charset=utf-8" } },
   },
-  // The page editor: plugins=page over a tag and an article, on a host that advertises
+  // The page editor: plugins=blockeditor over a tag and an article, on a host that advertises
   // the `page` extension and serves the document it saved.
-  "page-host": {
+  "blockeditor-host": {
     page: PAGE_HOST,
     lanes: false,
     peer: true,
     pageHost: true,
     host: {
-      extensions: ["page"],
+      extensions: ["blockeditor"],
       answerMeta: true,
       served: { path: PAGE_HOST.path, html: servedDocument(PAGE_HOST), etag: "etag-1" },
     },
@@ -678,13 +678,13 @@ export async function createLanePair({ settle = async () => {}, channel = instal
   const initial = seed ?? seedValue(LANE_BLOCKS);
 
   const tab = (client) => {
-    const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(initial)) });
-    const entries = new Map([["page", { store }]]);
+    const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(initial)) });
+    const entries = new Map([["blockeditor", { store }]]);
     const seed = () =>
-      new Map([["page", { value: store.authoritative, ephemeral: false, text: JSON.stringify(initial) }]]);
+      new Map([["blockeditor", { value: store.authoritative, ephemeral: false, text: JSON.stringify(initial) }]]);
     const transport = localTransport({ seed, key: LANE_KEY });
     const lane = createFastLane({ transport, entries });
-    store.onLocal((ops) => lane.local("page", ops, store.mark));
+    store.onLocal((ops) => lane.local("blockeditor", ops, store.mark));
     const ydoc = new Y.Doc();
     ydoc.clientID = client;
     for (const key of Object.keys(initial.y).sort()) Y.applyUpdateV2(ydoc, dec(initial.y[key]), NET);

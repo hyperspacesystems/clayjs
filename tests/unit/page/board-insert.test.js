@@ -64,7 +64,7 @@ test("the menu finds Board by name, kanban, cards and columns", () => {
 });
 
 test("through the Yjs binding a new board stores its three columns as board fields, in one Undo step, and takes cards", () => {
-  const store = createStore({ name: "page", value: seedValue([{ id: "p", text: "Intro" }, { id: "e", text: "" }]) });
+  const store = createStore({ name: "blockeditor", value: seedValue([{ id: "p", text: "Intro" }, { id: "e", text: "" }]) });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const view = new pmView.EditorView(document.body.appendChild(document.createElement("div")), { state: pmState.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }), dispatchTransaction: (tr) => binding.dispatch(tr) });
   binding.attach(view);

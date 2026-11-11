@@ -41,11 +41,11 @@ function page(spec, caretId = spec[0][0]) {
   select(view, posOf(view, caretId));
   return view;
 }
-const grip = (view) => view.dom.parentElement.querySelector(".page-grip");
+const grip = (view) => view.dom.parentElement.querySelector(".blockeditor-grip");
 const shell = (view) => view.dom.parentElement;
-const menu = (view) => shell(view).querySelector(".page-menu");
-const line = (view) => shell(view).querySelector(".page-drop");
-const live = (view) => shell(view).querySelector(".page-live").textContent;
+const menu = (view) => shell(view).querySelector(".blockeditor-menu");
+const line = (view) => shell(view).querySelector(".blockeditor-drop");
+const live = (view) => shell(view).querySelector(".blockeditor-live").textContent;
 const chrome = (view) => view.pluginViews.find((p) => p.menuEl);
 const ptr = (type, props = {}) => {
   const e = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: props.x ?? 0, clientY: props.y ?? 0 });

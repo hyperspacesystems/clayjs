@@ -50,6 +50,7 @@ jest.unstable_mockModule("../../src/core/unsaved-warning.js", counted("core/unsa
 })));
 
 jest.unstable_mockModule("../../src/core/save.js", counted("core/save.js", () => ({
+  claimFailure: () => {},
   savePage: function savePage() {},
   savePageForce: {},
   saveOverwritingConflict: {},

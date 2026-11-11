@@ -10,14 +10,14 @@ const table = {
 
 test("table view has labelled buttons, a scroll container and command menus", () => {
   const view = editor([], { blocks: { tbl: table } });
-  const wrapper = view.dom.querySelector(".page-table");
+  const wrapper = view.dom.querySelector(".blockeditor-table");
   expect(wrapper.getAttribute("role")).toBe("group");
-  expect(wrapper.querySelector(".page-table-scroll")).toBeTruthy();
+  expect(wrapper.querySelector(".blockeditor-table-scroll")).toBeTruthy();
   const buttons = [...wrapper.querySelectorAll("thead button")];
   expect(buttons.map((button) => button.textContent)).toEqual(["Name", "Amount"]);
   expect(wrapper.querySelector('td[data-kind="number"]')).toBeTruthy();
   buttons[1].click();
-  const menu = view.dom.parentElement.querySelector(".page-menu");
+  const menu = view.dom.parentElement.querySelector(".blockeditor-menu");
   expect(menu.querySelectorAll('button[role="menuitem"]').length).toBeGreaterThan(5);
   [...menu.querySelectorAll("button")].find((button) => button.textContent.includes("Sort ascending")).click();
   expect(view.state.doc.child(0).attrs.sort).toEqual({ col: "c2", dir: "asc" });
@@ -33,7 +33,7 @@ test("table view has labelled buttons, a scroll container and command menus", ()
   [...menu.querySelectorAll("button")].find((button) => button.textContent.includes("Date")).click();
   expect(view.state.doc.child(0).attrs.cols.c1.kind).toBe("date");
   expect(wrapper.querySelector('td[data-col="c1"]').dataset.kind).toBe("date");
-  wrapper.querySelector(".page-table-row-menu").click();
+  wrapper.querySelector(".blockeditor-table-row-menu").click();
   [...menu.querySelectorAll("button")].find((button) => button.textContent.includes("Insert below")).click();
   expect(view.state.doc.child(0).childCount).toBe(3);
 });
@@ -71,14 +71,14 @@ test("a press on a cell's padding puts the caret in that cell's text, after the 
     expect($head.parent.textContent).toBe(text);
     expect($head.parentOffset).toBe(text.length);
   }
-  expect(cells[0].querySelector(".page-table-row-menu").nextElementSibling).toBe(cells[0].querySelector("span"));
+  expect(cells[0].querySelector(".blockeditor-table-row-menu").nextElementSibling).toBe(cells[0].querySelector("span"));
 });
 
 test("table and row actions are gear icons that keep their accessible labels", () => {
   const view = editor([], { blocks: { tbl: table } });
-  const wrapper = view.dom.querySelector(".page-table");
-  const actions = wrapper.querySelector(":scope > .page-table-actions");
-  const rowMenu = wrapper.querySelector(".page-table-row-menu");
+  const wrapper = view.dom.querySelector(".blockeditor-table");
+  const actions = wrapper.querySelector(":scope > .blockeditor-table-actions");
+  const rowMenu = wrapper.querySelector(".blockeditor-table-row-menu");
   expect(actions.querySelector("svg")).toBeTruthy();
   expect(actions.textContent).toBe("");
   expect(actions.getAttribute("aria-label")).toBe("Table actions");

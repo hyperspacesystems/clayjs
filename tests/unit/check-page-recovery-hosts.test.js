@@ -50,9 +50,9 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ ok: true, msg: "Saved", msgType: "success", etag: stamp(await readFile(document)) }));
     return;
   }
-  if (url.pathname.startsWith("/_/page-state")) {
+  if (url.pathname.startsWith("/_/blockeditor-state")) {
     res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "page state unavailable", code: "no-page-state" }));
+    res.end(JSON.stringify({ error: "page state unavailable", code: "no-blockeditor-state" }));
     return;
   }
   const bytes = await readFile(document).catch(() => null);
@@ -99,12 +99,12 @@ describe("check-page-recovery-hosts", () => {
     }
 
     const [local] = lineOf(stdout, "hyperclay-local");
-    expect(local).toMatch(/^hyperclay-local: page-state sha256 [0-9a-f]{64} \(\d+ B, generation [0-9a-f]{32}\), reopened "/);
+    expect(local).toMatch(/^hyperclay-local: blockeditor-state sha256 [0-9a-f]{64} \(\d+ B, generation [0-9a-f]{32}\), reopened "/);
     expect(local).toContain('reopened "Pages keep every keystroke. words survive a restart."');
     expect(local).not.toContain("TEMPORARY");
 
     const [third] = lineOf(stdout, "hyperclay");
-    expect(third).toMatch(/^hyperclay: (skipped \(no fixture adapter\)|page-state sha256 [0-9a-f]{64})/);
+    expect(third).toMatch(/^hyperclay: (skipped \(no fixture adapter\)|blockeditor-state sha256 [0-9a-f]{64})/);
   });
 
   test("a host whose fixture adapter drops the page state makes the run fail", async () => {

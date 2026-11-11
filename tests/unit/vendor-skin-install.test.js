@@ -53,7 +53,7 @@ test("two skins both sit ahead of the page's stylesheets", () => {
 test("moves back to the front when something was put ahead of it", () => {
   const el = installSkin("richclay", RICHCLAY);
   const intruder = document.createElement("style");
-  intruder.textContent = "@layer page { button { color: red !important } }";
+  intruder.textContent = "@layer blockeditor { button { color: red !important } }";
   document.head.insertBefore(intruder, document.head.firstChild);
   installSkin("richclay", RICHCLAY);
   expect(document.head.firstChild).toBe(el);
@@ -97,7 +97,7 @@ test("without roots the skin text is exactly the module's", () => {
 test("after a live-sync frame every skin is back ahead of the page's stylesheets", () => {
   const el = installSkin("richclay", RICHCLAY);
   const intruder = document.createElement("style");
-  intruder.textContent = "@layer page { button { color: red !important } }";
+  intruder.textContent = "@layer blockeditor { button { color: red !important } }";
   document.head.insertBefore(intruder, document.head.firstChild);
   document.dispatchEvent(new CustomEvent("clay:sync-applied"));
   const nodes = [...document.head.childNodes];

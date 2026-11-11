@@ -170,13 +170,13 @@ describe("deleting and duplicating", () => {
 describe("the plugin in a real view", () => {
   const view = (spec = FLAT) => editor(spec);
 
-  test("Esc selects the caret's block and draws .page-block-selected", () => {
+  test("Esc selects the caret's block and draws .blockeditor-block-selected", () => {
     const v = view();
     select(v, posOf(v, "b"));
     expect(key(v, "Escape")).toBe(true);
     expect(v.state.selection instanceof BlockSelection).toBe(true);
-    expect(v.dom.querySelectorAll(".page-block-selected").length).toBe(1);
-    expect(v.dom.querySelector(".page-block-selected").textContent).toBe("B");
+    expect(v.dom.querySelectorAll(".blockeditor-block-selected").length).toBe(1);
+    expect(v.dom.querySelector(".blockeditor-block-selected").textContent).toBe("B");
   });
 
   test("a focused editor hides the browser's own selection while blocks are selected and shows it again after", () => {
@@ -193,7 +193,7 @@ describe("the plugin in a real view", () => {
     const v = view();
     select(v, posOf(v, "b"));
     key(v, "Escape");
-    const live = v.dom.parentElement.querySelector(".page-live");
+    const live = v.dom.parentElement.querySelector(".blockeditor-live");
     expect(live.textContent).toBe("1 block selected");
     key(v, "ArrowDown", { shiftKey: true });
     expect(live.textContent).toBe("2 blocks selected");
@@ -249,7 +249,7 @@ describe("the plugin in a real view", () => {
     key(v, "a", { ctrlKey: true });
     key(v, "a", { ctrlKey: true });
     expect(v.state.selection instanceof BlockSelection).toBe(true);
-    expect(v.dom.querySelectorAll(".page-block-selected").length).toBe(4);
+    expect(v.dom.querySelectorAll(".blockeditor-block-selected").length).toBe(4);
   });
 
   test("the chrome survives a block selection of the last block", () => {
@@ -264,7 +264,7 @@ describe("the plugin in a real view", () => {
     select(v, posOf(v, "a"));
     key(v, "Escape");
     key(v, "ArrowDown", { shiftKey: true });
-    const live = v.dom.parentElement.querySelector(".page-live");
+    const live = v.dom.parentElement.querySelector(".blockeditor-live");
     const para = schema.nodes.paragraph.create({ id: "r1", pos: "Zz" }, schema.text("R"));
     const edge = v.state.selection.to;
     v.dispatch(v.state.tr.insert(edge, para).setMeta(REMOTE, true).setMeta("addToHistory", false));
@@ -342,7 +342,7 @@ describe("review regressions", () => {
       v.dispatch(tr);
       expect(v.state.selection).toBeInstanceOf(TextSelection);
       expect(bookmark.map(tr.mapping).resolve(tr.doc)).toBeInstanceOf(TextSelection);
-      expect(v.dom.parentElement.querySelector(".page-live").textContent).toBe("Block selection cleared because the document changed");
+      expect(v.dom.parentElement.querySelector(".blockeditor-live").textContent).toBe("Block selection cleared because the document changed");
       expect(S.deleteBlocks(v.state, v.dispatch)).toBe(false);
       expect(v.state.doc.child(2).attrs.parent).toBe("t");
     } finally { v.destroy(); }
@@ -358,7 +358,7 @@ describe("review regressions", () => {
       v.dispatch(tr);
       expect(v.state.selection).toBeInstanceOf(TextSelection);
       expect(v.state.selection.$head.parent.attrs.id).toBe("a");
-      expect(v.dom.parentElement.querySelector(".page-live").textContent).toMatch(/document changed/);
+      expect(v.dom.parentElement.querySelector(".blockeditor-live").textContent).toMatch(/document changed/);
     } finally { v.destroy(); }
   });
 
@@ -368,7 +368,7 @@ describe("review regressions", () => {
       v.dispatch(v.state.tr.setSelection(S.selectBlocks(v.state.doc, 1)));
       v.dispatch(v.state.tr.setNodeMarkup(0, null, { ...v.state.doc.child(0).attrs, open: false }).setMeta(REMOTE, true));
       expect(v.state.selection).toBeInstanceOf(TextSelection);
-      expect(v.dom.parentElement.querySelector(".page-live").textContent).toBe("Block selection cleared because the document changed");
+      expect(v.dom.parentElement.querySelector(".blockeditor-live").textContent).toBe("Block selection cleared because the document changed");
     } finally { v.destroy(); }
   });
 

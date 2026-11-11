@@ -32,13 +32,13 @@ function adopt(meta) {
   return limit;
 }
 
-// A Document's live state rides in one <script merge="page"> tag that Hyperclay
+// A Document's live state rides in one <script merge="blockeditor"> tag that Hyperclay
 // stores apart from the file, and its limit (`maxBytesMeasures: 'file'`) is judged on
 // the body without that tag, the way the host's splitPage() cuts it: the whole line
 // when the tag stands alone on it, otherwise the tag itself. Where the host would not
 // split (no tag, two tags), the cut here can only make the count smaller, so the
 // host's own 413 stays the answer and nothing is refused that the host would store.
-const PAGE_TAG = /<script\b[^>]*\bmerge=(["'])page\1[^>]*>[\s\S]*?<\/script\s*>/i;
+const PAGE_TAG = /<script\b[^>]*\bmerge=(["'])blockeditor\1[^>]*>[\s\S]*?<\/script\s*>/i;
 
 export function storedFile(html, measure = measures) {
   if (measure !== 'file' || typeof html !== 'string') return html;

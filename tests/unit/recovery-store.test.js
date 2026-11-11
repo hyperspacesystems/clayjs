@@ -243,7 +243,7 @@ test("a database a later build already upgraded is reported, not downgraded or d
 test("a binary record keeps its bytes, not an object of numeric properties", async () => {
   const entries = recoveryWith().register({ channel: "clay.page", version: 1 });
   const bytes = new Uint8Array([7, 0, 255, 12]);
-  entries.stage({ key: "page-1", kind: "binary", payload: bytes });
+  entries.stage({ key: "blockeditor-1", kind: "binary", payload: bytes });
   expect((await entries.flush()).ok).toBe(true);
 
   const { records } = await entries.list();
@@ -256,7 +256,7 @@ test("a binary record keeps its bytes, not an object of numeric properties", asy
 test("a caller that mutates its buffer after staging cannot change the staged record", async () => {
   const entries = recoveryWith().register({ channel: "clay.page" });
   const buffer = new Uint8Array([1, 2, 3]);
-  entries.stage({ key: "page-1", kind: "binary", payload: buffer });
+  entries.stage({ key: "blockeditor-1", kind: "binary", payload: buffer });
   buffer[0] = 99;
   buffer.fill(42);
 

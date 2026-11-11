@@ -69,17 +69,17 @@ test("a cycle below an entry counts each module once", async () => {
 });
 
 test("relative, root-relative and absolute CSS imports resolve to one served file", () => {
-  const importer = "https://clayjs.com/v1/src/page/themes/light-1.css";
+  const importer = "https://clayjs.com/v1/src/blockeditor/themes/light-1.css";
   const imports = [
     '@import url("./content.css");',
-    '@import url("/v1/src/page/themes/content.css");',
-    '@import url("https://clayjs.com/v1/src/page/themes/content.css");',
+    '@import url("/v1/src/blockeditor/themes/content.css");',
+    '@import url("https://clayjs.com/v1/src/blockeditor/themes/content.css");',
   ].map((css) => cssImportsOf(css, importer)[0]);
 
   expect(imports).toEqual([
-    { url: "https://clayjs.com/v1/src/page/themes/content.css", path: "src/page/themes/content.css" },
-    { url: "https://clayjs.com/v1/src/page/themes/content.css", path: "src/page/themes/content.css" },
-    { url: "https://clayjs.com/v1/src/page/themes/content.css", path: "src/page/themes/content.css" },
+    { url: "https://clayjs.com/v1/src/blockeditor/themes/content.css", path: "src/blockeditor/themes/content.css" },
+    { url: "https://clayjs.com/v1/src/blockeditor/themes/content.css", path: "src/blockeditor/themes/content.css" },
+    { url: "https://clayjs.com/v1/src/blockeditor/themes/content.css", path: "src/blockeditor/themes/content.css" },
   ]);
 });
 
@@ -208,7 +208,7 @@ test("the owner's shipped copy loads the upgrade check after ready but not its v
 
 test("a Document with a tool counts the host and data modules its part opens first", async () => {
   const value = seedValue([{ id: "t", t: "tool", attrs: { rev: "r1" } }]);
-  const html = `<!doctype html><html><head><script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script></head><body><article data-page="1"></article><script src="https://clayjs.com/v1/clay.js?plugins=page"></script></body></html>`;
+  const html = `<!doctype html><html><head><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script></head><body><article data-blockeditor="1"></article><script src="https://clayjs.com/v1/clay.js?plugins=blockeditor"></script></body></html>`;
   const measured = await measure({ html, mode: "edit" });
 
   expect(paths(measured)).toContain("src/page/features/tool.js");

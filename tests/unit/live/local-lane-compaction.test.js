@@ -17,7 +17,7 @@ import { seedValue } from "../../../src/page/ybind/seed.js";
  */
 
 const KEY = "clay-live:/lab.html";
-const SCOPE = `${KEY}:page-rooms:2`;
+const SCOPE = `${KEY}:blockeditor-rooms:2`;
 const BLOCKS = [
   { id: "p", text: "hello" },
   { id: "q", text: "world" },
@@ -134,12 +134,12 @@ function updateOf(mark, client) {
 }
 
 function tab(client, { key = KEY, rooms = true, value = folded() } = {}) {
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(value)) });
-  const entries = new Map([["page", { store }]]);
-  const seed = () => new Map([["page", { value: store.authoritative, ephemeral: false, text: JSON.stringify(value) }]]);
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(value)) });
+  const entries = new Map([["blockeditor", { store }]]);
+  const seed = () => new Map([["blockeditor", { value: store.authoritative, ephemeral: false, text: JSON.stringify(value) }]]);
   const transport = localTransport({ seed, key, rooms });
   const lane = createFastLane({ transport, entries });
-  store.onLocal((ops) => lane.local("page", ops, store.mark));
+  store.onLocal((ops) => lane.local("blockeditor", ops, store.mark));
   const ydoc = new Y.Doc();
   ydoc.clientID = client;
   for (const k of Object.keys(value.y).sort()) Y.applyUpdateV2(ydoc, dec(value.y[k]), NET);
@@ -153,8 +153,8 @@ function tab(client, { key = KEY, rooms = true, value = folded() } = {}) {
 // The lane alone: a room seeded from a value this test builds, driven by frames
 // it sends itself.
 function room(value) {
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(value)) });
-  const seed = () => new Map([["page", { value: store.authoritative, ephemeral: false }]]);
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(value)) });
+  const seed = () => new Map([["blockeditor", { value: store.authoritative, ephemeral: false }]]);
   const transport = localTransport({ seed, key: KEY, rooms: true });
   const writers = [];
   const stop = transport.start({ open() {}, close() {}, frame() {}, state() {}, writer: (event) => writers.push(event) });
@@ -164,7 +164,7 @@ function room(value) {
 }
 
 const setOp = (key, value) => ({ op: "set", path: ["y", key], value });
-const keysOf = async (t) => Object.keys((await t.transport.fetchState(t.transport.clientId)).stores.page.value.y);
+const keysOf = async (t) => Object.keys((await t.transport.fetchState(t.transport.clientId)).stores.blockeditor.value.y);
 
 test("two tabs reach the loose bound and the room tails their updates", async () => {
   const a = tab(11);
@@ -196,24 +196,24 @@ test("two tabs reach the loose bound and the room tails their updates", async ()
   expect(b.store.pending.length).toBe(0);
 });
 
-test("an overflow gets a full and then page-full", async () => {
+test("an overflow gets a full and then blockeditor-full", async () => {
   const t = room({ v: 1, g: 0, y: { "c00000000-1": updateOf("x".repeat(2_800_000), 41) } });
   await settle();
   expect(t.transport.isSequencer).toBe(true);
 
-  const over = await t.transport.send("c1", { name: "page", n: 1, compaction: 1, ops: [setOp("u1aaaaaaa-b-c", updateOf("y".repeat(300_000), 42))] });
+  const over = await t.transport.send("c1", { name: "blockeditor", n: 1, compaction: 1, ops: [setOp("u1aaaaaaa-b-c", updateOf("y".repeat(300_000), 42))] });
   expect(over).toEqual({ status: 503, body: { code: "checkpoint-required" }, retryAfter: 0 });
 
   await settle();
   const state = await t.transport.fetchState("c1");
-  const keys = Object.keys(state.stores.page.value.y);
+  const keys = Object.keys(state.stores.blockeditor.value.y);
   expect(keys).toHaveLength(1);
   expect(keys[0]).toMatch(/^c[0-9a-z]{8}-[0-9a-z]+$/);
-  expect(state.stores.page.compaction).toEqual({ v: 1, loose: 32, activeBytes: 3932160 });
+  expect(state.stores.blockeditor.compaction).toEqual({ v: 1, loose: 32, activeBytes: 3932160 });
   expect(posted.some((message) => message.data?.type === "data" && message.data.data?.kind === "full")).toBe(true);
 
-  const full = await t.transport.send("c1", { name: "page", n: 2, compaction: 1, ops: [setOp("u1aaaaaaa-b-d", updateOf("z".repeat(600_000), 43))] });
-  expect(full).toEqual({ status: 409, body: { code: "page-full" }, retryAfter: 0 });
+  const full = await t.transport.send("c1", { name: "blockeditor", n: 2, compaction: 1, ops: [setOp("u1aaaaaaa-b-d", updateOf("z".repeat(600_000), 43))] });
+  expect(full).toEqual({ status: 409, body: { code: "blockeditor-full" }, retryAfter: 0 });
 });
 
 test("a hand-off in the middle of typing keeps every admitted update", async () => {
@@ -271,7 +271,7 @@ test("a whole-page fold that still does not fit refuses the next write as full",
   expect(t.transport.isSequencer).toBe(true);
   const keysBefore = await keysOf(t);
 
-  const over = await t.transport.send("c1", { name: "page", n: 1, compaction: 1, ops: [setOp("u1aaaaaaa-b-c", updateOf("y".repeat(200_000), 72))] });
+  const over = await t.transport.send("c1", { name: "blockeditor", n: 1, compaction: 1, ops: [setOp("u1aaaaaaa-b-c", updateOf("y".repeat(200_000), 72))] });
   expect(over).toEqual({ status: 503, body: { code: "checkpoint-required" }, retryAfter: 0 });
   await settle();
   expect(await keysOf(t)).toEqual(keysBefore);
@@ -279,8 +279,8 @@ test("a whole-page fold that still does not fit refuses the next write as full",
 
   // Waiting for another fold would never help: the next growing write is refused as
   // a full room refuses it.
-  const full = await t.transport.send("c1", { name: "page", n: 2, compaction: 1, ops: [setOp("u1aaaaaaa-b-d", updateOf("z".repeat(1_000), 73))] });
-  expect(full).toEqual({ status: 409, body: { code: "page-full" }, retryAfter: 0 });
+  const full = await t.transport.send("c1", { name: "blockeditor", n: 2, compaction: 1, ops: [setOp("u1aaaaaaa-b-d", updateOf("z".repeat(1_000), 73))] });
+  expect(full).toEqual({ status: 409, body: { code: "blockeditor-full" }, retryAfter: 0 });
 });
 
 test("a clean fold tells every tab it landed", async () => {
@@ -290,14 +290,14 @@ test("a clean fold tells every tab it landed", async () => {
   await settle();
   expect(t.transport.isSequencer).toBe(true);
 
-  const first = await t.transport.send("c1", { name: "page", n: 1, compaction: 1, ops: [setOp("u1aaaaaaa-b-c", updateOf("typed", 61))] });
+  const first = await t.transport.send("c1", { name: "blockeditor", n: 1, compaction: 1, ops: [setOp("u1aaaaaaa-b-c", updateOf("typed", 61))] });
   expect(first).toEqual({ status: 503, body: { code: "checkpoint-required" }, retryAfter: 0 });
   await settle();
 
   const state = await t.transport.fetchState(t.transport.clientId);
   expect(state.seq).toBe(1);
   expect(t.writers).toHaveLength(1);
-  expect(t.writers[0].landed.page).toBe(state.seq);
+  expect(t.writers[0].landed.blockeditor).toBe(state.seq);
 });
 
 test("a save of the page merges as a union under names this room makes", async () => {
@@ -309,7 +309,7 @@ test("a save of the page merges as a union under names this room makes", async (
   // A save from a device that never saw this room: the room's own key and one
   // this room does not hold.
   const file = { v: 1, g: 0, y: { ...value.y, "seed-0000": updateOf("from the file", 51) } };
-  t.transport.fileFrame(new Map([["page", { text: JSON.stringify(file), at: null, seq: null }]]));
+  t.transport.fileFrame(new Map([["blockeditor", { text: JSON.stringify(file), at: null, seq: null }]]));
   await settle();
 
   const keys = await keysOf(t);
@@ -317,7 +317,7 @@ test("a save of the page merges as a union under names this room makes", async (
   expect(keys.filter((key) => /^f[0-9a-z]{8}-[0-9a-z]+-[0-9a-z]+$/.test(key))).toHaveLength(1);
   const state = await t.transport.fetchState(t.transport.clientId);
   expect(state.seq).toBeGreaterThan(0);
-  expect(Object.keys(state.stores.page.value.y)).toHaveLength(2);
+  expect(Object.keys(state.stores.blockeditor.value.y)).toHaveLength(2);
 });
 
 test("an old-version tab on the old key never joins the new room", async () => {
@@ -362,7 +362,7 @@ test("a seed stored in parts commits its fold and then admits a write", async ()
   // A page of parts is never normal, so the first write is refused for the shape
   // and asks the room for a fold; the fold must commit, retiring the parts for one
   // checkpoint key, or every later write is refused the same way.
-  const first = await t.transport.send("c1", { name: "page", n: 1, compaction: 1, ops: [setOp("u1aaaaaaa-b-c", updateOf("typed", 61))] });
+  const first = await t.transport.send("c1", { name: "blockeditor", n: 1, compaction: 1, ops: [setOp("u1aaaaaaa-b-c", updateOf("typed", 61))] });
   expect(first).toEqual({ status: 503, body: { code: "checkpoint-required" }, retryAfter: 0 });
 
   await settle();
@@ -372,10 +372,10 @@ test("a seed stored in parts commits its fold and then admits a write", async ()
   expect(posted.some((message) => message.data?.type === "data" && message.data.data?.from === "compactor" && message.data.data?.kind === "full")).toBe(true);
 
   const state = await t.transport.fetchState(t.transport.clientId);
-  expect(textOf(state.stores.page.value)).toBe(before);
+  expect(textOf(state.stores.blockeditor.value)).toBe(before);
 
   // The room is within its bounds again: a further host-form update is admitted.
-  const again = await t.transport.send("c1", { name: "page", n: 2, compaction: 1, ops: [setOp("u1aaaaaaa-b-d", updateOf("more", 62))] });
+  const again = await t.transport.send("c1", { name: "blockeditor", n: 2, compaction: 1, ops: [setOp("u1aaaaaaa-b-d", updateOf("more", 62))] });
   expect(again.status).toBe(200);
   expect(again.body.code).toBeUndefined();
 });

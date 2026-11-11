@@ -11,7 +11,7 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 const record = { blocks: { h1: { t: "heading", pos: "1", level: 1, c: "Quarterly notes" }, p1: { t: "paragraph", pos: "2", c: "Revenue grew and costs stayed flat." } } };
 const value = migrateHybridValues([record]);
 function open() {
-  const store = createStore({ name: "page", value: clone(value) });
+  const store = createStore({ name: "blockeditor", value: clone(value) });
   const binding = createYPageBinding({ store });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = new pmView.EditorView(mount, { state: pmState.EditorState.create({ doc: binding.doc(), plugins: [structurePlugin(), identityPlugin()] }), dispatchTransaction: (tr) => binding.dispatch(tr) });
@@ -23,7 +23,7 @@ const taglessFile = (edit) => {
   const model = project(blocksFromYValue(value));
   const doc = document.implementation.createHTMLDocument("");
   const article = doc.createElement("article");
-  article.setAttribute("data-page", "1");
+  article.setAttribute("data-blockeditor", "1");
   article.setAttribute("data-rev", revOf(model));
   article.innerHTML = renderModel(model, { clean: fragmentCleaner(doc) });
   doc.body.appendChild(article);

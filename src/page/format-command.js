@@ -4,7 +4,7 @@ import toast from "../ui/toast-lazy.js";
 // A refusal the person cannot see is the same as a command that did nothing, so the
 // gate's "no" is said out loud. Only the gate's own refusal: a command the gate let
 // through reports its own result to its caller.
-const UNSUPPORTED = new Set(["page-format-unsupported", "unsupported-host"]);
+const UNSUPPORTED = new Set(["blockeditor-format-unsupported", "unsupported-host"]);
 const UNSUPPORTED_TEXT = "This host can't store that yet, so nothing was added.";
 const RETRY_TEXT = "That didn't go through. Try again.";
 const REFUSED_TEXT = "That couldn't be added here.";
@@ -23,11 +23,11 @@ function say(view, answer) {
 // caller writes nothing on a refusal.
 export async function runFormatted(view, apply) {
   if (typeof view.runFormatCommand !== "function") {
-    say(view, { code: "page-format-unsupported" });
-    return { ok: false, code: "page-format-unsupported" };
+    say(view, { code: "blockeditor-format-unsupported" });
+    return { ok: false, code: "blockeditor-format-unsupported" };
   }
   const answer = await view.runFormatCommand(apply);
   if (answer?.status === "applied") return answer.result;
   say(view, answer);
-  return { ok: false, code: answer?.code ?? answer?.status ?? "page-format-refused", retry: answer?.retry === true };
+  return { ok: false, code: answer?.code ?? answer?.status ?? "blockeditor-format-refused", retry: answer?.retry === true };
 }

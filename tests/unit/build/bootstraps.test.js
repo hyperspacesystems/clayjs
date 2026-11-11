@@ -152,24 +152,24 @@ test("the bootstrap fetches the edit supplement for an explicit ?editmode=true o
   expect(at).toBeGreaterThan(-1);
   const likelyEdit = new Function(`${code.slice(at, end)}\n  return __clayLikelyEdit;`)();
 
-  expect(likelyEdit("?plugins=page&editmode=true", "")).toBe(true);
+  expect(likelyEdit("?plugins=blockeditor&editmode=true", "")).toBe(true);
   expect(likelyEdit("?editmode=true", "")).toBe(true);
-  expect(likelyEdit("?plugins=page", "isAdminOfCurrentResource=abc")).toBe(false);
-  expect(likelyEdit("?plugins=page", "other=1; isAdminOfCurrentResource=abc")).toBe(false);
-  expect(likelyEdit("?plugins=page", "")).toBe(false);
-  expect(likelyEdit("?plugins=page&editmode=false", "isAdminOfCurrentResource=abc")).toBe(false);
+  expect(likelyEdit("?plugins=blockeditor", "isAdminOfCurrentResource=abc")).toBe(false);
+  expect(likelyEdit("?plugins=blockeditor", "other=1; isAdminOfCurrentResource=abc")).toBe(false);
+  expect(likelyEdit("?plugins=blockeditor", "")).toBe(false);
+  expect(likelyEdit("?plugins=blockeditor&editmode=false", "isAdminOfCurrentResource=abc")).toBe(false);
   expect(likelyEdit("?editmode=false", "other=1")).toBe(false);
 
   // A standalone page that sets the global before the script is editable by its own
   // say-so, and the URL still wins over the global.
   globalThis.clayEditMode = true;
   try {
-    expect(likelyEdit("?plugins=page")).toBe(true);
-    expect(likelyEdit("?plugins=page&editmode=false")).toBe(false);
+    expect(likelyEdit("?plugins=blockeditor")).toBe(true);
+    expect(likelyEdit("?plugins=blockeditor&editmode=false")).toBe(false);
   } finally {
     delete globalThis.clayEditMode;
   }
-  expect(likelyEdit("?plugins=page")).toBe(false);
+  expect(likelyEdit("?plugins=blockeditor")).toBe(false);
 
   // Two imports of the one supplement: the early one this predicate decides, and the
   // cached hint fetch a resolved edit, draft or first entry uses.

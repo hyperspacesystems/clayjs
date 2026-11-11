@@ -58,14 +58,14 @@ describe("pasted images", () => {
 });
 
 describe("pasted files", () => {
-  test("a page-file div becomes a file block with its name, size and type", () => {
-    const nodes = parse('<div class="page-file" data-type="file" data-src="/uploads/a.pdf" data-name="a.pdf" data-size="2048" data-mime="application/pdf"><a href="/uploads/a.pdf">a.pdf</a></div>');
+  test("a blockeditor-file div becomes a file block with its name, size and type", () => {
+    const nodes = parse('<div class="blockeditor-file" data-type="file" data-src="/uploads/a.pdf" data-name="a.pdf" data-size="2048" data-mime="application/pdf"><a href="/uploads/a.pdf">a.pdf</a></div>');
     expect(nodes.map((n) => n.type.name)).toEqual(["file"]);
     expect(nodes[0].attrs).toMatchObject({ src: "/uploads/a.pdf", name: "a.pdf", size: 2048, mime: "application/pdf" });
   });
 
   test("a file with an unsafe address is dropped, with no leftover text block for the link", () => {
-    const nodes = parse('<div class="page-file" data-type="file" data-src="javascript:alert(1)" data-name="x"><a href="javascript:alert(1)">x</a></div>');
+    const nodes = parse('<div class="blockeditor-file" data-type="file" data-src="javascript:alert(1)" data-name="x"><a href="javascript:alert(1)">x</a></div>');
     expect(nodes.map((n) => n.type.name)).not.toContain("file");
   });
 

@@ -134,7 +134,7 @@ export async function hostSupports(name) {
 }
 
 /**
- * The page format this host enforces: 1 when it announced `page-format-v1`,
+ * The page format this host enforces: 1 when it announced `blockeditor-format-v1`,
  * otherwise 0.
  *
  * A host announces that extension only once its floor enforcement and tolerant
@@ -146,14 +146,14 @@ export async function hostSupports(name) {
  */
 export async function hostPageFormat() {
   const meta = await hostMeta();
-  return meta.extensions.includes("page-format-v1") ? 1 : 0;
+  return meta.extensions.includes("blockeditor-format-v1") ? 1 : 0;
 }
 
 /**
  * Where this host serves the page state of one accepted version, or null.
  *
- * Two things have to be true: the host announced `page-recovery-v1` by name, and its
- * document block named the resource as `pageState.href`. A host that has the resource
+ * Two things have to be true: the host announced `blockeditor-recovery-v1` by name, and its
+ * document block named the resource as `blockeditorState.href`. A host that has the resource
  * but has not announced the extension is still launching it, and a client that inferred
  * either one from the other would retire journaled work against a pair nobody promised.
  * Absent, empty or not a string is null, which means no conditional read and no proof
@@ -163,8 +163,8 @@ export async function hostPageFormat() {
  */
 export async function hostPageStateHref() {
   const meta = await hostMeta();
-  if (!meta.extensions.includes("page-recovery-v1")) return null;
-  return meta.document?.pageState?.href || null;
+  if (!meta.extensions.includes("blockeditor-recovery-v1")) return null;
+  return meta.document?.blockeditorState?.href || null;
 }
 
 /**

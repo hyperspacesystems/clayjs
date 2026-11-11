@@ -43,10 +43,10 @@ const until = async (check, tries = 300) => {
 };
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 
 const marks = [];
@@ -200,7 +200,7 @@ const MODE = { editor: "ok", tablePart: "ok", tableGate: null, editorGate: null,
 function expectNoInput(page) {
   expect(markNames()).not.toContain("document:input-ready");
   expect(document.querySelectorAll('[contenteditable="true"]')).toHaveLength(0);
-  expect(document.querySelectorAll(".page-editor")).toHaveLength(0);
+  expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(0);
   expect(page.view).toBe(null);
 }
 
@@ -208,7 +208,7 @@ async function load({
   html = articleHtml(),
   head = tagHtml(seedValue(BLOCKS)),
   edit = null,
-  extensions = ["page"],
+  extensions = ["blockeditor"],
   saveAnswer = () => ({ ok: true, msgType: "success" }),
   saveGate = null,
   room = "ok",
@@ -240,7 +240,7 @@ async function load({
     seq: 0,
     writer: null,
     conn: 0,
-    stores: { page: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
+    stores: { blockeditor: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
   });
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
@@ -252,6 +252,7 @@ async function load({
   }));
 
   await jest.unstable_mockModule("../../../src/core/save.js", () => ({
+    claimFailure: () => {},
     savesAdmitted: () => true,
     savePageForce: async () => { saves.push(1); return saveGate ? saveGate.promise : saveAnswer(); },
     savePage: async () => ({ ok: true, msgType: "success" }),
@@ -305,14 +306,14 @@ async function load({
 
   const states = [];
   const onState = (event) => states.push(event.detail);
-  document.addEventListener("clay:page-save-state", onState);
-  cleanups.push(() => document.removeEventListener("clay:page-save-state", onState));
+  document.addEventListener("clay:blockeditor-save-state", onState);
+  cleanups.push(() => document.removeEventListener("clay:blockeditor-save-state", onState));
 
   const { live } = await import("../../../src/plugins/live.js");
   window.clay = {
     live: (name) => {
       liveCalls.push(name);
-      if (name !== "page") return live(name);
+      if (name !== "blockeditor") return live(name);
       if (livePage === "reject-ready") return { ready: Promise.reject(new Error("the room refused the join")) };
       const handle = live(name);
       if (room !== "defer") return handle;
@@ -338,10 +339,10 @@ test("while the room is still joining, the saved article stays and nothing is ed
   try {
     // The editor's code arrived and was accepted while the room was still joining.
     expect(await until(() => markNames().includes("document:assets-ready"))).toBe(true);
-    expect(liveCalls).toEqual(["page"]);
+    expect(liveCalls).toEqual(["blockeditor"]);
     expect(markNames()).not.toContain("document:authority-ready");
     expect(page.status).toMatchObject({ phase: "joining" });
-    expect(document.querySelector('article[data-page] [data-id="p"]')).toBeTruthy();
+    expect(document.querySelector('article[data-blockeditor] [data-id="p"]')).toBeTruthy();
     expectNoInput(page);
 
     roomGate.resolve();
@@ -355,7 +356,7 @@ test("while the room is still joining, the saved article stays and nothing is ed
 });
 
 test("a seeded document stages its seed in memory and opens no room", async () => {
-  const { page, saves, sent } = await load({ head: "", extensions: ["page", "live-data"] });
+  const { page, saves, sent } = await load({ head: "", extensions: ["blockeditor", "live-data"] });
   try {
     await page.ready;
 
@@ -366,7 +367,7 @@ test("a seeded document stages its seed in memory and opens no room", async () =
     expect(liveCalls).toEqual([]);
     expect(markNames()).toContain("document:authority-ready");
     expect(markNames()).toContain("document:input-ready");
-    expect(document.querySelectorAll('script[merge="page"]')).toHaveLength(0);
+    expect(document.querySelectorAll('script[merge="blockeditor"]')).toHaveLength(0);
     expect(page.view.editable).toBe(true);
   } finally {
     page.dispose();
@@ -381,7 +382,7 @@ test("an editor that never arrives blocks with the saved article kept and nothin
     await page.ready;
 
     expect(page.status).toMatchObject({ phase: "blocked", reason: "editor-assets-failed" });
-    expect(document.querySelector('article[data-page] [data-id="p"]')).toBeTruthy();
+    expect(document.querySelector('article[data-blockeditor] [data-id="p"]')).toBeTruthy();
     expect(markNames()).not.toContain("document:assets-ready");
     expectNoInput(page);
     page.dispose();
@@ -399,7 +400,7 @@ test("an optional part that never arrives keeps the text editor usable on its pl
   try {
     const { page } = await load({
       head: tagHtml(value),
-      html: `<article data-page="1" data-rev="${rev}">${html}</article>`,
+      html: `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`,
       tablePart: "throw",
     });
     await page.ready;
@@ -408,7 +409,7 @@ test("an optional part that never arrives keeps the text editor usable on its pl
     expect(page.view.editable).toBe(true);
     expect(page.view.state.doc.toString()).toContain("table");
     expect(document.querySelector("table")).toBeTruthy();
-    expect(document.querySelector(".page-table")).toBe(null);
+    expect(document.querySelector(".blockeditor-table")).toBe(null);
     expect(markNames().at(-1)).toBe("document:input-ready");
     page.dispose();
   } finally {
@@ -423,21 +424,21 @@ test("the view part the saved article asks for is fetched with the editor and dr
   const tableGate = deferred();
   const { page } = await load({
     head: tagHtml(value),
-    html: `<article data-page="1" data-rev="${rev}">${html}</article>`,
+    html: `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`,
     tableGate,
   });
   try {
     // The part is still on the wire: the editor must not mount on a document whose
     // view parts are missing, and the saved article is what a person still sees.
-    expect(await until(() => liveCalls.includes("page"))).toBe(true);
+    expect(await until(() => liveCalls.includes("blockeditor"))).toBe(true);
     expect(page.status).toMatchObject({ phase: "joining" });
-    expect(document.querySelector(".page-editor")).toBe(null);
-    expect(document.querySelector('article[data-page] [data-id="p"]')).toBeTruthy();
+    expect(document.querySelector(".blockeditor-editor")).toBe(null);
+    expect(document.querySelector('article[data-blockeditor] [data-id="p"]')).toBeTruthy();
 
     tableGate.resolve();
     await page.ready;
     expect(page.status).toMatchObject({ phase: "ready" });
-    expect(document.querySelector(".page-table")).toBeTruthy();
+    expect(document.querySelector(".blockeditor-table")).toBeTruthy();
     expect(page.view.editable).toBe(true);
   } finally {
     page.dispose();
@@ -445,12 +446,12 @@ test("the view part the saved article asks for is fetched with the editor and dr
 });
 
 test("an empty page.tools tag on a text document asks the tools store for nothing", async () => {
-  const tools = '<script type="application/json" merge="page.tools" clay="live">{}</script>';
+  const tools = '<script type="application/json" merge="blockeditor.tools" clay="live">{}</script>';
   const { page } = await load({ head: tagHtml(seedValue(BLOCKS)) + tools });
   try {
     await page.ready;
     expect(page.status).toMatchObject({ phase: "ready" });
-    expect(liveCalls).toEqual(["page"]);
+    expect(liveCalls).toEqual(["blockeditor"]);
   } finally {
     page.dispose();
   }
@@ -474,11 +475,11 @@ test("the room join is asked for while the editor's code is still arriving", asy
   try {
     // The join is asked for while the editor's code is still on the wire: the tag was
     // read without it, so the room answers before the editor ever evaluates.
-    expect(await until(() => liveCalls.includes("page"))).toBe(true);
+    expect(await until(() => liveCalls.includes("blockeditor"))).toBe(true);
     expect(MODE.editorDone).toBe(false);
     expect(inst.phase).toBe("joining");
     expect(markNames()).not.toContain("document:assets-ready");
-    expect(document.querySelector(".page-editor")).toBe(null);
+    expect(document.querySelector(".blockeditor-editor")).toBe(null);
     expect(document.querySelectorAll('[contenteditable="true"]')).toHaveLength(0);
     expect(inst.view ?? null).toBe(null);
 

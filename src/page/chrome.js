@@ -2,7 +2,7 @@
 // line, a toolbar over a text selection and a block menu (from the plus or "/").
 // At rest everything is faint; moving the pointer adds .is-moved to the shell,
 // which themes darken by a small step. All of it is themed through the
-// --page-* tokens in editor.js (contract: default-page/v1/look/THEME-CONTRACT.md).
+// --blockeditor-* tokens in editor.js (contract: default-page/v1/look/THEME-CONTRACT.md).
 import { state, commands } from "../vendor/prosemirror.vendor.js";
 import { schema } from "./schema.js";
 import { BlockSelection, siblingSpan, moveBlock, indentBlocks, outdentBlocks } from "./blocks.js";
@@ -262,19 +262,19 @@ const el = (tag, cls, attrs = {}) => {
 };
 
 function toolButton(name, label) {
-  const b = el("button", `page-tool${PHONE_TOOLS.has(name) ? " page-tool-primary" : " page-tool-desk"}`, { type: "button", "data-cmd": name, "aria-label": label, title: label });
+  const b = el("button", `blockeditor-tool${PHONE_TOOLS.has(name) ? " blockeditor-tool-primary" : " blockeditor-tool-desk"}`, { type: "button", "data-cmd": name, "aria-label": label, title: label });
   b.innerHTML = ICONS[name];
   return b;
 }
 
 const MOVED_MS = 1600;
 let menuCount = 0;
-export const chromeKey = new PluginKey("page-chrome");
+export const chromeKey = new PluginKey("blockeditor-chrome");
 const chromeFor = new WeakMap();
 
 // A range a slash menu chose, held in plugin state so it follows the document
 // while the action it belongs to waits for code to load.
-export const slashRangeKey = new PluginKey("page-slash-range");
+export const slashRangeKey = new PluginKey("blockeditor-slash-range");
 const slashRangeState = {
   init: () => null,
   apply(tr, value) {
@@ -341,33 +341,33 @@ class Chrome {
     this.roving = null;
     this.remote = false;
 
-    this.dock = el("div", "page-dock", { role: "toolbar", "aria-label": "Formatting" });
-    this.turn = el("button", "page-tool page-tool-turn page-tool-desk", { type: "button", "aria-haspopup": "menu" });
-    this.more = el("button", "page-tool page-tool-primary page-tool-more", { type: "button", "aria-label": "More", title: "More", "aria-haspopup": "menu" });
+    this.dock = el("div", "blockeditor-dock", { role: "toolbar", "aria-label": "Formatting" });
+    this.turn = el("button", "blockeditor-tool blockeditor-tool-turn blockeditor-tool-desk", { type: "button", "aria-haspopup": "menu" });
+    this.more = el("button", "blockeditor-tool blockeditor-tool-primary blockeditor-tool-more", { type: "button", "aria-label": "More", title: "More", "aria-haspopup": "menu" });
     this.more.innerHTML = ICONS.more;
-    this.settingsBtn = el("button", "page-tool page-tool-desk page-tool-settings", { type: "button", "aria-label": "Document settings", title: "Document settings", "aria-haspopup": "dialog", "aria-expanded": "false" });
+    this.settingsBtn = el("button", "blockeditor-tool blockeditor-tool-desk blockeditor-tool-settings", { type: "button", "aria-label": "Document settings", title: "Document settings", "aria-haspopup": "dialog", "aria-expanded": "false" });
     this.settingsBtn.innerHTML = ICONS.gear;
     this.settingsEl = null;
     this.settingsOpen = false;
     this.settingsAnchor = null;
     this.settingSwitches = {};
-    this.dock.append(this.turn, el("span", "page-tool-sep page-tool-desk"), ...TOOLS.map(([n, l]) => toolButton(n, l)), this.more);
+    this.dock.append(this.turn, el("span", "blockeditor-tool-sep blockeditor-tool-desk"), ...TOOLS.map(([n, l]) => toolButton(n, l)), this.more);
     // The loader publishes the page facade when its module arrives, which can be after
     // this toolbar is built, so the gear asks for the settings each time it is drawn.
     this.dock.insertBefore(this.settingsBtn, this.more);
     this.settingsBtn.hidden = !this.settingsAPI;
-    this.plus = el("button", "page-plus", { type: "button", "aria-label": "Add a block", title: "Add a block" });
+    this.plus = el("button", "blockeditor-plus", { type: "button", "aria-label": "Add a block", title: "Add a block" });
     this.plus.innerHTML = ICONS.plus;
-    this.grip = el("button", "page-grip", { type: "button", "aria-label": "Block actions", title: "Drag to move, click for actions", "aria-haspopup": "menu" });
+    this.grip = el("button", "blockeditor-grip", { type: "button", "aria-label": "Block actions", title: "Drag to move, click for actions", "aria-haspopup": "menu" });
     this.grip.innerHTML = ICONS.grip;
-    this.bubble = el("div", "page-bubble", { role: "toolbar", "aria-label": "Selection", hidden: "" });
-    this.bubbleTurn = el("button", "page-tool page-tool-turn", { type: "button", "aria-haspopup": "menu" });
-    this.bubbleMore = el("button", "page-tool page-tool-primary page-tool-more", { type: "button", "aria-label": "More", title: "More", "aria-haspopup": "menu" });
+    this.bubble = el("div", "blockeditor-bubble", { role: "toolbar", "aria-label": "Selection", hidden: "" });
+    this.bubbleTurn = el("button", "blockeditor-tool blockeditor-tool-turn", { type: "button", "aria-haspopup": "menu" });
+    this.bubbleMore = el("button", "blockeditor-tool blockeditor-tool-primary blockeditor-tool-more", { type: "button", "aria-label": "More", title: "More", "aria-haspopup": "menu" });
     this.bubbleMore.innerHTML = ICONS.more;
-    this.bubble.append(this.bubbleTurn, el("span", "page-tool-sep"), ...TOOLS.map(([n, l]) => toolButton(n, l)), this.bubbleMore);
-    this.menuId = `page-menu-${++menuCount}`;
-    this.menuEl = el("div", "page-menu", { role: "menu", id: this.menuId, hidden: "" });
-    this.scrim = el("div", "page-scrim", { hidden: "" });
+    this.bubble.append(this.bubbleTurn, el("span", "blockeditor-tool-sep"), ...TOOLS.map(([n, l]) => toolButton(n, l)), this.bubbleMore);
+    this.menuId = `blockeditor-menu-${++menuCount}`;
+    this.menuEl = el("div", "blockeditor-menu", { role: "menu", id: this.menuId, hidden: "" });
+    this.scrim = el("div", "blockeditor-scrim", { hidden: "" });
     this.shell.insertBefore(this.dock, view.dom);
     this.shell.append(this.plus, this.grip, this.bubble, this.scrim, this.menuEl);
 
@@ -399,7 +399,7 @@ class Chrome {
       scrimPressed = false;
     });
     this.menuEl.addEventListener("click", (e) => {
-      const row = e.target.closest(".page-menu-item");
+      const row = e.target.closest(".blockeditor-menu-item");
       if (row) this.pick(Number(row.dataset.index));
     });
     this.menuEl.addEventListener("keydown", (e) => {
@@ -461,14 +461,14 @@ class Chrome {
 
   dockControls() {
     const all = [...this.dock.querySelectorAll("button")].filter((b) => this.rendered(b));
-    return this.isPhone() ? all.filter((b) => b.classList.contains("page-tool-primary")) : all;
+    return this.isPhone() ? all.filter((b) => b.classList.contains("blockeditor-tool-primary")) : all;
   }
 
   // Every transaction asks whether the roving control is still usable: one style read for
   // that control, not one for every button in the dock.
   inRoving(control) {
     if (!control || !this.dock.contains(control)) return false;
-    if (this.isPhone() && !control.classList.contains("page-tool-primary")) return false;
+    if (this.isPhone() && !control.classList.contains("blockeditor-tool-primary")) return false;
     return this.rendered(control);
   }
 
@@ -596,26 +596,26 @@ class Chrome {
   // placed under the control that opened it.
   buildSettings() {
     if (this.settingsEl) return this.settingsEl;
-    const panel = el("div", "page-settings", { role: "dialog", "aria-label": "Document settings", hidden: "" });
-    const head = el("div", "page-settings-head");
-    const title = el("span", "page-settings-title");
+    const panel = el("div", "blockeditor-settings", { role: "dialog", "aria-label": "Document settings", hidden: "" });
+    const head = el("div", "blockeditor-settings-head");
+    const title = el("span", "blockeditor-settings-title");
     title.textContent = "Document settings";
-    const close = el("button", "page-settings-close", { type: "button", "aria-label": "Close settings" });
+    const close = el("button", "blockeditor-settings-close", { type: "button", "aria-label": "Close settings" });
     close.innerHTML = ICONS.close;
     close.addEventListener("click", () => this.closeSettings(true));
     head.append(title, close);
     const rows = SETTING_ROWS.map(([key, label]) => {
-      const row = el("div", "page-settings-row");
-      const name = el("span", "page-settings-name", { id: `${this.menuId}-set-${key}` });
+      const row = el("div", "blockeditor-settings-row");
+      const name = el("span", "blockeditor-settings-name", { id: `${this.menuId}-set-${key}` });
       name.textContent = label;
-      const sw = el("button", "page-settings-switch", { type: "button", role: "switch", "aria-checked": "true", "aria-labelledby": name.id, "data-setting": key });
-      sw.append(el("span", "page-settings-knob"));
+      const sw = el("button", "blockeditor-settings-switch", { type: "button", role: "switch", "aria-checked": "true", "aria-labelledby": name.id, "data-setting": key });
+      sw.append(el("span", "blockeditor-settings-knob"));
       sw.addEventListener("click", () => this.flipSetting(key));
       this.settingSwitches[key] = sw;
       row.append(name, sw);
       return row;
     });
-    const note = el("div", "page-settings-note");
+    const note = el("div", "blockeditor-settings-note");
     note.textContent = "Hidden values stay saved and come back when turned on.";
     panel.append(head, ...rows, note);
     this.settingsEl = panel;
@@ -644,7 +644,7 @@ class Chrome {
     anchor.setAttribute("aria-expanded", "true");
     panel.hidden = false;
     this.placeSettings();
-    panel.querySelector(".page-settings-close")?.focus({ preventScroll: true });
+    panel.querySelector(".blockeditor-settings-close")?.focus({ preventScroll: true });
   }
 
   closeSettings(restoreFocus = false) {
@@ -675,16 +675,16 @@ class Chrome {
       const x = Math.max(v.left + PHONE_INSET, Math.min(r.right - width, v.left + v.width - PHONE_INSET - width));
       let y = r.top - 6 - height;
       if (y < v.top + PHONE_INSET) y = Math.min(r.bottom + 6, v.top + v.height - PHONE_INSET - height);
-      panel.style.setProperty("--page-pop-x", `${x}px`);
-      panel.style.setProperty("--page-pop-y", `${Math.max(v.top + PHONE_INSET, y)}px`);
+      panel.style.setProperty("--blockeditor-pop-x", `${x}px`);
+      panel.style.setProperty("--blockeditor-pop-y", `${Math.max(v.top + PHONE_INSET, y)}px`);
       return;
     }
     const shellBox = this.shell.getBoundingClientRect();
     const x = Math.max(8, Math.min(r.right - shellBox.left - width, Math.max(8, shellBox.width - width - 8)));
     let y = r.bottom - shellBox.top + 6;
     if (y + height > this.win.innerHeight - 8 && r.top - shellBox.top - 6 - height >= 8) y = r.top - shellBox.top - 6 - height;
-    panel.style.setProperty("--page-pop-x", `${x}px`);
-    panel.style.setProperty("--page-pop-y", `${y}px`);
+    panel.style.setProperty("--blockeditor-pop-x", `${x}px`);
+    panel.style.setProperty("--blockeditor-pop-y", `${y}px`);
   }
 
   toggleMenu(mode, anchor) {
@@ -788,12 +788,12 @@ class Chrome {
     this.menuEl.setAttribute("role", slash ? "listbox" : "menu");
     const nodes = [];
     if (m.mode === "turn") {
-      const title = el("div", "page-menu-title");
+      const title = el("div", "blockeditor-menu-title");
       title.textContent = m.query ? `Turn into “${m.query}”` : "Turn into";
       nodes.push(title);
     }
     if (!m.items.length) {
-      const none = el("div", "page-menu-empty");
+      const none = el("div", "blockeditor-menu-empty");
       none.textContent = "No matching blocks";
       nodes.push(none);
     }
@@ -801,21 +801,21 @@ class Chrome {
       const active = i === m.active;
       const checked = current ? current.size === 1 && b.key === [...current][0] : (typeof b.checked === "boolean" ? b.checked : null);
       const role = m.mode === "turn" ? "menuitemradio" : typeof checked === "boolean" ? "menuitemcheckbox" : slash ? "option" : "menuitem";
-      const row = el("button", `page-menu-item${active ? " is-active" : ""}`, { type: "button", role, tabindex: !slash && active ? "0" : "-1", id: `${this.menuId}-${i}`, "data-index": String(i), ...(role === "menuitemradio" ? {} : { "aria-selected": active ? "true" : "false" }), ...(typeof checked === "boolean" ? { "aria-checked": String(checked) } : {}) });
-      const icon = el("span", "page-menu-icon");
+      const row = el("button", `blockeditor-menu-item${active ? " is-active" : ""}`, { type: "button", role, tabindex: !slash && active ? "0" : "-1", id: `${this.menuId}-${i}`, "data-index": String(i), ...(role === "menuitemradio" ? {} : { "aria-selected": active ? "true" : "false" }), ...(typeof checked === "boolean" ? { "aria-checked": String(checked) } : {}) });
+      const icon = el("span", "blockeditor-menu-icon");
       if (ICONS[b.icon]) icon.innerHTML = ICONS[b.icon];
       else icon.textContent = b.icon || "";
-      const label = el("span", "page-menu-label");
+      const label = el("span", "blockeditor-menu-label");
       label.textContent = b.label;
       if (b.description) {
-        const text = el("span", "page-menu-text");
-        const description = el("span", "page-menu-desc");
+        const text = el("span", "blockeditor-menu-text");
+        const description = el("span", "blockeditor-menu-desc");
         description.textContent = b.description;
         text.append(label, description);
         row.append(icon, text);
       } else row.append(icon, label);
       if (b.hint) {
-        const hint = el("span", "page-menu-hint");
+        const hint = el("span", "blockeditor-menu-hint");
         hint.textContent = b.hint;
         row.append(hint);
       }
@@ -823,7 +823,7 @@ class Chrome {
     });
     // A visitor's draft keeps no pictures or files: the menu says where they go instead.
     if (this.mediaNote && m.mode !== "turn" && m.mode !== "actions" && m.mode !== "more" && m.mode !== "external") {
-      const note = el("div", "page-menu-note", { role: "note" });
+      const note = el("div", "blockeditor-menu-note", { role: "note" });
       note.textContent = this.mediaNote;
       nodes.push(note);
     }
@@ -942,7 +942,7 @@ class Chrome {
   // The safe-area inset the browser reports, read through one hidden probe.
   safeBottom() {
     if (!this.probe) {
-      this.probe = el("div", "page-safe-probe");
+      this.probe = el("div", "blockeditor-safe-probe");
       this.shell.append(this.probe);
     }
     return parseFloat(this.win.getComputedStyle(this.probe).paddingBottom) || 0;
@@ -953,10 +953,10 @@ class Chrome {
     const v = phoneViewport(this.win);
     const maxHeight = Math.max(0, v.height - PHONE_INSET * 2);
     const width = Math.min(280, Math.max(0, v.width - PHONE_INSET * 2));
-    const applied = this.menuEl.style.getPropertyValue("--page-pop-max");
-    this.menuEl.style.removeProperty("--page-pop-max");
+    const applied = this.menuEl.style.getPropertyValue("--blockeditor-pop-max");
+    this.menuEl.style.removeProperty("--blockeditor-pop-max");
     const natural = this.menuEl.offsetHeight || 0;
-    if (applied) this.menuEl.style.setProperty("--page-pop-max", applied);
+    if (applied) this.menuEl.style.setProperty("--blockeditor-pop-max", applied);
     const height = Math.min(natural, maxHeight);
     const left = Math.max(v.left + PHONE_INSET, Math.min(bar.left, v.left + v.width - PHONE_INSET - width));
     let top = bar.top - 6 - height;
@@ -1027,34 +1027,34 @@ class Chrome {
       this.dock.style.left = `${layout.bar.left}px`;
       this.dock.style.top = `${layout.bar.top}px`;
       this.dock.style.width = `${layout.bar.width}px`;
-      this.grip.style.setProperty("--page-grip-lift", `${layout.bar.height}px`);
+      this.grip.style.setProperty("--blockeditor-grip-lift", `${layout.bar.height}px`);
     } else {
       if (layout.desk) for (const side of ["left", "top", "width"]) this.dock.style.removeProperty(side);
-      this.grip.style.removeProperty("--page-grip-lift");
+      this.grip.style.removeProperty("--blockeditor-grip-lift");
     }
     if (layout.gutter) {
       for (const part of [this.plus, this.grip]) {
-        part.style.setProperty("--page-plus-top", `${layout.gutter.top}px`);
-        part.style.setProperty("--page-plus-left", `${layout.gutter.left}px`);
+        part.style.setProperty("--blockeditor-plus-top", `${layout.gutter.top}px`);
+        part.style.setProperty("--blockeditor-plus-left", `${layout.gutter.left}px`);
       }
     }
-    this.plus.style.setProperty("--page-text-left", `${layout.textLeft}px`);
+    this.plus.style.setProperty("--blockeditor-text-left", `${layout.textLeft}px`);
     if (layout.bubble) {
-      this.bubble.style.setProperty("--page-pop-x", `${layout.bubble.x}px`);
-      this.bubble.style.setProperty("--page-pop-y", `${layout.bubble.y}px`);
+      this.bubble.style.setProperty("--blockeditor-pop-x", `${layout.bubble.x}px`);
+      this.bubble.style.setProperty("--blockeditor-pop-y", `${layout.bubble.y}px`);
     }
     if (layout.menu) {
-      this.menuEl.style.setProperty("--page-pop-x", `${layout.menu.x}px`);
-      this.menuEl.style.setProperty("--page-pop-y", `${layout.menu.y}px`);
+      this.menuEl.style.setProperty("--blockeditor-pop-x", `${layout.menu.x}px`);
+      this.menuEl.style.setProperty("--blockeditor-pop-y", `${layout.menu.y}px`);
       if (layout.menu.width !== undefined) {
-        this.menuEl.style.setProperty("--page-pop-width", `${layout.menu.width}px`);
-        this.menuEl.style.setProperty("--page-pop-max", `${layout.menu.maxHeight}px`);
+        this.menuEl.style.setProperty("--blockeditor-pop-width", `${layout.menu.width}px`);
+        this.menuEl.style.setProperty("--blockeditor-pop-max", `${layout.menu.maxHeight}px`);
       }
     }
   }
 
   get settingsAPI() {
-    return globalThis.clay?.page?.settings ?? null;
+    return globalThis.clay?.blockeditor?.settings ?? null;
   }
 
   update(view, prev) {

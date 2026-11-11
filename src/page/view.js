@@ -9,9 +9,9 @@ import { stopForUpgrade, upgradeReplaces, upgradeReplacesDocument } from "../syn
 import { applyPreparedArticle, keepToolVersion, prepareSavedArticle, toolInfoOf, toolsOf, toolStateOf } from "./reader-patch.js";
 import { claim } from "./runtime-owner.js";
 
-const ARTICLE = "article[data-page]";
+const ARTICLE = "article[data-blockeditor]";
 const TOOL = 'section[data-type="tool"][data-id]';
-const PAGE_TAG = 'script[type="application/json"][merge="page"]';
+const PAGE_TAG = 'script[type="application/json"][merge="blockeditor"]';
 const LINEAGE = ["live-at", "live-by"];
 
 export { applyPreparedArticle, prepareSavedArticle };
@@ -220,7 +220,7 @@ function createReader({ doc, article, represented = null, feed = null, documentU
     if (stopped || yielded) return false;
     const prepared = prepareSavedArticle(candidate.bytes, doc);
     if (!prepared.ok) return false;
-    if (article.querySelector(".page-editor")) return false;
+    if (article.querySelector(".blockeditor-editor")) return false;
     // A file published at another version of this document is not this reader's to
     // show: the stream stops, this file and every later one are refused, and the
     // notice offers a reload. Nothing of it reaches the article.
@@ -267,7 +267,7 @@ function createReader({ doc, article, represented = null, feed = null, documentU
   listeners.push(["toggle", onToggle, true]);
 
   const onTocLink = (event) => {
-    const link = event.target.closest?.('a[href^="#page-block-"], a[href^="#"]');
+    const link = event.target.closest?.('a[href^="#blockeditor-block-"], a[href^="#"]');
     if (!link || !article.contains(link) || !link.closest('nav[aria-label="Table of contents"]')) return;
     event.preventDefault();
     followTocLink(article, link.getAttribute("href"));
@@ -399,9 +399,9 @@ export function start({ represented = null, documentURL, servedEtag = null, stre
     throw new TypeError("clayjs: the reader needs a file, a stream or a page to follow");
   }
   const articles = doc.querySelectorAll(ARTICLE);
-  if (articles.length !== 1) throw new Error("clayjs: the reader needs exactly one article[data-page]");
+  if (articles.length !== 1) throw new Error("clayjs: the reader needs exactly one article[data-blockeditor]");
   const article = articles[0];
-  if (article.querySelector(".page-editor")) throw new Error("clayjs: the reader will not start over a mounted editor");
+  if (article.querySelector(".blockeditor-editor")) throw new Error("clayjs: the reader will not start over a mounted editor");
   if (represented) {
     const prepared = prepareSavedArticle(represented.bytes, doc);
     if (!prepared.ok) throw new Error("clayjs: the saved file is not a readable page");

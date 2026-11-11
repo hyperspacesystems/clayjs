@@ -11,7 +11,7 @@ const open = () => {
     second: { t: "paragraph", pos: "B", c: "abcdef" },
     third: { t: "paragraph", pos: "C", c: "after" },
   } }]);
-  const binding = createYPageBinding({ store: createStore({ name: "page", value }) });
+  const binding = createYPageBinding({ store: createStore({ name: "blockeditor", value }) });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = new pmView.EditorView(mount, {
     state: pmState.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }),

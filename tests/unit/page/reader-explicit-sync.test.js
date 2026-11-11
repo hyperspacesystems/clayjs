@@ -3,10 +3,10 @@ import { jest } from "@jest/globals";
 /**
  * The reader's compatibility path (Document 06 Step 3).
  *
- * A plain reader has no generic sync: page-view owns the saved lane through
+ * A plain reader has no generic sync: blockeditor-view owns the saved lane through
  * sync/saved-stream.js, and that is the only stream on the page. A reader whose
  * tag also names `sync` is a different thing: generic sync already streams the
- * saved lane and applies what it receives, so page-view opens no stream of its
+ * saved lane and applies what it receives, so blockeditor-view opens no stream of its
  * own and follows the saved-lane frames that apply reports instead. Those frames
  * are files and carry `source: "disk"` plus `lane: "saved"`; only the live lane
  * sends previews of unsaved keystrokes, which a reader never takes.
@@ -40,7 +40,7 @@ jest.unstable_mockModule("../../../src/sync/live-sync.js", () => ({
 }));
 
 const FILE = (p1, { rev = "r1", stamp = "disk-1", title = "Reader" } = {}) =>
-  `<!doctype html><html documentetag="${stamp}"><head><title>${title}</title></head><body><article class="page" clay="freeze" data-page="1" data-rev="${rev}"><p data-id="p1">${p1}</p><p data-id="p2">Keep me</p></article></body></html>`;
+  `<!doctype html><html documentetag="${stamp}"><head><title>${title}</title></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}"><p data-id="p1">${p1}</p><p data-id="p2">Keep me</p></article></body></html>`;
 
 const load = (html) => {
   document.documentElement.innerHTML = new DOMParser().parseFromString(html, "text/html").documentElement.innerHTML;
@@ -131,7 +131,7 @@ test("the loader passes the plan's sync choice to the reader", async () => {
     headers: { get: () => null },
   }));
   const { boot } = await import("../../../src/loader.js");
-  await boot("https://clayjs.com/v1", new URLSearchParams("plugins=page,sync"), () => {});
+  await boot("https://clayjs.com/v1", new URLSearchParams("plugins=blockeditor,sync"), () => {});
 
   expect(window.clay.conflicts).toBeDefined();
   expect(streams).toHaveLength(0);

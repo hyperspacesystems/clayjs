@@ -3,7 +3,7 @@ import { seedValue } from "../../../src/page/ybind/index.js";
 
 afterEach(() => { delete globalThis.clay; });
 
-const panelOf = (tab) => tab.view.dom.parentElement.querySelector(".page-board-panel");
+const panelOf = (tab) => tab.view.dom.parentElement.querySelector(".blockeditor-board-panel");
 const card = (tab, id) => control(tab.root(), `card:${id}`);
 const inPanel = (tab, key) => control(panelOf(tab), key);
 const type = (input, text) => {
@@ -33,10 +33,10 @@ test("clicking a card opens the side panel with every field, and Escape closes i
   const column = inPanel(tab, "column");
   expect(column.value).toBe("todo");
   expect([...column.options].map((option) => option.textContent)).toEqual(["To do", "In progress", "Done"]);
-  expect([...panel.querySelectorAll(".page-board-person")].map((chip) => `${chip.textContent}:${chip.getAttribute("aria-pressed")}`)).toEqual(["No owner:false"]);
+  expect([...panel.querySelectorAll(".blockeditor-board-person")].map((chip) => `${chip.textContent}:${chip.getAttribute("aria-pressed")}`)).toEqual(["No owner:false"]);
   expect(inPanel(tab, "owner-name").value).toBe("Maya");
   expect(inPanel(tab, "due").getAttribute("aria-label")).toBe("Due Thu, Jan 2, 2020, overdue");
-  expect(inPanel(tab, "due").querySelector(".page-board-due-note").textContent).toBe("Overdue");
+  expect(inPanel(tab, "due").querySelector(".blockeditor-board-due-note").textContent).toBe("Overdue");
   expect(inPanel(tab, "up").disabled).toBe(true);
   expect(inPanel(tab, "down").disabled).toBe(false);
   expect(inPanel(tab, "close").getAttribute("aria-keyshortcuts")).toBe("Escape");
@@ -61,7 +61,7 @@ test("on a narrow screen the panel is a modal sheet that keeps Tab inside it", (
     expect(keyOn(last, "Tab")).toBe(false);
     expect(document.activeElement).toBe(title);
     expect(keyOn(inPanel(tab, "down"), "Tab")).toBe(true);
-    tab.view.dom.parentElement.querySelector(".page-board-scrim").click();
+    tab.view.dom.parentElement.querySelector(".blockeditor-board-scrim").click();
     expect(panelOf(tab)).toBeNull();
     expect(tab.updates).toHaveLength(0);
   } finally {
@@ -108,7 +108,7 @@ test("owner chips come from the people on the host, with No owner and a typed na
   const tab = open();
   card(tab, "b").click();
   await tick();
-  const chips = () => [...panelOf(tab).querySelectorAll(".page-board-person")].map((chip) => `${chip.textContent}:${chip.getAttribute("aria-pressed")}`);
+  const chips = () => [...panelOf(tab).querySelectorAll(".blockeditor-board-person")].map((chip) => `${chip.textContent}:${chip.getAttribute("aria-pressed")}`);
   expect(chips()).toEqual(["MMaya:false", "SSam:false", "No owner:true"]);
   inPanel(tab, "owner:person-sam").focus();
   inPanel(tab, "owner:person-sam").click();
@@ -116,7 +116,7 @@ test("owner chips come from the people on the host, with No owner and a typed na
   expect(chips()).toEqual(["MMaya:false", "SSam:true", "No owner:false"]);
   expect(inPanel(tab, "owner-name").value).toBe("Sam");
   expect(document.activeElement).toBe(inPanel(tab, "owner:person-sam"));
-  expect(card(tab, "b").querySelector(".page-board-owner-name").textContent).toBe("Sam");
+  expect(card(tab, "b").querySelector(".blockeditor-board-owner-name").textContent).toBe("Sam");
 
   const typed = inPanel(tab, "owner-name");
   typed.focus();
@@ -146,7 +146,7 @@ test("the due date opens a date field that commits on Enter or blur, Escape keep
   keyOn(input, "Enter");
   expect(stored(tab).cards.b.due).toBe("2026-10-26");
   expect(document.activeElement).toBe(inPanel(tab, "due"));
-  expect(card(tab, "b").querySelector(".page-board-due")).not.toBeNull();
+  expect(card(tab, "b").querySelector(".blockeditor-board-due")).not.toBeNull();
 
   inPanel(tab, "due").click();
   input = inPanel(tab, "due-input");
@@ -191,7 +191,7 @@ test("Column, Move up, Move down and Delete card each run one command, keep focu
   expect(panelOf(tab)).toBeNull();
   expect(lanes(tab)[0]).toBe("To do: Invite flow");
   expect(document.activeElement).toBe(card(tab, "b"));
-  expect(tab.view.dom.parentElement.querySelector(".page-live").textContent).toBe("Card deleted");
+  expect(tab.view.dom.parentElement.querySelector(".blockeditor-live").textContent).toBe("Card deleted");
   expect(tab.binding.board.removed("bd").cards.a.title).toBe("Sample inbox");
   expect(keyOn(card(tab, "b"), "z", { ctrlKey: true })).toBe(false);
   expect(lanes(tab)[0]).toBe("To do: Sample inbox, Invite flow");
@@ -250,7 +250,7 @@ test("opening another card commits the first card's typing and moves the panel",
   expect(inPanel(tab, "title").value).toBe("Pricing page");
   expect(card(tab, "a").getAttribute("aria-expanded")).toBe("false");
   expect(card(tab, "c").getAttribute("aria-expanded")).toBe("true");
-  expect(tab.view.dom.parentElement.querySelectorAll(".page-board-panel")).toHaveLength(1);
+  expect(tab.view.dom.parentElement.querySelectorAll(".blockeditor-board-panel")).toHaveLength(1);
   expect(tab.updates).toHaveLength(1);
 });
 

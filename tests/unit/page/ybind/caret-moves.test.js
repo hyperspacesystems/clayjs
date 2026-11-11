@@ -15,7 +15,7 @@ afterEach(() => {
 });
 const seed = () => [{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }];
 const open = () => {
-  const store = createStore({ name: "page", value: seedValue(seed()) });
+  const store = createStore({ name: "blockeditor", value: seedValue(seed()) });
   const binding = createYPageBinding({ store });
   const view = new pmView.EditorView(document.body.appendChild(document.createElement("div")), { state: pmState.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }), dispatchTransaction: (tr) => binding.dispatch(tr) });
   binding.attach(view);

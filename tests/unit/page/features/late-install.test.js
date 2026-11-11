@@ -97,13 +97,13 @@ test("a first table recreates the table's views only; the paragraph, the image, 
     host,
     load: (id) => (id === "table" ? gate.then(() => realLoad("table")) : realLoad(id)),
   });
-  expect(await waitFor(() => view.dom.querySelector(".page-image") && view.dom.querySelector(".page-tool-block"))).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-image") && view.dom.querySelector(".blockeditor-tool-block"))).toBe(true);
   await settle(view);
 
   const paragraph = view.dom.querySelector("p");
-  const figure = view.dom.querySelector("figure.page-image");
-  const caption = figure.querySelector(".page-image-caption");
-  const tool = view.dom.querySelector(".page-tool-block");
+  const figure = view.dom.querySelector("figure.blockeditor-image");
+  const caption = figure.querySelector(".blockeditor-image-caption");
+  const tool = view.dom.querySelector(".blockeditor-tool-block");
   caption.focus();
   caption.textContent = "Draft caption";
   const mounts = host.mounts.length;
@@ -112,20 +112,20 @@ test("a first table recreates the table's views only; the paragraph, the image, 
   insertTable(view);
   await flush();
   await flush();
-  expect(view.dom.querySelector("figure.page-image")).toBe(figure);
+  expect(view.dom.querySelector("figure.blockeditor-image")).toBe(figure);
   expect(view.dom.querySelector("p")).toBe(paragraph);
-  expect(view.dom.querySelector(".page-image-caption").textContent).toBe("Draft caption");
+  expect(view.dom.querySelector(".blockeditor-image-caption").textContent).toBe("Draft caption");
   expect(calls).toEqual(["media", "tool", "table"]);
 
   release();
-  expect(await waitFor(() => view.dom.querySelector(".page-table"))).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
 
   expect(view.dom.querySelector("p")).toBe(paragraph);
-  expect(view.dom.querySelector("figure.page-image")).toBe(figure);
-  expect(view.dom.querySelector(".page-image-caption")).toBe(caption);
+  expect(view.dom.querySelector("figure.blockeditor-image")).toBe(figure);
+  expect(view.dom.querySelector(".blockeditor-image-caption")).toBe(caption);
   expect(caption.textContent).toBe("Draft caption");
   expect(view.state.doc.child(1).attrs.caption).toBe("Front door");
-  expect(view.dom.querySelector(".page-tool-block")).toBe(tool);
+  expect(view.dom.querySelector(".blockeditor-tool-block")).toBe(tool);
   expect(host.mounts.length).toBe(mounts);
   expect(host.disposes.length).toBe(disposes);
 });
@@ -135,13 +135,13 @@ test("a table present at boot draws its real table view, cells included, once th
   const { view, calls } = open({ tbl: TABLE }, { load: (id) => gate.then(() => realLoad(id)) });
   expect(calls).toEqual(["table"]);
   await flush();
-  expect(view.dom.querySelector(".page-table")).toBe(null);
+  expect(view.dom.querySelector(".blockeditor-table")).toBe(null);
   expect(view.dom.querySelector("table tbody td")).toBeTruthy();
 
   release();
-  expect(await waitFor(() => view.dom.querySelector(".page-table"))).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
   expect(view.dom.querySelectorAll("thead th").length).toBe(2);
-  expect(view.dom.querySelectorAll("td[data-col] .page-table-row-menu").length).toBeGreaterThan(0);
+  expect(view.dom.querySelectorAll("td[data-col] .blockeditor-table-row-menu").length).toBeGreaterThan(0);
 });
 
 test("the install transaction changes no document and leaves no undo step and no save", async () => {
@@ -156,7 +156,7 @@ test("the install transaction changes no document and leaves no undo step and no
   const steps = { done: historyOf(view.state).done.length, undone: historyOf(view.state).undone.length };
 
   release();
-  expect(await waitFor(() => view.dom.querySelector(".page-table"))).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
 
   expect(view.state.doc).toBe(doc);
   expect(view.state.selection.from).toBe(selection);
@@ -174,7 +174,7 @@ test("an install requested while composing applies only after composing ends", a
   await flush();
   await flush();
   await new Promise((resolve) => setTimeout(resolve, 60));
-  expect(view.dom.querySelector(".page-table")).toBe(null);
+  expect(view.dom.querySelector(".blockeditor-table")).toBe(null);
 
   // ProseMirror clears `composing` at compositionend and flushes the composed
   // text after it; hold the flag up for one more turn, as a browser that fires
@@ -185,6 +185,6 @@ test("an install requested while composing applies only after composing ends", a
   });
   view.dom.dispatchEvent(new CompositionEvent("compositionend"));
   await flush();
-  expect(view.dom.querySelector(".page-table")).toBe(null);
-  expect(await waitFor(() => view.dom.querySelector(".page-table"))).toBe(true);
+  expect(view.dom.querySelector(".blockeditor-table")).toBe(null);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
 });

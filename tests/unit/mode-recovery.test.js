@@ -15,7 +15,7 @@ jest.setTimeout(120000);
  *
  *   - a newer saved frame queued while the entry prepares refuses it with
  *     `stale-document`, and the reader applies that file afterwards (Astra 2);
- *   - a `plugins=page,sync` Document's exit restarts the page-view reader and the
+ *   - a `plugins=blockeditor,sync` Document's exit restarts the blockeditor-view reader and the
  *     live-sync saved lane it follows (Opus 5, Astra 3);
  *   - an `enable` that throws rolls the entry back and restarts the reader the
  *     retired one handed over, so the view keeps receiving files (Opus 6, Astra 5);
@@ -47,7 +47,7 @@ const until = async (predicate, timeout = 8000) => {
   return Boolean(await predicate());
 };
 
-const PAGE_HOST = { spec: 1, extensions: ["page", "live-data", "sync", "upload"], document: {} };
+const PAGE_HOST = { spec: 1, extensions: ["blockeditor", "live-data", "sync", "upload"], document: {} };
 
 const routeHost = async () => {
   const inner = globalThis.fetch;
@@ -70,8 +70,8 @@ const frameFrom = (source, bytes, seq, etag = `E${seq}`) =>
 // The file another tab saved: this page's bytes with one paragraph rewritten.
 const otherTabFile = (bytes, word) => {
   const file = new DOMParser().parseFromString(bytes, "text/html");
-  for (const tag of file.querySelectorAll('script[merge="page"]')) tag.remove();
-  file.querySelector('article[data-page] [data-id="p1"]').textContent = word;
+  for (const tag of file.querySelectorAll('script[merge="blockeditor"]')) tag.remove();
+  file.querySelector('article[data-blockeditor] [data-id="p1"]').textContent = word;
   return `<!DOCTYPE html>\n${file.documentElement.outerHTML}`;
 };
 
@@ -118,8 +118,8 @@ test("a saved frame queued while the entry prepares refuses it as stale and is a
   }
 });
 
-test("a plugins=page,sync Document's exit restarts the saved lane beside its page reader", async () => {
-  const boot = await bootFixture("document.html", { mode: "view", declare: true, params: "plugins=page,sync&exclude=richclay,source" });
+test("a plugins=blockeditor,sync Document's exit restarts the saved lane beside its page reader", async () => {
+  const boot = await bootFixture("document.html", { mode: "view", declare: true, params: "plugins=blockeditor,sync&exclude=richclay,source" });
   const pageView = await import(`${SRC}plugins/page-view.js`);
   const { liveSync: sync } = await import(`${SRC}sync/live-sync.js`);
   try {
@@ -136,7 +136,7 @@ test("a plugins=page,sync Document's exit restarts the saved lane beside its pag
     expect((await boot.clay.setMode("view")).ok).toBe(true);
     await flush();
 
-    // Both readers the page ran before the entry are running again: the page-view
+    // Both readers the page ran before the entry are running again: the blockeditor-view
     // reader over the article, and the saved lane it follows.
     expect(boot.eventSources().open).toBe(1);
     expect(sync.isDestroyed).toBe(false);
@@ -147,7 +147,7 @@ test("a plugins=page,sync Document's exit restarts the saved lane beside its pag
 
     // A file another tab saves reaches the article through the restarted lane.
     frameFrom(openStream(boot), otherTabFile(bytes, "newer"), 2);
-    expect(await until(() => document.querySelector('article[data-page] [data-id="p1"]')?.textContent === "newer")).toBe(true);
+    expect(await until(() => document.querySelector('article[data-blockeditor] [data-id="p1"]')?.textContent === "newer")).toBe(true);
   } finally {
     pageView.stop();
     sync.stop();
@@ -155,16 +155,16 @@ test("a plugins=page,sync Document's exit restarts the saved lane beside its pag
   }
 });
 
-test("a plugins=page Document's exit starts no saved lane its view never ran", async () => {
-  const boot = await bootFixture("document.html", { mode: "view", declare: true, params: "plugins=page&exclude=richclay,source" });
+test("a plugins=blockeditor Document's exit starts no saved lane its view never ran", async () => {
+  const boot = await bootFixture("document.html", { mode: "view", declare: true, params: "plugins=blockeditor&exclude=richclay,source" });
   const pageView = await import(`${SRC}plugins/page-view.js`);
   try {
     await routeHost();
     const source = openStream(boot);
     frameFrom(source, `<!DOCTYPE html>\n${document.documentElement.outerHTML}`, 1);
     await pageView.acquired;
-    // The reader's one stream, and nothing else: `plugins=page` in view resolves to the
-    // page-view reader alone.
+    // The reader's one stream, and nothing else: `plugins=blockeditor` in view resolves to the
+    // blockeditor-view reader alone.
     expect(boot.eventSources().open).toBe(1);
 
     // An entry of this page loads generic sync, because `page` implies it in edit, so by
@@ -230,7 +230,7 @@ test("a Document's enable that throws restarts its page reader from the entry re
     const source = openStream(boot);
     frameFrom(source, bytes, 1);
     await pageView.acquired;
-    const shown = () => document.querySelector('article[data-page] [data-id="p1"]')?.textContent;
+    const shown = () => document.querySelector('article[data-blockeditor] [data-id="p1"]')?.textContent;
 
     boot.clay.modeLifecycle.register({
       id: "probe:enable-fails",
@@ -303,13 +303,13 @@ test("an entry timeout releases the prepared Page before it returns view", async
     expect(deadlines.length).toBeGreaterThan(0);
     deadlines[0]();
     const answer = await entry;
-    const article = document.querySelector("article[data-page]");
+    const article = document.querySelector("article[data-blockeditor]");
     release();
     await flush();
 
     expect(answer).toMatchObject({ ok: false, mode: "view", code: "timeout" });
     expect(ownerOf(article)).toBe("reader");
-    expect(article.querySelectorAll(".page-editor").length).toBe(0);
+    expect(article.querySelectorAll(".blockeditor-editor").length).toBe(0);
   } finally {
     release();
     timerSpy?.mockRestore();

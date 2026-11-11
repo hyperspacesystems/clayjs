@@ -19,10 +19,10 @@ const readText = (file) => typeof file.text === "function" ? file.text() : new P
 
 function error(view, message) {
   const doc = view.dom.ownerDocument;
-  let notice = view.dom.parentElement.querySelector(".page-csv-error");
+  let notice = view.dom.parentElement.querySelector(".blockeditor-csv-error");
   if (!notice) {
     notice = doc.createElement("div");
-    notice.className = "page-csv-error";
+    notice.className = "blockeditor-csv-error";
     notice.setAttribute("role", "alert");
     view.dom.parentElement.append(notice);
   }
@@ -95,7 +95,7 @@ function placeImported(view, node, tableId, attachment) {
 
 export async function importCsv(view, file, { upload, remove = null, table = null } = {}) {
   try {
-    view.dom.parentElement.querySelector(".page-csv-error")?.remove();
+    view.dom.parentElement.querySelector(".blockeditor-csv-error")?.remove();
     const parsed = parseCsv(await readText(file));
     const result = tableNode(parsed);
     if (!result) { error(view, "Couldn't read this CSV: no columns."); return false; }
@@ -150,7 +150,7 @@ export function csvImportPlugin({ upload }) {
       input.type = "file";
       input.accept = ".csv,text/csv";
       input.hidden = true;
-      input.className = "page-csv-input";
+      input.className = "blockeditor-csv-input";
       view.dom.parentElement.append(input);
       inputs.set(view, input);
       input.addEventListener("change", () => {

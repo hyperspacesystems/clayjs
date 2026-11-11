@@ -2,12 +2,12 @@ import { jest } from "@jest/globals";
 import { createToolTransport } from "../../../src/page/tool-transport.js";
 
 /**
- * The page-tool helper over clay.wire. `clay.wire` is read when a request goes out,
+ * The blockeditor-tool helper over clay.wire. `clay.wire` is read when a request goes out,
  * because the page plugin loads before the wire does; a failure keeps the host's code
  * and a cancel reaches the handle the request made.
  */
 
-const payload = { protocol: "page-tool/1", requestId: "req-1", prompt: "make a tally", context: {}, target: null, current: null };
+const payload = { protocol: "blockeditor-tool/1", requestId: "req-1", prompt: "make a tally", context: {}, target: null, current: null };
 const reply = { requestId: "req-1", artifact: { title: "T" }, state: {}, model: "m" };
 
 const baseClay = window.clay;
@@ -24,7 +24,7 @@ function wireFor(outcome) {
   return { wire: { send }, calls };
 }
 
-test("a request goes out as the page-tool helper with the request id and the status hook", async () => {
+test("a request goes out as the blockeditor-tool helper with the request id and the status hook", async () => {
   const { wire, calls } = wireFor();
   const onStatus = jest.fn();
   window.clay = { wire };
@@ -35,7 +35,7 @@ test("a request goes out as the page-tool helper with the request id and the sta
 
   await expect(result).resolves.toEqual(reply);
   expect(calls[0].body).toBe(payload);
-  expect(calls[0].options).toEqual({ helper: "page-tool", document: "none", id: "req-1", onStatus });
+  expect(calls[0].options).toEqual({ helper: "blockeditor-tool", document: "none", id: "req-1", onStatus });
 });
 
 test("the wire is read when a request is made, not when the transport is built", async () => {

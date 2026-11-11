@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 function open(value, { plugins = [], captureTimeout = 0 } = {}) {
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(value)) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(value)) });
   const binding = createYPageBinding({ store, captureTimeout });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = new pmView.EditorView(mount, {

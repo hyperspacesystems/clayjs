@@ -3,7 +3,7 @@ import { editor, key, posOf, select, shape, typeText } from "./view-helpers.js";
 afterEach(() => { document.body.innerHTML = ""; });
 
 const bar = (view, cls) => view.dom.parentElement.querySelector(cls);
-const tool = (view, name) => bar(view, ".page-bubble").querySelector(`[data-cmd="${name}"]`);
+const tool = (view, name) => bar(view, ".blockeditor-bubble").querySelector(`[data-cmd="${name}"]`);
 const kinds = (view) => { const r = []; view.state.doc.forEach((n) => r.push(n.type.name === "list_item" ? n.attrs.kind : n.type.name)); return r; };
 
 const DOC = [["a", "paragraph", "First"], ["b", "paragraph", "Second"], ["c", "paragraph", "Third"]];
@@ -13,8 +13,8 @@ test("the bubble and the dock list the tools in David's order", () => {
   view.hasFocus = () => true;
   view.coordsAtPos = () => ({ left: 40, right: 48, top: 100, bottom: 120 });
   const order = ["strong", "em", "strike", "link", "bullet", "ordered", "check", "code"];
-  expect([...bar(view, ".page-bubble").querySelectorAll("[data-cmd]")].map((b) => b.dataset.cmd)).toEqual(order);
-  expect([...bar(view, ".page-dock").querySelectorAll("[data-cmd]")].map((b) => b.dataset.cmd)).toEqual(order);
+  expect([...bar(view, ".blockeditor-bubble").querySelectorAll("[data-cmd]")].map((b) => b.dataset.cmd)).toEqual(order);
+  expect([...bar(view, ".blockeditor-dock").querySelectorAll("[data-cmd]")].map((b) => b.dataset.cmd)).toEqual(order);
 });
 
 test("a list button turns every selected block into that list, and a second press turns them back into text", () => {
@@ -64,7 +64,7 @@ describe("review round 1", () => {
     view.coordsAtPos = () => ({ left: 40, right: 48, top: 100, bottom: 120 });
     return view;
   };
-  const dock = (view, name) => bar(view, ".page-dock").querySelector(`[data-cmd="${name}"]`);
+  const dock = (view, name) => bar(view, ".blockeditor-dock").querySelector(`[data-cmd="${name}"]`);
 
   test("Code over a whole line keeps its Shift+Enter breaks as newlines", () => {
     const view = setup([["a", "paragraph", "first"], ["b", "paragraph", "after"]]);
@@ -85,7 +85,7 @@ describe("review round 1", () => {
     const img = setup([["i", "image", "", { src: "/a.png" }], ["p", "paragraph", "P"]]);
     const { state: pm } = await import("../../../src/vendor/prosemirror.vendor.js");
     img.dispatch(img.state.tr.setSelection(pm.NodeSelection.create(img.state.doc, 0)));
-    bar(img, ".page-dock").querySelector('[data-cmd="ordered"]').click();
+    bar(img, ".blockeditor-dock").querySelector('[data-cmd="ordered"]').click();
     expect(kinds(img)).toEqual(["image", "paragraph"]);
   });
 
@@ -142,14 +142,14 @@ describe("Code toggles a code block back into text", () => {
 });
 
 test("the document settings gear is the dock control immediately before More", () => {
-  window.clay = { page: { settings: { read: () => ({ assignees: true, dates: true }), set: () => Promise.resolve() } } };
+  window.clay = { blockeditor: { settings: { read: () => ({ assignees: true, dates: true }), set: () => Promise.resolve() } } };
   try {
     const view = editor(DOC);
-    const toolbar = bar(view, ".page-dock");
+    const toolbar = bar(view, ".blockeditor-dock");
     const buttons = [...toolbar.querySelectorAll("button")];
-    const gear = toolbar.querySelector(".page-tool-settings");
+    const gear = toolbar.querySelector(".blockeditor-tool-settings");
     expect(buttons.indexOf(gear)).toBe(buttons.length - 2);
-    expect(buttons[buttons.length - 1].classList.contains("page-tool-more")).toBe(true);
+    expect(buttons[buttons.length - 1].classList.contains("blockeditor-tool-more")).toBe(true);
     expect(gear.getAttribute("aria-haspopup")).toBe("dialog");
     expect(gear.getAttribute("aria-label")).toBe("Document settings");
   } finally {

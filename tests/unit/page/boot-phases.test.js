@@ -24,12 +24,12 @@ const until = async (check, tries = 400) => {
   return false;
 };
 
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const handEdit = (doc) => { doc.querySelector('article[data-page] [data-id="p"]').textContent = "Hello, edited by hand"; };
+const handEdit = (doc) => { doc.querySelector('article[data-blockeditor] [data-id="p"]').textContent = "Hello, edited by hand"; };
 
 const marks = [];
 const cleanups = [];
@@ -47,14 +47,14 @@ function expectNoInput(page, seen = marks) {
   expect(seen.filter((entry) => entry.name === "document:input-ready")).toEqual([]);
   expect(document.querySelectorAll('[contenteditable="true"]')).toHaveLength(0);
   if (page.view) expect(page.view.editable).toBe(false);
-  else expect(document.querySelectorAll(".page-editor")).toHaveLength(0);
+  else expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(0);
 }
 
 async function load({
   html = articleHtml(),
   head = tagHtml(seedValue(BLOCKS)),
   edit = null,
-  extensions = ["page"],
+  extensions = ["blockeditor"],
   saveAnswer = () => ({ ok: true, msgType: "success" }),
   livePage = "ok",
   writer = null,
@@ -77,7 +77,7 @@ async function load({
     seq: room.seq,
     writer: room.writer,
     conn: 0,
-    stores: { page: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
+    stores: { blockeditor: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
   });
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
@@ -89,6 +89,7 @@ async function load({
   }));
 
   await jest.unstable_mockModule("../../../src/core/save.js", () => ({
+    claimFailure: () => {},
     savesAdmitted: () => true,
     savePageForce: async () => { saves.push(1); return saveAnswer(); },
     savePage: async () => ({ ok: true, msgType: "success" }),
@@ -133,14 +134,14 @@ async function load({
   // place before that.
   const states = [];
   const onState = (event) => states.push(event.detail);
-  document.addEventListener("clay:page-save-state", onState);
-  cleanups.push(() => document.removeEventListener("clay:page-save-state", onState));
+  document.addEventListener("clay:blockeditor-save-state", onState);
+  cleanups.push(() => document.removeEventListener("clay:blockeditor-save-state", onState));
 
   const { live } = await import("../../../src/plugins/live.js");
   window.clay = {
     live: (name) => {
-      if (name !== "page") return live(name);
-      if (livePage === "throw") throw new Error('this page has no <script merge="page" clay="live"> tag');
+      if (name !== "blockeditor") return live(name);
+      if (livePage === "throw") throw new Error('this page has no <script merge="blockeditor" clay="live"> tag');
       if (livePage === "reject-ready") return { ready: Promise.reject(new Error("the room refused the join")) };
       return live(name);
     },
@@ -204,7 +205,7 @@ test("every install owns its own id and status", async () => {
   const second = page.status;
   expect(second.phase).toBe("ready");
   expect(second.installId).toBeGreaterThan(first.installId);
-  expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
   page.dispose();
 });
 
@@ -214,9 +215,9 @@ test("invalid or multiple articles leave the saved HTML and no editable surface"
     const many = await load({ html: articleHtml() + articleHtml() });
     await many.page.ready;
     await flushAsync();
-    expect(many.page.status).toMatchObject({ phase: "blocked", reason: "ambiguous-page" });
+    expect(many.page.status).toMatchObject({ phase: "blocked", reason: "ambiguous-blockeditor" });
     expect(many.page.view).toBe(null);
-    expect(document.querySelectorAll("article[data-page]")).toHaveLength(2);
+    expect(document.querySelectorAll("article[data-blockeditor]")).toHaveLength(2);
     expectNoInput(many.page);
     many.page.dispose();
 
@@ -224,7 +225,7 @@ test("invalid or multiple articles leave the saved HTML and no editable surface"
     const none = await load({ html: "", head: "" });
     await none.page.ready;
     await flushAsync();
-    expect(none.page.status).toMatchObject({ phase: "blocked", reason: "no-page" });
+    expect(none.page.status).toMatchObject({ phase: "blocked", reason: "no-blockeditor" });
     expect(none.page.view).toBe(null);
     expectNoInput(none.page);
     none.page.dispose();
@@ -236,11 +237,11 @@ test("invalid or multiple articles leave the saved HTML and no editable surface"
 test("a page tag that is not JSON blocks with no editable surface", async () => {
   const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
   try {
-    const { page } = await load({ head: '<script type="application/json" merge="page" clay="live">{oops</script>' });
+    const { page } = await load({ head: '<script type="application/json" merge="blockeditor" clay="live">{oops</script>' });
     await page.ready;
     await flushAsync();
 
-    expect(page.status).toMatchObject({ phase: "blocked", reason: "invalid-page-json" });
+    expect(page.status).toMatchObject({ phase: "blocked", reason: "invalid-blockeditor-json" });
     expect(page.view).toBe(null);
     expectNoInput(page);
     page.dispose();
@@ -256,12 +257,12 @@ test("a page tag in an unsupported format blocks with no editable surface", asyn
     const html = renderFromTags([JSON.stringify(legacy)]);
     const { page } = await load({
       head: tagHtml(legacy),
-      html: `<article data-page="1" data-rev="${html.rev}">${html.html}</article>`,
+      html: `<article data-blockeditor="1" data-rev="${html.rev}">${html.html}</article>`,
     });
     await page.ready;
     await flushAsync();
 
-    expect(page.status).toMatchObject({ phase: "blocked", reason: "unsupported-page-format" });
+    expect(page.status).toMatchObject({ phase: "blocked", reason: "unsupported-blockeditor-format" });
     expect(page.view).toBe(null);
     expectNoInput(page);
     page.dispose();
@@ -286,7 +287,7 @@ test("a host without the page capability blocks and reports it", async () => {
 });
 
 test("a tagless page on a live-data host writes nothing at boot and opens no room", async () => {
-  const { page, saves, sent, states } = await load({ head: "", extensions: ["page", "live-data"] });
+  const { page, saves, sent, states } = await load({ head: "", extensions: ["blockeditor", "live-data"] });
   try {
     await page.ready;
     await flushAsync();
@@ -297,7 +298,7 @@ test("a tagless page on a live-data host writes nothing at boot and opens no roo
     expect(sent).toEqual([]);
     expect(page.status).toMatchObject({ phase: "ready", reason: null });
     expect(page.view.editable).toBe(true);
-    expect(document.querySelectorAll('script[merge="page"]')).toHaveLength(0);
+    expect(document.querySelectorAll('script[merge="blockeditor"]')).toHaveLength(0);
     expect(states).toEqual([]);
   } finally {
     page.dispose();
@@ -311,7 +312,7 @@ test("a page with no live store blocks without mounting", async () => {
     await page.ready;
     await flushAsync();
 
-    expect(page.status).toMatchObject({ phase: "blocked", reason: "missing-page-store" });
+    expect(page.status).toMatchObject({ phase: "blocked", reason: "missing-blockeditor-store" });
     expect(page.view).toBe(null);
     expectNoInput(page);
     page.dispose();
@@ -339,12 +340,12 @@ test("a room that refuses the join blocks without mounting", async () => {
 test("an adoption another tab owns leaves the nonwriter waiting, not blocked", async () => {
   const { page, sent } = await load({
     edit: handEdit,
-    extensions: ["page", "live-data"],
+    extensions: ["blockeditor", "live-data"],
     writer: "other",
   });
   const adopted = [];
   const onAdopted = (event) => adopted.push(event.detail);
-  document.addEventListener("clay:page-adopted", onAdopted);
+  document.addEventListener("clay:blockeditor-adopted", onAdopted);
   try {
     // The nonwriter is not refused: it stays in adopting, read-only, until the
     // elected writer's adoption reaches it through the room.
@@ -358,7 +359,7 @@ test("an adoption another tab owns leaves the nonwriter waiting, not blocked", a
     expect(page.view.isDestroyed).toBe(false);
     expectNoInput(page);
   } finally {
-    document.removeEventListener("clay:page-adopted", onAdopted);
+    document.removeEventListener("clay:blockeditor-adopted", onAdopted);
     page.dispose();
     await page.ready;
   }
@@ -370,7 +371,7 @@ test("a caught adoption error is not a success and enables nothing", async () =>
     const { page } = await load({ edit: handEdit, holdFails: true });
     const adopted = [];
     const onAdopted = (event) => adopted.push(event.detail);
-    document.addEventListener("clay:page-adopted", onAdopted);
+    document.addEventListener("clay:blockeditor-adopted", onAdopted);
     try {
       await page.ready;
       await flushAsync();
@@ -381,7 +382,7 @@ test("a caught adoption error is not a success and enables nothing", async () =>
       expect(loud).toHaveBeenCalled();
       expectNoInput(page);
     } finally {
-      document.removeEventListener("clay:page-adopted", onAdopted);
+      document.removeEventListener("clay:blockeditor-adopted", onAdopted);
     }
     page.dispose();
   } finally {

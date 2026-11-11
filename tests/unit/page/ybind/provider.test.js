@@ -13,7 +13,7 @@ const confirm = (store) => { store.rebase(JSON.parse(JSON.stringify(store.value)
 const confirmAll = (store) => { for (let i = 0; i < 4; i++) confirm(store); };
 const textOf = (value) => docFromValue(value).getText("flow").toString();
 const start = (extra = {}) => {
-  const store = createStore({ name: "page", value: { v: 1, g: 0, y: {} }, ...extra });
+  const store = createStore({ name: "blockeditor", value: { v: 1, g: 0, y: {} }, ...extra });
   const ydoc = new Y.Doc();
   ydoc.clientID = 5;
   const provider = createYProvider({ store, ydoc, ...timers });
@@ -76,7 +76,7 @@ test("compaction folds the seed into one entry, in parts when long", () => {
   const blocks = Array.from({ length: 200 }, (_, b) => ({ id: "b" + b, text: Array.from({ length: 350 }, (_, i) => word(i + b)).join("") }));
   const value = seedValue(blocks);
   expect(Object.keys(value.y).length).toBe(36);
-  const store = createStore({ name: "page", value });
+  const store = createStore({ name: "blockeditor", value });
   const ydoc = new Y.Doc();
   ydoc.clientID = 5;
   for (const k of Object.keys(value.y).sort()) Y.applyUpdateV2(ydoc, dec(value.y[k]), NET);
@@ -142,7 +142,7 @@ function makeRoom() {
 }
 
 const open = (clientID) => {
-  const store = createStore({ name: "page", value: { v: 1, g: 0, y: {} } });
+  const store = createStore({ name: "blockeditor", value: { v: 1, g: 0, y: {} } });
   const ydoc = new Y.Doc();
   ydoc.clientID = clientID;
   const provider = createYProvider({ store, ydoc, ...timers });

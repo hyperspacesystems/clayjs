@@ -6,7 +6,7 @@ import { state as pmState } from "../../../src/vendor/prosemirror.vendor.js";
  * line, a plus pick lands after it, and a grip click selects it and opens the
  * actions menu. jsdom has no layout, so each block gets a fake rectangle and
  * posAtCoords reads them. Placement waits for the chrome's frame, so every
- * read of the --page-plus-top variables follows a flush.
+ * read of the --blockeditor-plus-top variables follows a flush.
  */
 
 afterEach(() => { document.body.innerHTML = ""; });
@@ -42,48 +42,48 @@ const leave = async (view) => {
   view.dom.parentElement.dispatchEvent(new MouseEvent("mouseleave"));
   await frame();
 };
-const top = (view, cls) => part(view, cls).style.getPropertyValue("--page-plus-top");
+const top = (view, cls) => part(view, cls).style.getPropertyValue("--blockeditor-plus-top");
 
 const DOC = [["a", "paragraph", "A"], ["b", "paragraph", "B"], ["c", "paragraph", "C"]];
 
 test("at rest the plus and the grip sit on the caret's block", async () => {
   const view = await gutter(DOC, "b");
-  expect(top(view, ".page-plus")).toBe("40px");
-  expect(top(view, ".page-grip")).toBe("40px");
-  expect(part(view, ".page-grip").getAttribute("aria-label")).toBe("Block actions");
-  expect(part(view, ".page-grip").getAttribute("aria-haspopup")).toBe("menu");
+  expect(top(view, ".blockeditor-plus")).toBe("40px");
+  expect(top(view, ".blockeditor-grip")).toBe("40px");
+  expect(part(view, ".blockeditor-grip").getAttribute("aria-label")).toBe("Block actions");
+  expect(part(view, ".blockeditor-grip").getAttribute("aria-haspopup")).toBe("menu");
 });
 
 test("moving the pointer over a block moves both buttons to its first line, and leaving the page puts them back", async () => {
   const view = await gutter(DOC, "a");
-  expect(top(view, ".page-plus")).toBe("10px");
+  expect(top(view, ".blockeditor-plus")).toBe("10px");
   await move(view, 2 * ROW + 5);
-  expect(top(view, ".page-plus")).toBe("70px");
-  expect(top(view, ".page-grip")).toBe("70px");
+  expect(top(view, ".blockeditor-plus")).toBe("70px");
+  expect(top(view, ".blockeditor-grip")).toBe("70px");
   await leave(view);
-  expect(top(view, ".page-plus")).toBe("10px");
+  expect(top(view, ".blockeditor-plus")).toBe("10px");
 });
 
 test("typing makes the gutter follow the caret again", async () => {
   const view = await gutter(DOC, "a");
   await move(view, 2 * ROW);
-  expect(top(view, ".page-grip")).toBe("70px");
+  expect(top(view, ".blockeditor-grip")).toBe("70px");
   view.dom.parentElement.dispatchEvent(new KeyboardEvent("keydown", { key: "x", bubbles: true }));
   await frame();
-  expect(top(view, ".page-grip")).toBe("10px");
+  expect(top(view, ".blockeditor-grip")).toBe("10px");
 });
 
 test("a block inside a closed toggle is skipped: the gutter stays on the toggle", async () => {
   const view = await gutter([["t", "toggle", "T"], ["b1", "paragraph", "b1", { parent: "t" }], ["z", "paragraph", "Z"]], "z");
   await move(view, ROW + 2);
-  expect(top(view, ".page-grip")).toBe("10px");
+  expect(top(view, ".blockeditor-grip")).toBe("10px");
 });
 
 test("the plus inserts after the hovered block, not the caret's", async () => {
   const view = await gutter(DOC, "a");
   await move(view, ROW + 2);
-  part(view, ".page-plus").click();
-  const rows = [...view.dom.parentElement.querySelectorAll(".page-menu-item")];
+  part(view, ".blockeditor-plus").click();
+  const rows = [...view.dom.parentElement.querySelectorAll(".blockeditor-menu-item")];
   rows[1].click();
   expect(shape(view)).toBe("A | B | heading | C");
 });
@@ -91,23 +91,23 @@ test("the plus inserts after the hovered block, not the caret's", async () => {
 test("the hover does not move while the menu is open", async () => {
   const view = await gutter(DOC, "a");
   await move(view, ROW + 2);
-  part(view, ".page-plus").click();
+  part(view, ".blockeditor-plus").click();
   await move(view, 2 * ROW + 2);
-  expect(top(view, ".page-grip")).toBe("40px");
+  expect(top(view, ".blockeditor-grip")).toBe("40px");
 });
 
 test("a grip click selects the hovered block with its subtree and opens the actions menu under the grip", async () => {
   const view = await gutter([["t", "toggle", "T"], ["b1", "paragraph", "b1", { parent: "t" }], ["z", "paragraph", "Z"]], "z");
   await move(view, 2);
-  part(view, ".page-grip").click();
+  part(view, ".blockeditor-grip").click();
   const { lo, hi } = view.state.selection.span(view.state.doc);
   expect([lo, hi]).toEqual([0, 1]);
-  expect(part(view, ".page-menu").hidden).toBe(false);
-  expect(part(view, ".page-grip").getAttribute("aria-expanded")).toBe("true");
-  expect(part(view, ".page-grip").classList.contains("is-on")).toBe(true);
-  part(view, ".page-grip").click();
-  expect(part(view, ".page-menu").hidden).toBe(true);
-  expect(part(view, ".page-grip").getAttribute("aria-expanded")).toBe("false");
+  expect(part(view, ".blockeditor-menu").hidden).toBe(false);
+  expect(part(view, ".blockeditor-grip").getAttribute("aria-expanded")).toBe("true");
+  expect(part(view, ".blockeditor-grip").classList.contains("is-on")).toBe(true);
+  part(view, ".blockeditor-grip").click();
+  expect(part(view, ".blockeditor-menu").hidden).toBe(true);
+  expect(part(view, ".blockeditor-grip").getAttribute("aria-expanded")).toBe("false");
 });
 
 test("a grip click on a block inside the current block selection keeps the whole selection", async () => {
@@ -115,15 +115,15 @@ test("a grip click on a block inside the current block selection keeps the whole
   key(view, "Escape");
   key(view, "ArrowDown", { shiftKey: true });
   await move(view, 2);
-  part(view, ".page-grip").click();
+  part(view, ".blockeditor-grip").click();
   expect(view.state.selection.span(view.state.doc)).toEqual({ lo: 0, hi: 1 });
 });
 
 test("Move down from the grip's menu moves the hovered block", async () => {
   const view = await gutter(DOC, "c");
   await move(view, 2);
-  part(view, ".page-grip").click();
-  [...view.dom.parentElement.querySelectorAll(".page-menu-item")].find((r) => r.textContent.includes("Move down")).click();
+  part(view, ".blockeditor-grip").click();
+  [...view.dom.parentElement.querySelectorAll(".blockeditor-menu-item")].find((r) => r.textContent.includes("Move down")).click();
   expect(shape(view)).toBe("B | A | C");
 });
 
@@ -133,9 +133,9 @@ test.each(["plus", "grip"])("F17 the phone %s acts on the caret despite retained
   try {
     await move(view, 2 * ROW + 2);
     window.matchMedia = () => ({ matches: true });
-    part(view, `.page-${control}`).click();
+    part(view, `.blockeditor-${control}`).click();
     if (control === "plus") {
-      part(view, ".page-menu-item:nth-child(2)").click();
+      part(view, ".blockeditor-menu-item:nth-child(2)").click();
       expect(shape(view)).toBe("A | heading | B | C");
     } else expect(view.state.selection.span(view.state.doc)).toEqual({ lo: 0, hi: 0 });
   } finally { window.matchMedia = media; view.destroy(); }
@@ -144,14 +144,14 @@ test.each(["plus", "grip"])("F17 the phone %s acts on the caret despite retained
 test("a selected divider, image or file keeps the plus and the grip beside it, not on the block below", async () => {
   for (const atom of [["d", "divider", ""], ["i", "image", "", { src: "https://example.com/a.png" }], ["f", "file", "", { src: "https://example.com/a.pdf", name: "a.pdf" }]]) {
     const view = await gutter([["a", "paragraph", "A"], atom, ["c", "paragraph", "C"]]);
-    const caretTop = top(view, ".page-plus");
+    const caretTop = top(view, ".blockeditor-plus");
     select(view, posOf(view, "c"));
     await frame();
-    const below = top(view, ".page-plus");
+    const below = top(view, ".blockeditor-plus");
     view.dispatch(view.state.tr.setSelection(pmState.NodeSelection.create(view.state.doc, view.state.doc.child(0).nodeSize)));
     await frame();
-    expect([atom[1], top(view, ".page-plus"), top(view, ".page-grip")]).not.toEqual([atom[1], below, below]);
-    expect(top(view, ".page-plus")).not.toBe(caretTop);
+    expect([atom[1], top(view, ".blockeditor-plus"), top(view, ".blockeditor-grip")]).not.toEqual([atom[1], below, below]);
+    expect(top(view, ".blockeditor-plus")).not.toBe(caretTop);
     document.body.innerHTML = "";
   }
 });

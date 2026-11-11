@@ -1,4 +1,4 @@
-// The shared page-lineage vectors: one JSON file that clayjs, HTML Clay,
+// The shared blockeditor-lineage vectors: one JSON file that clayjs, HTML Clay,
 // hyperclay and Hyperclay Local all test their first-write decisions against.
 //
 //   node scripts/build-page-lineage-vectors.mjs --write
@@ -25,7 +25,7 @@ const OUT = new URL("../tests/fixtures/offline-runtime/page-lineage.json", impor
 const TEMPLATE = readFileSync(new URL("../tests/fixtures/ypage-template.html", import.meta.url), "utf8");
 const T = splitPage(TEMPLATE).file;
 const dom = new JSDOM("");
-const browserArticle = (html) => new JSDOM(html).window.document.querySelector("article[data-page]");
+const browserArticle = (html) => new JSDOM(html).window.document.querySelector("article[data-blockeditor]");
 const seedOf = (html) => seedPageFromArticle(browserArticle(html));
 const clientsOf = (value) => {
   const clients = new Set();
@@ -42,12 +42,12 @@ const docOf = (value, clientID) => {
 const edited = (value, clientID, change) => {
   const doc = docOf(value, clientID);
   const before = Y.encodeStateVector(doc);
-  doc.transact(() => change(createPageDoc(doc)), "page-local");
+  doc.transact(() => change(createPageDoc(doc)), "blockeditor-local");
   const u = Y.encodeStateAsUpdateV2(doc, before);
   return { v: 1, g: 0, y: { ...value.y, [`u${clientID.toString(36)}-0`]: Buffer.from(u).toString("base64") } };
 };
 const collapsed = (value) => yValueOf(docOf(value, 4242));
-const tagOf = (value) => `<script type="application/json" merge="page" clay="live">${serializeLive(value)}</script>`;
+const tagOf = (value) => `<script type="application/json" merge="blockeditor" clay="live">${serializeLive(value)}</script>`;
 const withTag = (file, value) => composePage(file, { v: 1, rev: pageRev(file), tag: tagOf(value) });
 
 // The article's outer element located by source offsets, as the host reads it.
@@ -79,8 +79,8 @@ const typeAndErase = (value) => {
   const before = Y.encodeStateVector(doc);
   const page = createPageDoc(doc);
   const at = page.flow.length;
-  doc.transact(() => page.flow.insert(at, "x"), "page-local");
-  doc.transact(() => page.flow.delete(at, 1), "page-local");
+  doc.transact(() => page.flow.insert(at, "x"), "blockeditor-local");
+  doc.transact(() => page.flow.delete(at, 1), "blockeditor-local");
   const u = Y.encodeStateAsUpdateV2(doc, before);
   return { v: 1, g: 0, y: { ...value.y, [entryKey(1001)]: Buffer.from(u).toString("base64") } };
 };
@@ -93,7 +93,7 @@ const appendParagraph = (value, clientID = 1001) => {
   doc.transact(() => {
     page.attrs.set("p1", new Y.Map([["t", "paragraph"]]));
     page.flow.insertEmbed(page.flow.length, { b: "p1" }, {});
-  }, "page-local");
+  }, "blockeditor-local");
   const u = Y.encodeStateAsUpdateV2(doc, before);
   return { v: 1, g: 0, y: { ...value.y, [entryKey(clientID)]: Buffer.from(u).toString("base64") } };
 };
@@ -182,31 +182,31 @@ const firstEditValue = edited(seedT, 1001, retitle);
 const deleteOnlyValue = edited(seedT, 1001, dropFirst);
 
 const writes = [
-  { name: "seed-only-published", current: T, body: withTag(T, seedOf(T)), ifMatchOf: "current", pageWrite: null, expect: { js: "initial", htmlclay: "ordinary" } },
-  { name: "seed-only-v1", current: T, body: withTag(T, seedOf(T)), ifMatchOf: "current", pageWrite: "v1", expect: { js: "nothing-to-write", htmlclay: "nothing-to-write" } },
-  { name: "seed-only-v1-other-change", current: T, body: withTag(noteless, seedOf(T)), ifMatchOf: "current", pageWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
-  { name: "first-edit", current: T, body: firstEditBody, ifMatchOf: "current", pageWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
-  { name: "first-edit-collapsed", current: T, body: editBody(T, collapsed(firstEditValue)), ifMatchOf: "current", pageWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
-  { name: "delete-only", current: T, body: editBody(T, deleteOnlyValue), ifMatchOf: "current", pageWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
-  { name: "net-zero-edit", current: T, body: netZeroBody, ifMatchOf: "current", pageWrite: "v1", expect: { js: "initial", htmlclay: null } },
-  { name: "stale-seed-edit", current: T2, body: firstEditBody, ifMatchOf: "current", pageWrite: "v1", expect: { js: "seed-lineage", htmlclay: "ordinary" } },
-  { name: "stale-seed-implicit-close", current: T2_IMPLICIT, body: firstEditBody, ifMatchOf: "current", pageWrite: "v1", expect: { js: "seed-lineage", htmlclay: "ordinary" } },
-  { name: "stale-seed-only", current: T2, body: withTag(T, seedOf(T)), ifMatchOf: "current", pageWrite: "v1", expect: { js: "seed-lineage", htmlclay: "ordinary" } },
-  { name: "stale-stamp", current: T2, body: firstEditBody, ifMatchOf: "T", pageWrite: "v1", expect: { js: "412", htmlclay: "412" } },
-  { name: "conversion-as-first-write", current: T, body: CONVERTED, ifMatchOf: "current", pageWrite: null, expect: { js: "seed-lineage", htmlclay: "ordinary" } },
-  { name: "empty-value-over-article", current: T, body: withTag(T, { v: 1, g: 0, y: { seed: "AAAAAAAAAQAAAAAAAA==" } }), ifMatchOf: "current", pageWrite: null, expect: { js: "seed-lineage", htmlclay: "ordinary" } },
-  { name: "incomplete-parts", current: T, body: withTag(T, { v: 1, g: 0, y: { [seedLFirstKey]: seedLFirstPart.slice(0, Math.floor(seedLFirstPart.length / 8) * 4) } }), ifMatchOf: "current", pageWrite: null, expect: { js: "invalid-capture", htmlclay: "invalid-capture" } },
-  { name: "undecodable-entry", current: T, body: withTag(T, { v: 1, g: 0, y: { seed: "bm90IGEgeWpzIHVwZGF0ZQ==" } }), ifMatchOf: "current", pageWrite: null, expect: { js: "invalid-capture", htmlclay: "ordinary" } },
-  { name: "same-lineage-over-tagged", current: TAGGED, body: editBody(T, edited(edited(seedT, 1001, retitle), 1002, dropFirst)), ifMatchOf: "current", pageWrite: "v1", expect: { js: "ordinary", htmlclay: "ordinary" } },
-  { name: "rival-over-tagged", current: TAGGED, body: editBody(T2, edited(seedT2, 1002, retitle)), ifMatchOf: "current", pageWrite: "v1", expect: { js: "seed-lineage", htmlclay: "ordinary" } },
-  { name: "conversion-over-tagged", current: TAGGED, body: CONVERTED, ifMatchOf: "current", pageWrite: null, expect: { js: "seed-lineage", htmlclay: "ordinary" } },
-  { name: "identical-tag", current: TAGGED, body: TAGGED, ifMatchOf: "current", pageWrite: null, expect: { js: "ordinary", htmlclay: "ordinary" } },
-  { name: "outside-edit-drops-tag", current: TAGGED, body: T2, ifMatchOf: "current", pageWrite: null, expect: { js: "ordinary", htmlclay: "ordinary" } },
-  { name: "new-site-from-template", current: "", body: CONVERTED, ifMatchOf: "current", pageWrite: null, expect: { js: "initial", htmlclay: "initial" } },
-  { name: "empty-seed-only-v1", current: E, body: withTag(E, seedOf(E)), ifMatchOf: "current", pageWrite: "v1", expect: { js: "nothing-to-write", htmlclay: "nothing-to-write" } },
-  { name: "empty-first-edit", current: E, body: editBody(E, appendParagraph(seedE)), ifMatchOf: "current", pageWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
-  { name: "large-first-edit", current: L, body: editBody(L, edited(seedL, 1001, dropFirst)), ifMatchOf: "current", pageWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
-  { name: "large-seed-only-v1", current: L, body: withTag(L, seedOf(L)), ifMatchOf: "current", pageWrite: "v1", expect: { js: "nothing-to-write", htmlclay: "nothing-to-write" } },
+  { name: "seed-only-published", current: T, body: withTag(T, seedOf(T)), ifMatchOf: "current", blockeditorWrite: null, expect: { js: "initial", htmlclay: "ordinary" } },
+  { name: "seed-only-v1", current: T, body: withTag(T, seedOf(T)), ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "nothing-to-write", htmlclay: "nothing-to-write" } },
+  { name: "seed-only-v1-other-change", current: T, body: withTag(noteless, seedOf(T)), ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
+  { name: "first-edit", current: T, body: firstEditBody, ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
+  { name: "first-edit-collapsed", current: T, body: editBody(T, collapsed(firstEditValue)), ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
+  { name: "delete-only", current: T, body: editBody(T, deleteOnlyValue), ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
+  { name: "net-zero-edit", current: T, body: netZeroBody, ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "initial", htmlclay: null } },
+  { name: "stale-seed-edit", current: T2, body: firstEditBody, ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "seed-lineage", htmlclay: "ordinary" } },
+  { name: "stale-seed-implicit-close", current: T2_IMPLICIT, body: firstEditBody, ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "seed-lineage", htmlclay: "ordinary" } },
+  { name: "stale-seed-only", current: T2, body: withTag(T, seedOf(T)), ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "seed-lineage", htmlclay: "ordinary" } },
+  { name: "stale-stamp", current: T2, body: firstEditBody, ifMatchOf: "T", blockeditorWrite: "v1", expect: { js: "412", htmlclay: "412" } },
+  { name: "conversion-as-first-write", current: T, body: CONVERTED, ifMatchOf: "current", blockeditorWrite: null, expect: { js: "seed-lineage", htmlclay: "ordinary" } },
+  { name: "empty-value-over-article", current: T, body: withTag(T, { v: 1, g: 0, y: { seed: "AAAAAAAAAQAAAAAAAA==" } }), ifMatchOf: "current", blockeditorWrite: null, expect: { js: "seed-lineage", htmlclay: "ordinary" } },
+  { name: "incomplete-parts", current: T, body: withTag(T, { v: 1, g: 0, y: { [seedLFirstKey]: seedLFirstPart.slice(0, Math.floor(seedLFirstPart.length / 8) * 4) } }), ifMatchOf: "current", blockeditorWrite: null, expect: { js: "invalid-capture", htmlclay: "invalid-capture" } },
+  { name: "undecodable-entry", current: T, body: withTag(T, { v: 1, g: 0, y: { seed: "bm90IGEgeWpzIHVwZGF0ZQ==" } }), ifMatchOf: "current", blockeditorWrite: null, expect: { js: "invalid-capture", htmlclay: "ordinary" } },
+  { name: "same-lineage-over-tagged", current: TAGGED, body: editBody(T, edited(edited(seedT, 1001, retitle), 1002, dropFirst)), ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "ordinary", htmlclay: "ordinary" } },
+  { name: "rival-over-tagged", current: TAGGED, body: editBody(T2, edited(seedT2, 1002, retitle)), ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "seed-lineage", htmlclay: "ordinary" } },
+  { name: "conversion-over-tagged", current: TAGGED, body: CONVERTED, ifMatchOf: "current", blockeditorWrite: null, expect: { js: "seed-lineage", htmlclay: "ordinary" } },
+  { name: "identical-tag", current: TAGGED, body: TAGGED, ifMatchOf: "current", blockeditorWrite: null, expect: { js: "ordinary", htmlclay: "ordinary" } },
+  { name: "outside-edit-drops-tag", current: TAGGED, body: T2, ifMatchOf: "current", blockeditorWrite: null, expect: { js: "ordinary", htmlclay: "ordinary" } },
+  { name: "new-site-from-template", current: "", body: CONVERTED, ifMatchOf: "current", blockeditorWrite: null, expect: { js: "initial", htmlclay: "initial" } },
+  { name: "empty-seed-only-v1", current: E, body: withTag(E, seedOf(E)), ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "nothing-to-write", htmlclay: "nothing-to-write" } },
+  { name: "empty-first-edit", current: E, body: editBody(E, appendParagraph(seedE)), ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
+  { name: "large-first-edit", current: L, body: editBody(L, edited(seedL, 1001, dropFirst)), ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "initial", htmlclay: "ordinary" } },
+  { name: "large-seed-only-v1", current: L, body: withTag(L, seedOf(L)), ifMatchOf: "current", blockeditorWrite: "v1", expect: { js: "nothing-to-write", htmlclay: "nothing-to-write" } },
 ];
 
 // HTML Clay refuses a v1 body whose tag-stripped bytes equal the stored file.

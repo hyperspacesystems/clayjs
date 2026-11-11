@@ -1,7 +1,7 @@
 import * as Y from "../../vendor/yjs.vendor.js";
 
-export const ORIGINS_ORIGIN = "page-origins";
-export const UNDO_OVERLAP_ORIGIN = "page-undo-overlap-repair";
+export const ORIGINS_ORIGIN = "blockeditor-origins";
+export const UNDO_OVERLAP_ORIGIN = "blockeditor-undo-overlap-repair";
 
 export const spanKey = (client, clock) => JSON.stringify(["span", client, clock]);
 export const aliasKey = (client, clock) => JSON.stringify(["alias", client, clock]);

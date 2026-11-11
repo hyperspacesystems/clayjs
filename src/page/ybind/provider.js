@@ -15,7 +15,7 @@ export const PART = 12 * 1024;
 
 // The origin a replayed journal is applied through. It is offered to the room like any
 // other local work and is never journaled again: a recovery is not this tab's typing.
-export const RECOVERY_ORIGIN = "page-recovery";
+export const RECOVERY_ORIGIN = "blockeditor-recovery";
 const baseOf = (k) => PART_KEY.exec(k)?.[1] ?? k;
 
 export function yValueOf(ydoc) {
@@ -430,7 +430,7 @@ export function createYProvider({ store, ydoc, compact: limits = {}, setTimer = 
   const offDelivery = store.onDelivery((event) => {
     if (event.phase !== "refused") return;
     if (mode === "host") {
-      if (event.code === "page-full" || event.code === "compaction-failed") { stop(event.code); return; }
+      if (event.code === "blockeditor-full" || event.code === "compaction-failed") { stop(event.code); return; }
       refusedGap = true;
       schedule(true, false);
       return;

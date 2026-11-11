@@ -164,11 +164,11 @@ describe("a known oversize body is refused before the backend", () => {
     // Whatever the host would have answered, the guard answers first: one measurement
     // and no request, so there is no refusal for a retry to ride on.
     installRouter({
-      save: () => ({ status: 503, headers: { "Retry-After": "0" }, body: { msg: "Converting", code: "page-converting" } })
+      save: () => ({ status: 503, headers: { "Retry-After": "0" }, body: { msg: "Converting", code: "blockeditor-converting" } })
     });
     await sizeMod.saveLimit({ fresh: true });
     installRouter({
-      save: () => ({ status: 503, headers: { "Retry-After": "0" }, body: { msg: "Converting", code: "page-converting" } })
+      save: () => ({ status: 503, headers: { "Retry-After": "0" }, body: { msg: "Converting", code: "blockeditor-converting" } })
     });
     await hostSays(overLimit());
     edit();
@@ -224,12 +224,12 @@ describe("a body within a known limit still sends, on every lane", () => {
     expect(calls.save).toHaveLength(1);
   });
 
-  test("the page-converting retry sends the same bytes again and is measured once", async () => {
+  test("the blockeditor-converting retry sends the same bytes again and is measured once", async () => {
     await hostSays(underLimit());
     installRouter({
       meta: underLimit(),
       save: (n) => (n < 3
-        ? { status: 503, headers: { "Retry-After": "0" }, body: { msg: "Converting", code: "page-converting" } }
+        ? { status: 503, headers: { "Retry-After": "0" }, body: { msg: "Converting", code: "blockeditor-converting" } }
         : { body: { msg: "Saved" } })
     });
     edit();

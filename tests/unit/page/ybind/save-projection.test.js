@@ -8,14 +8,14 @@ import { RECORD } from "../fixtures/all-kinds.js";
 
 const seed = () => migrateHybridValues([{ blocks: { p: { t: "paragraph", pos: "1", c: "First" } } }]);
 const parse = (html) => new DOMParser().parseFromString(html, "text/html");
-const tagValue = (doc) => JSON.parse(doc.querySelector('script[merge="page"]').textContent);
+const tagValue = (doc) => JSON.parse(doc.querySelector('script[merge="blockeditor"]').textContent);
 const idleTimers = { setTimer: () => 1, clearTimer: () => {} };
 let snapshot, projection, save, live, storeOf;
 
 beforeAll(async () => {
   window.clayEditMode = true;
-  document.head.innerHTML = `<script type="application/json" merge="page" clay="live">${JSON.stringify(seed())}</script><script type="application/json" merge="prefs" clay="live">{"theme":"one"}</script><style id="owned-style" clay="no-dirty">.page { color: red; }</style>`;
-  document.body.innerHTML = '<main><article data-page="1" clay="freeze" data-rev="old"><p>Load-time article</p></article></main>';
+  document.head.innerHTML = `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(seed())}</script><script type="application/json" merge="prefs" clay="live">{"theme":"one"}</script><style id="owned-style" clay="no-dirty">.page { color: red; }</style>`;
+  document.body.innerHTML = '<main><article data-blockeditor="1" clay="freeze" data-rev="old"><p>Load-time article</p></article></main>';
   global.fetch = jest.fn(async () => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => '{"msg":"Saved"}' }));
   projection = await import("../../../../src/page/save-projection.js");
   snapshot = await import("../../../../src/core/snapshot.js");
@@ -24,17 +24,17 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  live("page").update((value) => {
+  live("blockeditor").update((value) => {
     for (const key of Object.keys(value)) delete value[key];
     Object.assign(value, seed());
   });
   live("prefs").set("theme", "one");
-  document.querySelector("article").innerHTML = '<div class="page-editor">Editor DOM</div>';
+  document.querySelector("article").innerHTML = '<div class="blockeditor-editor">Editor DOM</div>';
   global.fetch.mockClear();
 });
 
 test("a save carries its captured Yjs value and article even when another edit follows capture", async () => {
-  const binding = createYPageBinding({ store: storeOf("page"), ...idleTimers });
+  const binding = createYPageBinding({ store: storeOf("blockeditor"), ...idleTimers });
   const editLater = () => {
     binding.pd.flow.insert(binding.pd.flow.length, " later");
     live("prefs").set("theme", "two");
@@ -56,7 +56,7 @@ test("a save carries its captured Yjs value and article even when another edit f
     expect(second.querySelector("article").textContent).toBe("First later");
     expect(blocksFromYValue(tagValue(second)).p.c).toBe("First later");
     expect(JSON.parse(second.querySelector('script[merge="prefs"]').textContent).theme).toBe("two");
-    const reload = createYPageBinding({ store: createStore({ name: "page", value: tagValue(first) }), ...idleTimers });
+    const reload = createYPageBinding({ store: createStore({ name: "blockeditor", value: tagValue(first) }), ...idleTimers });
     try { expect(reload.doc().textContent).toBe("First"); }
     finally { reload.dispose(); reload.ydoc.destroy(); }
   } finally {
@@ -81,7 +81,7 @@ test("page and style updates stay out of comparison while the save carries both"
   const before = snapshot.captureForSaveAndComparison({ emitForSync: false, flushUndo: false });
   document.querySelector("article").textContent = "Different editor DOM";
   document.getElementById("owned-style").textContent = ".page { color: blue; }";
-  live("page").set("y", migrateHybridValues([{ blocks: { p: { t: "paragraph", pos: "1", c: "Changed" } } }]).y);
+  live("blockeditor").set("y", migrateHybridValues([{ blocks: { p: { t: "paragraph", pos: "1", c: "Changed" } } }]).y);
   const after = snapshot.captureForSaveAndComparison({ emitForSync: false, flushUndo: false });
   expect(after.forComparison).toBe(before.forComparison);
   expect(after.forDirty).toBe(before.forDirty);
@@ -92,7 +92,7 @@ test("page and style updates stay out of comparison while the save carries both"
 });
 
 test("fast captures omit only incomplete multipart groups from the saved page tag", () => {
-  const store = storeOf("page");
+  const store = storeOf("blockeditor");
   const value = seed();
   const text = Object.values(value.y).join("");
   const half = Math.floor(text.length / 2);
@@ -122,9 +122,9 @@ test.each([
   ["malformed", { seed: "@@bad@@" }],
   ["incomplete", { "seed.0.2": "AAAA" }],
 ])("%s Yjs data fails both real save entry points without a write or a live article change", async (_, y) => {
-  live("page").set("y", y);
+  live("blockeditor").set("y", y);
   const before = document.querySelector("article").outerHTML;
-  const pending = JSON.parse(JSON.stringify(storeOf("page").pending));
+  const pending = JSON.parse(JSON.stringify(storeOf("blockeditor").pending));
   const prefs = JSON.parse(JSON.stringify(storeOf("prefs").pending));
   const errors = [];
   const onError = (event) => errors.push(event.detail.msg);
@@ -137,15 +137,15 @@ test.each([
       expect(result.msgType).toBe("error");
       expect(callback).toHaveBeenCalledWith(result);
       expect(document.documentElement.getAttribute("savestatus")).toBe("error");
-      expect(live("page").toJSON().y).toEqual(y);
-      expect(storeOf("page").pending).toEqual(pending);
+      expect(live("blockeditor").toJSON().y).toEqual(y);
+      expect(storeOf("blockeditor").pending).toEqual(pending);
       expect(storeOf("prefs").pending).toEqual(prefs);
     }
     expect(errors).toHaveLength(2);
     expect(errors.every(Boolean)).toBe(true);
     expect(global.fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
     expect(document.querySelector("article").outerHTML).toBe(before);
-    live("page").set("y", seed().y);
+    live("blockeditor").set("y", seed().y);
     expect((await save.savePageForce()).msgType).toBe("success");
     expect(global.fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   } finally {
@@ -169,7 +169,7 @@ test("a complete folded capture reloads without generating startup frames", () =
   const full = yValueOf(doc);
   doc.destroy();
   const value = { ...full, y: { "mfold-0": full.y.seed } };
-  const store = createStore({ name: "page", value });
+  const store = createStore({ name: "blockeditor", value });
   const binding = createYPageBinding({ store, ...idleTimers });
   try {
     binding.provider.settle();

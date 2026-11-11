@@ -1,6 +1,6 @@
 // The saved table of contents' links: decode the anchor a link names, and reveal
 // the block it points at in a reader. Loaded the first time a reader follows one.
-const TOC_ANCHOR = "page-block-";
+const TOC_ANCHOR = "blockeditor-block-";
 
 const fromB64url = (text) => {
   const bin = atob(String(text).replace(/-/g, "+").replace(/_/g, "/"));

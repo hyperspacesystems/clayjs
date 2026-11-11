@@ -37,7 +37,7 @@ const until = async (predicate, timeout = 8000) => {
 
 // The host's answer about what it can do. The boot asks before any entry runs and memoizes
 // the answer, so the route is installed right after boot and the memo is dropped.
-const PAGE_HOST = { spec: 1, extensions: ["page", "live-data", "sync", "upload"], document: {} };
+const PAGE_HOST = { spec: 1, extensions: ["blockeditor", "live-data", "sync", "upload"], document: {} };
 
 const routeHost = async () => {
   const inner = globalThis.fetch;

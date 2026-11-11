@@ -78,7 +78,7 @@ test("an unknown limit never calls a body over, however large it is", () => {
 });
 
 describe("storedFile: what a 'file' limit measures", () => {
-  const TAG = '<script type="application/json" merge="page" clay="live">{"a":1}</script>';
+  const TAG = '<script type="application/json" merge="blockeditor" clay="live">{"a":1}</script>';
 
   test("a body limit measures every byte", () => {
     const html = `<body>\n  ${TAG}\n  <article data-rev="1"></article>\n</body>`;

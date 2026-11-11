@@ -25,15 +25,15 @@ const KNOWN = new Set(CODES);
 // semantic envelope: canonical JSON, base64url, in one attribute. The block
 // envelope holds the block record, the marks envelope the descriptors of one
 // run, and the visible text stays the readable fallback.
-export const OPAQUE = "data-clay-page-opaque";
-export const VALUE = "data-clay-page-value";
-export const MARKS = "data-clay-page-marks";
+export const OPAQUE = "data-clay-blockeditor-opaque";
+export const VALUE = "data-clay-blockeditor-value";
+export const MARKS = "data-clay-blockeditor-marks";
 // A person mention's span states its id plainly beside the envelope that carries it:
 // the label is the text, and a reader without the editor shows a name, never a link.
-export const MENTION = "data-page-mention";
+export const MENTION = "data-blockeditor-mention";
 // A date mention reads as a `time` element: the text is the ISO date and `datetime`
 // repeats it, so a reader without the editor shows the day and no zone or reminder.
-export const DATE = "data-page-date";
+export const DATE = "data-blockeditor-date";
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const ENVELOPE = "1";
 const STRUCTURAL = new Set(["id", "t", "parent", "c", "m"]);
@@ -60,7 +60,7 @@ export const DEFAULTS = {
 };
 const TEXT = new Set(["paragraph", "heading", "list_item", "callout", "quote", "code_block", "toggle"]);
 export const TOC_LABEL = "Table of contents";
-export const TOC_ANCHOR = "page-block-";
+export const TOC_ANCHOR = "blockeditor-block-";
 export const blockAnchor = (id) => `${TOC_ANCHOR}${b64url(String(id ?? ""))}`;
 const TOC_MAX_LEVEL = 3;
 const tocLevel = (item) => (item.t === "heading"
@@ -530,9 +530,9 @@ export function renderInline(c, m, marksEnvelopes = true) {
 }
 
 const inlineOf = (item) => renderInline(item.c ?? "", item.m);
-const titleHtml = (item) => `<header${attr("data-id", item.id)} data-page-heading="1"${extrasOfItem(item)}>${item.pageCoverSrc ? `<img data-page-cover${attr("src", item.pageCoverSrc)}${attr("alt", item.pageCoverAlt ?? "")} style="object-position:${item.pageCoverX ?? 50}% ${item.pageCoverY ?? 50}%">` : ""}${item.pageIcon ? `<span data-page-icon aria-hidden="true">${escText(item.pageIcon)}</span>` : ""}<h1>${inlineOf(item)}</h1></header>`;
+const titleHtml = (item) => `<header${attr("data-id", item.id)} data-blockeditor-heading="1"${extrasOfItem(item)}>${item.pageCoverSrc ? `<img data-blockeditor-cover${attr("src", item.pageCoverSrc)}${attr("alt", item.pageCoverAlt ?? "")} style="object-position:${item.pageCoverX ?? 50}% ${item.pageCoverY ?? 50}%">` : ""}${item.pageIcon ? `<span data-blockeditor-icon aria-hidden="true">${escText(item.pageIcon)}</span>` : ""}<h1>${inlineOf(item)}</h1></header>`;
 const toolData = (item) => item.artifact || item.rev || (item.state && Object.keys(item.state).length)
-  ? `<script type="application/json" data-tool>${canon({ artifact: item.artifact ?? null, rev: item.rev ?? null, state: item.state ?? {} }).replace(/</g, "\\u003c")}</script>`
+  ? `<script type="application/json" clay="no-data" data-tool>${canon({ artifact: item.artifact ?? null, rev: item.rev ?? null, state: item.state ?? {} }).replace(/</g, "\\u003c")}</script>`
   : "";
 // A header names its column for every cell under it: the table id and the column
 // id together, so a copied column keeps a name no other table shares.
@@ -547,7 +547,7 @@ function renderLeaf(item, clean, tables) {
   switch (item.t) {
     case "paragraph": return `<p${at}>${inlineOf(item)}</p>`;
     case "heading": { const h = `h${item.level ?? 2}`; return `<${h}${at}>${inlineOf(item)}</${h}>`; }
-    case "callout": return `<aside${at} class="page-callout">${inlineOf(item)}</aside>`;
+    case "callout": return `<aside${at} class="blockeditor-callout">${inlineOf(item)}</aside>`;
     case "quote": return `<blockquote${at}>${inlineOf(item)}</blockquote>`;
     case "code_block": return `<pre${at}${attr("data-lang", item.lang || null)}><code>${escText(item.c ?? "")}</code></pre>`;
     case "divider": return `<hr${at}>`;
@@ -789,8 +789,8 @@ export function parseArticle(article) {
     const onlyImage = tag === "P" && el.children.length === 1 && el.children[0].tagName === "IMG" && !el.textContent.trim();
     if (tag === "P" && !onlyImage) return push(el, "paragraph", parent, { ...omitDefaults("paragraph", P), ...tf(el) });
     if (/^H[1-6]$/.test(tag)) return push(el, "heading", parent, { ...omitDefaults("heading", { ...P, level: +tag[1] }), ...tf(el) });
-    if (tag === "HEADER" && el.getAttribute("data-page-heading") === ENVELOPE) {
-      const icon = el.querySelector(":scope > [data-page-icon]");
+    if (tag === "HEADER" && el.getAttribute("data-blockeditor-heading") === ENVELOPE) {
+      const icon = el.querySelector(":scope > [data-blockeditor-icon]");
       const cover = el.querySelector(":scope > img");
       const [, x, y] = /object-position:\s*([-\d.]+)%\s+([-\d.]+)%/.exec(cover?.getAttribute("style") ?? "") ?? [];
       const cover0 = cover ? { pageCoverSrc: safeSrc(cover.getAttribute("src")), pageCoverAlt: cover.getAttribute("alt") ?? "", pageCoverX: focal(x), pageCoverY: focal(y) } : {};

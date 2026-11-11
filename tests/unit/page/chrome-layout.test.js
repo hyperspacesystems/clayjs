@@ -11,7 +11,7 @@ import { selectBlocks } from "../../../src/page/blocksel.js";
 let realSet, realRaf;
 // ProseMirror reads the editor element's own rectangle once per transaction, so
 // the chrome's reads are counted on the shell and on each block instead. Only
-// the chrome's own --page-* writes are counted; jsdom writes a few of its own
+// the chrome's own --blockeditor-* writes are counted; jsdom writes a few of its own
 // when getComputedStyle resolves.
 const counts = { shell: 0, blocks: 0, coords: 0, hits: 0, writes: 0, frames: 0 };
 beforeAll(() => { document.elementFromPoint = () => null; });
@@ -21,7 +21,7 @@ beforeEach(() => {
   realSet = CSSStyleDeclaration.prototype.setProperty;
   realRaf = window.requestAnimationFrame;
   CSSStyleDeclaration.prototype.setProperty = function (name, ...rest) {
-    if (String(name).startsWith("--page-")) counts.writes++;
+    if (String(name).startsWith("--blockeditor-")) counts.writes++;
     return realSet.call(this, name, ...rest);
   };
   window.requestAnimationFrame = function (cb) { counts.frames++; return realRaf.call(window, cb); };
@@ -34,7 +34,7 @@ afterEach(() => {
 const frame = () => new Promise((done) => realRaf.call(window, () => done()));
 const reset = () => { for (const k of Object.keys(counts)) counts[k] = 0; };
 const part = (view, cls) => view.dom.parentElement.querySelector(cls);
-const top = (view, cls) => part(view, cls).style.getPropertyValue("--page-plus-top");
+const top = (view, cls) => part(view, cls).style.getPropertyValue("--blockeditor-plus-top");
 
 // Each block reports a first line that moves down with the text it gained, so
 // a frame that painted an older view would land on an older line.
@@ -67,9 +67,9 @@ test("twenty transactions before one frame read and paint once, for the newest v
   expect([counts.shell, counts.blocks, counts.coords, counts.writes]).toEqual([0, 0, 0, 0]);
   await frame();
   expect([counts.shell, counts.blocks, counts.coords, counts.writes]).toEqual([1, 1, 0, 5]);
-  expect(top(view, ".page-plus")).toBe("110px");
-  expect(top(view, ".page-grip")).toBe("110px");
-  expect(part(view, ".page-plus").style.getPropertyValue("--page-text-left")).toBe("0px");
+  expect(top(view, ".blockeditor-plus")).toBe("110px");
+  expect(top(view, ".blockeditor-grip")).toBe("110px");
+  expect(part(view, ".blockeditor-plus").style.getPropertyValue("--blockeditor-text-left")).toBe("0px");
 });
 
 test("hover, resize, viewport changes and a menu opening share the same frame", async () => {
@@ -85,7 +85,7 @@ test("hover, resize, viewport changes and a menu opening share the same frame", 
     window.dispatchEvent(new Event("scroll"));
     viewport.dispatchEvent(new Event("resize"));
     viewport.dispatchEvent(new Event("scroll"));
-    part(view, ".page-plus").click();
+    part(view, ".blockeditor-plus").click();
     expect(counts.frames).toBe(1);
     expect([counts.shell, counts.blocks, counts.coords, counts.hits, counts.writes]).toEqual([0, 0, 0, 1, 0]);
     await frame();
@@ -126,10 +126,10 @@ test("command pressed state and the menu selection are correct before the frame"
   const view = gutter([["a", "paragraph", "A"], ["b", "paragraph", "B"]]);
   select(view, posOf(view, "a"), posOf(view, "a") + 1);
   view.dispatch(view.state.tr.addMark(posOf(view, "a"), posOf(view, "a") + 1, view.state.schema.marks.strong.create()));
-  expect(part(view, '.page-dock [data-cmd="strong"]').getAttribute("aria-pressed")).toBe("true");
+  expect(part(view, '.blockeditor-dock [data-cmd="strong"]').getAttribute("aria-pressed")).toBe("true");
   view.dispatch(view.state.tr.setSelection(selectBlocks(view.state.doc, 0, 1)));
-  part(view, ".page-grip").click();
-  const rows = [...part(view, ".page-menu").querySelectorAll(".page-menu-item")];
+  part(view, ".blockeditor-grip").click();
+  const rows = [...part(view, ".blockeditor-menu").querySelectorAll(".blockeditor-menu-item")];
   expect(rows[0].getAttribute("aria-selected")).toBe("true");
   expect(rows[0].getAttribute("tabindex")).toBe("0");
   expect(document.activeElement).toBe(rows[0]);

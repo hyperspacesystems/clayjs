@@ -2,7 +2,7 @@ import { Sim, createRoom, engine, legacy } from "../compat.js";
 export { engine, Sim, createRoom };
 export async function tabs(text, ids, { room: roomOpts, quiet } = {}) {
   const sim = new Sim(), initial = engine.initial(text);
-  const room = createRoom(sim, { page: initial }, roomOpts);
+  const room = createRoom(sim, { blockeditor: initial }, roomOpts);
   const list = ids.map((id) => engine.makeTab(sim, room, id, JSON.parse(JSON.stringify(initial)), { quiet }));
   for (const t of list) t.start();
   await sim.run(500);

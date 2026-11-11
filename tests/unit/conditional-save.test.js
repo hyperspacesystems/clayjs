@@ -461,19 +461,19 @@ describe("live sync", () => {
 // conversion, and `retryAfter` was dropped entirely.
 describe("typed refusals from the host contract", () => {
   const ROWS = [
-    { label: "invalid-header", status: 400, code: "page-conversion-refused", reason: "invalid-header" },
-    { label: "invalid-capture", status: 422, code: "page-conversion-refused", reason: "invalid-capture" },
-    { label: "invalid-source", status: 409, code: "page-conversion-refused", reason: "invalid-source" },
-    { label: "ambiguous-source", status: 409, code: "page-conversion-refused", reason: "ambiguous-source" },
-    { label: "room-page-authority", status: 409, code: "page-conversion-refused", reason: "room-page-authority" },
-    { label: "implicit-conversion", status: 409, code: "page-conversion-required", reason: "implicit-conversion" },
-    { label: "source-changed", status: 409, code: "page-conversion-stale", reason: "source-changed" },
-    { label: "room-changed", status: 409, code: "page-conversion-stale", reason: "room-changed" },
-    { label: "room-required", status: 409, code: "page-conversion-stale", reason: "room-required" },
-    { label: "page-converting", status: 503, code: "page-converting", reason: "page-converting", header: "0", delay: 0, sends: 4 },
-    { label: "budget", status: 503, code: "page-capacity", reason: "budget", header: "60", delay: 60 },
-    { label: "receipt-capacity", status: 503, code: "page-capacity", reason: "receipt-capacity", header: "60", delay: 60 },
-    { label: "file-changed", status: 428, code: "page-condition-required", reason: "file-changed" },
+    { label: "invalid-header", status: 400, code: "blockeditor-conversion-refused", reason: "invalid-header" },
+    { label: "invalid-capture", status: 422, code: "blockeditor-conversion-refused", reason: "invalid-capture" },
+    { label: "invalid-source", status: 409, code: "blockeditor-conversion-refused", reason: "invalid-source" },
+    { label: "ambiguous-source", status: 409, code: "blockeditor-conversion-refused", reason: "ambiguous-source" },
+    { label: "room-blockeditor-authority", status: 409, code: "blockeditor-conversion-refused", reason: "room-blockeditor-authority" },
+    { label: "implicit-conversion", status: 409, code: "blockeditor-conversion-required", reason: "implicit-conversion" },
+    { label: "source-changed", status: 409, code: "blockeditor-conversion-stale", reason: "source-changed" },
+    { label: "room-changed", status: 409, code: "blockeditor-conversion-stale", reason: "room-changed" },
+    { label: "room-required", status: 409, code: "blockeditor-conversion-stale", reason: "room-required" },
+    { label: "blockeditor-converting", status: 503, code: "blockeditor-converting", reason: "blockeditor-converting", header: "0", delay: 0, sends: 4 },
+    { label: "budget", status: 503, code: "blockeditor-capacity", reason: "budget", header: "60", delay: 60 },
+    { label: "receipt-capacity", status: 503, code: "blockeditor-capacity", reason: "receipt-capacity", header: "60", delay: 60 },
+    { label: "file-changed", status: 428, code: "blockeditor-condition-required", reason: "file-changed" },
     { label: "save-id-reused", status: 409, code: "save-id-reused" },
   ];
 
@@ -536,7 +536,7 @@ describe("typed refusals from the host contract", () => {
     responses.save = () => ({
       status: 503,
       headers: { "Retry-After": when },
-      body: { msg: "Over budget.", msgType: "error", code: "page-capacity", reason: "budget" },
+      body: { msg: "Over budget.", msgType: "error", code: "blockeditor-capacity", reason: "budget" },
     });
 
     await edit("dated retry");
@@ -550,7 +550,7 @@ describe("typed refusals from the host contract", () => {
     responses.save = () => ({
       status: 503,
       headers: { "Retry-After": "soon" },
-      body: { msg: "Over budget.", msgType: "error", code: "page-capacity", reason: "budget" },
+      body: { msg: "Over budget.", msgType: "error", code: "blockeditor-capacity", reason: "budget" },
     });
 
     await edit("nonsense retry");
@@ -563,7 +563,7 @@ describe("typed refusals from the host contract", () => {
     responses.save = () => ({
       status: 503,
       headers: { "Retry-After": header },
-      body: { msg: "Over budget.", msgType: "error", code: "page-capacity", reason: "budget" },
+      body: { msg: "Over budget.", msgType: "error", code: "blockeditor-capacity", reason: "budget" },
     });
 
     await edit(`invalid retry ${header}`);
@@ -576,7 +576,7 @@ describe("typed refusals from the host contract", () => {
     responses.save = () => ({
       status: 503,
       headers: { "Retry-After": "99999" },
-      body: { msg: "Over budget.", msgType: "error", code: "page-capacity", reason: "budget" },
+      body: { msg: "Over budget.", msgType: "error", code: "blockeditor-capacity", reason: "budget" },
     });
 
     await edit("absurd retry");
@@ -586,11 +586,11 @@ describe("typed refusals from the host contract", () => {
   });
 });
 
-describe("page-converting retries inside one logical save", () => {
+describe("blockeditor-converting retries inside one logical save", () => {
   const converting = () => ({
     status: 503,
     headers: { "Retry-After": "1" },
-    body: { msg: "Converting the page.", msgType: "error", code: "page-converting", reason: "page-converting" },
+    body: { msg: "Converting the page.", msgType: "error", code: "blockeditor-converting", reason: "blockeditor-converting" },
   });
 
   beforeEach(async () => {
@@ -631,7 +631,7 @@ describe("page-converting retries inside one logical save", () => {
     const result = await pending;
 
     expect(result.ok).toBe(false);
-    expect(result.code).toBe("page-converting");
+    expect(result.code).toBe("blockeditor-converting");
     expect(result.msgType).toBe("error");
     expect(result.hadTimeout).toBe(false);
     expect(calls.save).toHaveLength(4);
@@ -651,7 +651,7 @@ describe("page-converting retries inside one logical save", () => {
     const result = await pending;
 
     expect(result.ok).toBe(false);
-    expect(result.code).toBe("page-converting");
+    expect(result.code).toBe("blockeditor-converting");
     expect(calls.save).toHaveLength(1);
   });
 
@@ -668,7 +668,7 @@ describe("page-converting retries inside one logical save", () => {
     await jest.advanceTimersByTimeAsync(1000);
     const result = await pending;
 
-    expect(result.code).toBe("page-converting");
+    expect(result.code).toBe("blockeditor-converting");
     expect(calls.save).toHaveLength(1);
   });
 });

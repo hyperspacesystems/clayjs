@@ -70,8 +70,8 @@ const waitFor = async (check) => {
   }
   return false;
 };
-const pickerEl = () => document.querySelector(".page-mention-picker");
-const options = () => [...document.querySelectorAll(".page-mention-picker .page-menu-item")];
+const pickerEl = () => document.querySelector(".blockeditor-mention-picker");
+const options = () => [...document.querySelectorAll(".blockeditor-mention-picker .blockeditor-menu-item")];
 const record = (view, id) => blockMap(view.state.doc)[id];
 const blockPos = (view, id) => {
   let found = null;
@@ -247,7 +247,7 @@ test("typing at the mark's edge stays unmarked, and an unknown person stays read
   const records = { a: record(view, "a") };
   const model = project(records);
   const html = renderModel(model);
-  expect(html).toContain('data-page-mention="ada-lovelace"');
+  expect(html).toContain('data-blockeditor-mention="ada-lovelace"');
   expect(html).toContain("Ada Lovelace");
   expect(html).not.toContain("href");
   const reopened = parseModel(articleOf(html, revOf(model)));
@@ -281,7 +281,7 @@ test("a mention in a table cell round-trips through the record and the binding",
   const view = open(blocks);
   expect(record(view, "tbl").rows.r1.cells.c1).toEqual(cell);
 
-  const store = createStore({ name: "page", value: seed(blocks) });
+  const store = createStore({ name: "blockeditor", value: seed(blocks) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   cleanups.push(() => { binding.dispose(); binding.ydoc.destroy(); });
   const synced = blocksFromYValue(yValueOf(binding.ydoc));
@@ -316,7 +316,7 @@ test("undo takes the mention back out and redo puts it back", async () => {
 test("a second peer opens the mention by its id and label", () => {
   people();
   const blocks = { a: { t: "paragraph", pos: "00000001", c: "Hello " }, z: { t: "paragraph", pos: "00000002", c: NEIGHBOUR.c } };
-  const mineBinding = createYPageBinding({ store: createStore({ name: "page", value: seed(blocks) }), captureTimeout: 0 });
+  const mineBinding = createYPageBinding({ store: createStore({ name: "blockeditor", value: seed(blocks) }), captureTimeout: 0 });
   const theirs = new Y.Doc();
   cleanups.push(() => { mineBinding.dispose(); mineBinding.ydoc.destroy(); theirs.destroy(); });
 
@@ -345,13 +345,13 @@ test("a saved article reopens with the same label and id", async () => {
   expect(mention.c).toBe("Hello Ada Lovelace ");
   expect(mention.m).toEqual(runsOf(saved.a.m));
   // The article states the mention on an inert span: a name, an id, no link.
-  expect(article.innerHTML).toContain('data-page-mention="ada-lovelace">Ada Lovelace</span>');
+  expect(article.innerHTML).toContain('data-blockeditor-mention="ada-lovelace">Ada Lovelace</span>');
 });
 
 test("an older writer's neighbour edit keeps the id and the label", () => {
   const formatCase = caseOf("a person mention");
   const blocks = JSON.parse(JSON.stringify(formatCase.blocks));
-  const store = createStore({ name: "page", value: seed(blocks) });
+  const store = createStore({ name: "blockeditor", value: seed(blocks) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   cleanups.push(() => { binding.dispose(); binding.ydoc.destroy(); });
   const view = bindingView(binding);
@@ -380,10 +380,10 @@ test("view, edit, view leaves no picker and no listener behind", async () => {
   setEditorActive(view, true);
   type(view, endOf(view, "a"));
   expect(await waitFor(() => options().length === 2)).toBe(true);
-  expect(document.querySelectorAll(".page-mention-picker")).toHaveLength(1);
+  expect(document.querySelectorAll(".blockeditor-mention-picker")).toHaveLength(1);
   keys(view, "Escape");
   expect(pickerEl()).toBeNull();
-  expect(document.querySelectorAll(".page-mention-picker")).toHaveLength(0);
+  expect(document.querySelectorAll(".blockeditor-mention-picker")).toHaveLength(0);
   expect(record(view, "a").c).toBe("@Hello @");
 });
 
@@ -430,7 +430,7 @@ test("a gate that refuses writes nothing, marks nothing and leaves no undo entry
   people();
   const view = open();
   const asked = [];
-  view.runFormatCommand = async () => { asked.push(true); return { status: "upgrade-required", code: "page-format-upgrade-required" }; };
+  view.runFormatCommand = async () => { asked.push(true); return { status: "upgrade-required", code: "blockeditor-format-upgrade-required" }; };
   type(view, endOf(view, "a"));
   await waitFor(() => options().length === 2);
   const before = view.state.doc;
@@ -448,7 +448,7 @@ test("a gate that refuses writes nothing, marks nothing and leaves no undo entry
 
   // The answer is the gate's own refusal, so a caller reads the code rather than a mention.
   expect(await runFormatted(view, () => { throw new Error("a refused command writes nothing"); }))
-    .toEqual({ ok: false, code: "page-format-upgrade-required", retry: false });
+    .toEqual({ ok: false, code: "blockeditor-format-upgrade-required", retry: false });
 });
 
 // A host that never advertised the format is the one refusal nothing else reports: the
@@ -456,11 +456,11 @@ test("a gate that refuses writes nothing, marks nothing and leaves no undo entry
 test("a host that cannot store the format says so rather than doing nothing", async () => {
   people();
   const view = open();
-  view.runFormatCommand = async () => ({ status: "unsupported-host", code: "page-format-unsupported" });
+  view.runFormatCommand = async () => ({ status: "unsupported-host", code: "blockeditor-format-unsupported" });
 
   expect(await runFormatted(view, () => { throw new Error("a refused command writes nothing"); }))
-    .toEqual({ ok: false, code: "page-format-unsupported", retry: false });
-  expect(view.dom.parentElement.querySelector(".page-live").textContent).toContain("This host can't store that yet");
+    .toEqual({ ok: false, code: "blockeditor-format-unsupported", retry: false });
+  expect(view.dom.parentElement.querySelector(".blockeditor-live").textContent).toContain("This host can't store that yet");
 });
 
 test("the gate is asked once per mention, and the written name is its answer", async () => {
@@ -505,6 +505,6 @@ test("a caret that moves while the gate is pending refuses with stale-target", a
 
 // The article a page saves, from the projection's own bytes.
 function articleOf(html, rev) {
-  const parsed = new DOMParser().parseFromString(`<!DOCTYPE html><html><body><article data-page="1" data-rev="${rev}">\n${html}\n</article></body></html>`, "text/html");
+  const parsed = new DOMParser().parseFromString(`<!DOCTYPE html><html><body><article data-blockeditor="1" data-rev="${rev}">\n${html}\n</article></body></html>`, "text/html");
   return parsed.querySelector("article");
 }

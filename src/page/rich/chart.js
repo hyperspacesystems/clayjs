@@ -92,7 +92,7 @@ function renderPie(model, slices, width) {
     const y1 = fmt(PIE.cy + PIE.radius * Math.sin(slice.from));
     const x2 = fmt(PIE.cx + PIE.radius * Math.cos(slice.to));
     const y2 = fmt(PIE.cy + PIE.radius * Math.sin(slice.to));
-    parts.push(`<path${point} d="M ${PIE.cx} ${PIE.cy} L ${x1} ${y1} A ${PIE.radius} ${PIE.radius} 0 ${slice.fraction > .5 ? 1 : 0} 1 ${x2} ${y2} Z" fill="${slice.color}" stroke="var(--page-bg)" stroke-width="2"/>`);
+    parts.push(`<path${point} d="M ${PIE.cx} ${PIE.cy} L ${x1} ${y1} A ${PIE.radius} ${PIE.radius} 0 ${slice.fraction > .5 ? 1 : 0} 1 ${x2} ${y2} Z" fill="${slice.color}" stroke="var(--blockeditor-bg)" stroke-width="2"/>`);
   });
   slices.forEach((slice, index) => {
     const yy = fmt(54 + index * 36);

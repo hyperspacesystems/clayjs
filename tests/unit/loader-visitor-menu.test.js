@@ -6,7 +6,7 @@ const golden = JSON.parse(readFileSync(new URL("../fixtures/load/resolve-golden.
 const URLS = {
   journal: "plugins=sync,visitor-drafts,bind-text,menu,upload&exclude=richclay",
   kanban: "plugins=sortable,people,upload,sync,visitor-drafts,unsent,menu,undo&exclude=richclay",
-  page: "plugins=page,menu,indicator",
+  page: "plugins=blockeditor,menu,indicator",
   calculator: "plugins=visitor-drafts,menu",
 };
 const MODES = [["view", false, false, false], ["viewOwner", false, false, true], ["edit", true, false, true], ["draft", true, true, false]];

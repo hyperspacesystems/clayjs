@@ -21,7 +21,7 @@ const metaRequests = (requests) => requests.filter((r) => new URL(r.href).pathna
 
 async function boot(mode, query) {
   jest.resetModules();
-  document.documentElement.innerHTML = '<head><title>Document</title></head><body><article class="page" clay="freeze" data-page="1"><p data-id="p1">Hi</p></article></body>';
+  document.documentElement.innerHTML = '<head><title>Document</title></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1"><p data-id="p1">Hi</p></article></body>';
   window.clay = {};
   delete window.clayEditMode;
   delete window.__hyperclayEditMode;
@@ -60,20 +60,20 @@ afterEach(() => {
   document.documentElement.removeAttribute("visitor-drafts");
 });
 
-test("an edit-mode boot with plugins=page asks the host for its metadata exactly once", async () => {
-  const { requests } = await boot("edit", "plugins=page");
+test("an edit-mode boot with plugins=blockeditor asks the host for its metadata exactly once", async () => {
+  const { requests } = await boot("edit", "plugins=blockeditor");
 
   const meta = metaRequests(requests);
   expect(meta.length).toBe(1);
   // The boot asks once: the loader, or the host-permission check it runs first.
   expect(meta[0].caller).toMatch(/\/src\/(loader|core\/host-permission)\.js:/);
-  expect(window.clay.page).toBeDefined();
+  expect(window.clay.blockeditor).toBeDefined();
 });
 
 test("a view-mode boot does not ask the host for its metadata from the loader", async () => {
-  const { requests } = await boot("view", "plugins=page");
+  const { requests } = await boot("view", "plugins=blockeditor");
 
-  expect(window.clay.page).toBeUndefined();
+  expect(window.clay.blockeditor).toBeUndefined();
   expect(metaRequests(requests).filter((r) => r.caller.includes("/src/loader.js:"))).toEqual([]);
 });
 

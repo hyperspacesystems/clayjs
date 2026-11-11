@@ -48,7 +48,7 @@ import { mergeIgnoresAttr, mergeVetoesAttr } from '../lib/root-attrs.js';
 import { autosaveActive } from '../lib/autosave-state.js';
 import { hostSupports } from '../core/host-meta.js';
 import { PAGE_FORMAT, PAGE_FORMAT_HEADER } from '../core/page-format-wire.js';
-import { knownPageFormatFloor, pageFormatFloor, withPageFormatFloor } from '../core/page-format.js';
+import { knownPageFormatFloor, blockeditorFormatFloor, withPageFormatFloor } from '../core/page-format.js';
 import { onSaveAccepted } from '../core/save-accepted.js';
 import { servedDocumentEtag } from '../core/host-attrs.js';
 import { recordEtag, seedEtag, lastSeenEtag, conditionalSaves, representedEtag, forgetRepresentedEtag } from '../core/etag.js';
@@ -1332,7 +1332,7 @@ class LiveSync {
     // at: the save adds the format marker on its way out (core/save-core.js runSave),
     // after the capture this relay was built from. At floor 0 the html is unchanged.
     const sent = acceptedBytesFor(captureId) ?? acceptedHtml;
-    const floor = typeof sent === 'string' ? pageFormatFloor(sent) : 0;
+    const floor = typeof sent === 'string' ? blockeditorFormatFloor(sent) : 0;
     payload = { ...payload, html: asSent(withPageFormatFloor(payload.html, Math.max(knownPageFormatFloor(), floor)), sent) };
 
     // Skip only an unstamped repeat, judged against the base as it stood. A

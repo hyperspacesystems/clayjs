@@ -11,7 +11,7 @@ import { COMMAND_FEATURES } from "../../../src/page/features/registry.js";
 import { runPageCommand } from "../../../src/page/editor.js";
 import { editor } from "./view-helpers.js";
 
-const exportPanel = () => document.querySelector('clay-editor-ui[data-clay-ui="page-export"]')?.shadowRoot.querySelector(".page-export-panel") ?? null;
+const exportPanel = () => document.querySelector('clay-editor-ui[data-clay-ui="blockeditor-export"]')?.shadowRoot.querySelector(".blockeditor-export-panel") ?? null;
 
 afterEach(() => { document.body.innerHTML = ""; });
 
@@ -71,7 +71,7 @@ const serve = (routes = {}) => {
   return { fetchImpl, calls };
 };
 
-const page = (body) => `<!DOCTYPE html><html><head><title>Notes</title></head><body><article data-page="1">${body}</article></body></html>`;
+const page = (body) => `<!DOCTYPE html><html><head><title>Notes</title></head><body><article data-blockeditor="1">${body}</article></body></html>`;
 const inline = (html, resources, options = {}) => inlineExportResources(html, { resources, base: BASE, ...options });
 const codes = (result) => result.losses.map((entry) => entry.code);
 
@@ -381,7 +381,7 @@ test("the live snapshot is taken once: a peer's edit during the fetch never reac
   });
   const pending = feature.run();
   await new Promise((done) => setTimeout(done, 5));
-  expect(document.querySelector('clay-editor-ui[data-clay-ui="page-export"]')).toBeNull();
+  expect(document.querySelector('clay-editor-ui[data-clay-ui="blockeditor-export"]')).toBeNull();
   view.dispatch(view.state.tr.insertText("after", view.state.doc.child(1).nodeSize - 1));
   release();
   const answer = await pending;
@@ -406,7 +406,7 @@ test("a complete copy shows its captured title and time, and downloads only when
   const panel = exportPanel();
   expect(panel.textContent).toContain("Relay launch review");
   expect(panel.dataset.at).toBe("2026-10-27T09:30:00.000Z");
-  expect(panel.querySelectorAll(".page-export-losses li").length).toBe(0);
+  expect(panel.querySelectorAll(".blockeditor-export-losses li").length).toBe(0);
   expect(panel.querySelectorAll("[data-act]").length).toBe(2);
 
   panel.querySelector('[data-act="download"]').click();
@@ -416,7 +416,7 @@ test("a complete copy shows its captured title and time, and downloads only when
   const doc = docOf(downloads[0].html);
   expect(doc.querySelector("figure[data-type=\"image\"] img").getAttribute("src")).toBe(dataUrl(PNG, "dip"));
   expect(remoteDependencies(downloads[0].html)).toEqual([]);
-  expect(document.querySelector('clay-editor-ui[data-clay-ui="page-export"]')).toBeNull();
+  expect(document.querySelector('clay-editor-ui[data-clay-ui="blockeditor-export"]')).toBeNull();
   feature.dispose();
 });
 
@@ -432,7 +432,7 @@ test("every loss is listed before anything downloads, and nothing downloads", as
   expect(answer.code).toBe("resource-losses");
   expect(answer.losses.map((entry) => entry.code)).toEqual(["missing-resource"]);
   const panel = exportPanel();
-  const said = [...panel.querySelectorAll(".page-export-losses li")].map((li) => li.textContent);
+  const said = [...panel.querySelectorAll(".blockeditor-export-losses li")].map((li) => li.textContent);
   expect(said.length).toBe(1);
   expect(said[0]).toContain("https://example.com/uploads/dip.png");
   expect(said[0]).toContain("404");
@@ -450,7 +450,7 @@ test("a refusal to render is listed too, never a silent absence", async () => {
   expect(answer.ok).toBe(false);
   expect(answer.code).toBe("unsafe-url");
   const panel = exportPanel();
-  expect(panel.querySelectorAll(".page-export-losses li").length).toBe(1);
+  expect(panel.querySelectorAll(".blockeditor-export-losses li").length).toBe(1);
   expect(panel.querySelector('[data-act="download"]')).toBeNull();
   expect(downloads).toEqual([]);
   feature.dispose();
@@ -469,7 +469,7 @@ test("a command left while its resources are still arriving paints nothing", asy
   const answer = await pending;
 
   expect(answer).toEqual({ ok: false, code: "not-editing" });
-  expect(document.querySelector('clay-editor-ui[data-clay-ui="page-export"]')).toBeNull();
+  expect(document.querySelector('clay-editor-ui[data-clay-ui="blockeditor-export"]')).toBeNull();
   expect(downloads).toEqual([]);
 });
 
@@ -487,7 +487,7 @@ test("the export command is its own lazy row, and the registry runs it on an edi
     expect(answer.name).toBe("Relay launch review.html");
     const panel = exportPanel();
     expect(panel).not.toBeNull();
-    expect(panel.querySelectorAll(".page-export-losses li").length).toBe(0);
+    expect(panel.querySelectorAll(".blockeditor-export-losses li").length).toBe(0);
   } finally {
     globalThis.fetch = original;
   }

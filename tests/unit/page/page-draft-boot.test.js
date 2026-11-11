@@ -16,14 +16,14 @@ const BLOCKS = [
   { id: "title", t: "heading", text: "" },
   { id: "p1", t: "paragraph", text: "" },
 ];
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
 const RULES = '{"title":"title"}';
 
 let boots = 0;
 
 function articleHtml() {
   const { html, rev } = renderFromTags([JSON.stringify(seedValue(BLOCKS))]);
-  return `<article class="page" clay="freeze" data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 }
 
 // The boot the spike proved: a draft slot and no owner cookie, the page's own rules
@@ -31,10 +31,10 @@ function articleHtml() {
 // The previous boot is disposed and settled first: its editor's work still running
 // would otherwise evaluate the mode modules for the next boot's plan.
 async function bootPage({ tagText = null, slot: wanted = null, storage = null } = {}) {
-  window.clay?.page?.dispose?.();
+  window.clay?.blockeditor?.dispose?.();
   await wait(400);
   jest.resetModules();
-  const slot = wanted ?? `page-draft-${++boots}`;
+  const slot = wanted ?? `blockeditor-draft-${++boots}`;
   delete window.clayEditMode;
   delete window.__hyperclayEditMode;
   const root = document.documentElement;
@@ -50,7 +50,7 @@ async function bootPage({ tagText = null, slot: wanted = null, storage = null } 
   document.head.append(rules);
   const settings = document.createElement("script");
   settings.setAttribute("type", "application/json");
-  settings.setAttribute("merge", "page.settings");
+  settings.setAttribute("merge", "blockeditor.settings");
   settings.setAttribute("clay", "live");
   settings.textContent = "{}";
   document.head.append(settings);
@@ -58,10 +58,10 @@ async function bootPage({ tagText = null, slot: wanted = null, storage = null } 
   if (tagText) {
     const tag = document.createElement("script");
     tag.setAttribute("type", "application/json");
-    tag.setAttribute("merge", "page");
+    tag.setAttribute("merge", "blockeditor");
     tag.setAttribute("clay", "live");
     tag.textContent = tagText;
-    const article = document.querySelector("article[data-page]");
+    const article = document.querySelector("article[data-blockeditor]");
     article.parentNode.insertBefore(tag, article);
   }
   localStorage.clear();
@@ -77,7 +77,7 @@ async function bootPage({ tagText = null, slot: wanted = null, storage = null } 
   await import("../../../src/ui/toast.js");
   await import("../../../src/lib/region-policy.js");
   const { boot } = await import("../../../src/loader.js");
-  await new Promise((resolve) => boot(null, new URLSearchParams("plugins=page,visitor-drafts,indicator"), resolve));
+  await new Promise((resolve) => boot(null, new URLSearchParams("plugins=blockeditor,visitor-drafts,indicator"), resolve));
   return { clay: window.clay, fetchMock };
 }
 
@@ -125,24 +125,24 @@ async function openSlashMenu(view) {
   view.dispatch(view.state.tr.setSelection(pm.state.TextSelection.create(view.state.doc, firstParagraph(view))));
   const { from, to } = view.state.selection;
   view.dispatch(view.state.tr.insertText("/", from, to));
-  return view.dom.parentElement.querySelector(".page-menu");
+  return view.dom.parentElement.querySelector(".blockeditor-menu");
 }
 
-const menuLabels = (menu) => [...menu.querySelectorAll(".page-menu-item .page-menu-label")].map((n) => n.textContent);
+const menuLabels = (menu) => [...menu.querySelectorAll(".blockeditor-menu-item .blockeditor-menu-label")].map((n) => n.textContent);
 
 test("a visitor's page boots editable with no host request", async () => {
   const { clay, fetchMock } = await bootPage();
-  const status = await clay.page.ready;
+  const status = await clay.blockeditor.ready;
   expect(status.phase).toBe("ready");
-  expect(clay.page.view.editable).toBe(true);
+  expect(clay.blockeditor.view.editable).toBe(true);
   expect(fetchMock.mock.calls.length).toBe(0);
 }, 30000);
 
 test("a visitor's typing saves into this browser's draft transport", async () => {
   const { clay, fetchMock } = await bootPage();
-  await clay.page.ready;
+  await clay.blockeditor.ready;
   const bytes = await tapDraftTransport();
-  const view = clay.page.view;
+  const view = clay.blockeditor.view;
   view.dispatch(view.state.tr.insertText("visitor words", firstParagraph(view)));
 
   await waitFor(() => bytes.some((html) => html.includes("visitor words")));
@@ -151,21 +151,21 @@ test("a visitor's typing saves into this browser's draft transport", async () =>
   expect(saved).toBeTruthy();
   const doc = docOf(saved);
   expect(doc.querySelectorAll(TAG_SEL).length).toBe(1);
-  expect(doc.querySelector("article[data-page]").textContent).toContain("visitor words");
+  expect(doc.querySelector("article[data-blockeditor]").textContent).toContain("visitor words");
   expect(fetchMock.mock.calls.length).toBe(0);
 
   const tagText = doc.querySelector(TAG_SEL).textContent;
   const second = await bootPage({ tagText });
-  await second.clay.page.ready;
-  expect(second.clay.page.view.state.doc.textContent).toContain("visitor words");
+  await second.clay.blockeditor.ready;
+  expect(second.clay.blockeditor.view.state.doc.textContent).toContain("visitor words");
   expect(second.fetchMock.mock.calls.length).toBe(0);
 }, 40000);
 
 test("a return visit boots from a stored page tag", async () => {
   const first = await bootPage();
-  await first.clay.page.ready;
+  await first.clay.blockeditor.ready;
   const bytes = await tapDraftTransport();
-  const view = first.clay.page.view;
+  const view = first.clay.blockeditor.view;
   view.dispatch(view.state.tr.insertText("kept words", firstParagraph(view)));
   await waitFor(() => bytes.some((html) => html.includes("kept words")));
   const saved = bytes.find((html) => html.includes("kept words"));
@@ -174,56 +174,56 @@ test("a return visit boots from a stored page tag", async () => {
   expect(tagText).toBeTruthy();
 
   const second = await bootPage({ tagText });
-  await second.clay.page.ready;
-  expect(second.clay.page.view.state.doc.textContent).toContain("kept words");
+  await second.clay.blockeditor.ready;
+  expect(second.clay.blockeditor.view.state.doc.textContent).toContain("kept words");
   expect(second.fetchMock.mock.calls.length).toBe(0);
 }, 40000);
 
 test("a reload finds the visitor's page from the record alone", async () => {
-  const slot = "page-draft-reload";
+  const slot = "blockeditor-draft-reload";
   const first = await bootPage({ slot });
-  await first.clay.page.ready;
+  await first.clay.blockeditor.ready;
   const bytes = await tapDraftTransport();
-  const view = first.clay.page.view;
+  const view = first.clay.blockeditor.view;
   view.dispatch(view.state.tr.insertText("record words", firstParagraph(view)));
 
   const key = `clay:visitor-drafts:${slot}@/page.html`;
   const recordOf = () => {
     try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
   };
-  await waitFor(() => bytes.some((html) => html.includes("record words")) && recordOf()?.page?.html?.includes("record words"));
+  await waitFor(() => bytes.some((html) => html.includes("record words")) && recordOf()?.blockeditor?.html?.includes("record words"));
   const raw = localStorage.getItem(key);
   expect(raw).toBeTruthy();
   const record = JSON.parse(raw);
-  expect(record.page.html).toContain("record words");
-  expect(record.live.page).toBeTruthy();
+  expect(record.blockeditor.html).toContain("record words");
+  expect(record.live.blockeditor).toBeTruthy();
 
   const second = await bootPage({ slot, storage: { [key]: raw } });
-  await second.clay.page.ready;
-  expect(second.clay.page.view.state.doc.textContent).toContain("record words");
+  await second.clay.blockeditor.ready;
+  expect(second.clay.blockeditor.view.state.doc.textContent).toContain("record words");
   expect(second.fetchMock.mock.calls.length).toBe(0);
 }, 40000);
 
 test("a visitor's slash menu has no Image or File, and shows the note", async () => {
   const { clay } = await bootPage();
-  await clay.page.ready;
-  const menu = await openSlashMenu(clay.page.view);
+  await clay.blockeditor.ready;
+  const menu = await openSlashMenu(clay.blockeditor.view);
   expect(menu).toBeTruthy();
   const labels = menuLabels(menu);
   expect(labels).not.toContain("Image");
   expect(labels).not.toContain("File");
   expect(labels).toContain("Text");
-  expect(menu.querySelector(".page-menu-note").textContent).toBe("Download your copy to add pictures and files.");
+  expect(menu.querySelector(".blockeditor-menu-note").textContent).toBe("Download your copy to add pictures and files.");
 }, 30000);
 
 test("a visitor's more menu has no Add cover", async () => {
   const { clay } = await bootPage();
-  await clay.page.ready;
-  const view = clay.page.view;
-  const more = view.dom.parentElement.querySelector(".page-dock .page-tool-more");
+  await clay.blockeditor.ready;
+  const view = clay.blockeditor.view;
+  const more = view.dom.parentElement.querySelector(".blockeditor-dock .blockeditor-tool-more");
   expect(more).toBeTruthy();
   more.click();
-  const menu = view.dom.parentElement.querySelector(".page-menu");
+  const menu = view.dom.parentElement.querySelector(".blockeditor-menu");
   expect(menu).toBeTruthy();
   const labels = menuLabels(menu);
   expect(labels).not.toContain("Add cover");
@@ -232,8 +232,8 @@ test("a visitor's more menu has no Add cover", async () => {
 
 test("a visitor's dropped image is refused with the note, not offered as an embed", async () => {
   const { clay } = await bootPage();
-  await clay.page.ready;
-  const view = clay.page.view;
+  await clay.blockeditor.ready;
+  const view = clay.blockeditor.view;
   const { mediaKey, insertFiles } = await import("../../../src/page/media.js");
   const item = () => mediaKey.getState(view.state).items[0];
   insertFiles(view, [new File(["x"], "a.png", { type: "image/png" })]);
@@ -245,8 +245,8 @@ test("a visitor's dropped image is refused with the note, not offered as an embe
 
 test("no persistent storage warning appears for a visitor", async () => {
   const { clay } = await bootPage();
-  await clay.page.ready;
-  expect(clay.page.view.editable).toBe(true);
+  await clay.blockeditor.ready;
+  expect(clay.blockeditor.view.editable).toBe(true);
   // The save-state notices arrive after the boot settles: a draft with no host has
   // nothing to be unavailable about, so neither the storage toast nor the chip's
   // "can't store changes" status appears.
@@ -258,7 +258,7 @@ test("no persistent storage warning appears for a visitor", async () => {
 
 test("the same harness counts host requests for an owner", async () => {
   const answer = { ok: false, status: 404, headers: new Headers(), text: async () => "", json: async () => ({}) };
-  window.clay?.page?.dispose?.();
+  window.clay?.blockeditor?.dispose?.();
   await wait(800);
   jest.resetModules();
   // The owner's document loads sync, whose stream opens an EventSource jsdom lacks.
@@ -288,8 +288,8 @@ test("the same harness counts host requests for an owner", async () => {
   window.clayEditMode = true;
   window.fetch = fetchMock;
   global.fetch = fetchMock;
-  await new Promise((resolve) => boot(null, new URLSearchParams("plugins=page,indicator"), resolve));
+  await new Promise((resolve) => boot(null, new URLSearchParams("plugins=blockeditor,indicator"), resolve));
   expect(fetchMock.mock.calls.length).toBeGreaterThan(0);
-  await Promise.resolve(window.clay.page?.ready).catch(() => {});
+  await Promise.resolve(window.clay.blockeditor?.ready).catch(() => {});
   await wait(500);
 }, 30000);

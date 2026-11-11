@@ -34,7 +34,7 @@ const until = async (predicate, timeout = 8000) => {
   return Boolean(await predicate());
 };
 
-const PAGE_HOST = { spec: 1, extensions: ["page", "live-data", "live-provenance", "sync", "upload"], document: {} };
+const PAGE_HOST = { spec: 1, extensions: ["blockeditor", "live-data", "live-provenance", "sync", "upload"], document: {} };
 
 const routeHost = async (host = PAGE_HOST) => {
   const inner = globalThis.fetch;
@@ -61,8 +61,8 @@ const frameFrom = (source, bytes, seq, etag = `E${seq}`) =>
 
 const otherTabFile = (bytes) => {
   const file = new DOMParser().parseFromString(bytes, "text/html");
-  for (const tag of file.querySelectorAll('script[merge="page"]')) tag.remove();
-  const paragraph = file.querySelector('article[data-page] [data-id="p1"]');
+  for (const tag of file.querySelectorAll('script[merge="blockeditor"]')) tag.remove();
+  const paragraph = file.querySelector('article[data-blockeditor] [data-id="p1"]');
   if (paragraph) paragraph.textContent = "from another tab";
   return `<!DOCTYPE html>\n${file.documentElement.outerHTML}`;
 };
@@ -103,7 +103,7 @@ test("a Document's clean second session keeps the newer file and the next entry 
         return { enable() {}, quiesce() {}, resume() {}, dispose() {} };
       },
     });
-    const paragraph = () => document.querySelector('article[data-page] [data-id="p1"]');
+    const paragraph = () => document.querySelector('article[data-blockeditor] [data-id="p1"]');
 
     expect((await clay.setMode("edit")).ok).toBe(true);
     paragraph().textContent = "saved A";
@@ -141,7 +141,7 @@ test("a Document's clean second session keeps the newer file and the next entry 
     expect(await until(() => posts.some((entry) => /\/_\/save$/.test(entry.url)))).toBe(true);
     const filePost = posts.find((entry) => /\/_\/save$/.test(entry.url));
     const saved = new DOMParser().parseFromString(String(filePost.body), "text/html");
-    expect(saved.querySelector('article[data-page] [data-id="p1"]')?.textContent).toBe("third");
+    expect(saved.querySelector('article[data-blockeditor] [data-id="p1"]')?.textContent).toBe("third");
     await clay.setMode("view");
   } finally {
     pageView.stop();
@@ -252,7 +252,7 @@ test("a live entry learns conditional saves and every session records the stamp 
       const held = await pageView.acquired;
       return (held?.represented ?? held)?.etag === "E1";
     })).toBe(true);
-    const paragraph = () => document.querySelector('article[data-page] [data-id="p1"]');
+    const paragraph = () => document.querySelector('article[data-blockeditor] [data-id="p1"]');
 
     // A live entry, not an edit boot: the stamp comes from the reader's receipt, and the
     // conditional capability from discovery. The first save must carry it.

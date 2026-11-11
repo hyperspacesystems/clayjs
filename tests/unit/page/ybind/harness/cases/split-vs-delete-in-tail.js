@@ -8,7 +8,7 @@ export async function run() {
   const { TextSelection } = pmState;
   const initial = { blocks: { p: { t: 'paragraph', pos: 'M', c: 'one two three four five' }, q: { t: 'paragraph', pos: 'V', c: '' } }, deleted: {} };
   const sim = new Sim(1);
-  const room = createRoom(sim, { page: initial }, { latency: () => 40, answerLatency: () => 40 });
+  const room = createRoom(sim, { blockeditor: initial }, { latency: () => 40, answerLatency: () => 40 });
   const tabs = new Map(['a', 'b'].map((id) => [id, makeTab(sim, room, id, JSON.parse(JSON.stringify(initial)))]));
   for (const t of tabs.values()) t.start();
   await sim.run(500);

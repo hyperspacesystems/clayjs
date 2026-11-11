@@ -11,9 +11,9 @@ export async function run() {
     a.replace(0, 0, 'ZZ ');
     b.replace(5, 11, '');
     await sim.run(sim.now() + 1200);
-    const file = JSON.parse(JSON.stringify(room.stores.get('page').value));
-    room.land('page', room.seq);
-    room.restart({ page: file });
+    const file = JSON.parse(JSON.stringify(room.stores.get('blockeditor').value));
+    room.land('blockeditor', room.seq);
+    room.restart({ blockeditor: file });
     await sim.run(sim.now() + returnAfter);
     room.open('a');
     await sim.run(sim.now() + 15000);

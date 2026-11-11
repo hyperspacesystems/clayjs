@@ -1145,8 +1145,8 @@ describe("with a ready ai-edit helper", () => {
     expect(handle.cancel).not.toHaveBeenCalled();
 
     // A field the page owns.
-    section.insertAdjacentHTML("afterend", '<input id="page-field">');
-    const field = document.getElementById("page-field");
+    section.insertAdjacentHTML("afterend", '<input id="blockeditor-field">');
+    const field = document.getElementById("blockeditor-field");
     field.focus();
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(handle.cancel).not.toHaveBeenCalled();
@@ -1602,7 +1602,7 @@ describe("with a ready ai-edit helper", () => {
 
   // A Block-based document hands ai-edit an AiTarget instead of a DOM element: the page
   // surface owns the request, the preview and the keep, and nothing here morphs.
-  describe("a Block document, through clay.page.ai", () => {
+  describe("a Block document, through clay.blockeditor.ai", () => {
     const SECTION = '<section data-edit-id="hero"><h1>Old heading</h1><p>Old paragraph</p></section>';
 
     function makeTarget(label = "2 blocks") {
@@ -1657,7 +1657,7 @@ describe("with a ready ai-edit helper", () => {
       if (barShown() && !barButton("revert").hidden) barButton("revert").click();
       else if (barShown() && !barButton("close").hidden) barButton("close").click();
       await flush();
-      delete window.clay.page;
+      delete window.clay.blockeditor;
     });
 
     test("Ctrl+J opens on the page's chosen blocks and never reads their HTML from the DOM", async () => {
@@ -1668,7 +1668,7 @@ describe("with a ready ai-edit helper", () => {
         get() { throw new Error("the editor's HTML was read"); },
       });
       const target = makeTarget();
-      window.clay.page = { ai: fakePage(target) };
+      window.clay.blockeditor = { ai: fakePage(target) };
 
       const event = ctrlJ();
       expect(event.defaultPrevented).toBe(true);
@@ -1693,7 +1693,7 @@ describe("with a ready ai-edit helper", () => {
       const section = mountBlockPage();
       const target = makeTarget("This page");
       const ai = fakePage(target);
-      window.clay.page = { ai };
+      window.clay.blockeditor = { ai };
 
       expect(await aiEdit.open(document.body)).toBe(true);
       expect(ai.wholePage).toHaveBeenCalledTimes(1);
@@ -1720,7 +1720,7 @@ describe("with a ready ai-edit helper", () => {
     test("Keep is the page target's own keep, and the page never pauses its observers", async () => {
       const pause = jest.spyOn(Mutation, "pause");
       const target = makeTarget();
-      window.clay.page = { ai: fakePage(target) };
+      window.clay.blockeditor = { ai: fakePage(target) };
       mountBlockPage();
 
       await requestFor(target);
@@ -1735,9 +1735,9 @@ describe("with a ready ai-edit helper", () => {
     });
 
     test("a Block document whose surface is not ready stays off the DOM path", async () => {
-      document.body.insertAdjacentHTML("afterbegin", '<article data-page></article>');
-      window.clay.editPlugins = ["page"];
-      delete window.clay.page;
+      document.body.insertAdjacentHTML("afterbegin", '<article data-blockeditor></article>');
+      window.clay.editPlugins = ["blockeditor"];
+      delete window.clay.blockeditor;
       morphCalls.length = 0;
       try {
         expect(await aiEdit.open(document.body)).toBe(false);
@@ -1747,7 +1747,7 @@ describe("with a ready ai-edit helper", () => {
         const event = ctrlJ();
         expect(event.defaultPrevented).toBe(false);
       } finally {
-        document.querySelector("article[data-page]")?.remove();
+        document.querySelector("article[data-blockeditor]")?.remove();
         delete window.clay.editPlugins;
       }
     });
@@ -1759,7 +1759,7 @@ describe("with a ready ai-edit helper", () => {
       const { createPageAi } = await import("../../src/page/ai-surface.js");
       const view = pageEditor(spec);
       const ai = createPageAi({ getView: () => view });
-      window.clay.page = { ai };
+      window.clay.blockeditor = { ai };
       return { view, ai, posOf: pagePosOf, select: pageSelect };
     }
 
@@ -1838,7 +1838,7 @@ describe("with a ready ai-edit helper", () => {
     test("Discard is the page target's discard, and the page never pauses its observers", async () => {
       const pause = jest.spyOn(Mutation, "pause");
       const target = makeTarget();
-      window.clay.page = { ai: fakePage(target) };
+      window.clay.blockeditor = { ai: fakePage(target) };
       mountBlockPage();
 
       await requestFor(target);
@@ -1854,7 +1854,7 @@ describe("with a ready ai-edit helper", () => {
     test("openTarget opens the same composer on a target the page built, and the bar keeps it", async () => {
       mountBlockPage();
       const target = makeTarget("This tool");
-      window.clay.page = { ai: fakePage(target) };
+      window.clay.blockeditor = { ai: fakePage(target) };
 
       expect(await aiEdit.openTarget(target)).toBe(true);
       expect(panel().hidden).toBe(false);

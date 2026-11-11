@@ -9,10 +9,10 @@ import { CHART_ITEM, runItem } from "../../../src/page/items.js";
 afterEach(() => { document.body.innerHTML = ""; });
 
 const table = RECORD.blocks.tbl;
-const menu = (view) => view.dom.parentElement.querySelector(".page-menu");
-const labels = (view) => [...menu(view).querySelectorAll(".page-menu-item")].map((row) => row.querySelector(".page-menu-label").textContent);
-const item = (view, label) => [...menu(view).querySelectorAll(".page-menu-item")].find((row) => row.querySelector(".page-menu-label").textContent === label);
-const descriptions = (view) => [...menu(view).querySelectorAll(".page-menu-item")].map((row) => row.querySelector(".page-menu-desc")?.textContent ?? "");
+const menu = (view) => view.dom.parentElement.querySelector(".blockeditor-menu");
+const labels = (view) => [...menu(view).querySelectorAll(".blockeditor-menu-item")].map((row) => row.querySelector(".blockeditor-menu-label").textContent);
+const item = (view, label) => [...menu(view).querySelectorAll(".blockeditor-menu-item")].find((row) => row.querySelector(".blockeditor-menu-label").textContent === label);
+const descriptions = (view) => [...menu(view).querySelectorAll(".blockeditor-menu-item")].map((row) => row.querySelector(".blockeditor-menu-desc")?.textContent ?? "");
 const COORDS = { left: 40, right: 48, top: 100, bottom: 120 };
 const slash = (view, query) => { view.coordsAtPos = () => COORDS; for (const ch of `/${query}`) typeText(view, ch); };
 const types = (view) => { const out = []; view.state.doc.forEach((node) => out.push(node.type.name)); return out; };
@@ -87,16 +87,16 @@ test("/chart with one table opens its inspector, and undo then redo leaves it cl
   item(view, "Chart").click();
   await settled();
   await painted();
-  expect(view.dom.querySelector(".page-chart-panel")).not.toBeNull();
-  expect(view.dom.querySelector(".page-chart-edit").getAttribute("aria-expanded")).toBe("true");
+  expect(view.dom.querySelector(".blockeditor-chart-panel")).not.toBeNull();
+  expect(view.dom.querySelector(".blockeditor-chart-edit").getAttribute("aria-expanded")).toBe("true");
   view.scrollToSelection = () => {};
   expect(history.undo(view.state, view.dispatch)).toBe(true);
   expect(types(view)).toEqual(["table", "paragraph"]);
   expect(history.redo(view.state, view.dispatch)).toBe(true);
   expect(types(view)).toEqual(["table", "chart"]);
   await painted();
-  expect(view.dom.querySelector(".page-chart-panel")).toBeNull();
-  expect(view.dom.querySelector(".page-chart-edit").getAttribute("aria-expanded")).toBe("false");
+  expect(view.dom.querySelector(".blockeditor-chart-panel")).toBeNull();
+  expect(view.dom.querySelector(".blockeditor-chart-edit").getAttribute("aria-expanded")).toBe("false");
 });
 
 test("/chart with no table toasts and inserts nothing, and the query is consumed", async () => {

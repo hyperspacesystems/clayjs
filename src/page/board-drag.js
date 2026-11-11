@@ -41,8 +41,8 @@ export class BoardDrag {
   start(event) {
     const host = this.host;
     if (event.button !== 0 || event.pointerType === "touch" || this.state || !host.commands || !host.view.editable) return;
-    const card = event.target.closest?.(".page-board-card[data-card]");
-    const head = card ? null : event.target.closest?.(".page-board-head[data-col]");
+    const card = event.target.closest?.(".blockeditor-board-card[data-card]");
+    const head = card ? null : event.target.closest?.(".blockeditor-board-head[data-col]");
     if (!card && (!head || event.target.closest("button, input"))) return;
     this.state = {
       kind: card ? "card" : "column", id: card ? card.dataset.card : head.dataset.col, pointer: event.pointerId,
@@ -69,7 +69,7 @@ export class BoardDrag {
 
   source() {
     const { kind, id } = this.state;
-    const nodes = kind === "card" ? this.host.dom.querySelectorAll(".page-board-card[data-card]") : this.host.lanes.querySelectorAll(".page-board-lane[data-col]");
+    const nodes = kind === "card" ? this.host.dom.querySelectorAll(".blockeditor-board-card[data-card]") : this.host.lanes.querySelectorAll(".blockeditor-board-lane[data-col]");
     return [...nodes].find((node) => (kind === "card" ? node.dataset.card : node.dataset.col) === id) ?? null;
   }
 
@@ -89,7 +89,7 @@ export class BoardDrag {
     s.dy = s.y0 - r.top;
     const ghost = source.cloneNode(true);
     for (const node of [ghost, ...ghost.querySelectorAll("*")]) for (const name of STRIP) node.removeAttribute(name);
-    ghost.classList.add("page-board-ghost");
+    ghost.classList.add("blockeditor-board-ghost");
     ghost.setAttribute("aria-hidden", "true");
     ghost.setAttribute("inert", "");
     ghost.style.width = `${r.width}px`;
@@ -97,7 +97,7 @@ export class BoardDrag {
     host.dom.append(ghost);
     host.dom.classList.add("is-dragging");
     this.line = host.dom.ownerDocument.createElement(s.kind === "card" ? "li" : "div");
-    this.line.className = s.kind === "card" ? "page-board-drop" : "page-board-drop is-column";
+    this.line.className = s.kind === "card" ? "blockeditor-board-drop" : "blockeditor-board-drop is-column";
     this.line.setAttribute("aria-hidden", "true");
     host.dom.setPointerCapture?.(s.pointer);
     host.dom.addEventListener("lostpointercapture", this.onCancel);
@@ -125,13 +125,13 @@ export class BoardDrag {
   cardSlot() {
     const s = this.state;
     let lane = null, best = Infinity;
-    for (const node of this.host.lanes.querySelectorAll(".page-board-lane[data-col]")) {
+    for (const node of this.host.lanes.querySelectorAll(".blockeditor-board-lane[data-col]")) {
       const r = node.getBoundingClientRect();
       const distance = s.x < r.left ? r.left - s.x : s.x > r.right ? s.x - r.right : 0;
       if (distance < best) { best = distance; lane = node; }
     }
     if (!lane) return null;
-    const cards = [...lane.querySelectorAll(".page-board-card[data-card]")].filter((node) => node.dataset.card !== s.id);
+    const cards = [...lane.querySelectorAll(".blockeditor-board-card[data-card]")].filter((node) => node.dataset.card !== s.id);
     const index = cards.filter((node) => middle(node, "y") < s.y).length;
     return { col: lane.dataset.col, afterId: index ? cards[index - 1].dataset.card : null };
   }
@@ -139,7 +139,7 @@ export class BoardDrag {
   columnSlot() {
     const s = this.state;
     const rtl = getComputedStyle(this.host.lanes).direction === "rtl";
-    const lanes = [...this.host.lanes.querySelectorAll(".page-board-lane[data-col]")].filter((node) => node.dataset.col !== s.id);
+    const lanes = [...this.host.lanes.querySelectorAll(".blockeditor-board-lane[data-col]")].filter((node) => node.dataset.col !== s.id);
     const index = lanes.filter((node) => (rtl ? middle(node, "x") > s.x : middle(node, "x") < s.x)).length;
     return { col: null, afterId: index ? lanes[index - 1].dataset.col : null };
   }
@@ -150,11 +150,11 @@ export class BoardDrag {
     if (!s.slot) return;
     const lanes = this.host.lanes;
     if (s.kind === "card") {
-      const list = [...lanes.querySelectorAll(".page-board-lane[data-col]")].find((node) => node.dataset.col === s.slot.col)?.querySelector(".page-board-cards");
-      const after = s.slot.afterId && [...(list?.querySelectorAll(".page-board-card[data-card]") ?? [])].find((node) => node.dataset.card === s.slot.afterId)?.closest("li");
+      const list = [...lanes.querySelectorAll(".blockeditor-board-lane[data-col]")].find((node) => node.dataset.col === s.slot.col)?.querySelector(".blockeditor-board-cards");
+      const after = s.slot.afterId && [...(list?.querySelectorAll(".blockeditor-board-card[data-card]") ?? [])].find((node) => node.dataset.card === s.slot.afterId)?.closest("li");
       list?.insertBefore(line, after ? after.nextSibling : list.firstChild);
     } else {
-      const after = s.slot.afterId && [...lanes.querySelectorAll(".page-board-lane[data-col]")].find((node) => node.dataset.col === s.slot.afterId);
+      const after = s.slot.afterId && [...lanes.querySelectorAll(".blockeditor-board-lane[data-col]")].find((node) => node.dataset.col === s.slot.afterId);
       lanes.insertBefore(line, after ? after.nextSibling : lanes.firstChild);
     }
   }

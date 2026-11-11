@@ -10,7 +10,7 @@ import * as Y from "../../../src/vendor/yjs.vendor.js";
 import { createRooms, COMPACTION, createPageCompactor } from "../../../src/server/rooms/index.js";
 
 const doc = (...parts) => `<!doctype html><html><body>${parts.join("")}</body></html>`;
-const pageTag = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const pageTag = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 
 let clients = 100;
 const insert = (text, client = (clients += 1)) => {
@@ -39,10 +39,10 @@ const clock = () => {
 const open = (rooms) => rooms.open("/p.html", html(), { nodeId: "n1" });
 
 const frame = (room, n, ops, over = {}) => ({
-  name: "page",
+  name: "blockeditor",
   epoch: room.epoch,
   n,
-  pageGeneration: room.pageTransition.id,
+  blockeditorGeneration: room.blockeditorTransition.id,
   compaction: 1,
   ops,
   ...over,
@@ -65,7 +65,7 @@ const fill = (rooms, room, count, start = 1) => {
 };
 
 const overBound = (rooms, room, n) => {
-  const keys = Object.keys(room.stores.get("page").value.y);
+  const keys = Object.keys(room.stores.get("blockeditor").value.y);
   const answer = send(rooms, room, n, [[nextKey(), insert("over the bound")]]);
   expect(answer.error).toBe("checkpoint-required");
   return keys;
@@ -182,7 +182,7 @@ test("a due room's job runs in the worker, commits, and onCommit hears the answe
   expect(result.ops.filter((op) => op.op === "del").every((op) => before.includes(op.path[1]))).toBe(true);
   expect(room.compaction.job).toBeNull();
   expect(compactor.running).toBe(false);
-  expect(Object.keys(room.stores.get("page").value.y).filter((key) => key.startsWith("t"))).toHaveLength(1);
+  expect(Object.keys(room.stores.get("blockeditor").value.y).filter((key) => key.startsWith("t"))).toHaveLength(1);
   await compactor.close();
 });
 
@@ -208,13 +208,13 @@ test("a room reset while the job runs refuses the commit and changes nothing", a
   expect(room.compaction.job).not.toBeNull();
 
   const reset = rooms.reset("/p.html", html({ g: 5 }), { nodeId: "n1" });
-  const snapshot = JSON.stringify({ value: reset.stores.get("page").value, seq: reset.seq, log: reset.stores.get("page").log });
+  const snapshot = JSON.stringify({ value: reset.stores.get("blockeditor").value, seq: reset.seq, log: reset.stores.get("blockeditor").log });
   state.handler(state.message);
   await flush();
 
   expect(asked).toEqual([{ refused: "stale-token" }]);
   expect(commits).toEqual([]);
-  expect(JSON.stringify({ value: reset.stores.get("page").value, seq: reset.seq, log: reset.stores.get("page").log })).toBe(snapshot);
+  expect(JSON.stringify({ value: reset.stores.get("blockeditor").value, seq: reset.seq, log: reset.stores.get("blockeditor").log })).toBe(snapshot);
   expect(reset.compaction.failed).toBeNull();
   await compactor.close();
 });
@@ -422,7 +422,7 @@ const workerJob = `
   const { createRooms, createPageCompactor } = require(arg.entry);
   const rooms = createRooms({ compaction: true });
   const room = rooms.open("/p.html", arg.html, { nodeId: "n1" });
-  const frame = (n, ops) => ({ name: "page", epoch: room.epoch, n, pageGeneration: room.pageTransition.id, compaction: 1, ops });
+  const frame = (n, ops) => ({ name: "blockeditor", epoch: room.epoch, n, blockeditorGeneration: room.blockeditorTransition.id, compaction: 1, ops });
   let n = 1;
   for (let i = 0; i < arg.values.length; i += 4) {
     const ops = arg.values.slice(i, i + 4).map((value, j) => ({ op: "set", path: ["y", "u1-a-" + (i + j).toString(36)], value }));
@@ -439,7 +439,7 @@ const workerJob = `
       if (Date.now() > deadline) throw new Error("the bundled worker never committed");
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
-    const keys = Object.keys(room.stores.get("page").value.y);
+    const keys = Object.keys(room.stores.get("blockeditor").value.y);
     console.log(JSON.stringify({ from: committed.from, seq: committed.seq, kind: committed.kind, ops: committed.ops.length,
       tails: keys.filter((key) => key.startsWith("t")), loose: room.compaction.retired.size, job: room.compaction.job }));
     await compactor.close();

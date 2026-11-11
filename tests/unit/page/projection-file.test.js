@@ -6,7 +6,7 @@ import { blocksOfValues, canon, parseModel, project, renderModel, revOf } from "
  */
 
 function throughBytes(html, rev) {
-  const page = `<!DOCTYPE html><html><body><main><article class="page" clay="freeze" data-page="1" data-rev="${rev}">\n${html}\n</article></main></body></html>`;
+  const page = `<!DOCTYPE html><html><body><main><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}">\n${html}\n</article></main></body></html>`;
   const first = new DOMParser().parseFromString(page, "text/html");
   const bytes = "<!DOCTYPE html>" + first.documentElement.outerHTML;
   return new DOMParser().parseFromString(bytes, "text/html").querySelector("article");

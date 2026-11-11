@@ -29,8 +29,8 @@ const answerOf = (body) =>
 // A transport over the real room, shaped like the host: a read declares the
 // capability the way the query parameter does, a send applies the frame.
 function tab(rooms, room, { declare = 1, strip = false } = {}) {
-  const page = createStore({ name: "page", value: cloneJson(room.stores.get("page").value) });
-  const entries = new Map([["page", { store: page }]]);
+  const page = createStore({ name: "blockeditor", value: cloneJson(room.stores.get("blockeditor").value) });
+  const entries = new Map([["blockeditor", { store: page }]]);
   const events = [];
   const sends = [];
   let handlers;
@@ -48,7 +48,7 @@ function tab(rooms, room, { declare = 1, strip = false } = {}) {
     },
   };
   const lane = createFastLane({ entries, transport });
-  page.onLocal((ops) => lane.local("page", ops, page.mark));
+  page.onLocal((ops) => lane.local("blockeditor", ops, page.mark));
   page.onDelivery((event) => events.push(event));
   return { page, lane, handlers: () => handlers, events, sends };
 }
@@ -77,7 +77,7 @@ test("a checkpoint-required frame is retried as soon as the compactor's frame ar
   for (let i = 1; i <= 32; i += 4) {
     const ops = [];
     for (let j = 0; j < 4; j++) ops.push(setOp(`u2-a-${(i + j).toString(36)}`, insert(`fill ${i + j}`)));
-    expect(rooms.apply(room, "b", { name: "page", n: ++n, epoch: room.epoch, pageGeneration: room.pageTransition.id, compaction: 1, ops }).ops).toHaveLength(4);
+    expect(rooms.apply(room, "b", { name: "blockeditor", n: ++n, epoch: room.epoch, blockeditorGeneration: room.blockeditorTransition.id, compaction: 1, ops }).ops).toHaveLength(4);
   }
 
   const t = tab(rooms, room);
@@ -92,7 +92,7 @@ test("a checkpoint-required frame is retried as soon as the compactor's frame ar
   expect(refused[0].frame.compaction).toBe(1);
   expect(refused[0].answer.body.code).toBe("checkpoint-required");
   expect(t.events.filter((e) => e.phase === "retry").map((e) => e.code)).toEqual(["checkpoint-required"]);
-  expect(Object.hasOwn(room.stores.get("page").value.y, "u1-a-new")).toBe(false);
+  expect(Object.hasOwn(room.stores.get("blockeditor").value.y, "u1-a-new")).toBe(false);
 
   const frame = cloneJson(compact(rooms, room));
   expect(frame.from).toBe("compactor");
@@ -107,28 +107,28 @@ test("a checkpoint-required frame is retried as soon as the compactor's frame ar
   expect(retried[0].at).toBeGreaterThanOrEqual(frameAt);
   expect(retried[0].at - frameAt).toBeLessThan(RETRY_MS / 2);
   expect(retried[0].at - refusedAt).toBeLessThan(RETRY_MS);
-  expect(typeof room.stores.get("page").value.y["u1-a-new"]).toBe("string");
+  expect(typeof room.stores.get("blockeditor").value.y["u1-a-new"]).toBe("string");
   expect(t.events.some((e) => e.phase === "landed" && e.n === refused[0].frame.n)).toBe(true);
 
   t.lane.stop();
 });
 
-test("a page-full refusal reaches onDelivery as refused with that code", async () => {
+test("a blockeditor-full refusal reaches onDelivery as refused with that code", async () => {
   const rooms = createRooms({ compaction: { activeBytes: 4096 } });
   const room = open(rooms);
   expect(compact(rooms, room, { overflow: true }).kind).toBe("full");
 
   const t = tab(rooms, room);
   await join(t);
-  const before = Object.keys(room.stores.get("page").value.y);
+  const before = Object.keys(room.stores.get("blockeditor").value.y);
 
   t.page.handle.set(["y", "u1-a-big"], insert("x".repeat(6000)));
   await sleep(80);
 
   const refused = t.events.filter((event) => event.phase === "refused");
   expect(refused).toHaveLength(1);
-  expect(refused[0].code).toBe("page-full");
-  expect(Object.keys(room.stores.get("page").value.y)).toEqual(before);
+  expect(refused[0].code).toBe("blockeditor-full");
+  expect(Object.keys(room.stores.get("blockeditor").value.y)).toEqual(before);
 
   t.lane.stop();
 });
@@ -136,8 +136,8 @@ test("a page-full refusal reaches onDelivery as refused with that code", async (
 test("a lane that does not declare the capability gets no page store and stays at save speed", async () => {
   const rooms = createRooms({ compaction: true });
   const room = open(rooms);
-  expect(rooms.state(room, "a", null, { compaction: 1 }).stores.page.compaction).toEqual({ v: 1, loose: 32, activeBytes: 3840 * 1024 });
-  expect(rooms.state(room, "a", null, { compaction: 0 }).stores.page).toBeUndefined();
+  expect(rooms.state(room, "a", null, { compaction: 1 }).stores.blockeditor.compaction).toEqual({ v: 1, loose: 32, activeBytes: 3840 * 1024 });
+  expect(rooms.state(room, "a", null, { compaction: 0 }).stores.blockeditor).toBeUndefined();
 
   const t = tab(rooms, room, { declare: 0 });
   await join(t);
@@ -147,7 +147,7 @@ test("a lane that does not declare the capability gets no page store and stays a
   t.page.handle.set(["y", "u1-a-old"], insert("old client"));
   await sleep(80);
   expect(t.sends).toHaveLength(0);
-  expect(Object.hasOwn(room.stores.get("page").value.y, "u1-a-old")).toBe(false);
+  expect(Object.hasOwn(room.stores.get("blockeditor").value.y, "u1-a-old")).toBe(false);
 
   t.lane.stop();
 });
@@ -165,10 +165,10 @@ test("a page frame without the marker gets 404 and the store leaves the room", a
   expect(t.sends).toHaveLength(1);
   expect(t.sends[0].frame.compaction).toBe(1);
   expect(t.sends[0].sent.compaction).toBeUndefined();
-  expect(t.sends[0].answer).toEqual({ status: 404, body: { code: "page-upgrade" } });
+  expect(t.sends[0].answer).toEqual({ status: 404, body: { code: "blockeditor-upgrade" } });
   expect(t.events.filter((event) => event.phase === "left").map((event) => event.code)).toEqual(["no-store"]);
   expect(t.page.handle.status.mode).toBe("file");
-  expect(Object.hasOwn(room.stores.get("page").value.y, "u1-a-new")).toBe(false);
+  expect(Object.hasOwn(room.stores.get("blockeditor").value.y, "u1-a-new")).toBe(false);
 
   t.lane.stop();
 });

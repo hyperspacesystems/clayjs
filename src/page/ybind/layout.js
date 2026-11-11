@@ -1,11 +1,11 @@
 import * as Y from "../../vendor/yjs.vendor.js";
 import { REMOTE } from "../model.js";
 
-export const LOCAL = "page-local";
-export const NET = "page-net";
-export const SEED = "page-seed";
+export const LOCAL = "blockeditor-local";
+export const NET = "blockeditor-net";
+export const SEED = "blockeditor-seed";
 export const REMOTE_META = REMOTE;
-export const HISTORY_META = Symbol("page-history");
+export const HISTORY_META = Symbol("blockeditor-history");
 export const PAGE_ROOTS = Object.freeze(["flow", "attrs", "gone", "boardFields", "tableFields", "origins"]);
 
 const SKIP = new Set(["id", "pos"]);

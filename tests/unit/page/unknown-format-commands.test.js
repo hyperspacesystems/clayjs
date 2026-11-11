@@ -80,7 +80,7 @@ function newerPeer(value) {
 const features = { ensure: () => Promise.resolve(), has: () => false, dispose() {} };
 
 function open(value) {
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(value)) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(value)) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = createPageEditor(mount, { doc: binding.doc(), dispatch: (tr) => binding.dispatch(tr), features });
@@ -137,8 +137,8 @@ test("copying a selection with an opaque block and pasting it reproduces the rec
   const event = clip();
   expect(fire(view, "copy", event).defaultPrevented).toBe(true);
   expect(event.data["text/plain"]).toBe("Read this too");
-  expect(event.data["text/html"]).toContain('data-clay-page-opaque="1"');
-  expect(event.data["text/html"]).toContain('data-clay-page-value="');
+  expect(event.data["text/html"]).toContain('data-clay-blockeditor-opaque="1"');
+  expect(event.data["text/html"]).toContain('data-clay-blockeditor-value="');
   expect(event.data["text/html"]).toContain("Read this too");
 
   select(view, posOf(view, "b") + "after".length);
@@ -179,7 +179,7 @@ test("copying text with an unknown descriptor pastes the descriptor back", () =>
   select(view, a.pos + 1, a.pos + 1 + "befo".length);
   const event = clip();
   expect(fire(view, "copy", event).defaultPrevented).toBe(true);
-  expect(event.data["text/html"]).toContain("data-clay-page-marks=");
+  expect(event.data["text/html"]).toContain("data-clay-blockeditor-marks=");
   const b = find(view.state.doc, "b");
   select(view, b.pos + 1 + "after".length);
   paste(view, event.data);
@@ -197,7 +197,7 @@ test("an invalid envelope on paste falls back to readable text and invents no re
   selectBlocksIn(view, 1);
   const event = clip();
   fire(view, "copy", event);
-  const broken = event.data["text/html"].replace(/data-clay-page-value="[^"]*"/, 'data-clay-page-value="not-a-record"');
+  const broken = event.data["text/html"].replace(/data-clay-blockeditor-value="[^"]*"/, 'data-clay-blockeditor-value="not-a-record"');
   expect(broken).not.toBe(event.data["text/html"]);
 
   select(view, posOf(view, "b") + "after".length);
@@ -212,7 +212,7 @@ test("an invalid marks envelope on paste keeps the text and invents no descripto
   select(view, a.pos + 1, a.pos + 1 + "befo".length);
   const event = clip();
   fire(view, "copy", event);
-  const broken = event.data["text/html"].replace(/data-clay-page-marks="[^"]*"/, 'data-clay-page-marks="%%%"');
+  const broken = event.data["text/html"].replace(/data-clay-blockeditor-marks="[^"]*"/, 'data-clay-blockeditor-marks="%%%"');
   expect(broken).not.toBe(event.data["text/html"]);
   const b = find(view.state.doc, "b");
   select(view, b.pos + 1 + "after".length);
@@ -245,7 +245,7 @@ test("a copied table cell keeps the unknown marks in the cell", () => {
   mouse("mouseover", td(1, 1));
   const event = clip();
   expect(fire(view, "copy", event).defaultPrevented).toBe(true);
-  expect(event.data["text/html"]).toContain("data-clay-page-marks=");
+  expect(event.data["text/html"]).toContain("data-clay-blockeditor-marks=");
   const found = gridFromClipboard(event.data["text/html"], event.data["text/plain"], document);
   expect(found.grid[0][0]).toEqual(cell);
 });
@@ -304,9 +304,9 @@ const CANNOT = "This block holds content from a newer version, so it can't be co
 const COORDS = { left: 40, right: 48, top: 100, bottom: 120 };
 const pinned = (view) => { view.coordsAtPos = () => COORDS; return view; };
 const part = (view, sel) => view.dom.parentElement.querySelector(sel);
-const row = (view, label) => [...part(view, ".page-menu").querySelectorAll(".page-menu-item")]
-  .find((r) => r.querySelector(".page-menu-label").textContent === label);
-const notice = (view) => part(view, ".page-live").textContent;
+const row = (view, label) => [...part(view, ".blockeditor-menu").querySelectorAll(".blockeditor-menu-item")]
+  .find((r) => r.querySelector(".blockeditor-menu-label").textContent === label);
+const notice = (view) => part(view, ".blockeditor-live").textContent;
 const wholeLine = (view, id) => {
   const { node, pos } = find(view.state.doc, id);
   select(view, pos + 1, pos + 1 + node.content.size);
@@ -319,7 +319,7 @@ test("the block menu's Turn into refuses an opaque block and changes nothing", (
   selectBlocksIn(view, 1);
   const before = { doc: view.state.doc, q: runsOf(pd, "q"), a: runsOf(pd, "a"), qAttrs: attrsOf(pd, "q") };
   const counter = updates(tab);
-  part(view, ".page-tool-turn").click();
+  part(view, ".blockeditor-tool-turn").click();
   row(view, "Heading 1").click();
   expect(view.state.doc.eq(before.doc)).toBe(true);
   expect(counter.n).toBe(0);
@@ -328,7 +328,7 @@ test("the block menu's Turn into refuses an opaque block and changes nothing", (
   expect(runsOf(pd, "a")).toEqual(before.a);
   expect(attrsOf(pd, "q")).toEqual(before.qAttrs);
   expect(notice(view)).toBe(CANNOT);
-  expect(part(view, ".page-menu").hidden).toBe(true);
+  expect(part(view, ".blockeditor-menu").hidden).toBe(true);
 });
 
 test("a list button over a selection holding an opaque block refuses and changes nothing", () => {
@@ -338,7 +338,7 @@ test("a list button over a selection holding an opaque block refuses and changes
   selectBlocksIn(view, 0, 1);
   const before = { doc: view.state.doc, q: runsOf(pd, "q"), qAttrs: attrsOf(pd, "q") };
   const counter = updates(tab);
-  part(view, '.page-dock [data-cmd="bullet"]').click();
+  part(view, '.blockeditor-dock [data-cmd="bullet"]').click();
   expect(view.state.doc.eq(before.doc)).toBe(true);
   expect(counter.n).toBe(0);
   expect(types(view.state.doc)).toEqual(["paragraph", "opaque_block", "paragraph"]);
@@ -354,7 +354,7 @@ test("the code button over a paragraph with an unknown mark refuses and changes 
   wholeLine(view, "a");
   const before = { doc: view.state.doc, a: runsOf(pd, "a") };
   const counter = updates(tab);
-  part(view, '.page-dock [data-cmd="code"]').click();
+  part(view, '.blockeditor-dock [data-cmd="code"]').click();
   expect(view.state.doc.eq(before.doc)).toBe(true);
   expect(counter.n).toBe(0);
   expect(types(view.state.doc)).toEqual(["paragraph", "opaque_block", "paragraph"]);
@@ -369,24 +369,24 @@ test("the same chrome actions still convert ordinary blocks, and a marked line i
   const counter = updates(tab);
 
   selectBlocksIn(view, 2);
-  part(view, ".page-tool-turn").click();
+  part(view, ".blockeditor-tool-turn").click();
   row(view, "Heading 1").click();
   expect(types(view.state.doc)).toEqual(["paragraph", "opaque_block", "heading"]);
 
   selectBlocksIn(view, 2);
-  part(view, '.page-dock [data-cmd="bullet"]').click();
+  part(view, '.blockeditor-dock [data-cmd="bullet"]').click();
   expect(types(view.state.doc)).toEqual(["paragraph", "opaque_block", "list_item"]);
   expect(view.state.doc.child(2).attrs.kind).toBe("bullet");
 
   wholeLine(view, "b");
-  part(view, '.page-dock [data-cmd="code"]').click();
+  part(view, '.blockeditor-dock [data-cmd="code"]').click();
   expect(types(view.state.doc)).toEqual(["paragraph", "opaque_block", "code_block"]);
   expect(view.state.doc.child(2).textContent).toBe("after");
   expect(counter.n).toBeGreaterThan(0);
   expect(notice(view)).not.toBe(CANNOT);
 
   selectBlocksIn(view, 0);
-  part(view, '.page-dock [data-cmd="bullet"]').click();
+  part(view, '.blockeditor-dock [data-cmd="bullet"]').click();
   expect(types(view.state.doc)).toEqual(["list_item", "opaque_block", "code_block"]);
   expect(runsOf(pd, "a")).toEqual([
     { text: "befo", attributes: { "sparkle~p1": true } },
@@ -478,9 +478,9 @@ test("undo after a peer added a descriptor keeps that descriptor", () => {
 test("the saved article carries the envelopes and no runtime wrapper names", () => {
   const { tab } = room();
   const { html } = renderFromTags([JSON.stringify(yValueOf(tab.binding.ydoc))]);
-  expect(html).toContain('data-clay-page-opaque="1"');
-  expect(html).toContain("data-clay-page-value=");
-  expect(html).toContain("data-clay-page-marks=");
+  expect(html).toContain('data-clay-blockeditor-opaque="1"');
+  expect(html).toContain("data-clay-blockeditor-value=");
+  expect(html).toContain("data-clay-blockeditor-marks=");
   expect(html).toContain("Read this too");
   expect(html).not.toMatch(/ProseMirror|data-pm-slice|pm-/);
 });

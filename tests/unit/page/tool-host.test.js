@@ -5,7 +5,7 @@ import { createToolHost } from "../../../src/page/tools.js";
 
 const examples = [...readFileSync(new URL("../../../docs/page-tool.md", import.meta.url), "utf8").matchAll(/```json\n([\s\S]*?)\n```/g)].map((match) => JSON.parse(match[1]));
 const root = () => document.createElement("section");
-const store = (value) => createStore({ name: "page.tools", value }).handle;
+const store = (value) => createStore({ name: "blockeditor.tools", value }).handle;
 
 test("the documented tally shares add operations across two editors", () => {
   const live = store({ tally: { r1: { count: 0 } } });

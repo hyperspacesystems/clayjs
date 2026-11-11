@@ -122,5 +122,5 @@ function pastedTable(dom) {
   return found;
 }
 
-export const table = (dom) => ({ cols: pastedTable(dom).cols, sort: pastedTable(dom).sort, parent: dom.getAttribute("data-page-parent") || null });
+export const table = (dom) => ({ cols: pastedTable(dom).cols, sort: pastedTable(dom).sort, parent: dom.getAttribute("data-blockeditor-parent") || null });
 export const rows = (dom) => pastedTable(dom).rows;

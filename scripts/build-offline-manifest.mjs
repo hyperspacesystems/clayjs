@@ -104,7 +104,7 @@ const REQUIRED = [
   "clay.js",
   "m/manifest.json",
   "src/loader.js",
-  "src/page/themes/light-1.css",
+  "src/blockeditor/themes/light-1.css",
   "fonts/inter-latin-wght-normal.woff2",
   "fonts/ibm-plex-sans-latin-400-normal.woff2",
 ];

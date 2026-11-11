@@ -8,10 +8,10 @@ import { bootFixture } from "./helpers/mode-harness.js";
 jest.setTimeout(120000);
 
 /**
- * A `plugins=page,sync` Document's second editing session edits the file the reader
+ * A `plugins=blockeditor,sync` Document's second editing session edits the file the reader
  * shows, not the one the live DOM remembered (Opus 1, Opus 5).
  *
- * An exit restarts the page-view reader on the receipt the session left, and that
+ * An exit restarts the blockeditor-view reader on the receipt the session left, and that
  * reader follows generic sync's saved lane instead of opening a stream of its own. The
  * tag a live entry opens its page store from is the one on screen, so the restarted
  * reader has to keep that tag at the file it represents exactly as the reader that owns
@@ -32,8 +32,8 @@ const until = async (predicate, timeout = 8000) => {
   return Boolean(await predicate());
 };
 
-const PAGE_HOST = { spec: 1, extensions: ["page", "sync", "upload"], document: {} };
-const TAG = 'script[type="application/json"][merge="page"]';
+const PAGE_HOST = { spec: 1, extensions: ["blockeditor", "sync", "upload"], document: {} };
+const TAG = 'script[type="application/json"][merge="blockeditor"]';
 
 let posts = [];
 
@@ -63,17 +63,17 @@ const tagOf = (bytes) => new DOMParser().parseFromString(bytes, "text/html").que
 // saved file already applied.
 async function openDocument({ tagged = false } = {}) {
   posts = [];
-  const boot = await bootFixture("document.html", { mode: "view", declare: true, params: "plugins=page,sync&exclude=richclay,source" });
+  const boot = await bootFixture("document.html", { mode: "view", declare: true, params: "plugins=blockeditor,sync&exclude=richclay,source" });
   const pageView = await import(`${SRC}plugins/page-view.js`);
   const { liveSync: sync } = await import(`${SRC}sync/live-sync.js`);
   const pageMod = await import(`${SRC}plugins/page.js`);
   const { seedPageFromArticle } = await import(`${SRC}page/ybind/migrate.js`);
   await routeHost();
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   if (tagged) {
     const tag = document.createElement("script");
     tag.setAttribute("type", "application/json");
-    tag.setAttribute("merge", "page");
+    tag.setAttribute("merge", "blockeditor");
     tag.setAttribute("clay", "live");
     tag.textContent = JSON.stringify(seedPageFromArticle(article.cloneNode(true)));
     article.parentNode.insertBefore(tag, article);

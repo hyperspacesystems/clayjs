@@ -49,8 +49,8 @@ const refusal = (run) => {
 };
 
 const pageHold = (rooms, key, nodeId) => {
-  const hybrid = doc(tag("page", { blocks: { b1: { text: "hi" } } }), tag("notes", { text: "" }));
-  const yjs = doc(tag("page", { v: 1, y: { root: "abc" } }));
+  const hybrid = doc(tag("blockeditor", { blocks: { b1: { text: "hi" } } }), tag("notes", { text: "" }));
+  const yjs = doc(tag("blockeditor", { v: 1, y: { root: "abc" } }));
   rooms.open(key, hybrid, { nodeId });
   return rooms.reservePage(key, {
     nodeId,
@@ -97,21 +97,21 @@ test("a page reservation and a persistent hold exclude each other both ways", ()
   const holdRooms = second.rooms();
   const room = holdRooms.open("/p.html", DOC, { nodeId: "n1" });
   holdRooms.holdPersistent("/p.html", { nodeId: "n1" });
-  const hybrid = doc(tag("page", { blocks: { b1: { text: "hi" } } }), tag("notes", { text: "" }));
+  const hybrid = doc(tag("blockeditor", { blocks: { b1: { text: "hi" } } }), tag("notes", { text: "" }));
   let thrown = null;
   try {
     holdRooms.reservePage("/p.html", {
       nodeId: "n1",
       header: `v1; source=room; base=${pageBaseline(inspectPage(hybrid).tags)}; epoch=${room.epoch}`,
       currentHtml: hybrid,
-      html: doc(tag("page", { v: 1, y: { root: "abc" } })),
+      html: doc(tag("blockeditor", { v: 1, y: { root: "abc" } })),
       ifMatch: documentEtag(hybrid),
     });
   } catch (err) {
     thrown = err;
   }
   expect(thrown).toBeInstanceOf(PageConversionError);
-  expect(thrown.reason).toBe("page-converting");
+  expect(thrown.reason).toBe("blockeditor-converting");
   expect(holdRooms.pageReserved("/p.html")).toBe(false);
   counts.refused += 1;
   expect(pageToken).toBeTruthy();
@@ -206,7 +206,7 @@ test("a checked capture reconciles the later increment exactly once", () => {
   expect(room.stores.get("game").log.filter((entry) => entry.seq === 2)).toHaveLength(1);
   expect(room.seq).toBe(2);
   expect(room.epoch).toBe(epoch);
-  expect(room.pageTransition).toBeUndefined();
+  expect(room.blockeditorTransition).toBeUndefined();
   expect(rooms.used()).toBe(used);
   expect(rooms.releasePersistent(token)).toBe(true);
 });
@@ -273,15 +273,15 @@ test("a missing, duplicate, malformed, oversized or wrong-type tag is refused be
 test("a checked Yjs page keeps its stored generation", () => {
   const c = clock();
   const rooms = c.rooms();
-  const initial = doc(tag("page", { v: 1, g: 0, y: { seed: "opaque" } }));
+  const initial = doc(tag("blockeditor", { v: 1, g: 0, y: { seed: "opaque" } }));
   const room = rooms.open("/page.html", initial, { nodeId: "np" });
   const token = rooms.holdPersistent("/page.html", { nodeId: "np" });
   const used = rooms.used();
 
   expect(refusal(() => rooms.checkPersistent(token, {
-    html: doc(tag("page", { v: 1, g: 1, y: { seed: "opaque" } })),
+    html: doc(tag("blockeditor", { v: 1, g: 1, y: { seed: "opaque" } })),
   }))).toBe("invalid-target");
-  expect(room.stores.get("page").value.g).toBe(0);
+  expect(room.stores.get("blockeditor").value.g).toBe(0);
   expect(rooms.used()).toBe(used);
   expect(rooms.checkPersistent(token, { html: initial })).toEqual({ html: initial });
   counts.checked += 1;
@@ -426,9 +426,9 @@ test("two sequential rekeys keep both rooms' identity, receipts and values", () 
   expect(refusal(() => rooms.rekeyPersistent(tokenA, "/folder/b.html"))).toBe("destination-exists");
   const currentHtml = doc(tag("notes", { text: "" }));
   const pageToken = rooms.reservePageInitial("/reserved.html", {
-    nodeId: "page-node",
+    nodeId: "blockeditor-node",
     currentHtml,
-    html: doc(tag("page", { v: 1, g: 0, y: { seed: "opaque" } })),
+    html: doc(tag("blockeditor", { v: 1, g: 0, y: { seed: "opaque" } })),
     ifMatch: documentEtag(currentHtml),
   });
   expect(refusal(() => rooms.rekeyPersistent(tokenA, "/reserved.html"))).toBe("destination-exists");

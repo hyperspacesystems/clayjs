@@ -80,8 +80,8 @@ const needsFormat = (blocks) => {
 };
 
 const messageOf = (answer) => {
-  if (answer?.code === "page-format-upgrade-required") return "This document needs a newer page format before Markdown can be added. The preview stays open.";
-  if (answer?.code === "page-format-unsupported") return "This host cannot record the newer page format this file needs. The preview stays open.";
+  if (answer?.code === "blockeditor-format-upgrade-required") return "This document needs a newer page format before Markdown can be added. The preview stays open.";
+  if (answer?.code === "blockeditor-format-unsupported") return "This host cannot record the newer page format this file needs. The preview stays open.";
   if (answer?.code === "stale-target") return "The place this import was started from changed. The preview stays open.";
   if (answer?.code === "empty-import") return "This file holds nothing that can be inserted.";
   return "The Markdown could not be inserted. The preview stays open.";
@@ -135,25 +135,25 @@ export function createFeature({ view = null, load = assetMarked } = {}) {
       el.textContent = text;
       return el;
     };
-    parts.push(line("page-menu-title", s.error ? "Couldn't read that Markdown" : `Import ${s.name}`));
+    parts.push(line("blockeditor-menu-title", s.error ? "Couldn't read that Markdown" : `Import ${s.name}`));
     if (!s.error) {
       const counts = [`${s.count} block${s.count === 1 ? "" : "s"}`];
       if (s.unsupported.length) counts.push(`${s.unsupported.length} kept as written`);
       if (s.refused.length) counts.push(`${s.refused.length} address${s.refused.length === 1 ? "" : "es"} left out`);
-      parts.push(line("page-menu-title page-import-summary", counts.join(" \u00b7 ")));
+      parts.push(line("blockeditor-menu-title blockeditor-import-summary", counts.join(" \u00b7 ")));
     }
     const rows = (className, list) => {
       const box = doc.createElement("div");
       box.className = className;
-      box.replaceChildren(...list.map((text) => line("page-import-row", text)));
+      box.replaceChildren(...list.map((text) => line("blockeditor-import-row", text)));
       return box;
     };
-    if (s.unsupported.length) parts.push(rows("page-import-unsupported", s.unsupported.map((one) => `${one.type}: ${excerpt(one.text)}`)));
-    if (s.refused.length) parts.push(rows("page-import-refused", s.refused.map((one) => `${one.type}: ${one.href}`)));
+    if (s.unsupported.length) parts.push(rows("blockeditor-import-unsupported", s.unsupported.map((one) => `${one.type}: ${excerpt(one.text)}`)));
+    if (s.refused.length) parts.push(rows("blockeditor-import-refused", s.refused.map((one) => `${one.type}: ${one.href}`)));
     const said = s.error ?? s.notice ?? null;
     if (said) {
       const failed = doc.createElement("p");
-      failed.className = "page-import-error";
+      failed.className = "blockeditor-import-error";
       failed.setAttribute("role", "alert");
       failed.textContent = said;
       parts.push(failed);
@@ -161,7 +161,7 @@ export function createFeature({ view = null, load = assetMarked } = {}) {
     const button = (what, label) => {
       const el = doc.createElement("button");
       el.type = "button";
-      el.className = "page-menu-item";
+      el.className = "blockeditor-menu-item";
       el.dataset.import = what;
       el.textContent = label;
       el.addEventListener("mousedown", (event) => event.preventDefault());
@@ -265,7 +265,7 @@ export function createFeature({ view = null, load = assetMarked } = {}) {
       input.type = "file";
       input.accept = ".md,.markdown,text/markdown,text/plain";
       input.hidden = true;
-      input.className = "page-markdown-input";
+      input.className = "blockeditor-markdown-input";
       const done = (file) => {
         input.remove();
         resolve(file);
@@ -280,7 +280,7 @@ export function createFeature({ view = null, load = assetMarked } = {}) {
   async function open(s, error = null) {
     s.error = error;
     const panel = doc.createElement("div");
-    panel.className = "page-menu page-import-preview";
+    panel.className = "blockeditor-menu blockeditor-import-preview";
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Import Markdown");
     s.panel = panel;
@@ -295,8 +295,8 @@ export function createFeature({ view = null, load = assetMarked } = {}) {
     draw(s);
     const at = place();
     if (at) {
-      panel.style.setProperty("--page-pop-x", `${at.x}px`);
-      panel.style.setProperty("--page-pop-y", `${at.y}px`);
+      panel.style.setProperty("--blockeditor-pop-x", `${at.x}px`);
+      panel.style.setProperty("--blockeditor-pop-y", `${at.y}px`);
     }
     const insert = panel.querySelector('[data-import="insert"]');
     if (insert && !insert.disabled) insert.focus?.();

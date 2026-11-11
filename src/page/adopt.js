@@ -13,7 +13,7 @@ import { DEFAULTS, project, canon, revOf, parseModel, renderModel, fragmentClean
 import { unflatten } from "./inline.js";
 import { blocksFromPageValues } from "./ybind/decode.js";
 
-export const ADOPT = "page-adopt";
+export const ADOPT = "blockeditor-adopt";
 const same = (a, b) => canon(a) === canon(b);
 const body = ({ id, parent, ...rest }) => ({ ...rest, parent: parent ?? null });
 

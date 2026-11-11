@@ -13,8 +13,8 @@ import { jest } from "@jest/globals";
  * need a floor-0 document run before the one that activates it.
  */
 
-const PAGE = '<article data-page="1"><p data-type="paragraph">start</p></article>';
-const MARKER = '<meta name="clay-page-format" content="1">';
+const PAGE = '<article data-blockeditor="1"><p data-type="paragraph">start</p></article>';
+const MARKER = '<meta name="clay-blockeditor-format" content="1">';
 
 let level;
 let gateOf;
@@ -25,7 +25,7 @@ let saves;
 const page = () => {
   document.body.innerHTML = PAGE;
   document.documentElement.setAttribute("savetoken", "abc");
-  document.querySelector('meta[name="clay-page-format"]')?.remove();
+  document.querySelector('meta[name="clay-blockeditor-format"]')?.remove();
 };
 
 // Every answer is the host's: the meta discovery is not a save, and it says nothing.
@@ -43,7 +43,7 @@ const refused = () => ({
   ok: false,
   status: 409,
   statusText: "Conflict",
-  text: async () => JSON.stringify({ code: "page-format-upgrade-required", msg: "This document uses a newer page format" }),
+  text: async () => JSON.stringify({ code: "blockeditor-format-upgrade-required", msg: "This document uses a newer page format" }),
 });
 const offline = () => {
   throw new TypeError("Failed to fetch");
@@ -68,7 +68,7 @@ test("a refused activation leaves the floor at 0, applies nothing, and the next 
   const result = await gate.run({ apply: () => applied.push("sparkle") });
 
   expect(result.status).toBe("upgrade-required");
-  expect(result.code).toBe("page-format-upgrade-required");
+  expect(result.code).toBe("blockeditor-format-upgrade-required");
   expect(result.minimum).toBe(1);
   expect(applied).toEqual([]);
   expect(gate.floor).toBe(0);
@@ -92,7 +92,7 @@ test("a network failure is a retryable failure, not an upgrade requirement", asy
   const result = await gate.run({ apply: () => applied.push("sparkle") });
 
   expect(result.status).toBe("failed");
-  expect(result.code).toBe("page-format-activation-failed");
+  expect(result.code).toBe("blockeditor-format-activation-failed");
   expect(result.retry).toBe(true);
   expect(applied).toEqual([]);
   expect(level.knownPageFormatFloor()).toBe(0);
@@ -104,7 +104,7 @@ test("an unsupported host refuses before any save is sent", async () => {
   const result = await gate.run({ apply: () => "sparkle" });
 
   expect(result.status).toBe("unsupported-host");
-  expect(result.extension).toBe("page-format-v1");
+  expect(result.extension).toBe("blockeditor-format-v1");
   expect(saves).toHaveLength(0);
   expect(level.knownPageFormatFloor()).toBe(0);
 });
@@ -177,7 +177,7 @@ test("an activation skipped behind a save already on the wire waits for it and a
   });
   const answer = await host.activate({ floor: 1 });
   expect(answer).toEqual({ accepted: true, revision: null, receipt: "e2" });
-  expect(sent).toEqual([{ pageFormatFloor: 1 }, { pageFormatFloor: 1 }]);
+  expect(sent).toEqual([{ blockeditorFormatFloor: 1 }, { blockeditorFormatFloor: 1 }]);
   expect(waited).toBe(1);
 });
 
@@ -191,6 +191,6 @@ test("an activation still skipped after its retries is a retryable failure", asy
   });
   const answer = await host.activate({ floor: 1 });
   expect(answer.accepted).toBe(false);
-  expect(answer.code).toBe("page-format-activation-failed");
+  expect(answer.code).toBe("blockeditor-format-activation-failed");
   expect(sends).toBe(4);
 });

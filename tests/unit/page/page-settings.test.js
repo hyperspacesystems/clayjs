@@ -16,15 +16,15 @@ const BLOCKS = [
   { id: "h", t: "heading", text: "Notes" },
   { id: "c", t: "list_item", text: "Do it", attrs: { kind: "check" } },
 ];
-const SETTINGS_SEL = 'script[type="application/json"][merge="page.settings"][clay~="live"]';
+const SETTINGS_SEL = 'script[type="application/json"][merge="blockeditor.settings"][clay~="live"]';
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 const pageHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 const settingsTag = (value) =>
-  `<script type="application/json" merge="page.settings" clay="live">${JSON.stringify(value)}</script>`;
+  `<script type="application/json" merge="blockeditor.settings" clay="live">${JSON.stringify(value)}</script>`;
 
 let current = null;
 
@@ -35,7 +35,7 @@ async function load({ head = "" } = {}) {
   document.head.innerHTML = head;
   document.body.innerHTML = pageHtml();
 
-  const extensions = ["page"];
+  const extensions = ["blockeditor"];
   const opens = [];
   const peers = [];
 
@@ -57,7 +57,7 @@ async function load({ head = "" } = {}) {
   // its listeners, the way the live store does for a local write and for a peer's.
   window.clay = {
     live: (name) => {
-      if (name !== "page.settings") return live(name);
+      if (name !== "blockeditor.settings") return live(name);
       opens.push(name);
       const tag = document.querySelector(SETTINGS_SEL);
       const state = tag ? clone(JSON.parse(tag.textContent)) : {};
@@ -143,7 +143,7 @@ test("a tab opened before any setting existed follows the first one a peer write
   document.head.insertAdjacentHTML("beforeend", settingsTag({ dates: false }));
   document.dispatchEvent(new CustomEvent("clay:sync-applied", { detail: { html: document.documentElement.outerHTML } }));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(opens).toEqual(["page.settings"]);
+  expect(opens).toEqual(["blockeditor.settings"]);
   expect(page.view.dom.dataset.dates).toBe("false");
   expect(page.settings.read()).toEqual({ assignees: true, dates: false });
 });
@@ -159,6 +159,6 @@ test("a setting that is not one of the two switches is refused and writes nothin
 
 test("the editor's stylesheet hides the tags a document switched off", async () => {
   const { PAGE_EDITOR_CSS } = await import("../../../src/page/editor.js");
-  expect(PAGE_EDITOR_CSS).toContain('[data-assignees="false"] .page-check-chip[data-check="owner"], [data-dates="false"] .page-check-chip[data-check="date"] { display: none; }');
-  expect(PAGE_EDITOR_CSS).toContain('[data-assignees="false"][data-dates="false"] .page-check-controls { display: none; }');
+  expect(PAGE_EDITOR_CSS).toContain('[data-assignees="false"] .blockeditor-check-chip[data-check="owner"], [data-dates="false"] .blockeditor-check-chip[data-check="date"] { display: none; }');
+  expect(PAGE_EDITOR_CSS).toContain('[data-assignees="false"][data-dates="false"] .blockeditor-check-controls { display: none; }');
 });

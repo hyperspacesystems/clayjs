@@ -12,7 +12,7 @@ import { MessageChannel, MessagePort, BroadcastChannel } from "node:worker_threa
 // The host parser loads the rooms package, whose bundled HTML parser needs Node globals jsdom does not provide.
 for (const [name, value] of Object.entries({ ReadableStream, WritableStream, TransformStream, MessageChannel, MessagePort, BroadcastChannel })) globalThis[name] ??= value;
 
-// The host grammar is the only definition of a valid `Page-Conversion` value, so
+// The host grammar is the only definition of a valid `Blockeditor-Conversion` value, so
 // every emitted header is parsed by the committed host parser itself. That is the
 // cross-repository convention the round14d tests use: read the sibling checkout,
 // and say so plainly when it is not here rather than silently weakening the test.
@@ -64,7 +64,7 @@ function installRouter() {
 }
 
 const headerOf = (index, name) => calls.save[index].options.headers[name];
-const conversionOf = (index) => headerOf(index, "Page-Conversion");
+const conversionOf = (index) => headerOf(index, "Blockeditor-Conversion");
 const savedIds = () => calls.save.map((_, i) => headerOf(i, "Save-ID"));
 
 const FILE_BASE = "a".repeat(64);
@@ -160,11 +160,11 @@ suite("capture-bound conversion metadata", () => {
     expect(seen).toEqual([first.captureId, second.captureId]);
   });
 
-  test("every page-converting retry of one logical save carries the same header and id", async () => {
+  test("every blockeditor-converting retry of one logical save carries the same header and id", async () => {
     const converting = () => ({
       status: 503,
       headers: { "Retry-After": "0" },
-      body: { msg: "Converting the page.", msgType: "error", code: "page-converting", reason: "page-converting" }
+      body: { msg: "Converting the page.", msgType: "error", code: "blockeditor-converting", reason: "blockeditor-converting" }
     });
     responses.save = (n) => (n <= 3 ? converting() : { body: { msg: "Saved", etag: "stored-conv" } });
 
@@ -287,15 +287,15 @@ suite("capture-bound conversion metadata", () => {
   });
 
   const REFUSALS = [
-    { label: "invalid-header", status: 400, code: "page-conversion-refused", reason: "invalid-header" },
-    { label: "invalid-capture", status: 422, code: "page-conversion-refused", reason: "invalid-capture" },
-    { label: "invalid-source", status: 409, code: "page-conversion-refused", reason: "invalid-source" },
-    { label: "ambiguous-source", status: 409, code: "page-conversion-refused", reason: "ambiguous-source" },
-    { label: "room-page-authority", status: 409, code: "page-conversion-refused", reason: "room-page-authority" },
-    { label: "implicit-conversion", status: 409, code: "page-conversion-required", reason: "implicit-conversion" },
-    { label: "source-changed", status: 409, code: "page-conversion-stale", reason: "source-changed" },
-    { label: "room-changed", status: 409, code: "page-conversion-stale", reason: "room-changed" },
-    { label: "room-required", status: 409, code: "page-conversion-stale", reason: "room-required" }
+    { label: "invalid-header", status: 400, code: "blockeditor-conversion-refused", reason: "invalid-header" },
+    { label: "invalid-capture", status: 422, code: "blockeditor-conversion-refused", reason: "invalid-capture" },
+    { label: "invalid-source", status: 409, code: "blockeditor-conversion-refused", reason: "invalid-source" },
+    { label: "ambiguous-source", status: 409, code: "blockeditor-conversion-refused", reason: "ambiguous-source" },
+    { label: "room-blockeditor-authority", status: 409, code: "blockeditor-conversion-refused", reason: "room-blockeditor-authority" },
+    { label: "implicit-conversion", status: 409, code: "blockeditor-conversion-required", reason: "implicit-conversion" },
+    { label: "source-changed", status: 409, code: "blockeditor-conversion-stale", reason: "source-changed" },
+    { label: "room-changed", status: 409, code: "blockeditor-conversion-stale", reason: "room-changed" },
+    { label: "room-required", status: 409, code: "blockeditor-conversion-stale", reason: "room-required" }
   ];
 
   test.each(REFUSALS)("$label reaches the caller with its reason and no retry", async (row) => {
@@ -320,7 +320,7 @@ suite("capture-bound conversion metadata", () => {
     responses.save = () => ({
       status: 503,
       headers: { "Retry-After": "0" },
-      body: { msg: "Converting the page.", msgType: "error", code: "page-converting", reason: "page-converting" }
+      body: { msg: "Converting the page.", msgType: "error", code: "blockeditor-converting", reason: "blockeditor-converting" }
     });
 
     const captureId = snapMod.captureForSaveAndComparison({ emitForSync: false }).captureId;
@@ -329,8 +329,8 @@ suite("capture-bound conversion metadata", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.code).toBe("page-converting");
-    expect(result.reason).toBe("page-converting");
+    expect(result.code).toBe("blockeditor-converting");
+    expect(result.reason).toBe("blockeditor-converting");
     expect(calls.save).toHaveLength(4);
     for (let i = 0; i < calls.save.length; i++) expect(conversionOf(i)).toBe(fileHeader());
   });

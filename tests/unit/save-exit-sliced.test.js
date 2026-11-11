@@ -139,7 +139,7 @@ test("the exit's own save answers a soon() waiter no drained save could", async 
   const realNow = performance.now;
   let clock = 0;
   Object.defineProperty(performance, "now", { configurable: true, writable: true, value: () => (clock += 10) });
-  setText("page-soon-A");
+  setText("blockeditor-soon-A");
   const session = save.saveSession();
   session.start();
   const gate = holdSlices();
@@ -202,7 +202,7 @@ test("the exit's own save answers a soon() waiter no drained save could", async 
     expect(answers[0]).toMatchObject({ ok: true });
     expect(answers[0].msgType).not.toBe("skipped");
     expect(posts.length).toBe(sentBefore + 1);
-    expect(posts[posts.length - 1]).toContain("page-soon-A");
+    expect(posts[posts.length - 1]).toContain("blockeditor-soon-A");
   } finally {
     console.error = realError;
     global.fetch = realFetch;

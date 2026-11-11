@@ -30,8 +30,8 @@ const mountList = (options) => {
   const mount = document.body.appendChild(document.createElement("div"));
   const list = createRecoverList({ mount, ...options });
   mounts.push({ mount, list });
-  const root = mount.querySelector('clay-editor-ui[data-clay-ui="page-recover"]').shadowRoot;
-  return { mount, list, button: root.querySelector(".page-recover"), panel: root.querySelector(".page-recover-panel") };
+  const root = mount.querySelector('clay-editor-ui[data-clay-ui="blockeditor-recover"]').shadowRoot;
+  return { mount, list, button: root.querySelector(".blockeditor-recover"), panel: root.querySelector(".blockeditor-recover-panel") };
 };
 const toasts = () => $$("[data-clay-toast]", "toasts").filter((el) => el.textContent.includes(NOTICE_TEXT));
 const buttonIn = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent === label);
@@ -51,11 +51,11 @@ test("the button appears only when something is recoverable, and the panel lists
   button.click();
   expect(panel.hidden).toBe(false);
   expect(button.getAttribute("aria-expanded")).toBe("true");
-  const rows = panel.querySelectorAll(".page-recover-row");
+  const rows = panel.querySelectorAll(".blockeditor-recover-row");
   expect(rows).toHaveLength(2);
-  expect(rows[0].querySelector(".page-recover-meta").textContent).toBe("Paragraph · You");
-  expect(rows[0].querySelector(".page-recover-text").innerHTML).toBe("bra<mark>!Z</mark>");
-  expect(rows[1].querySelector(".page-recover-meta").textContent).toBe("Heading · Another editor");
+  expect(rows[0].querySelector(".blockeditor-recover-meta").textContent).toBe("Paragraph · You");
+  expect(rows[0].querySelector(".blockeditor-recover-text").innerHTML).toBe("bra<mark>!Z</mark>");
+  expect(rows[1].querySelector(".blockeditor-recover-meta").textContent).toBe("Heading · Another editor");
   expect(deepActiveElement()).toBe(rows[0].querySelector("button"));
 });
 
@@ -133,7 +133,7 @@ test("destroy unsubscribes and removes the button and panel", () => {
   list.destroy();
   mount.remove();
   expect(binding.listening).toBe(false);
-  expect(mount.querySelector('clay-editor-ui[data-clay-ui="page-recover"]')).toBeNull();
+  expect(mount.querySelector('clay-editor-ui[data-clay-ui="blockeditor-recover"]')).toBeNull();
 });
 
 test("with a real binding, a peer's text kept aside by an Undo is listed and Restore brings it back", () => {
@@ -173,7 +173,7 @@ test("with a real binding, a peer's text kept aside by an Undo is listed and Res
   const { button, panel } = mountList({ binding: a.bridge, ownTokens: ["tok-a"], onRestored: (id) => restored.push(id) });
   expect(button.textContent).toBe("Recover changes (1)");
   button.click();
-  expect(panel.querySelector(".page-recover-meta").textContent).toBe("Paragraph · Another editor");
+  expect(panel.querySelector(".blockeditor-recover-meta").textContent).toBe("Paragraph · Another editor");
   expect(panel.querySelector("mark").textContent).toBe("Z");
   buttonIn(panel, "Restore").click();
   expect(restored).toHaveLength(1);

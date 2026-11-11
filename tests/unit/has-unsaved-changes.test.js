@@ -13,6 +13,11 @@ beforeAll(async () => {
   window.clay = {};
   window.fetch = async () => new Response("", { status: 404 });
   document.body.innerHTML = '<div id="content">start</div>';
+  // These tests fail saves on purpose; they are about the close warning, so the failures
+  // are claimed the way a page's own indicator would, and core's fallback notice stays
+  // undownloaded (its import would otherwise land after this file is torn down).
+  const { claimFailure } = await import("../../src/core/save.js");
+  for (const type of ["clay:save-error", "clay:save-offline"]) document.addEventListener(type, claimFailure);
   const { boot } = await import("../../src/loader.js");
   await new Promise((resolve) => boot(null, new URLSearchParams("exclude=richclay,source"), resolve));
 });

@@ -35,7 +35,7 @@ export function setLinkTr(st, from, to, href) {
   return asStep(tr);
 }
 
-export const linkKey = new PluginKey("page-link");
+export const linkKey = new PluginKey("blockeditor-link");
 const popovers = new WeakMap();
 
 const svg = (body) => `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -63,14 +63,14 @@ class LinkPopover {
     this.mode = null;
     this.range = null;
     const doc = this.doc;
-    this.dom = el(doc, "div", "page-link", { role: "dialog", "aria-label": "Link", hidden: "" });
-    this.input = el(doc, "input", "page-link-input", { type: "url", "aria-label": "Link address", placeholder: "Paste or type a link", autocomplete: "off", spellcheck: "false" });
-    this.url = el(doc, "a", "page-link-url", { target: "_blank", rel: "noopener noreferrer" });
-    this.open = el(doc, "a", "page-link-btn", { "data-act": "open", target: "_blank", rel: "noopener noreferrer", "aria-label": "Open link in a new tab", title: "Open in a new tab" });
+    this.dom = el(doc, "div", "blockeditor-link", { role: "dialog", "aria-label": "Link", hidden: "" });
+    this.input = el(doc, "input", "blockeditor-link-input", { type: "url", "aria-label": "Link address", placeholder: "Paste or type a link", autocomplete: "off", spellcheck: "false" });
+    this.url = el(doc, "a", "blockeditor-link-url", { target: "_blank", rel: "noopener noreferrer" });
+    this.open = el(doc, "a", "blockeditor-link-btn", { "data-act": "open", target: "_blank", rel: "noopener noreferrer", "aria-label": "Open link in a new tab", title: "Open in a new tab" });
     this.open.innerHTML = ICON_OPEN;
-    this.edit = el(doc, "button", "page-link-btn", { type: "button", "data-act": "edit" });
+    this.edit = el(doc, "button", "blockeditor-link-btn", { type: "button", "data-act": "edit" });
     this.edit.textContent = "Edit";
-    this.remove = el(doc, "button", "page-link-btn", { type: "button", "data-act": "remove", "aria-label": "Remove link", title: "Remove link" });
+    this.remove = el(doc, "button", "blockeditor-link-btn", { type: "button", "data-act": "remove", "aria-label": "Remove link", title: "Remove link" });
     this.remove.innerHTML = ICON_REMOVE;
     this.dom.append(this.input, this.url, this.open, this.edit, this.remove);
     this.shell.append(this.dom);
@@ -153,8 +153,8 @@ class LinkPopover {
     if (!r) return;
     const shellBox = this.shell.getBoundingClientRect();
     const a = this.view.coordsAtPos(r.from), b = this.view.coordsAtPos(r.to, -1);
-    this.dom.style.setProperty("--page-pop-x", `${Math.min(a.left, b.left) - shellBox.left}px`);
-    this.dom.style.setProperty("--page-pop-y", `${Math.max(a.bottom, b.bottom) - shellBox.top + 6}px`);
+    this.dom.style.setProperty("--blockeditor-pop-x", `${Math.min(a.left, b.left) - shellBox.left}px`);
+    this.dom.style.setProperty("--blockeditor-pop-y", `${Math.max(a.bottom, b.bottom) - shellBox.top + 6}px`);
   }
 
   update(view) {
@@ -224,7 +224,7 @@ export function linkPlugin() {
     props: {
       decorations(st) {
         const r = linkKey.getState(st);
-        return r && r.from < r.to ? DecorationSet.create(st.doc, [Decoration.inline(r.from, r.to, { class: "page-link-pending" })]) : null;
+        return r && r.from < r.to ? DecorationSet.create(st.doc, [Decoration.inline(r.from, r.to, { class: "blockeditor-link-pending" })]) : null;
       },
       handleKeyDown(view, event) {
         const mod = event.metaKey || event.ctrlKey;

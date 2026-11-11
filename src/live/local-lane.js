@@ -68,11 +68,11 @@ const encoder = new TextEncoder();
 // Floor 1 moves the durable lane to its own channel scope: a tab that cannot read
 // floor 1 never receives future-format updates, and its writes are refused by the
 // host floor. The message protocol inside the scope is unchanged.
-export const FORMAT_SCOPE = "page-format:1";
+export const FORMAT_SCOPE = "blockeditor-format:1";
 
 // The room scope: this lane's sequencer is a host-mode room, so a tab of the lane
 // before it, which cannot read that room, is never on the same channel or lock.
-export const ROOM_SCOPE = "page-rooms:2";
+export const ROOM_SCOPE = "blockeditor-rooms:2";
 
 export function localLaneKey(floor = 0, path = window.location.pathname) {
   const base = "clay-live:" + path;
@@ -193,7 +193,7 @@ export function localTransport({ seed, key = "clay-live:" + window.location.path
     const meta = {};
     for (const [name, m] of mirror.stores) {
       stores[name] = { value: cloneJson(m.value), ephemeral: m.ephemeral, seen: receiptsFor(name), last: m.last, landed: landedIn(m) };
-      if (name === "page" && isYValue(m.value)) stores[name].compaction = { v: COMPACTION.version, loose: COMPACTION.loose, activeBytes: COMPACTION.activeBytes };
+      if (name === "blockeditor" && isYValue(m.value)) stores[name].compaction = { v: COMPACTION.version, loose: COMPACTION.loose, activeBytes: COMPACTION.activeBytes };
       meta[name] = { log: m.log, last: m.last, landed: m.landed, floor: m.floor, behind: m.behind, file: m.file, inFile: m.inFile };
     }
     const state = { epoch: room.epoch, seq: room.seq, writer: clientId, stores, mirror: { seen: [...mirror.seen], stores: meta } };
@@ -386,7 +386,7 @@ export function localTransport({ seed, key = "clay-live:" + window.location.path
   const pageHost = () => ({ retired: new Set(), lastFull: null, deletesSince: 0, failed: null, ranges: createRangeCache(), task: null, overflow: false });
 
   const pageStore = () => {
-    const m = mirror.stores.get("page");
+    const m = mirror.stores.get("blockeditor");
     return m && !m.ephemeral && isYValue(m.value) ? m : null;
   };
 
@@ -471,14 +471,14 @@ export function localTransport({ seed, key = "clay-live:" + window.location.path
       host.lastFull = { bytes, seq: room.seq };
       host.deletesSince = 0;
     }
-    const data = { epoch: room.epoch, seq: room.seq, name: "page", ops, from: "compactor", n: 0, kind: plan.kind };
+    const data = { epoch: room.epoch, seq: room.seq, name: "blockeditor", ops, from: "compactor", n: 0, kind: plan.kind };
     advance(data);
     if (clean) m.landed = room.seq;
     post({ type: "data", data });
     handlers.frame(cloneJson(data));
     if (clean) {
-      tellLanded(["page"]);
-      post({ type: "landed", name: "page", at: { epoch: room.epoch, seq: room.seq } });
+      tellLanded(["blockeditor"]);
+      post({ type: "landed", name: "blockeditor", at: { epoch: room.epoch, seq: room.seq } });
     }
     const shape = pageShape(m.value.y, COMPACTION);
     if (shape.loose >= COMPACTION.soft || !shape.normal) due();
@@ -502,7 +502,7 @@ export function localTransport({ seed, key = "clay-live:" + window.location.path
       return { status: 422, body: { error: err.message }, retryAfter: 0 };
     }
     const host = room.host;
-    const admission = frame.name === "page" && isYValue(m.value) ? admitPageOps({ y: m.value.y, ops, state: { ...host, compaction: frame.compaction }, limits: COMPACTION }) : null;
+    const admission = frame.name === "blockeditor" && isYValue(m.value) ? admitPageOps({ y: m.value.y, ops, state: { ...host, compaction: frame.compaction }, limits: COMPACTION }) : null;
     if (admission?.error) {
       if (admission.error === "checkpoint-required") due();
       return refused(admission.error, admission.retryAfter);
@@ -516,7 +516,7 @@ export function localTransport({ seed, key = "clay-live:" + window.location.path
     const bytes = admission ? pageBytes(trial.value) : 0;
     trial.undo();
     if (admission && bytes > admission.limit) {
-      if (admission.failed || (host.lastFull && host.deletesSince === 0)) return refused("page-full");
+      if (admission.failed || (host.lastFull && host.deletesSince === 0)) return refused("blockeditor-full");
       due(true);
       return refused("checkpoint-required");
     }
@@ -572,7 +572,7 @@ export function localTransport({ seed, key = "clay-live:" + window.location.path
     }
     if (value === null || typeof value !== "object" || Array.isArray(value) !== Array.isArray(m.value)) return null;
     const file = { seq: seq ?? null, hash: textHash(serializeLive(value)) };
-    if (name === "page" && isYValue(m.value) && isYValue(value)) return mergePageFile(m, value, file);
+    if (name === "blockeditor" && isYValue(m.value) && isYValue(value)) return mergePageFile(m, value, file);
     // A stamp of this room places the file. Still the value its stamp names, it
     // is a capture and holds no merge past the stamp; edited, or unstamped, it
     // descends from the file before it, which holds the merges in inFile.

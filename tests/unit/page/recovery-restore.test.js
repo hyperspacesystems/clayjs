@@ -168,7 +168,7 @@ const gate = () => {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function openTab({ service, value = world(), generation = null, authority = AUTHORITY, clientID = 5 } = {}) {
-  const store = createStore({ name: "page", value });
+  const store = createStore({ name: "blockeditor", value });
   const binding = createYPageBinding({
     store,
     setTimer: (fn) => { setTimeout(fn, 0); return 1; },
@@ -529,7 +529,7 @@ test("mode exit during a recovery await inserts nothing", async () => {
   review.update({ rows });
   expect(review.count).toBe(1);
   review.open();
-  const panelText = mount.querySelector('clay-editor-ui[data-clay-ui="page-recovery"]').shadowRoot.textContent;
+  const panelText = mount.querySelector('clay-editor-ui[data-clay-ui="blockeditor-recovery"]').shadowRoot.textContent;
   for (const line of rows[0].text.split("\n")) expect(panelText).toContain(line);
 
   // The mode leaves while the copy is still being decided.

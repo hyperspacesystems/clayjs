@@ -21,7 +21,7 @@ const textOf = (value) => {
 };
 
 const start = (value = { v: 1, g: 0, y: {} }, clientID = 5, compact) => {
-  const store = createStore({ name: "page", value });
+  const store = createStore({ name: "blockeditor", value });
   const ydoc = new Y.Doc();
   ydoc.clientID = clientID;
   const provider = createYProvider({ store, ydoc, ...(compact ? { compact } : {}), ...timers });
@@ -355,7 +355,7 @@ test("an own acknowledgment of a multipart fold applies nothing", () => {
   const text = enc(Y.encodeStateAsUpdateV2(source));
   const n = Math.ceil(text.length / PART);
   const y = Object.fromEntries(Array.from({ length: n }, (_, i) => [`m9-0.${i}.${n}`, text.slice(i * PART, (i + 1) * PART)]));
-  const store = createStore({ name: "page", value: { v: 1, g: 0, y } });
+  const store = createStore({ name: "blockeditor", value: { v: 1, g: 0, y } });
   const ydoc = new Y.Doc();
   ydoc.clientID = 5;
   Y.applyUpdateV2(ydoc, Y.encodeStateAsUpdateV2(source));
@@ -390,7 +390,7 @@ test("the cover cache survives consecutive remote frames", () => {
   source.once("updateV2", (update) => { side = parts("mside", update); });
   source.getMap("items").set("side-text", "y".repeat(60000));
   const value = { v: 1, g: 0, y: { ...base, ...side } };
-  const store = createStore({ name: "page", value });
+  const store = createStore({ name: "blockeditor", value });
   const ydoc = docFromValue(value, { strict: true });
   const provider = createYProvider({ store, ydoc, ...timers });
   const frame = (i) => {

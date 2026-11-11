@@ -6,7 +6,7 @@ const CONTEXT_LIMIT = 16384;
 const bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
 
 /**
- * @typedef {{protocol: 'page-tool/1', requestId: string, prompt: string,
+ * @typedef {{protocol: 'blockeditor-tool/1', requestId: string, prompt: string,
  *   context: {title: string, outline: unknown[], tables: unknown[]},
  *   target: null | {toolId: string, rev: string},
  *   current: null | {artifact: object, state: unknown}}} ToolRequest
@@ -58,7 +58,7 @@ export function createToolClient({ transport, newId = freshRequestId }) {
       const candidate = { requestId, discarded: false, done: false };
       candidate.promise = new Promise((resolve) => { candidate.resolve = resolve; });
       active = candidate;
-      const request = { protocol: "page-tool/1", requestId, prompt, context: trimmed, target, current };
+      const request = { protocol: "blockeditor-tool/1", requestId, prompt, context: trimmed, target, current };
       candidate.request = request;
       const finish = (reply) => {
         if (candidate.discarded || candidate.done || reply?.requestId !== requestId) return;

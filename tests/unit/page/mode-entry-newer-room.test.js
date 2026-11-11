@@ -26,8 +26,8 @@ const BLOCKS = [
   { id: "h", t: "heading", text: "Notes" },
   { id: "p", t: "paragraph", text: "Hello" },
 ];
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
-const ARTICLE_SEL = "article[data-page]";
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
+const ARTICLE_SEL = "article[data-blockeditor]";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
@@ -43,19 +43,19 @@ const tick = async (turns = 40) => { for (let i = 0; i < turns; i++) await Promi
 const render = (blocks) => renderFromTags([JSON.stringify(seedValue(blocks))]);
 const articleHtml = (blocks = BLOCKS) => {
   const { html, rev } = render(blocks);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const tagHtml = (blocks = BLOCKS) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(seedValue(blocks))}</script>`;
+const tagHtml = (blocks = BLOCKS) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(seedValue(blocks))}</script>`;
 const articleOf = (html) => new DOMParser().parseFromString(html, "text/html").querySelector(ARTICLE_SEL);
 // A page tag stating a value this module built, rather than one a seed wrote.
-const tagValueHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagValueHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 
 // The page a peer saved from the page this tab holds: the same blocks plus one edit, so
 // the value it states descends from the tag the tab was served.
 async function descendantValue(blocks, edit) {
   const { createStore } = await import("../../../src/live/store.js");
   const { createYPageBinding, LOCAL, yValueOf } = await import("../../../src/page/ybind/index.js");
-  const store = createStore({ name: "page", value: seedValue(blocks) });
+  const store = createStore({ name: "blockeditor", value: seedValue(blocks) });
   const binding = createYPageBinding({ store });
   binding.ydoc.transact(() => binding.pd.flow.insert(binding.pd.flow.length, edit), LOCAL);
   const value = yValueOf(binding.ydoc);
@@ -69,7 +69,7 @@ async function descendantValue(blocks, edit) {
 const FILE = (body, { head = "", rev = "r1" } = {}) =>
   `<!doctype html><html><head><title>Notes</title>${head}</head><body>${body.replace("<article", `<article data-rev="${rev}"`)}</body></html>`;
 
-const readerHtml = (body) => `<!doctype html><html><head><title>Notes</title></head><body><article data-page="1">${body}</article></body></html>`;
+const readerHtml = (body) => `<!doctype html><html><head><title>Notes</title></head><body><article data-blockeditor="1">${body}</article></body></html>`;
 
 const context = ({ represented = null, reader = null, initial = false } = {}) => ({
   generation: 1,
@@ -120,7 +120,7 @@ async function load({
   document.head.innerHTML = head;
   document.body.innerHTML = html;
 
-  const extensions = ["page", "sync", "live-data", "live-provenance"];
+  const extensions = ["blockeditor", "sync", "live-data", "live-provenance"];
   const saves = [];
   const sent = [];
   const sources = [];
@@ -165,7 +165,7 @@ async function load({
     ...realEditor,
     createPageEditor: (mount, options) => {
       if (MODE.factory === "throw") {
-        mount.appendChild(document.createElement("div")).className = "page-shell";
+        mount.appendChild(document.createElement("div")).className = "blockeditor-shell";
         throw new Error("the editor could not be built");
       }
       return realEditor.createPageEditor(mount, options);
@@ -234,7 +234,7 @@ const article = () => document.querySelector(ARTICLE_SEL);
 test('a Page entry keeps a live room that is newer than its saved file, and saves the room text', async () => {
   const harness = await load({ head: tagHtml() });
   const newer = await descendantValue(BLOCKS, ' PEER_UNCHECKPOINTED');
-  harness.room.stores.page = { value: newer, ephemeral: false, last: 1, landed: 0 };
+  harness.room.stores.blockeditor = { value: newer, ephemeral: false, last: 1, landed: 0 };
   harness.room.seq = 1;
   harness.room.writer = 'tab-1';
   const bytes = `<!doctype html><html><head><title>Notes</title>${tagHtml()}</head><body>${articleHtml()}</body></html>`;
@@ -245,12 +245,12 @@ test('a Page entry keeps a live room that is newer than its saved file, and save
   const { pageLaneReady } = await import('../../../src/plugins/live.js');
   await pageLaneReady();
   await flush();
-  const before = blocksFromYValue(harness.storeOf('page').value).p.c;
+  const before = blocksFromYValue(harness.storeOf('blockeditor').value).p.c;
   expect(before).toContain('PEER_UNCHECKPOINTED');
   const lease = harness.pageParticipant().prepare(ctx);
   try {
     await lease.ready;
-    const after = blocksFromYValue(harness.storeOf('page').value).p.c;
+    const after = blocksFromYValue(harness.storeOf('blockeditor').value).p.c;
     const facts = await import('../../../src/core/is-edit-mode.js');
     const save = await import('../../../src/core/save.js');
     facts.commitModeFacts({ mode: 'edit', isEditMode: true, phase: 'idle' });

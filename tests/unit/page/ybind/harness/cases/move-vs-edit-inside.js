@@ -8,7 +8,7 @@ export async function run() {
   const { TextSelection } = pmState;
   const value = seedValue([{ id: 'x1', text: 'ALPHA' }, { id: 'x2', text: 'bravo' }, { id: 'x3', text: 'OMEGA' }]);
   const sim = new Sim(1);
-  const room = createRoom(sim, { page: value }, { latency: () => 40, answerLatency: () => 40 });
+  const room = createRoom(sim, { blockeditor: value }, { latency: () => 40, answerLatency: () => 40 });
   const a = makeYTab(sim, room, 'a', JSON.parse(JSON.stringify(value)));
   const b = makeYTab(sim, room, 'b', JSON.parse(JSON.stringify(value)));
   a.start(); b.start();
@@ -29,7 +29,7 @@ export async function run() {
   await sim.run(20000);
   await sim.idle(5000);
   const show = (t) => { const o = []; t.editor.state.doc.forEach((n) => o.push(n.textContent)); return o.join(' / '); };
-  const doc = docOfValue(room.stores.get('page').value);
+  const doc = docOfValue(room.stores.get('blockeditor').value);
   const o = []; doc.forEach((n) => o.push(n.textContent));
   log('room    :', o.join(' / '));
   log('tab a   :', show(a), '| tab b:', show(b));

@@ -10,7 +10,7 @@ beforeEach(() => { clock = 1000000; jest.spyOn(Date, "now").mockImplementation((
 afterEach(() => { jest.restoreAllMocks(); });
 
 function open(value) {
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(value)) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(value)) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = createPageEditor(mount, { doc: binding.doc(), dispatch: binding.dispatch, history: false, undo: binding.undo, redo: binding.redo, board: binding.board });

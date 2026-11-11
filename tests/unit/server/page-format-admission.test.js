@@ -15,9 +15,9 @@ import { PAGE_FORMAT_META, PAGE_FORMAT_UPGRADE } from "../../../src/page/format-
 // rises: a stale save that omits the marker cannot lower it.
 
 const createDocument = () => new JSDOM("<!doctype html><html><body></body></html>").window.document;
-const pageTag = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value).replace(/</g, "\\u003c")}</script>`;
+const pageTag = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value).replace(/</g, "\\u003c")}</script>`;
 const marker = (floor) => `<meta name="${PAGE_FORMAT_META}" content="${floor}">`;
-const doc = (value, { floor = 0, article = '<article data-page><p data-id="p">before</p></article>' } = {}) =>
+const doc = (value, { floor = 0, article = '<article data-blockeditor><p data-id="p">before</p></article>' } = {}) =>
   `<!doctype html><html><head>${floor ? marker(floor) : ""}<title>t</title></head><body>${article}${pageTag(value)}</body></html>`;
 
 // The plain page, and a page a newer runtime formatted with a named extension mark.
@@ -127,12 +127,12 @@ test("a floor rise is refused while an admitted editor could not read the result
 });
 
 test("a version restored as an edit keeps the floor, and an unmarked restore adds none", () => {
-  const html = `<!doctype html><html><head></head><body><article data-page="1"><p>x</p></article></body></html>`;
+  const html = `<!doctype html><html><head></head><body><article data-blockeditor="1"><p>x</p></article></body></html>`;
   const restored = stampPageRev(html, "r1", 1);
   expect(restored).toContain(marker(1));
   expect(restored).toContain('data-rev="r1"');
   expect(stampPageRev(restored, "r2", 1)).toBe(restored.replace('data-rev="r1"', 'data-rev="r2"'));
-  expect(stampPageRev(html, "r1")).toBe(`<!doctype html><html><head></head><body><article data-page="1" data-rev="r1"><p>x</p></article></body></html>`);
+  expect(stampPageRev(html, "r1")).toBe(`<!doctype html><html><head></head><body><article data-blockeditor="1" data-rev="r1"><p>x</p></article></body></html>`);
   expect(stampPageRev(html, "r1", 1).includes(marker(1))).toBe(true);
 });
 
@@ -142,7 +142,7 @@ test("an outside writer's rebase keeps the floor the stored document had", () =>
     const model = project(blocksOfValues([record]));
     const html = renderModel(model, { fallbackOf: () => "", clean: fragmentCleaner(d) });
     const rev = revOf(model);
-    return { rev, file: `<!doctype html>\n<html><head><title>t</title></head><body>\n<article data-page data-rev="${rev}">\n${html}\n</article>${pageTag(record)}\n</body></html>\n` };
+    return { rev, file: `<!doctype html>\n<html><head><title>t</title></head><body>\n<article data-blockeditor data-rev="${rev}">\n${html}\n</article>${pageTag(record)}\n</body></html>\n` };
   };
   const A = { blocks: { a: { t: "paragraph", pos: "1", c: "Hello world" }, b: { t: "paragraph", pos: "2", c: "Second block" } }, deleted: {} };
   const B = JSON.parse(JSON.stringify(A));

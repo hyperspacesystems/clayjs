@@ -22,8 +22,8 @@ const b64encode = (text) => Buffer.from(text, "utf8").toString("base64url");
 const envelopeOf = (value) => `${OPAQUE}="1" ${VALUE}="${b64encode(JSON.stringify(value))}"`;
 
 const fileOf = (value, article = "old article") =>
-  `<!doctype html><html><head><title>Keep this title</title></head><body><article data-page data-rev="old">${article}</article>${tag("page", value)}${tag("game", { score: 0 })}<footer>Keep this footer</footer></body></html>`;
-const withArticle = (html, article) => html.replace(/(<article data-page data-rev="old">)[\s\S]*?(<\/article>)/, `$1${article}$2`);
+  `<!doctype html><html><head><title>Keep this title</title></head><body><article data-blockeditor data-rev="old">${article}</article>${tag("blockeditor", value)}${tag("game", { score: 0 })}<footer>Keep this footer</footer></body></html>`;
+const withArticle = (html, article) => html.replace(/(<article data-blockeditor data-rev="old">)[\s\S]*?(<\/article>)/, `$1${article}$2`);
 
 const createDocument = () => new JSDOM("").window.document;
 const articleInside = (html) => html.match(/<article[^>]*>([\s\S]*?)<\/article>/)[1];
@@ -38,22 +38,22 @@ const roomOf = (value, article) => {
 };
 
 const editPage = (rooms, room, client, n, change) => {
-  const doc = docFromValue(room.stores.get("page").value, { strict: true });
+  const doc = docFromValue(room.stores.get("blockeditor").value, { strict: true });
   doc.clientID = Number(client);
   change(doc.getText("flow"));
   const update = enc(Y.encodeStateAsUpdateV2(doc));
   doc.destroy();
-  const result = rooms.apply(room, client, { name: "page", n, ops: [{ op: "set", path: ["y", `edit-${client}-${n}`], value: update }], epoch: room.epoch, pageGeneration: room.pageTransition?.id ?? null });
+  const result = rooms.apply(room, client, { name: "blockeditor", n, ops: [{ op: "set", path: ["y", `edit-${client}-${n}`], value: update }], epoch: room.epoch, blockeditorGeneration: room.blockeditorTransition?.id ?? null });
   expect(result.seq).toBeGreaterThan(0);
 };
 
 const editDoc = (rooms, room, client, n, change) => {
-  const doc = docFromValue(room.stores.get("page").value, { strict: true });
+  const doc = docFromValue(room.stores.get("blockeditor").value, { strict: true });
   doc.clientID = Number(client);
   change(doc);
   const update = enc(Y.encodeStateAsUpdateV2(doc));
   doc.destroy();
-  const result = rooms.apply(room, client, { name: "page", n, ops: [{ op: "set", path: ["y", `edit-${client}-${n}`], value: update }], epoch: room.epoch, pageGeneration: room.pageTransition?.id ?? null });
+  const result = rooms.apply(room, client, { name: "blockeditor", n, ops: [{ op: "set", path: ["y", `edit-${client}-${n}`], value: update }], epoch: room.epoch, blockeditorGeneration: room.blockeditorTransition?.id ?? null });
   expect(result.seq).toBeGreaterThan(0);
 };
 
@@ -80,12 +80,12 @@ test("an article carrying a newer format's record is never projected away", () =
   const envelope = `<p data-id="p" ${envelopeOf({ due: "2026-11-01" })}>before</p>`;
   const carried = roomOf(value, envelope);
   const refused = carried.render();
-  expect(refused).toEqual({ kind: "refused", reason: "unknown-page-content" });
+  expect(refused).toEqual({ kind: "refused", reason: "unknown-blockeditor-content" });
   expect(refused.html).toBeUndefined();
   expect(isCheckpointCurrent(carried.source, carried.capture())).toBe(false);
 
   const marks = roomOf(value, `<p data-id="p"><span ${MARKS}="${b64encode('[{"tokens":["u"]}]')}">before</span></p>`);
-  expect(marks.render()).toEqual({ kind: "refused", reason: "unknown-page-content" });
+  expect(marks.render()).toEqual({ kind: "refused", reason: "unknown-blockeditor-content" });
 
   const plain = roomOf(value);
   expect(plain.render().kind).toBe("ok");
@@ -101,7 +101,7 @@ test("a room holding newer content checkpoints into envelopes, and re-adopting t
     doc.getText("flow").insert(doc.getText("flow").length, "later", { "clay_opaque_code~future": { tokens: ["u"] } });
   });
   const pinned = capture();
-  const decoded = blocksFromYValue(room.stores.get("page").value);
+  const decoded = blocksFromYValue(room.stores.get("blockeditor").value);
   expect(decoded.q).toEqual({ t: "future_widget", pos: "00000002", theme: { bg: "red" }, c: "later", m: [[5, "u"]] });
   const written = render(undefined, pinned);
   expect(written.kind).toBe("ok");
@@ -110,7 +110,7 @@ test("a room holding newer content checkpoints into envelopes, and re-adopting t
   expect(article).toContain(`${MARKS}="`);
   expect(isCheckpointCurrent(written.html, pinned)).toBe(true);
 
-  const doc = new JSDOM(`<article data-page>${article}</article>`).window.document;
+  const doc = new JSDOM(`<article data-blockeditor>${article}</article>`).window.document;
   const adopted = parseModel(doc.querySelector("article"));
   const expected = project(decoded);
   expect(canon(adopted)).toBe(canon(expected));
@@ -135,7 +135,7 @@ test("a deliberately invalid envelope is refused and the source file is left as 
     expect(isCheckpointCurrent(fileOf(value, article), capture())).toBe(false);
   }
   const valid = roomOf(value, `<p data-id="p"><span ${MARKS}="${b64encode('[{"tokens":["u"]}]')}">before</span></p>`);
-  expect(valid.render()).toEqual({ kind: "refused", reason: "unknown-page-content" });
+  expect(valid.render()).toEqual({ kind: "refused", reason: "unknown-blockeditor-content" });
   const plain = roomOf(value, `<p data-id="p">before</p>`);
   expect(plain.render().kind).toBe("ok");
 });

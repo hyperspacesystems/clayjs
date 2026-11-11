@@ -20,7 +20,7 @@ const textOf = (value) => {
 const keysUnder = (value, first) => Object.keys(value.y ?? {}).filter((k) => k[0] === first);
 
 const makeHost = ({ value = { v: 1, g: 0, y: {} }, clientID = 5, compaction = COMPACTION, journal = null } = {}) => {
-  const store = createStore({ name: "page", value });
+  const store = createStore({ name: "blockeditor", value });
   const ydoc = new Y.Doc();
   ydoc.clientID = clientID;
   const room = { value: clone(value) };
@@ -86,12 +86,12 @@ test("a 3 MB paste travels as one whole key", () => {
   expect(textOf(h.store.value).length).toBe(3_000_000);
 }, 30000);
 
-test("a page-immutable refusal offers the content again as one r key", () => {
+test("a blockeditor-immutable refusal offers the content again as one r key", () => {
   const h = makeHost();
   h.enter();
   h.ydoc.getText("flow").insert(0, "kept");
   expect(keysUnder(h.store.value, "u")).toHaveLength(1);
-  h.store.deliver({ phase: "refused", code: "page-immutable" });
+  h.store.deliver({ phase: "refused", code: "blockeditor-immutable" });
   const pending = h.store.pendingEntries();
   h.store.rebase(h.store.authoritative, { source: "state", drop: [pending[0].id, pending.at(-1).id] });
   flush();
@@ -103,16 +103,16 @@ test("a page-immutable refusal offers the content again as one r key", () => {
   expect(textOf(h.store.value)).toBe("kept");
 });
 
-test("a page-full refusal stops the provider with the document and journal intact", () => {
+test("a blockeditor-full refusal stops the provider with the document and journal intact", () => {
   const journaled = [];
   const journal = { local: (u) => journaled.push(u), dependency: () => {} };
   const h = makeHost({ journal });
   h.enter();
   h.ydoc.getText("flow").insert(0, "mine");
   expect(keysUnder(h.store.value, "u")).toHaveLength(1);
-  h.store.deliver({ phase: "refused", code: "page-full" });
+  h.store.deliver({ phase: "refused", code: "blockeditor-full" });
   flush();
-  expect(h.provider.stopped).toBe("page-full");
+  expect(h.provider.stopped).toBe("blockeditor-full");
   expect(h.ydoc.getText("flow").toString()).toBe("mine");
   expect(journaled).toHaveLength(1);
   expect(textOf(h.store.value)).toBe("mine");
@@ -249,7 +249,7 @@ test("a refused write is reconciled before the newer ones go out", () => {
 
   // The room refuses the write, and the lane drops the op it took, while a newer
   // edit is already waiting behind it.
-  h.store.deliver({ phase: "refused", code: "page-immutable" });
+  h.store.deliver({ phase: "refused", code: "blockeditor-immutable" });
   flush();
   h.ydoc.getText("flow").insert(1, "b");
   const pending = h.store.pendingEntries();
@@ -271,7 +271,7 @@ test("a refused write is reconciled before the newer ones go out", () => {
 
 test("a store whose last rebase carried a room starts its provider in host mode", () => {
   const value = { v: 1, g: 0, y: {} };
-  const store = createStore({ name: "page", value: clone(value) });
+  const store = createStore({ name: "blockeditor", value: clone(value) });
   store.rebase(clone(value), { source: "state", room: { compaction: COMPACTION } });
   const ydoc = new Y.Doc();
   ydoc.clientID = 5;

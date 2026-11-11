@@ -17,7 +17,7 @@ import { docFromValue, enc } from "../../../src/page/ybind/provider.js";
  * deterministic seed in memory and writes nothing, so a clean enter and exit makes no
  * request at all. The first genuine edit is what makes the store pending, and the first
  * save then carries seed plus that edit, projected, conditional on the version the tab
- * staged from, and declared with `Page-Write: v1`. Only a write the host accepts opens
+ * staged from, and declared with `Blockeditor-Write: v1`. Only a write the host accepts opens
  * the room; a refusal keeps the typed text in this tab.
  */
 
@@ -25,15 +25,15 @@ const BLOCKS = [
   { id: "h", t: "heading", text: "Notes" },
   { id: "p", t: "paragraph", text: "Hello" },
 ];
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 const pageHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 
-const articleOf = (html) => new DOMParser().parseFromString(html, "text/html").querySelector("article[data-page]");
+const articleOf = (html) => new DOMParser().parseFromString(html, "text/html").querySelector("article[data-blockeditor]");
 const expectedTagValue = (html) => seedPageFromArticle(articleOf(html));
 const pageTag = () => document.querySelector(TAG_SEL);
 
@@ -48,7 +48,7 @@ const peerValue = (html) => {
   doc.destroy();
   return value;
 };
-const taggedPage = (value) => pageHtml(value) + `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const taggedPage = (value) => pageHtml(value) + `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 
 const settle = async (save, timeout = 4000) => {
   const deadline = Date.now() + timeout;
@@ -74,15 +74,15 @@ async function load({ html = pageHtml(), liveData = true, storedState = null, st
   document.head.innerHTML = "";
   document.body.innerHTML = html;
 
-  const extensions = liveData ? ["page", "live-data", "conditional"] : ["page"];
-  if (storedState) extensions.push("page-recovery-v1");
+  const extensions = liveData ? ["blockeditor", "live-data", "conditional"] : ["blockeditor"];
+  if (storedState) extensions.push("blockeditor-recovery-v1");
   const saves = [];
   const sent = [];
   const handlersRef = { h: null };
   const room = { epoch: "e1", seq: 0, writer: null, stores: {} };
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
-    hostMeta: async () => ({ spec: 1, extensions, document: storedState ? { etag: "stamp-1", pageState: { href: "/_/page-state" } } : { etag: "stamp-1" } }),
+    hostMeta: async () => ({ spec: 1, extensions, document: storedState ? { etag: "stamp-1", blockeditorState: { href: "/_/blockeditor-state" } } : { etag: "stamp-1" } }),
     hostSupports: async (name) => extensions.includes(name),
     hostMetaOutcome: () => "ok",
     querySaveOutcome: () => null,
@@ -118,7 +118,7 @@ async function load({ html = pageHtml(), liveData = true, storedState = null, st
   // The host's answer to a save. A host that keeps a room holds the document's page
   // store as it reads it out of the body it accepted.
   global.fetch = jest.fn(async (url, options) => {
-    if (String(url).endsWith("/_/page-state")) {
+    if (String(url).endsWith("/_/blockeditor-state")) {
       return {
         ok: stateStatus < 400,
         status: stateStatus,
@@ -133,7 +133,7 @@ async function load({ html = pageHtml(), liveData = true, storedState = null, st
     const tag = doc.querySelector(TAG_SEL);
     const status = reply.status ?? 200;
     const headers = reply.headers ?? {};
-    if (status < 400 && tag) room.stores.page = { value: JSON.parse(tag.textContent), ephemeral: false, last: 0, landed: 0 };
+    if (status < 400 && tag) room.stores.blockeditor = { value: JSON.parse(tag.textContent), ephemeral: false, last: 0, landed: 0 };
     return {
       ok: status < 400,
       status,
@@ -179,7 +179,7 @@ test("a tagless page stages its seed in memory: no tag, no request, no room", as
   expect(page.view.editable).toBe(true);
   expect(page.view.dom.textContent).toContain("Hello");
   // The seed is the article's own, and it is held as a value only.
-  expect(storeOf("page").value).toEqual(expectedTagValue(html));
+  expect(storeOf("blockeditor").value).toEqual(expectedTagValue(html));
   expect(pageTag()).toBe(null);
   expect(saves).toHaveLength(0);
   expect(sent).toHaveLength(0);
@@ -207,7 +207,7 @@ test("the first edit saves seed plus that edit against the version it staged fro
   const view = page.view;
   const end = view.state.doc.content.size - 1;
   view.dispatch(view.state.tr.insertText(" there", end));
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello there");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello there");
 
   checkpointWithin(0);
   expect(await until(() => saves.length > 0)).toBe(true);
@@ -215,7 +215,7 @@ test("the first edit saves seed plus that edit against the version it staged fro
   // One conditional save, declared as a page write, carrying the seed's own client.
   expect(saves).toHaveLength(1);
   expect(saves[0].headers["If-Match"]).toBe("stamp-1");
-  expect(saves[0].headers["Page-Write"]).toBe("v1");
+  expect(saves[0].headers["Blockeditor-Write"]).toBe("v1");
   const saved = new DOMParser().parseFromString(saves[0].body, "text/html");
   const tag = saved.querySelector(TAG_SEL);
   const value = JSON.parse(tag.textContent);
@@ -231,8 +231,8 @@ test("the first edit saves seed plus that edit against the version it staged fro
   expect(saved.querySelector("article").getAttribute("data-rev")).toBe(projected.rev);
 
   // The accepted write opens the room and the page store follows it.
-  expect(await until(() => storeOf("page").handle.status.mode === "fast")).toBe(true);
-  expect(room.stores.page).toBeTruthy();
+  expect(await until(() => storeOf("blockeditor").handle.status.mode === "fast")).toBe(true);
+  expect(room.stores.blockeditor).toBeTruthy();
   expect(pageTag()).toBe(null);
 
   // Operations made after that capture keep their own identities and travel through
@@ -241,9 +241,9 @@ test("the first edit saves seed plus that edit against the version it staged fro
   const at = view.state.doc.content.size - 1;
   view.dispatch(view.state.tr.insertText("!", at));
   expect(await until(() => sent.length > framesBefore)).toBe(true);
-  expect(sent.at(-1).name).toBe("page");
+  expect(sent.at(-1).name).toBe("blockeditor");
   expect(sent.at(-1).ops.length).toBeGreaterThan(0);
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello there!");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello there!");
 });
 
 test("a losing first write keeps the typed text in this tab", async () => {
@@ -272,7 +272,7 @@ test("a losing first write keeps the typed text in this tab", async () => {
     expect(view.editable).toBe(true);
     expect(page.view.dom.textContent).toContain("Hello there");
     // Nothing was accepted, so the operations are still this tab's to keep.
-    expect(storeOf("page").pending).toHaveLength(1);
+    expect(storeOf("blockeditor").pending).toHaveLength(1);
     expect(document.documentElement.getAttribute("savestatus")).toBe("conflict");
     document.removeEventListener("clay:save-conflict", onConflict);
   } finally {
@@ -299,13 +299,13 @@ test("a host that keeps no page data saves through the file lane at the first re
   expect(await until(() => saves.length > 0)).toBe(true);
 
   expect(saves).toHaveLength(1);
-  expect(saves[0].headers["Page-Write"]).toBe("v1");
+  expect(saves[0].headers["Blockeditor-Write"]).toBe("v1");
   const saved = new DOMParser().parseFromString(saves[0].body, "text/html");
   const tag = saved.querySelector(TAG_SEL);
   expect(blocksFromYValue(JSON.parse(tag.textContent)).p.c).toBe("Hello there");
   // No room on this host: nothing is framed and no writer is claimed.
   expect(sent).toHaveLength(0);
-  expect(storeOf("page").handle.status.mode).toBe("file");
+  expect(storeOf("blockeditor").handle.status.mode).toBe("file");
   expect(page.view.dom.textContent).toContain("Hello there");
 });
 
@@ -317,8 +317,8 @@ test("the staged store is pending only after an edit, and its flush is the first
   await page.ready;
   await settle(save);
 
-  const staged = stageStore("page");
-  expect(staged.handle).toBe(window.clay.live("page"));
+  const staged = stageStore("blockeditor");
+  expect(staged.handle).toBe(window.clay.live("blockeditor"));
   expect(staged.isPending()).toBe(false);
   await expect(staged.flush()).resolves.toEqual({ ok: true });
   expect(saves).toHaveLength(0);
@@ -328,16 +328,16 @@ test("the staged store is pending only after an edit, and its flush is the first
   expect(staged.isPending()).toBe(true);
   await expect(staged.flush()).resolves.toEqual({ ok: true });
   expect(saves).toHaveLength(1);
-  expect(saves[0].headers["Page-Write"]).toBe("v1");
+  expect(saves[0].headers["Blockeditor-Write"]).toBe("v1");
   expect(staged.isPending()).toBe(false);
 
   // Accepted initialization: the store is no longer staged, so the same call writes
   // nothing and the room it now belongs to carries what comes next.
   await expect(staged.flush()).resolves.toEqual({ ok: true });
   expect(saves).toHaveLength(1);
-  expect(storeOf("page").pending).toHaveLength(0);
+  expect(storeOf("blockeditor").pending).toHaveLength(0);
   staged.dispose();
-  expect(storeOf("page")).toBeTruthy();
+  expect(storeOf("blockeditor")).toBeTruthy();
 });
 
 test("a staged editor takes a peer's first saved state without requiring its own edit", async () => {
@@ -349,7 +349,7 @@ test("a staged editor takes a peer's first saved state without requiring its own
   receiveFrame(taggedPage(peer));
   expect(await until(() => page.view.dom.textContent.includes("Hello peer"))).toBe(true);
   expect(page.view.editable).toBe(true);
-  expect(blocksFromYValue(storeOf("page").value).p.c).toBe("Hello peer");
+  expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello peer");
 });
 
 test("a refused first save merges the stored Yjs lineage and preserves both edits", async () => {
@@ -373,7 +373,7 @@ test("a refused first save merges the stored Yjs lineage and preserves both edit
   view.dispatch(view.state.tr.insertText(" local", view.state.doc.content.size - 1));
   checkpointWithin(0);
   expect(await until(() => saves.length === 2)).toBe(true);
-  expect(await until(() => storeOf("page").pending.length === 0)).toBe(true);
+  expect(await until(() => storeOf("blockeditor").pending.length === 0)).toBe(true);
   expect(view.editable).toBe(true);
   const value = JSON.parse(new DOMParser().parseFromString(saves[1].body, "text/html").querySelector(TAG_SEL).textContent);
   const text = blocksFromYValue(value).p.c;
@@ -388,15 +388,15 @@ test("entering a tagless saved version uses the host's existing Yjs state withou
   await page.ready;
   expect(page.view).toBeTruthy();
   expect(page.view.editable).toBe(true);
-  expect(storeOf("page").value).toEqual(persisted);
+  expect(storeOf("blockeditor").value).toEqual(persisted);
   expect(pageTag()).toBe(null);
   expect(saves).toHaveLength(0);
-  const reads = global.fetch.mock.calls.filter(([url]) => String(url).endsWith("/_/page-state"));
+  const reads = global.fetch.mock.calls.filter(([url]) => String(url).endsWith("/_/blockeditor-state"));
   expect(reads).toHaveLength(1);
   expect(reads[0][1].headers["If-Match"]).toBe("stamp-1");
 });
 
-test("a moved page-state version refuses entry instead of inventing a new lineage", async () => {
+test("a moved blockeditor-state version refuses entry instead of inventing a new lineage", async () => {
   const persisted = peerValue(pageHtml());
   const { page, saves } = await load({ html: pageHtml(persisted), liveData: false, storedState: persisted, stateStatus: 412 });
   await page.ready;
@@ -410,10 +410,10 @@ test.each([false, true])("an unstamped reader verifies the served article before
   const html = pageHtml(persisted);
   const { page, storeOf, saves } = await load({ html, liveData: false, storedState: persisted });
   await page.ready;
-  const previous = storeOf("page");
+  const previous = storeOf("blockeditor");
   page.dispose();
   const { closeStore } = await import("../../../src/plugins/live.js");
-  closeStore("page", previous);
+  closeStore("blockeditor", previous);
   const served = changed ? seedValue([{ id: "p", t: "paragraph", text: "Another article" }]) : persisted;
   global.fetch = jest.fn(async () => ({
     ok: true, status: 200, headers: { get: () => "stamp-2" }, text: async () => taggedPage(served),
@@ -425,7 +425,7 @@ test.each([false, true])("an unstamped reader verifies the served article before
       await expect(lease.ready).rejects.toMatchObject({ code: "stale-document" });
     } else {
       await lease.ready;
-      expect(storeOf("page").value).toEqual(persisted);
+      expect(storeOf("blockeditor").value).toEqual(persisted);
       expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(global.fetch.mock.calls[0][0]).toBe("https://example.com/notes.html");
     }

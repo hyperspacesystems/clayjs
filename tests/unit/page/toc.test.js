@@ -24,7 +24,7 @@ import { editor, posOf, select, typeText, key } from "./view-helpers.js";
 
 const articleOf = (inner, rev = "0") => {
   const parsed = new DOMParser().parseFromString(
-    `<!DOCTYPE html><html><body><article data-page="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
+    `<!DOCTYPE html><html><body><article data-blockeditor="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
     "text/html",
   );
   return parsed.querySelector("article");
@@ -51,7 +51,7 @@ const TO = () => {
   return { view, asked };
 };
 const record = (view, id) => blockMap(view.state.doc)[id];
-const links = (view) => [...view.dom.querySelectorAll(".page-toc nav a")].map((a) => [a.textContent, a.getAttribute("href")]);
+const links = (view) => [...view.dom.querySelectorAll(".blockeditor-toc nav a")].map((a) => [a.textContent, a.getAttribute("href")]);
 
 // A page holding a title, two headings and a toc, as blocks.
 const PAGE = () => [
@@ -81,13 +81,13 @@ test("the menu offers Table of contents, and a pick writes one block through the
 test("a gate that refuses writes no toc, and neither does a page with no gate", async () => {
   const { view } = TO();
   const before = view.state.doc;
-  view.runFormatCommand = async () => ({ status: "upgrade-required", code: "page-format-upgrade-required" });
-  expect(await I.runTocItem(view, 0)).toEqual({ ok: false, code: "page-format-upgrade-required", retry: false });
+  view.runFormatCommand = async () => ({ status: "upgrade-required", code: "blockeditor-format-upgrade-required" });
+  expect(await I.runTocItem(view, 0)).toEqual({ ok: false, code: "blockeditor-format-upgrade-required", retry: false });
   expect(view.state.doc).toBe(before);
   expect(record(view, "e")).toEqual({ t: "paragraph", pos: expect.any(String), c: "" });
 
   delete view.runFormatCommand;
-  expect(await I.runTocItem(view, 0)).toEqual({ ok: false, code: "page-format-unsupported" });
+  expect(await I.runTocItem(view, 0)).toEqual({ ok: false, code: "blockeditor-format-unsupported" });
   expect(view.state.doc).toBe(before);
   history.undoNoScroll(view.state, view.dispatch);
   expect(view.state.doc.child(0).type.name).toBe("paragraph");
@@ -204,7 +204,7 @@ test("following a link reveals collapsed ancestors without saving, dirtying, ent
   expect(saved).toHaveLength(0);
   expect(hiddenRanges(outline(view.state.doc, collapseKey.getState(view.state).reveal))).toHaveLength(0);
   expect(collapseKey.getState(view.state).ranges).toHaveLength(0);
-  expect(view.dom.querySelector('[data-id="b"]').classList.contains("page-hidden")).toBe(false);
+  expect(view.dom.querySelector('[data-id="b"]').classList.contains("blockeditor-hidden")).toBe(false);
   expect(view.state.selection.from).toBe(posOf(view, "b"));
 
   // The saved document still says the toggle is closed, and no undo step was made.
@@ -225,7 +225,7 @@ test("a missing target is a no-op that says so", () => {
   const before = view.state.doc;
   expect(followTocLink(view, "gone")).toBeNull();
   expect(view.state.doc).toBe(before);
-  expect(view.dom.parentElement.querySelector(".page-live").textContent).toContain("gone");
+  expect(view.dom.parentElement.querySelector(".blockeditor-live").textContent).toContain("gone");
 });
 
 test("the saved nav works without the editor: a link opens the closed bodies above its target", async () => {
@@ -265,7 +265,7 @@ test("a toc arriving from a peer or a paste needs floor 1, and a page without on
     const model = project(records);
     const inner = renderModel(model);
     const value = seedPageFromArticle(articleOf(inner, revOf(model)));
-    return `<!doctype html><html><body><article data-page="1" data-rev="${revOf(model)}">\n${inner}\n</article><script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script></body></html>`;
+    return `<!doctype html><html><body><article data-blockeditor="1" data-rev="${revOf(model)}">\n${inner}\n</article><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script></body></html>`;
   };
   const withToc = blocksOf(PAGE());
   const without = blocksOf(PAGE().filter(([id]) => id !== "t"));

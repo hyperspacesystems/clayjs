@@ -48,7 +48,7 @@ beforeEach(() => {
 });
 
 const FILE = (inner, { rev = "r1", title = "Reader" } = {}) =>
-  `<!doctype html><html><head><title>${title}</title></head><body><article class="page" clay="freeze" data-page="1" data-rev="${rev}">${inner}</article></body></html>`;
+  `<!doctype html><html><head><title>${title}</title></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}">${inner}</article></body></html>`;
 
 const load = (html) => {
   document.documentElement.innerHTML = new DOMParser().parseFromString(html, "text/html").documentElement.innerHTML;
@@ -126,7 +126,7 @@ test("a native apply failure keeps the previous receipt and restores its bytes",
 });
 
 test("a reader refuses to start over a mounted editor or another owner", () => {
-  load(FILE('<p data-id="a">A</p><div class="page-editor"></div>'));
+  load(FILE('<p data-id="a">A</p><div class="blockeditor-editor"></div>'));
   expect(() => start({ represented: { bytes: FILE('<p data-id="a">A</p>'), etag: null, seq: null } })).toThrow(/mounted editor/);
 
   load(FILE('<p data-id="a">A</p>'));
@@ -188,7 +188,7 @@ test("an accepted file records its etag, so a later save is not refused as stale
   reader.stop();
 });
 
-test("page-view starts from a represented receipt, paints it and asks the host for nothing", async () => {
+test("blockeditor-view starts from a represented receipt, paints it and asks the host for nothing", async () => {
   load(FILE('<p data-id="a">Served</p>'));
   const fetchSpy = jest.fn(() => Promise.resolve({ ok: true, status: 200, text: async () => "", headers: { get: () => null } }));
   globalThis.fetch = window.fetch = fetchSpy;

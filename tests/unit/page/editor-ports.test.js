@@ -1,4 +1,4 @@
-import { createPageEditor, pageState } from "../../../src/page/editor.js";
+import { createPageEditor, blockeditorState } from "../../../src/page/editor.js";
 import { state as pmState } from "../../../src/vendor/prosemirror.vendor.js";
 
 const { TextSelection } = pmState;
@@ -34,13 +34,13 @@ test("standalone editing still applies transactions to the view itself", () => {
 
 test("the history plugin state is present by default and absent with history:false", () => {
   const blocks = { p: { t: "paragraph", pos: "V", c: "Hi" } };
-  expect(historyState(pageState(blocks))).toBeTruthy();
-  expect(historyState(pageState(blocks, { history: false }))).toBeFalsy();
+  expect(historyState(blockeditorState(blocks))).toBeTruthy();
+  expect(historyState(blockeditorState(blocks, { history: false }))).toBeFalsy();
 });
 
-test("pageState starts from options.doc when supplied", () => {
-  const source = pageState({ p: { t: "paragraph", pos: "V", c: "Hi" } });
-  const state = pageState(null, { doc: source.doc });
+test("blockeditorState starts from options.doc when supplied", () => {
+  const source = blockeditorState({ p: { t: "paragraph", pos: "V", c: "Hi" } });
+  const state = blockeditorState(null, { doc: source.doc });
   expect(state.doc).toBe(source.doc);
 });
 

@@ -46,8 +46,8 @@ describe("mountEditorUI", () => {
   });
 
   test("inserts the host at parent and before", () => {
-    document.body.innerHTML = '<main id="page">page</main>';
-    const page = document.getElementById("page");
+    document.body.innerHTML = '<main id="blockeditor">page</main>';
+    const page = document.getElementById("blockeditor");
     const ui = mountEditorUI({ name: "seo", content: panel(), before: page });
     expect(document.body.firstElementChild).toBe(ui.host);
 
@@ -81,7 +81,7 @@ describe("mountEditorUI", () => {
   });
 
   test("a capture holds neither the host nor anything inside it", () => {
-    document.body.innerHTML = '<main id="page">page text</main>';
+    document.body.innerHTML = '<main id="blockeditor">page text</main>';
     mountEditorUI({ name: "menu", content: panel() });
     const html = captureSnapshot({ flushUndo: false, authored: false }).outerHTML;
     expect(html).toContain("page text");
@@ -180,8 +180,8 @@ describe("typing inside a root", () => {
 
   test("typing in a page field still reaches the page", () => {
     mountEditorUI({ name: "menu", content: panel() });
-    document.body.insertAdjacentHTML("beforeend", '<input id="page-field">');
-    const field = document.getElementById("page-field");
+    document.body.insertAdjacentHTML("beforeend", '<input id="blockeditor-field">');
+    const field = document.getElementById("blockeditor-field");
     const seen = [];
     const listen = (event) => seen.push(event.key);
     document.addEventListener("keydown", listen, true);

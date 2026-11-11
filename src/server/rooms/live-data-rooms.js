@@ -55,7 +55,7 @@ export const LIVE_LIMITS = Object.freeze({
   movesBytes: 1024 * 1024,
 });
 
-const PAGE = /^page(\.[0-9]+)?$/;
+const PAGE = /^blockeditor(\.[0-9]+)?$/;
 export const COMPACTOR = 'compactor';
 const isContainer = (v) => v !== null && typeof v === 'object';
 
@@ -239,7 +239,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
     lastSentAt: new Map(),
     seen: new Map(),
     emptySince: null,
-    ...(inspectPage(html).kind === 'yjs' && { pageTransition: makePageTransition() }),
+    ...(inspectPage(html).kind === 'yjs' && { blockeditorTransition: makePageTransition() }),
     compaction: hostMode(inspectPage(html).kind === 'yjs'),
   });
 
@@ -249,7 +249,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
     return total;
   };
   const heldBy = (room) => {
-    let total = (room.receiptBytes ?? 0) + (room.pageTransition?.bytes ?? 0) + (room.compaction?.job?.reserved ?? 0);
+    let total = (room.receiptBytes ?? 0) + (room.blockeditorTransition?.bytes ?? 0) + (room.compaction?.job?.reserved ?? 0);
     for (const s of room.stores.values()) total += s.bytes + s.logBytes;
     return total;
   };
@@ -265,7 +265,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
     return {
       limit,
       over() {
-        if (answer.failed || (state.lastFull && state.deletesSince === 0)) return { error: 'page-full' };
+        if (answer.failed || (state.lastFull && state.deletesSince === 0)) return { error: 'blockeditor-full' };
         due(room, true);
         return { error: 'checkpoint-required', retryAfter: 0 };
       },
@@ -342,7 +342,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
 
   const pageSource = (key, nodeId) => {
     if (nodeId == null) throw new PageConversionError('invalid-document');
-    if (pageReservations.has(key) || persistentReservations.has(key) || reservedNodes.has(String(nodeId))) throw new PageConversionError('page-converting');
+    if (pageReservations.has(key) || persistentReservations.has(key) || reservedNodes.has(String(nodeId))) throw new PageConversionError('blockeditor-converting');
     let room = rooms.get(key) ?? null;
     if (room && String(room.nodeId) !== String(nodeId)) {
       used -= heldBy(room);
@@ -355,7 +355,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
   const reservePageTarget = (key, nodeId, room, html, details) => {
     const receipts = new Set([...(room?.lastN.keys() ?? [])].filter((key) => PAGE.test(key.slice(0, key.indexOf('\n')))));
     if (receipts.size >= LIVE_LIMITS.receipts ||
-      (room?.pageTransition?.receiptCount ?? 0) + receipts.size > LIVE_LIMITS.receipts) throw new PageConversionError('receipt-capacity');
+      (room?.blockeditorTransition?.receiptCount ?? 0) + receipts.size > LIVE_LIMITS.receipts) throw new PageConversionError('receipt-capacity');
     const names = details.names ?? [...new Set([
       ...[...(room?.stores.keys() ?? [])].filter((name) => PAGE.test(name)),
       ...[...receipts].map((key) => key.slice(0, key.indexOf('\n'))),
@@ -373,7 +373,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
         heldCount: others.length,
       });
       for (const store of stores.values()) store.from = null;
-      budget = transition.bytes - (room.pageTransition?.historyBytes ?? 0) +
+      budget = transition.bytes - (room.blockeditorTransition?.historyBytes ?? 0) +
         [...stores.values()].reduce((sum, store) => sum + store.bytes, 0);
       const replacedBytes = [...room.stores].filter(([name]) => PAGE.test(name))
         .reduce((sum, [, store]) => sum + store.bytes + store.logBytes, 0);
@@ -413,11 +413,11 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       }
       if (!isContainer(value) || Array.isArray(value) !== Array.isArray(store.value)) continue;
       if (PAGE.test(tag.name)) {
-        if (room.pageTransition?.format === 'yjs') {
-          if (tag.name !== 'page' || !isYPageValue(value)) continue;
+        if (room.blockeditorTransition?.format === 'yjs') {
+          if (tag.name !== 'blockeditor' || !isYPageValue(value)) continue;
         } else if (isYPageValue(value, { complete: false })) continue;
       }
-      const host = Boolean(room.compaction && tag.name === 'page' && room.pageTransition?.format === 'yjs');
+      const host = Boolean(room.compaction && tag.name === 'blockeditor' && room.blockeditorTransition?.format === 'yjs');
       const before = store.landed;
       const base = baseOf(room, store, tag.at);
       // A capture (stamped, and still the value its stamp names) holds no merge
@@ -548,9 +548,9 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       return reservePageTarget(key, nodeId, room, html, { source, base, epoch, names, format: 'yjs' });
     },
 
-    reservePageInitial(key, { nodeId, currentHtml, html, ifMatch, pageWrite = null, createDocument }) {
+    reservePageInitial(key, { nodeId, currentHtml, html, ifMatch, blockeditorWrite = null, createDocument }) {
       const room = pageSource(key, nodeId);
-      checkPageInitial({ currentHtml, html, ifMatch, room, pageWrite, createDocument });
+      checkPageInitial({ currentHtml, html, ifMatch, room, blockeditorWrite, createDocument });
       return reservePageTarget(key, nodeId, room, html, { source: 'initial', names: [], format: 'yjs' });
     },
 
@@ -591,7 +591,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
         room.stores.set(name, store);
         bytes += store.bytes;
       }
-      room.pageTransition = transition;
+      room.blockeditorTransition = transition;
       if (hostLimits) room.compaction = hostMode(transition.format === 'yjs');
       reservation.target = null;
       used += heldBy(room) - before - reservation.budget;
@@ -662,8 +662,8 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
           throw new PersistentReservationError('invalid-target');
         }
         if (PAGE.test(name)) {
-          if (record.room.pageTransition?.format === 'yjs') {
-            if (name !== 'page' || !isYPageValue(value) || value.g !== store.value.g) {
+          if (record.room.blockeditorTransition?.format === 'yjs') {
+            if (name !== 'blockeditor' || !isYPageValue(value) || value.g !== store.value.g) {
               throw new PersistentReservationError('invalid-target');
             }
           } else if (isYPageValue(value, { complete: false })) throw new PersistentReservationError('invalid-target');
@@ -839,14 +839,14 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       if (current === room && persistentReservations.has(room.key)) return { error: 'checkpointing' };
       if (!isContainer(frame)) return { error: 'bad-frame' };
       if (current !== room) return { stale: true, epoch: current?.epoch ?? null };
-      if (pageReservations.has(room.key) && PAGE.test(frame.name)) return { error: 'page-converting' };
+      if (pageReservations.has(room.key) && PAGE.test(frame.name)) return { error: 'blockeditor-converting' };
       // Made for an earlier room: the tab resends its ops once it has this room's state.
       if ((PAGE.test(frame.name) || frame.epoch !== undefined) && frame.epoch !== room.epoch) return { stale: true, epoch: room.epoch };
-      const transition = PAGE.test(frame.name) ? room.pageTransition : null;
-      if (PAGE.test(frame.name) && (transition?.format === 'yjs' || frame.pageGeneration !== undefined) &&
-        (frame.pageGeneration ?? null) !== (transition?.id ?? null)) return { error: 'page-generation' };
+      const transition = PAGE.test(frame.name) ? room.blockeditorTransition : null;
+      if (PAGE.test(frame.name) && (transition?.format === 'yjs' || frame.blockeditorGeneration !== undefined) &&
+        (frame.blockeditorGeneration ?? null) !== (transition?.id ?? null)) return { error: 'blockeditor-generation' };
       const converted = transition?.format === 'yjs';
-      if (converted && frame.name !== 'page') return { error: 'page-format' };
+      if (converted && frame.name !== 'blockeditor') return { error: 'blockeditor-format' };
       const store = room.stores.get(frame.name);
       if (!store) return { error: 'unknown-store' };
       if (!Number.isInteger(frame.n) || frame.n < 1) return { error: 'bad-frame' };
@@ -862,11 +862,11 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
           return { error: 'bad-op', message: err.message };
         }
         if (ops.some((op) => op.path.length !== 2 || op.path[0] !== 'y' ||
-          !(op.op === 'del' || (op.op === 'set' && typeof op.value === 'string')))) return { error: 'page-format' };
+          !(op.op === 'del' || (op.op === 'set' && typeof op.value === 'string')))) return { error: 'blockeditor-format' };
       }
       const nKey = frame.name + '\n' + clientId;
       const last = room.lastN.get(nKey);
-      const admission = room.compaction && frame.name === 'page' && !receiptHas(last, frame.n) ? admit(room, store, frame, ops) : null;
+      const admission = room.compaction && frame.name === 'blockeditor' && !receiptHas(last, frame.n) ? admit(room, store, frame, ops) : null;
       if (admission?.error) return admission;
       // Answered with the seq the sender's last frame landed at, so the tab knows
       // which applied state holds it.
@@ -914,12 +914,12 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       }
       if (converted && !isYPageValue(value, { complete: false })) {
         undo();
-        return { error: 'page-format' };
+        return { error: 'blockeditor-format' };
       }
       if (!converted && PAGE.test(frame.name) && (isYPageValue(value, { complete: false }) ||
         (hybridSource && (Object.hasOwn(value, 'y') || Object.hasOwn(value, 'v'))))) {
         undo();
-        return { error: 'page-conversion-required' };
+        return { error: 'blockeditor-conversion-required' };
       }
       if (bytes > LIVE_LIMITS.storeBytes || roomBytes(room) - store.bytes + bytes > LIVE_LIMITS.roomBytes) {
         undo();
@@ -957,7 +957,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       if (admission && done.length) admission.admitted(bytes);
       const writerGone = room.writer && connected && !connected.includes(room.writer);
       if ((!room.writer || writerGone) && (!connected || connected.includes(clientId))) room.writer = clientId;
-      return { seq: room.seq, epoch: room.epoch, name: frame.name, ops, writer: room.writer, checkpoint: pressed(store), receiptGeneration: room.receiptGeneration ?? 0, ...(transition && { pageGeneration: transition.id }) };
+      return { seq: room.seq, epoch: room.epoch, name: frame.name, ops, writer: room.writer, checkpoint: pressed(store), receiptGeneration: room.receiptGeneration ?? 0, ...(transition && { blockeditorGeneration: transition.id }) };
     },
 
     /** Everything a joining tab needs, with clientId's own receipt per store. Values are the room's own objects: serialize, never mutate. With since in this room's epoch, moves carries each store's log entries after since.seq (null where the log no longer reaches back that far). */
@@ -970,12 +970,12 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       }
       const hidden = Boolean(legacy && (capable !== undefined ? capable !== hostLimits.version : clientId && legacy.has(clientId)));
       for (const [name, s] of room.stores) {
-        if (hidden && name === 'page') continue;
+        if (hidden && name === 'blockeditor') continue;
         const seen = {};
         const mine = clientId ? room.lastN.get(name + '\n' + clientId) : null;
         if (mine) seen[clientId] = mine.n;
         stores[name] = { value: s.value, ephemeral: s.ephemeral, from: s.from, landed: s.landed, floor: s.floor, last: s.last, seen, ...(mine?.saved?.length && { saved: mine.saved }),
-          ...(name === 'page' && room.compaction && { compaction: { v: hostLimits.version, loose: hostLimits.loose, activeBytes: hostLimits.activeBytes } }) };
+          ...(name === 'blockeditor' && room.compaction && { compaction: { v: hostLimits.version, loose: hostLimits.loose, activeBytes: hostLimits.activeBytes } }) };
       }
       // A client's own read (since is its { epoch, seq }, or null for a first
       // read) carries moves: those after its seq in its own epoch, else this
@@ -983,8 +983,8 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       // heals other tabs already sent by their steps. A broadcast passes no since
       // and carries none.
       const provenance = { provenanceVersion: 2, receiptGeneration: room.receiptGeneration ?? 0 };
-      if (room.pageTransition) {
-        provenance.pageTransition = pageTransitionState(room.pageTransition, clientId);
+      if (room.blockeditorTransition) {
+        provenance.blockeditorTransition = pageTransitionState(room.blockeditorTransition, clientId);
       }
       if (since === undefined) return { epoch: room.epoch, seq: room.seq, writer: room.writer, stores, ...provenance };
       const from = since && since.epoch === room.epoch && Number.isInteger(since.seq) ? since.seq : 0;
@@ -1110,7 +1110,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
         if (now() < state.job.deadline) return null;
         endJob(state.job);
       }
-      const store = room.stores.get('page');
+      const store = room.stores.get('blockeditor');
       if (!store || pageReservations.has(room.key) || persistentReservations.has(room.key)) return null;
       const plan = planCompaction(store.value.y, { overflow }, hostLimits);
       if (!plan) return null;
@@ -1118,7 +1118,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       if (used + reserved > liveBytes) return null;
       state.fence += 1;
       const token = Object.freeze({ key: room.key, epoch: room.epoch, fence: state.fence });
-      const job = { token, room, store, epoch: room.epoch, generation: room.pageTransition?.id ?? null, kind: plan.kind,
+      const job = { token, room, store, epoch: room.epoch, generation: room.blockeditorTransition?.id ?? null, kind: plan.kind,
         sources: new Map(plan.sources), physical: Object.keys(store.value.y), reserved, deadline: now() + hostLimits.leaseMs, deletesAtBegin: state.deletesSince };
       state.job = job;
       used += reserved;
@@ -1141,8 +1141,8 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       jobs.delete(token);
       const { room, store } = job;
       if (!endJob(job)) return { refused: 'stale-token' };
-      if (rooms.get(room.key) !== room || room.epoch !== job.epoch || room.stores.get('page') !== store ||
-        (room.pageTransition?.id ?? null) !== job.generation) return { refused: 'stale-token' };
+      if (rooms.get(room.key) !== room || room.epoch !== job.epoch || room.stores.get('blockeditor') !== store ||
+        (room.blockeditorTransition?.id ?? null) !== job.generation) return { refused: 'stale-token' };
       const y = store.value.y;
       const retire = job.physical.filter((k) => {
         const part = PART_KEY.exec(k);
@@ -1196,8 +1196,8 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
         state.deletesSince -= job.deletesAtBegin;
       }
       if (pageShape(store.value.y, hostLimits).loose >= hostLimits.soft || !pageShape(store.value.y, hostLimits).normal) due(room);
-      return { seq: room.seq, epoch: room.epoch, name: 'page', ops, from: COMPACTOR, kind: job.kind, landed: store.landed,
-        ...(room.pageTransition && { pageGeneration: room.pageTransition.id }) };
+      return { seq: room.seq, epoch: room.epoch, name: 'blockeditor', ops, from: COMPACTOR, kind: job.kind, landed: store.landed,
+        ...(room.blockeditorTransition && { blockeditorGeneration: room.blockeditorTransition.id }) };
     },
 
     /** Every room's key. */

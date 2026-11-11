@@ -67,8 +67,8 @@ const TWO = { blocks: {
 function fileHtml(record, edit = () => {}, { tags = true } = {}) {
   const blocks = blocksOfValues([record]);
   const model = project(blocks);
-  const page = tags ? `<script type="application/json" merge="page" clay="live">${JSON.stringify(record)}</script>` : "";
-  const html = `<!DOCTYPE html><html><head>${page}</head><body><article class="page" clay="freeze" data-page="1" data-rev="${revOf(model)}">${renderModel(model)}</article></body></html>`;
+  const page = tags ? `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(record)}</script>` : "";
+  const html = `<!DOCTYPE html><html><head>${page}</head><body><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${revOf(model)}">${renderModel(model)}</article></body></html>`;
   const d = new DOMParser().parseFromString(html, "text/html");
   edit(d);
   return "<!DOCTYPE html>" + d.documentElement.outerHTML;

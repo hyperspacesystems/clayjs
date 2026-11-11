@@ -91,7 +91,7 @@ const people = () => {
 
 const articleOf = (inner, rev = "0") => {
   const parsed = new DOMParser().parseFromString(
-    `<!DOCTYPE html><html><body><article data-page="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
+    `<!DOCTYPE html><html><body><article data-blockeditor="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
     "text/html",
   );
   return parsed.querySelector("article");
@@ -102,7 +102,7 @@ const seedOf = (records) => {
   return clone(seedPageFromArticle(articleOf(renderModel(model), revOf(model))));
 };
 const fileOf = (inner, rev, value) =>
-  `<!doctype html>\n<html>\n<head><title>Notebook</title></head>\n<body>\n<article data-page="1" data-rev="${rev}">\n${inner}\n</article><script type="application/json" merge="page" clay="live">${JSON.stringify(value).replace(/</g, "\\u003c")}</script>\n</body>\n</html>`;
+  `<!doctype html>\n<html>\n<head><title>Notebook</title></head>\n<body>\n<article data-blockeditor="1" data-rev="${rev}">\n${inner}\n</article><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value).replace(/</g, "\\u003c")}</script>\n</body>\n</html>`;
 
 // A host that owns the canonical floor, as the gate's adapter seam states it.
 const gateHost = () => {
@@ -249,14 +249,14 @@ const blockPos = (view, id) => {
 };
 const endOf = (view, id) => blockPos(view, id) + 1 + view.state.doc.nodeAt(blockPos(view, id)).textContent.length;
 const caret = (view, pos) => view.dispatch(view.state.tr.setSelection(pmState.TextSelection.create(view.state.doc, pos)));
-const pickerEl = () => document.querySelector(".page-mention-picker");
-const options = () => [...document.querySelectorAll(".page-mention-picker .page-menu-item")];
+const pickerEl = () => document.querySelector(".blockeditor-mention-picker");
+const options = () => [...document.querySelectorAll(".blockeditor-mention-picker .blockeditor-menu-item")];
 const choose = (text) => {
   const found = options().find((option) => option.textContent.startsWith(text));
   expect([text, Boolean(found)]).toEqual([text, true]);
   found.click();
 };
-const importPanel = () => document.querySelector(".page-import-preview");
+const importPanel = () => document.querySelector(".blockeditor-import-preview");
 
 // The records the page starts from: a title, the lines each command will write into, a line
 // for the older writer's neighbour edit, and a table that carries a sort and two widths.
@@ -290,10 +290,10 @@ async function fixture() {
   const channel = fakeChannel("w-a");
   const journal = createPageJournal({
     channel,
-    key: "page",
+    key: "blockeditor",
     context: (base) => pageJournalContext({ authority: AUTHORITY, base }),
   });
-  const store = createStore({ name: "page", value: seedOf(START()) });
+  const store = createStore({ name: "blockeditor", value: seedOf(START()) });
   const ydoc = new Y.Doc();
   ydoc.clientID = 1111;
   const binding = createYPageBinding({ store, ydoc, captureTimeout: 0, journal });
@@ -309,7 +309,7 @@ async function fixture() {
   // the document it would have changed is the very same document afterwards.
   const tocIndex = view.state.doc.childCount - 2;
   const refused = await I.runTocItem(view, tocIndex);
-  expect(refused).toMatchObject({ ok: false, code: "page-format-unsupported" });
+  expect(refused).toMatchObject({ ok: false, code: "blockeditor-format-unsupported" });
   expect(refused.retry).toBe(false);
   expect(view.state.doc).toBe(doc);
   expect(record(view, "t").t).toBe("paragraph");
@@ -336,13 +336,13 @@ async function fixture() {
 
   // The page cover: one upload, one address on the title, one undo entry.
   expect(await runPageCommand(view, "titleCover", {})).toEqual({ ok: true, picker: true });
-  const chooser = document.querySelector("input.page-cover-input");
+  const chooser = document.querySelector("input.blockeditor-cover-input");
   Object.defineProperty(chooser, "files", { configurable: true, get: () => [new File(["bytes"], "cover.png", { type: "image/png" })] });
   chooser.dispatchEvent(new Event("change"));
   expect(await waitFor(() => record(view, "h").pageCoverSrc === COVER)).toBe(true);
   // The focal point is the default one, drawn on the picture beside the title, not in it.
-  expect(view.dom.querySelector("img[data-page-cover]").getAttribute("style")).toBe("object-position:50% 50%");
-  expect(view.dom.querySelector("header[data-page-heading] h1").textContent).toBe("Notebook");
+  expect(view.dom.querySelector("img[data-blockeditor-cover]").getAttribute("style")).toBe("object-position:50% 50%");
+  expect(view.dom.querySelector("header[data-blockeditor-heading] h1").textContent).toBe("Notebook");
 
   // The mention: the action types its @ and the pick writes the name under the mark.
   caret(view, blockPos(view, "m") + 1);
@@ -404,7 +404,7 @@ async function fixture() {
   const imported = orderedIds(blockMap(view.state.doc)).map((id) => blockMap(view.state.doc)[id]).filter((block) => block.c === "Imported" || block.c === "Imported body");
   expect(imported.map((block) => [block.t, block.level ?? null])).toEqual([["heading", 1], ["paragraph", null]]);
   // The TOC is derived: the imported heading is its one entry, and the title is not.
-  expect([...view.dom.querySelectorAll(".page-toc nav a")].map((a) => a.textContent)).toEqual(["Imported"]);
+  expect([...view.dom.querySelectorAll(".blockeditor-toc nav a")].map((a) => a.textContent)).toEqual(["Imported"]);
 
   // The touch drag: one block put where it is by a finger on the grip, one move, one order.
   touchLayout(view);
@@ -428,7 +428,7 @@ const pointer = (type, props = {}) => {
   return event;
 };
 const shellOf = (view) => view.dom.parentElement;
-const gripOf = (view) => shellOf(view).querySelector(".page-grip");
+const gripOf = (view) => shellOf(view).querySelector(".blockeditor-grip");
 // The fake layout the touch test uses: rows of thirty px, and a caret at each block's top.
 function touchLayout(view) {
   Object.defineProperty(document, "scrollingElement", { configurable: true, value: document.documentElement });
@@ -464,7 +464,7 @@ const seedValueOf = (blocks) => {
   return seedPageFromArticle(articleOf(renderModel(model), revOf(model)));
 };
 const editNeighbour = (blocks) => {
-  const store = createStore({ name: "page", value: clone(seedValueOf(blocks)) });
+  const store = createStore({ name: "blockeditor", value: clone(seedValueOf(blocks)) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   cleanups.push(() => { binding.dispose(); binding.ydoc.destroy(); });
   const view = bindingView(binding);
@@ -532,7 +532,7 @@ test("a local edit, a peer's edit and an older writer's neighbour edit leave eve
 
   // The peer's edit: a second tab over the same room opens with the same records, writes into
   // the neighbour line, and its work reaches this one the way a room's answer does.
-  const peerStore = createStore({ name: "page", value: clone(room.value) });
+  const peerStore = createStore({ name: "blockeditor", value: clone(room.value) });
   const peerDoc = new Y.Doc();
   peerDoc.clientID = 2222;
   const peer = createYPageBinding({ store: peerStore, ydoc: peerDoc, captureTimeout: 0 });
@@ -578,13 +578,13 @@ test("the saved file without its live tags reopens to the same records, through 
   const rev = revOf(model);
   const value = clone(seedPageFromArticle(articleOf(inner, rev)));
   const file = fileOf(inner, rev, value);
-  expect(liveTags(file).map((tag) => tag.name)).toEqual(["page"]);
+  expect(liveTags(file).map((tag) => tag.name)).toEqual(["blockeditor"]);
 
   // The live tags stripped: the article alone is the whole document.
   const stripped = fileOf(inner, rev, value).replace(/<script[\s\S]*?<\/script>/g, "");
   expect(liveTags(stripped)).toEqual([]);
 
-  const reopenedStore = createStore({ name: "page", value: clone(seedPageFromArticle(articleOf(inner, rev))) });
+  const reopenedStore = createStore({ name: "blockeditor", value: clone(seedPageFromArticle(articleOf(inner, rev))) });
   const ydoc = new Y.Doc();
   ydoc.clientID = 3333;
   const binding = createYPageBinding({ store: reopenedStore, ydoc, captureTimeout: 0 });
@@ -607,7 +607,7 @@ test("the saved file without its live tags reopens to the same records, through 
   }
   // And the commands still are there to run: the reopened page exports, on demand.
   expect(await runPageCommand(reopened, "exportMarkdown")).toEqual({ ok: true, preview: true });
-  expect(document.querySelector(".page-export-preview")).not.toBeNull();
+  expect(document.querySelector(".blockeditor-export-preview")).not.toBeNull();
 });
 
 test("both exports carry the fixture: the Markdown extensions and a copy with nothing left to load", async () => {
@@ -617,9 +617,9 @@ test("both exports carry the fixture: the Markdown extensions and a copy with no
 
   // Markdown: what the format cannot say is written as semantic HTML and listed.
   expect(await runPageCommand(view, "exportMarkdown")).toEqual({ ok: true, preview: true });
-  const panel = document.querySelector(".page-export-preview");
-  expect([...panel.querySelectorAll(".page-export-extensions .page-export-row")].map((row) => row.textContent)).toEqual(["Page icon", "Page cover", "Table of contents"]);
-  const losses = [...panel.querySelectorAll(".page-export-losses .page-export-row")].map((row) => row.textContent);
+  const panel = document.querySelector(".blockeditor-export-preview");
+  expect([...panel.querySelectorAll(".blockeditor-export-extensions .blockeditor-export-row")].map((row) => row.textContent)).toEqual(["Page icon", "Page cover", "Table of contents"]);
+  const losses = [...panel.querySelectorAll(".blockeditor-export-losses .blockeditor-export-row")].map((row) => row.textContent);
   // The mention is a named loss (its label is all Markdown keeps); a date is its ISO text,
   // and the table's widths and sort are the two constructs Markdown cannot state.
   expect(losses).toEqual(["mention", "column width", "sort"]);
@@ -642,7 +642,7 @@ test("both exports carry the fixture: the Markdown extensions and a copy with no
   expect(text).toContain(ADA.name);
   expect(text).toContain(date);
   expect(text).toContain("<header");
-  expect(text).toContain('data-page-icon aria-hidden="true"');
+  expect(text).toContain('data-blockeditor-icon aria-hidden="true"');
   expect(text).toContain('data-type="toc"');
   expect(text).toContain("Imported body");
 
@@ -654,8 +654,8 @@ test("both exports carry the fixture: the Markdown extensions and a copy with no
     const answer = await runPageCommand(view, "exportHtml");
     expect(answer).toMatchObject({ ok: true, title: "Notebook", name: "Notebook.html" });
     expect(asked).toEqual(["https://example.com/uploads/cover.png"]);
-    const copy = document.querySelector('clay-editor-ui[data-clay-ui="page-export"]').shadowRoot.querySelector(".page-export-panel");
-    expect(copy.querySelectorAll(".page-export-losses li")).toHaveLength(0);
+    const copy = document.querySelector('clay-editor-ui[data-clay-ui="blockeditor-export"]').shadowRoot.querySelector(".blockeditor-export-panel");
+    expect(copy.querySelectorAll(".blockeditor-export-losses li")).toHaveLength(0);
     copy.querySelector('[data-act="download"]').click();
     await settle();
   } finally {
@@ -668,10 +668,10 @@ test("both exports carry the fixture: the Markdown extensions and a copy with no
     reader.readAsText(blobs[blobs.length - 1]);
   });
   const page = new DOMParser().parseFromString(html, "text/html");
-  const header = page.querySelector("article header[data-page-heading]");
+  const header = page.querySelector("article header[data-blockeditor-heading]");
   expect(header.querySelector("h1").textContent).toBe("Notebook");
-  expect(header.querySelector("[data-page-icon]").textContent).toBe(ICON);
-  expect(header.querySelector("img[data-page-cover]").getAttribute("src")).toMatch(/^data:image\/png;base64,/);
+  expect(header.querySelector("[data-blockeditor-icon]").textContent).toBe(ICON);
+  expect(header.querySelector("img[data-blockeditor-cover]").getAttribute("src")).toMatch(/^data:image\/png;base64,/);
   expect(page.querySelector("article").textContent).toContain("Imported body");
   expect(page.querySelector("script")).toBeNull();
   expect(remoteDependencies(html)).toEqual([]);

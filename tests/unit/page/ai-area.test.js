@@ -19,7 +19,7 @@ const SEED = [
 async function pair(blocks = SEED, opts = {}) {
   const sim = new Sim(7);
   const initial = seedValue(blocks);
-  const room = createRoom(sim, { page: initial }, {});
+  const room = createRoom(sim, { blockeditor: initial }, {});
   const a = makeYTab(sim, room, "a", clone(initial), opts);
   const b = makeYTab(sim, room, "b", clone(initial), opts);
   a.start();

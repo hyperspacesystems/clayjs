@@ -49,14 +49,14 @@ const errorOf = (run) => {
 test("every block kind and the decorated title survive into the reading copy", () => {
   const { html, title } = render();
   const doc = docOf(html);
-  const article = doc.querySelector("article[data-page]");
+  const article = doc.querySelector("article[data-blockeditor]");
   expect(article).not.toBeNull();
   expect(title).toBe("Relay launch review");
 
-  const header = article.querySelector("header[data-page-heading]");
+  const header = article.querySelector("header[data-blockeditor-heading]");
   expect(header.querySelector("h1").textContent).toBe("Relay launch review");
-  expect(header.querySelector("[data-page-icon]").textContent).toBe("🚀");
-  expect(header.querySelector("img[data-page-cover]").getAttribute("src")).toBe("/uploads/cover.jpg");
+  expect(header.querySelector("[data-blockeditor-icon]").textContent).toBe("🚀");
+  expect(header.querySelector("img[data-blockeditor-cover]").getAttribute("src")).toBe("/uploads/cover.jpg");
 
   expect(article.querySelector("p strong").textContent).toBe("Bold");
   expect(article.querySelector('p a[href="https://example.test/?a=1&b=<2>"]').textContent).toBe("link");
@@ -73,7 +73,7 @@ test("every block kind and the decorated title survive into the reading copy", (
   expect(checked.length).toBe(1);
   expect(checked[0].closest("li").textContent).toBe("Mobile empty state checked");
 
-  expect(article.querySelector("aside.page-callout").textContent).toBe("Decision: launch.");
+  expect(article.querySelector("aside.blockeditor-callout").textContent).toBe("Decision: launch.");
   expect(article.querySelector('blockquote[data-id="q"]').textContent).toBe("Quoted line");
   expect(article.querySelector("pre code").textContent).toContain("const a = 1 < 2 && 3;");
   expect(article.querySelectorAll("hr").length).toBe(1);
@@ -100,7 +100,7 @@ test("every block kind and the decorated title survive into the reading copy", (
   expect(article.querySelector('[data-type="file"] a').textContent).toBe("relay.pdf");
 
   expect(article.textContent).toContain("Ask Maya about the 🚀 launch");
-  expect(article.querySelector("span[data-page-mention]")?.textContent).toBe("Maya");
+  expect(article.querySelector("span[data-blockeditor-mention]")?.textContent).toBe("Maya");
 });
 
 test("no editor, live, recovery or host data reaches the file", () => {
@@ -112,8 +112,8 @@ test("no editor, live, recovery or host data reaches the file", () => {
   expect(html).not.toContain("data-clay");
   expect(html).not.toMatch(/<script/i);
   expect(doc.querySelectorAll("script, link, style[data-name]").length).toBe(0);
-  expect(doc.querySelectorAll(".page-editor, .page-toolbar, .page-chrome, .page-gutter, [contenteditable]").length).toBe(0);
-  expect(html).not.toContain("page-recovery");
+  expect(doc.querySelectorAll(".blockeditor-editor, .blockeditor-toolbar, .blockeditor-chrome, .blockeditor-gutter, [contenteditable]").length).toBe(0);
+  expect(html).not.toContain("blockeditor-recovery");
   expect(html).not.toContain("application/json");
   expect(doc.body.children.length).toBe(1);
 });

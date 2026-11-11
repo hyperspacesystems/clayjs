@@ -30,7 +30,7 @@ const FIXTURE_ORIGIN = "https://fixture.invalid";
 const FIXTURES = join(ROOT, "tests/fixtures/load");
 const CSS_IMPORT = /@import\s+(?:url\(\s*(?:"([^"]+)"|'([^']+)'|([^\s)"']+))\s*\)|"([^"]+)"|'([^']+)')/gi;
 const FONT_URL = /url\(\s*["']?([^"')]+\.(?:woff2?|ttf|otf))["']?\s*\)/gi;
-const THEME_PATH = /^src\/page\/themes\/([^/]+)\.css$/;
+const THEME_PATH = /^src\/blockeditor\/themes\/([^/]+)\.css$/;
 
 // The cookie a host sets on a document it serves to its owner. The bootstrap predicate
 // may read it, so the meter has to present it to measure that boot.
@@ -38,7 +38,7 @@ const OWNER_COOKIE = "isAdminOfCurrentResource=1";
 const attrsOf = (node) => Object.fromEntries((node.attrs || []).map(({ name, value }) => [name, value]));
 const textOf = (node) => (node.childNodes || []).map((child) => child.value ?? textOf(child)).join("");
 const PAGE_PLUGIN = "plugins/page.js";
-const PAGE_MERGE = /^page(\.[0-9]+)?$/;
+const PAGE_MERGE = /^blockeditor(\.[0-9]+)?$/;
 
 // The block types a page will hold, read the way page.js reads them: the strict Yjs
 // page store when the file has one, otherwise the `data-type`s of the saved article
@@ -575,7 +575,7 @@ export async function measureBuilt({ html, mode, dir, search = "", owner = true 
     return added;
   };
   // The view-mode reach of the same document, on its own seen set: a reader's part that
-  // the editor replaced (page-view for page) is the reader's alone, and a chunk this
+  // the editor replaced (blockeditor-view for page) is the reader's alone, and a chunk this
   // boot never fetches belongs to no phase of it.
   const viewReach = new Set();
   const reach = (chunks) => {
@@ -622,7 +622,7 @@ export async function measureBuilt({ html, mode, dir, search = "", owner = true 
     // runtime index and the always-wave core a satellite would otherwise repeat.
     reach(payload.preload);
     reachPaths([...viewPlan.core, ...viewPlan.plugins, ...bootImportsOf(viewPlan)]);
-    // The plan this boot resolves: an edit page asks for page, never for page-view.
+    // The plan this boot resolves: an edit page asks for page, never for blockeditor-view.
     const bootPaths = mode === "view"
       ? [...viewPlan.core, ...viewPlan.plugins, ...bootImportsOf(viewPlan)]
       : [...plan.core, ...plan.plugins, ...editBootImports];

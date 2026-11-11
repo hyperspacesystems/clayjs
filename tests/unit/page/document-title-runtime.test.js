@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 function open(seed = value) {
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(seed)) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(seed)) });
   const binding = createYPageBinding({ store });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = new pmView.EditorView(mount, {

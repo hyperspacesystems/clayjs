@@ -30,7 +30,7 @@ const COVER_MAX = 256;
 const HOST = process.env.CLAY_HOST_COMPACTION === "1";
 const ROOM_LIMITS = Object.freeze({ ...COMPACTION, activeBytes: Number(process.env.CLAY_COMPACT_ROOM) || COMPACTION.activeBytes });
 const ROOM_INFO = { compaction: { v: 1 } };
-const BLOCK_CODE = HOST ? "page-full" : "too-large";
+const BLOCK_CODE = HOST ? "blockeditor-full" : "too-large";
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -97,7 +97,7 @@ function clock() {
 }
 
 function openTab({ id, value, clientID, journal }) {
-  const store = createStore({ name: "page", value: clone(value) });
+  const store = createStore({ name: "blockeditor", value: clone(value) });
   const timers = clock();
   const binding = createYPageBinding({ store, setTimer: timers.setTimer, clearTimer: timers.clearTimer, captureTimeout: 0, journal, stats: { groups: 0, mismatch: 0, renders: 0, first: null, proveWalks: process.env.CLAY_PROVE_WALKS === "1" } });
   binding.ydoc.clientID = clientID;
@@ -178,7 +178,7 @@ function createRoom(initial) {
 }
 
 const pageHtml = (value) =>
-  `<!doctype html><html><body><script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script></body></html>`;
+  `<!doctype html><html><body><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script></body></html>`;
 
 // The room a host runs: the real registry in host mode, with the compactor run
 // inline where a worker runs it in production (begin, build, commit), and the
@@ -188,7 +188,7 @@ function createHostRoom(initial) {
   const rooms = createRooms({ compaction: ROOM_LIMITS });
   const opened = rooms.open("long-session", pageHtml(initial), { nodeId: "n1" });
   const state = { admitted: [], violations: [], refusals: [], commits: 0 };
-  const page = () => opened.stores.get("page");
+  const page = () => opened.stores.get("blockeditor");
   const value = () => page().value;
 
   const contained = (updates) => {
@@ -226,8 +226,8 @@ function createHostRoom(initial) {
     for (let tries = 0; tries < 8; tries++) {
       tab.sent = (tab.sent ?? 0) + 1;
       const frame = {
-        name: "page", n: tab.sent, epoch: opened.epoch,
-        pageGeneration: opened.pageTransition?.id ?? null, compaction: 1, ops: [op],
+        name: "blockeditor", n: tab.sent, epoch: opened.epoch,
+        blockeditorGeneration: opened.blockeditorTransition?.id ?? null, compaction: 1, ops: [op],
       };
       const res = rooms.apply(opened, clientOf(tab), frame);
       if (res.error === "checkpoint-required") { compact(); continue; }
@@ -527,7 +527,7 @@ export async function runLongSession({ seed = LONG_DOCUMENT_SEED, operations = 2
       room.ackAll();
       for (const tab of tabs()) tab.timers.flush();
     }
-    const store = createStore({ name: "page", value: clone(saved) });
+    const store = createStore({ name: "blockeditor", value: clone(saved) });
     const rebuilt = createYPageBinding({ store, captureTimeout: 0 });
     const fromBytes = shapeOf(docOf(rebuilt.pd, walk(rebuilt.pd)));
     rebuilt.dispose();
@@ -608,7 +608,7 @@ export async function runLongSession({ seed = LONG_DOCUMENT_SEED, operations = 2
     const block = pick(r, textBlocks(tab));
     const before = shapeOf(tab.view.state.doc);
     caret(tab, r, block);
-    const refused = tab.binding.dispatch(tab.view.state.tr.setMeta("page-move", { ids: [block.id], afterId: null, parent: block.id }));
+    const refused = tab.binding.dispatch(tab.view.state.tr.setMeta("blockeditor-move", { ids: [block.id], afterId: null, parent: block.id }));
     expect(refused).toEqual({ status: "refused", code: "invalid-parent" });
     expect(diffShape(shapeOf(tab.view.state.doc), before)).toBe(null);
   };

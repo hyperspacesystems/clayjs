@@ -19,7 +19,7 @@ import { safeFileHref } from "./address.js";
 const { Plugin, PluginKey } = state;
 const N = schema.nodes;
 
-export const mediaKey = new PluginKey("page-media");
+export const mediaKey = new PluginKey("blockeditor-media");
 export const EMBED_MAX = 1.5 * 1024 * 1024;
 export const mediaRuntime = new WeakMap();
 
@@ -182,7 +182,7 @@ export function mediaPlugin({ upload, features = null }) {
       input.type = "file";
       input.multiple = true;
       input.hidden = true;
-      input.className = "page-file-input";
+      input.className = "blockeditor-file-input";
       view.dom.parentElement.append(input);
       mediaRuntime.set(view, { upload, aborts: new Map(), input });
       input.addEventListener("change", () => {
@@ -205,7 +205,7 @@ export function mediaPlugin({ upload, features = null }) {
       });
       input.addEventListener("cancel", () => view.dispatch(view.state.tr.setMeta(mediaKey, { picker: null })));
       const onClick = (e) => {
-        const b = e.target.closest?.(".page-upload-btn");
+        const b = e.target.closest?.(".blockeditor-upload-btn");
         if (!b) return;
         e.preventDefault();
         const part = mediaParts.get(view);

@@ -206,7 +206,7 @@ test("the participant's lease never has two streams open, and ends with none", a
 });
 
 const FILE = (word) =>
-  `<!doctype html><html><head><title>Reader</title></head><body><article data-page="1"><p data-id="a">${word}</p></article></body></html>`;
+  `<!doctype html><html><head><title>Reader</title></head><body><article data-blockeditor="1"><p data-id="a">${word}</p></article></body></html>`;
 
 const articleText = () => document.querySelector('article [data-id="a"]')?.textContent ?? null;
 
@@ -216,7 +216,7 @@ test("a saved lane started from a receipt has it before any frame, and a frame r
   sync.stop();
   sources = [];
 
-  document.body.innerHTML = '<article data-page="1"><p data-id="a">local</p></article>';
+  document.body.innerHTML = '<article data-blockeditor="1"><p data-id="a">local</p></article>';
   const bytes = FILE("disk");
 
   sync.start("index.html", { lane: "saved", represented: { bytes, etag: "E1", seq: 7 } });

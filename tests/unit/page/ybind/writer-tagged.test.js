@@ -12,7 +12,7 @@ import { yValueOf } from "../../../../src/page/ybind/provider.js";
 const { EditorState } = pmState;
 
 const open = (blocks) => {
-  const store = createStore({ name: "page", value: seedValue(blocks) });
+  const store = createStore({ name: "blockeditor", value: seedValue(blocks) });
   const binding = createYPageBinding({ store });
   const view = new pmView.EditorView(document.body.appendChild(document.createElement("div")), {
     state: EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }),

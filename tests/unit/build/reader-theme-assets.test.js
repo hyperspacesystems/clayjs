@@ -35,8 +35,8 @@ const FONTS = [
   },
 ];
 const WOFF2 = FONTS.flatMap((font) => font.subsets.map(font.files));
-const THEME = "page/themes/light-1.css";
-const DOCUMENT_URL = "src/page/themes/light-1.css";
+const THEME = "blockeditor/themes/light-1.css";
+const DOCUMENT_URL = "src/blockeditor/themes/light-1.css";
 
 // The theme is served at the document URL saved documents name, and beside the fonts in
 // the release. Each copy's font URLs are relative to its own depth.
@@ -168,16 +168,16 @@ test("every face is its pinned package's file, range and weight", async () => {
 
 test("content.css and the Light 1 rules are compiled in their existing order", async () => {
   const css = await readFile(path.join(publicDir, DOCUMENT_URL), "utf8");
-  const source = await readFile(path.join(ROOT, "src/page/themes/light-1.source.css"), "utf8");
-  const content = await readFile(path.join(ROOT, "src/page/themes/content.css"), "utf8");
-  const rules = source.slice(source.indexOf(":where(article[data-page], .page-shell) {"));
+  const source = await readFile(path.join(ROOT, "src/blockeditor/themes/light-1.source.css"), "utf8");
+  const content = await readFile(path.join(ROOT, "src/blockeditor/themes/content.css"), "utf8");
+  const rules = source.slice(source.indexOf(":where(article[data-blockeditor], .blockeditor-shell) {"));
 
   expect(css).toContain(content);
   expect(css.endsWith(rules)).toBe(true);
   expect(css.indexOf(content.trimEnd())).toBeGreaterThan(css.indexOf("@font-face"));
-  // @layer page survives, once, around content.css rather than flattened away.
-  expect(css.match(/@layer page \{/g)).toHaveLength(1);
-  for (const declaration of ["--page-bg: #F7F6F2;", "--page-font: Inter,", "--page-font-display: Newsreader,", "--page-measure: 632px;", "--page-accent: #2F5E9E;"]) {
+  // @layer blockeditor survives, once, around content.css rather than flattened away.
+  expect(css.match(/@layer blockeditor \{/g)).toHaveLength(1);
+  for (const declaration of ["--blockeditor-bg: #F7F6F2;", "--blockeditor-font: Inter,", "--blockeditor-font-display: Newsreader,", "--blockeditor-measure: 632px;", "--blockeditor-accent: #2F5E9E;"]) {
     expect(css).toContain(declaration);
   }
 });

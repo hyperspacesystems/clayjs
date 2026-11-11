@@ -607,7 +607,7 @@ async function selftest(flags) {
   }
 }
 
-// The fixtures a sweep draws from. `page-host` is left out on purpose: its editor owns the
+// The fixtures a sweep draws from. `blockeditor-host` is left out on purpose: its editor owns the
 // page, and an `input` step cannot type into it, so every schedule over it would be invalid
 // rather than a hunt. `draft-host` boots in draft mode, which is a shape of its own.
 const SWEEP_FIXTURES = [

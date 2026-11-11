@@ -4,9 +4,9 @@
 import { state, view as pmView } from "../vendor/prosemirror.vendor.js";
 
 const { Plugin, PluginKey } = state;
-const PREVIEW = "page-ai-preview";
+const PREVIEW = "blockeditor-ai-preview";
 
-export const aiPreviewKey = new PluginKey("page-ai-preview");
+export const aiPreviewKey = new PluginKey("blockeditor-ai-preview");
 
 // One node decoration per hidden block, and the proposal as a widget at the first of
 // them. Side -1 puts it above the block it stands for, and it takes no part in
@@ -18,7 +18,7 @@ function decorationsFor(doc, ids, dom) {
   doc.forEach((node, at) => {
     if (!wanted.has(node.attrs?.id)) return;
     if (first < 0) first = at;
-    decos.push(pmView.Decoration.node(at, at + node.nodeSize, { class: "page-ai-hidden" }));
+    decos.push(pmView.Decoration.node(at, at + node.nodeSize, { class: "blockeditor-ai-hidden" }));
   });
   if (first < 0) return null;
   decos.push(pmView.Decoration.widget(first, dom, { side: -1, ignoreSelection: true, stopEvent: () => true }));

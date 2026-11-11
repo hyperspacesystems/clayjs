@@ -41,7 +41,7 @@ test("the direct shape comparison agrees with the serialized mismatch check", ()
 
 test("region writes preserve mapped steps and an appended inline transaction", () => {
   const blocks = { first: { t: "paragraph", pos: "A", c: "ab😀cd" }, second: { t: "paragraph", pos: "B", c: "tail" } };
-  const binding = createYPageBinding({ store: createStore({ name: "page", value: migrateHybridValues([{ blocks }]) }) });
+  const binding = createYPageBinding({ store: createStore({ name: "blockeditor", value: migrateHybridValues([{ blocks }]) }) });
   const append = new pmState.Plugin({ appendTransaction(transactions, _old, next) {
     if (!transactions.some((tr) => tr.docChanged) || transactions.some((tr) => tr.getMeta("appended"))) return null;
     return next.tr.insertText("!", 2).setMeta("appended", true);
@@ -70,7 +70,7 @@ test("region writes preserve mapped steps and an appended inline transaction", (
 
 test("700 long blocks stay below the ordinary edit p95 target through the real editor", () => {
   const blocks = Object.fromEntries(Array.from({ length: 700 }, (_, i) => [`p${i}`, { t: "paragraph", pos: String(i).padStart(5, "0") + "A", c: "x".repeat(350) }]));
-  const store = createStore({ name: "page", value: migrateHybridValues([{ blocks }]) });
+  const store = createStore({ name: "blockeditor", value: migrateHybridValues([{ blocks }]) });
   const binding = createYPageBinding({ store });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = new pmView.EditorView(mount, {

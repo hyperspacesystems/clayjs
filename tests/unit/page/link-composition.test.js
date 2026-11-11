@@ -8,7 +8,7 @@ test('a composition Enter in a link address does not apply it',()=>{
   view.coordsAtPos=()=>({left:20,right:30,top:100,bottom:120});
   select(view,posOf(view,'p'),posOf(view,'p',true));
   openLinkEditor(view);
-  const input=part(view,'.page-link-input');
+  const input=part(view,'.blockeditor-link-input');
   input.value='https://example.test';
   const before=view.state.doc;
   input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',isComposing:true,keyCode:229,bubbles:true,cancelable:true}));

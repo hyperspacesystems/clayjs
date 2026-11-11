@@ -61,7 +61,7 @@ test("a document with no media and no checklist asks for neither part", async ()
   await flush();
   await flush();
   expect(calls).toEqual([]);
-  expect(view.dom.querySelector(".page-check-controls")).toBe(null);
+  expect(view.dom.querySelector(".blockeditor-check-controls")).toBe(null);
 });
 
 test("a first image paste loads the media part and inserts the image", async () => {
@@ -77,11 +77,11 @@ test("a first image paste loads the media part and inserts the image", async () 
 
 test("a checklist draws its decorations and toggles its box once the part arrives", async () => {
   const { view, calls } = open({ chk: { t: "list_item", pos: "B", c: "Do it", kind: "check" } });
-  expect(await waitFor(() => view.dom.querySelector(".page-check-controls"))).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-check-controls"))).toBe(true);
   expect(calls).toEqual(["checklist"]);
-  expect([...view.dom.querySelectorAll(".page-check-chip")].map((button) => button.textContent)).toEqual(["Unassigned", "No date"]);
+  expect([...view.dom.querySelectorAll(".blockeditor-check-chip")].map((button) => button.textContent)).toEqual(["Unassigned", "No date"]);
 
-  const li = view.dom.querySelector('.page-li[data-kind="check"]');
+  const li = view.dom.querySelector('.blockeditor-li[data-kind="check"]');
   li.getBoundingClientRect = () => ({ top: 0, bottom: 20, left: 0, right: 100, height: 20, width: 100 });
   li.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, clientX: 0 }));
   expect(view.state.doc.child(0).attrs.checked).toBe(true);

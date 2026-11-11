@@ -12,13 +12,13 @@ globalThis.ClipboardEvent ??= class ClipboardEvent extends Event { constructor(t
 
 let tabCounter = 100;
 export function makeYTab(sim, room, id, init, opts = {}) {
-  const store = createStore({ name: "page", value: init });
-  const entries = new Map([["page", { store }]]);
+  const store = createStore({ name: "blockeditor", value: init });
+  const entries = new Map([["blockeditor", { store }]]);
   const transport = room.transport(id, { person: opts.person ?? id });
   let leftAt = null, saving = null;
   const held = () => !!saving && saving.mode === "file" && store.pendingEntries().some((e) => e.id <= saving.mark);
   const lane = createFastLane({ transport, entries, now: sim.now, setTimer: sim.setTimer, clearTimer: sim.clearTimer, onLeave: (_n, at) => { leftAt = at; }, held });
-  store.onLocal((ops) => lane.local("page", ops, store.mark));
+  store.onLocal((ops) => lane.local("blockeditor", ops, store.mark));
   const ydoc = new Y.Doc();
   ydoc.clientID = opts.clientID ?? (10000 + tabCounter++);
   const notices = [];
@@ -45,18 +45,18 @@ export function makeYTab(sim, room, id, init, opts = {}) {
       const value = JSON.parse(JSON.stringify(fastMode ? store.authoritative : store.value));
       const where = fastMode ? { epoch: lane.status.epoch, seq: lane.status.seq } : leftAt && !leftAt.disk ? leftAt : null;
       const at = where ? { epoch: where.epoch, seq: where.seq, hash: textHash(serializeLive(value)) } : null;
-      const n = lane.framed?.("page") ?? 0;
+      const n = lane.framed?.("blockeditor") ?? 0;
       const stamp = { at, by: !fastMode && by && at && n > 0 ? { client: id, n } : null };
       const mark = store.mark;
       if (!fastMode) saving = { mark, mode };
       const capture = { mode, value, mark, ...stamp };
-      sim.after(answer / 2, () => room.fileWritten("page", value, at, stamp.by));
+      sim.after(answer / 2, () => room.fileWritten("blockeditor", value, at, stamp.by));
       sim.after(answer, () => {
         if (saving && saving.mark === mark) saving = null;
         if (fastMode) return;
         if (store.handle.status.mode === "fast") {
           store.rebase(store.authoritative, { source: "state", through: mark });
-          lane.release("page");
+          lane.release("blockeditor");
           lane.refresh();
         } else {
           store.confirm(mark);
@@ -82,7 +82,7 @@ export function docOfValue(value) {
 
 export function check({ room, tabs }) {
   const problems = [];
-  const value = JSON.parse(JSON.stringify(room.stores.get("page").value));
+  const value = JSON.parse(JSON.stringify(room.stores.get("blockeditor").value));
   const reloaded = docOfValue(value);
   const bare = bareShape;
   for (const t of tabs.values()) {
@@ -94,8 +94,8 @@ export function check({ room, tabs }) {
 }
 
 export async function reload({ sim, room, tabs }) {
-  const file = JSON.parse(JSON.stringify(room.stores.get("page").value));
-  room.land("page", room.seq);
+  const file = JSON.parse(JSON.stringify(room.stores.get("blockeditor").value));
+  room.land("blockeditor", room.seq);
   const seq = room.seq;
   const fresh = makeYTab(sim, room, "reload", file);
   const opened = fresh.editor.state.doc;

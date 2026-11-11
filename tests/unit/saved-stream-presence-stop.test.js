@@ -76,7 +76,7 @@ beforeEach(() => {
   global.fetch = jest.fn((url) => {
     fetchCalls.push({ url: String(url) });
     if (String(url).includes("/_/meta")) return Promise.resolve(response(200, JSON.stringify(metaAnswer)));
-    return Promise.resolve(response(200, "<!DOCTYPE html><html><body><article data-page><p>one</p></article></body></html>"));
+    return Promise.resolve(response(200, "<!DOCTYPE html><html><body><article data-blockeditor><p>one</p></article></body></html>"));
   });
 });
 

@@ -8,9 +8,9 @@ export async function run() {
   room.close('a');
   b.replace(6, 6, 'NEW ');
   await sim.run(sim.now() + 1200);
-  const file = JSON.parse(JSON.stringify(room.stores.get('page').value));
-  room.land('page', room.seq);
-  room.restart({ page: file });
+  const file = JSON.parse(JSON.stringify(room.stores.get('blockeditor').value));
+  room.land('blockeditor', room.seq);
+  room.restart({ blockeditor: file });
   await sim.run(sim.now() + 10000);
   room.open('a');
   await sim.run(sim.now() + 15000);

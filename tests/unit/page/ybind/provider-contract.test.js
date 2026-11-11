@@ -1,7 +1,7 @@
 import { createStore } from "../../../../src/live/store.js";
 
 test("the store members the provider depends on", () => {
-  const store = createStore({ name: "page", value: { v: 1, g: 0, y: {} } });
+  const store = createStore({ name: "blockeditor", value: { v: 1, g: 0, y: {} } });
   const events = [];
   store.onRebase((ev) => events.push(ev));
   const op = { op: "set", path: ["y", "k1"], value: "AA" };
@@ -30,7 +30,7 @@ test("the store members the provider depends on", () => {
 });
 
 test("rebase with drop removes the first pending op", () => {
-  const store = createStore({ name: "page", value: { v: 1, g: 0, y: {} } });
+  const store = createStore({ name: "blockeditor", value: { v: 1, g: 0, y: {} } });
   store.handle.set(["y", "k"], "AA");
   expect(store.value.y.k).toBe("AA");
   store.rebase(store.authoritative, { source: "state", drop: [1, 1] });

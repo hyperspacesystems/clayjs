@@ -29,7 +29,7 @@ describe("the empty-line placeholder", () => {
     const found = set.find();
     expect(found).toHaveLength(1);
     expect(found[0].type.attrs["data-placeholder"]).toBe("To do");
-    expect(found[0].type.attrs.class).toBe("page-check-placeholder");
+    expect(found[0].type.attrs.class).toBe("blockeditor-check-placeholder");
     expect(found[0].from).toBe(0);
   });
 
@@ -58,7 +58,7 @@ describe("the empty-line placeholder", () => {
     const found = set.find();
     expect(found).toHaveLength(1);
     expect(found[0].type.attrs["data-placeholder"]).toBe("Untitled");
-    expect(found[0].type.attrs.class).toBe("page-title-placeholder");
+    expect(found[0].type.attrs.class).toBe("blockeditor-title-placeholder");
     expect(found[0].from).toBe(0);
   });
 

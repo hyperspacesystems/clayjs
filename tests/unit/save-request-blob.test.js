@@ -84,7 +84,7 @@ test("a retry sends the same Blob instead of building a second one", async () =>
     status: 409,
     statusText: "Conflict",
     headers: { get: (name) => (String(name).toLowerCase() === "retry-after" ? "0" : null) },
-    text: async () => JSON.stringify({ code: "page-converting", msg: "Converting" })
+    text: async () => JSON.stringify({ code: "blockeditor-converting", msg: "Converting" })
   };
   global.fetch = jest.fn(async (url, options = {}) => {
     if (String(url).includes("/_/save")) {
@@ -97,7 +97,7 @@ test("a retry sends the same Blob instead of building a second one", async () =>
   const result = await save.savePage();
   expect(result.ok).toBe(true);
 
-  // Two actual sends of one attempt: the host's `page-converting` refusal asks for the
+  // Two actual sends of one attempt: the host's `blockeditor-converting` refusal asks for the
   // same bytes again, and those are the bytes already encoded.
   expect(sent.length).toBe(2);
   expect(sent[0]).toBeInstanceOf(Blob);

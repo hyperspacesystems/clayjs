@@ -445,7 +445,7 @@ describe("typed refusals through a receipts host", () => {
       body: {
         msg: "This save was built for a different source.",
         msgType: "error",
-        code: "page-conversion-stale",
+        code: "blockeditor-conversion-stale",
         reason: "source-changed"
       }
     });
@@ -459,7 +459,7 @@ describe("typed refusals through a receipts host", () => {
 
     expect(result.ok).toBe(false);
     expect(result.msgType).toBe("error");
-    expect(result.code).toBe("page-conversion-stale");
+    expect(result.code).toBe("blockeditor-conversion-stale");
     expect(result.reason).toBe("source-changed");
     expect(result.hadTimeout).toBe(false);
     expect(saveMod.isSaveConflicted()).toBe(false);
@@ -469,15 +469,15 @@ describe("typed refusals through a receipts host", () => {
     expect(calls.save).toHaveLength(1);
   });
 
-  // A pre-commit `page-converting` refusal is the one code worth retrying, and the
+  // A pre-commit `blockeditor-converting` refusal is the one code worth retrying, and the
   // retry is the same logical save: it must carry the same receipt id so the host
   // can still answer for the write whichever attempt lands.
-  test("a page-converting retry keeps the same receipt id", async () => {
+  test("a blockeditor-converting retry keeps the same receipt id", async () => {
     responses.save = (n) => (n === 1
       ? {
           status: 503,
           headers: { "Retry-After": "0" },
-          body: { msg: "Converting the page.", msgType: "error", code: "page-converting", reason: "page-converting" }
+          body: { msg: "Converting the page.", msgType: "error", code: "blockeditor-converting", reason: "blockeditor-converting" }
         }
       : accepted("stored-after-conversion")());
 

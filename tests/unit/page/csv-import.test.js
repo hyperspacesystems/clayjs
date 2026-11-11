@@ -63,14 +63,14 @@ test("a slash import that arrives after an edit keeps the person\u0027s text and
   view.coordsAtPos = () => ({ left: 40, right: 48, top: 100, bottom: 120 });
   select(view, posOf(view, "b", true));
   type(view, "/csv");
-  const menu = view.dom.parentElement.querySelector(".page-menu");
+  const menu = view.dom.parentElement.querySelector(".blockeditor-menu");
   expect(menu.hidden).toBe(false);
   key(view, "Enter");
   expect(menu.hidden).toBe(true);
   expect(view.state.doc.child(1).textContent).toBe("Mine /csv");
   // An edit before the file arrives moves every position the slash range held.
   view.dispatch(view.state.tr.insertText("12345", 1));
-  const input = view.dom.parentElement.querySelector(".page-csv-input");
+  const input = view.dom.parentElement.querySelector(".blockeditor-csv-input");
   Object.defineProperty(input, "files", { value: [file("Name\nAda")], configurable: true });
   input.dispatchEvent(new Event("change"));
   for (let waited = 0; waited < 2000 && view.state.doc.childCount < 3; waited += 10) {
@@ -90,7 +90,7 @@ test("a slash import whose range no longer holds its text inserts after that blo
   key(view, "Enter");
   view.dispatch(view.state.tr.insertText("x", from + 2));
   expect(view.state.doc.child(1).textContent).toBe("Mine /cxsv");
-  const input = view.dom.parentElement.querySelector(".page-csv-input");
+  const input = view.dom.parentElement.querySelector(".blockeditor-csv-input");
   Object.defineProperty(input, "files", { value: [file("Name\nAda")], configurable: true });
   input.dispatchEvent(new Event("change"));
   for (let waited = 0; waited < 2000 && view.state.doc.childCount < 3; waited += 10) {

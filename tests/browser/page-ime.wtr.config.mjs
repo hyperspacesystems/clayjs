@@ -10,7 +10,7 @@ import { chromeOptions } from '../../scripts/chrome-for-testing/browser-runtime.
 const cdps = new Map();
 
 const ime = {
-  name: 'page-ime',
+  name: 'blockeditor-ime',
   async executeCommand({ command, payload, session }) {
     if (command !== 'ime') return undefined;
     if (session.browser.type !== 'playwright' || session.browser.name !== 'Chromium') return { cdp: false };

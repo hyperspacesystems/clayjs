@@ -18,16 +18,16 @@ const open = (spec, id = spec[0][0], end = true, options = {}) => {
 };
 const shell = (view) => view.dom.parentElement;
 const part = (view, cls) => shell(view).querySelector(cls);
-const menu = (view) => part(view, ".page-menu");
-const rows = (view) => [...menu(view).querySelectorAll(".page-menu-item")];
-const label = (view, text) => rows(view).find((r) => r.querySelector(".page-menu-label").textContent === text);
-const labels = (view) => rows(view).map((r) => r.querySelector(".page-menu-label").textContent);
+const menu = (view) => part(view, ".blockeditor-menu");
+const rows = (view) => [...menu(view).querySelectorAll(".blockeditor-menu-item")];
+const label = (view, text) => rows(view).find((r) => r.querySelector(".blockeditor-menu-label").textContent === text);
+const labels = (view) => rows(view).map((r) => r.querySelector(".blockeditor-menu-label").textContent);
 const type = (view, text) => { for (const ch of text) typeText(view, ch); };
 const isOpen = (view) => !menu(view).hidden;
-const live = (view) => part(view, ".page-live").textContent;
+const live = (view) => part(view, ".blockeditor-live").textContent;
 const chromeOf = (view) => view.pluginViews.find((pv) => pv && pv.menuEl);
 const types = (view) => { const out = []; view.state.doc.forEach((n) => out.push(n.type.name)); return out; };
-const checked = (view) => rows(view).filter((r) => r.getAttribute("aria-checked") === "true").map((r) => r.querySelector(".page-menu-label").textContent);
+const checked = (view) => rows(view).filter((r) => r.getAttribute("aria-checked") === "true").map((r) => r.querySelector(".blockeditor-menu-label").textContent);
 const deferred = () => {
   let settle;
   const gate = new Promise((ok) => { settle = ok; });
@@ -37,7 +37,7 @@ const deferred = () => {
 describe("the current type", () => {
   test("Turn into marks the current type and only that type, apart from the keyboard's active row", () => {
     const view = open([["p", "paragraph", "P"]]);
-    part(view, ".page-tool-turn").click();
+    part(view, ".blockeditor-tool-turn").click();
     expect(rows(view).map((r) => r.getAttribute("role"))).toEqual(rows(view).map(() => "menuitemradio"));
     expect(checked(view)).toEqual(["Text"]);
     expect(label(view, "Heading 1").getAttribute("aria-checked")).toBe("false");
@@ -51,14 +51,14 @@ describe("the current type", () => {
   test("a block selection of one type checks that type", () => {
     const view = open([["a", "heading", "A", { level: 2 }], ["b", "heading", "B", { level: 2 }]], "a");
     view.dispatch(view.state.tr.setSelection(selectBlocks(view.state.doc, 0, 1)));
-    part(view, ".page-tool-turn").click();
+    part(view, ".blockeditor-tool-turn").click();
     expect(checked(view)).toEqual(["Heading 2"]);
   });
 
   test("a selection that mixes types checks no row", () => {
     const view = open([["a", "paragraph", "A"], ["h", "heading", "H", { level: 2 }], ["z", "paragraph", "Z"]], "a");
     view.dispatch(view.state.tr.setSelection(selectBlocks(view.state.doc, 0, 1)));
-    part(view, ".page-tool-turn").click();
+    part(view, ".blockeditor-tool-turn").click();
     expect(labels(view).length).toBe(14);
     expect(checked(view)).toEqual([]);
     expect(rows(view).every((r) => r.getAttribute("aria-checked") === "false")).toBe(true);
@@ -67,7 +67,7 @@ describe("the current type", () => {
   test("a selected toggle with its body counts as one Toggle, not as a mixed selection", () => {
     const view = open([["t", "toggle", "T", { open: true }], ["b", "paragraph", "body", { parent: "t" }], ["z", "paragraph", "Z"]], "t");
     view.dispatch(view.state.tr.setSelection(selectBlocks(view.state.doc, 0, 1)));
-    part(view, ".page-tool-turn").click();
+    part(view, ".blockeditor-tool-turn").click();
     expect(checked(view)).toEqual(["Toggle"]);
   });
 });
@@ -103,7 +103,7 @@ describe("focus and popup semantics", () => {
 
   test("an explicit menu focuses its active row and Escape returns focus to the control that opened it", () => {
     const view = open([["p", "paragraph", "P"]]);
-    const turn = part(view, ".page-tool-turn");
+    const turn = part(view, ".blockeditor-tool-turn");
     turn.click();
     expect(menu(view).getAttribute("role")).toBe("menu");
     expect(document.activeElement).toBe(rows(view)[0]);
@@ -118,7 +118,7 @@ describe("focus and popup semantics", () => {
 
   test("Escape returns focus to the plus that opened the insert menu", () => {
     const view = open([["p", "paragraph", "P"]]);
-    const plus = part(view, ".page-plus");
+    const plus = part(view, ".blockeditor-plus");
     plus.click();
     expect(document.activeElement).toBe(rows(view)[0]);
     key(view, "Escape");
@@ -139,7 +139,7 @@ describe("focus and popup semantics", () => {
 
   test("a composing Enter leaves a focused menu row unpicked", () => {
     const view = open([["p", "paragraph", "P"]]);
-    part(view, ".page-tool-turn").click();
+    part(view, ".blockeditor-tool-turn").click();
     const before = view.state.doc;
     rows(view)[1].dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 229, bubbles: true, cancelable: true }));
     expect(view.state.doc).toBe(before);
@@ -150,7 +150,7 @@ describe("focus and popup semantics", () => {
 describe("the ids a command resolves", () => {
   test("a menu keeps the ids of the blocks it opened on, not the block under the selection now", () => {
     const view = open([["a", "paragraph", "A"], ["b", "paragraph", "B"]], "b");
-    part(view, ".page-tool-turn").click();
+    part(view, ".blockeditor-tool-turn").click();
     expect(chromeOf(view).menu.ids).toEqual(["b"]);
     select(view, posOf(view, "a") + 1);
     expect(isOpen(view)).toBe(true);
@@ -164,7 +164,7 @@ describe("the ids a command resolves", () => {
   test("a block selection keeps every id it opened on", () => {
     const view = open([["a", "paragraph", "A"], ["b", "paragraph", "B"], ["z", "paragraph", "Z"]], "a");
     view.dispatch(view.state.tr.setSelection(selectBlocks(view.state.doc, 0, 1)));
-    part(view, ".page-tool-turn").click();
+    part(view, ".blockeditor-tool-turn").click();
     expect(chromeOf(view).menu.ids).toEqual(["a", "b"]);
     select(view, posOf(view, "z"));
     label(view, "Heading 3").click();
@@ -176,7 +176,7 @@ describe("the ids a command resolves", () => {
   test("a command whose anchor a peer removed cancels and announces instead of filling the index it left", () => {
     const view = open([["x", "paragraph", "X"], ["p", "paragraph", ""], ["z", "paragraph", "Z"]]);
     const chrome = chromeOf(view);
-    const plus = part(view, ".page-plus");
+    const plus = part(view, ".blockeditor-plus");
     chrome.openMenu("insert", plus, null, null, "p");
     const at = posOf(view, "p") - 1;
     view.dispatch(view.state.tr.delete(at, at + view.state.doc.child(1).nodeSize));
@@ -193,7 +193,7 @@ describe("the ids a command resolves", () => {
     const features = deferred();
     const view = open([["p", "paragraph", ""], ["z", "paragraph", "Z"]], "p", true, { features: features.features });
     const chrome = chromeOf(view);
-    chrome.openMenu("insert", part(view, ".page-plus"), null, null, "p");
+    chrome.openMenu("insert", part(view, ".blockeditor-plus"), null, null, "p");
     label(view, "Table").click();
     expect(shape(view)).toBe("table | Z");
     const afterPick = view.state.doc;
@@ -208,7 +208,7 @@ describe("the ids a command resolves", () => {
     const features = deferred();
     const view = open([["p", "paragraph", ""], ["z", "paragraph", "Z"]], "p", true, { features: features.features });
     const chrome = chromeOf(view);
-    const plus = part(view, ".page-plus");
+    const plus = part(view, ".blockeditor-plus");
     chrome.openMenu("insert", plus, null, null, "p");
     label(view, "Table").click();
     const inserted = view.state.doc;

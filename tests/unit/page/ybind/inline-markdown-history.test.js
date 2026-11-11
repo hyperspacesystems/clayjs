@@ -27,7 +27,7 @@ beforeEach(() => {
 afterEach(() => { jest.restoreAllMocks(); });
 
 function open(value, from = value) {
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(value)) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(value)) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = createPageEditor(mount, {

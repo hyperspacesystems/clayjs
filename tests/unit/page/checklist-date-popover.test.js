@@ -6,11 +6,11 @@ const fresh = (attrs = {}) => editor([["check", "list_item", "Do it", { kind: "c
 const open = (view) => {
   const tag = view.dom.querySelector('[data-check="date"]');
   tag.click();
-  return { tag, panel: document.querySelector(".page-check-date") };
+  return { tag, panel: document.querySelector(".blockeditor-check-date") };
 };
 const quick = (panel) => [...panel.querySelectorAll('[data-check="date-quick"]')];
 const days = (panel) => [...panel.querySelectorAll('[data-check="date-day"]')];
-const monthLabel = (panel) => panel.querySelector(".page-check-cal-month").textContent;
+const monthLabel = (panel) => panel.querySelector(".blockeditor-check-cal-month").textContent;
 const press = (el, k) => el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
 
 beforeEach(() => { jest.useFakeTimers({ now: new Date(2026, 9, 29) }); });
@@ -21,14 +21,14 @@ test("the quick rows write today, tomorrow and next week", () => {
   const { panel } = open(view);
   expect(panel.getAttribute("role")).toBe("dialog");
   expect(panel.getAttribute("aria-label")).toBe("Due date");
-  expect(quick(panel).map((row) => row.querySelector(".page-check-quick-label").textContent)).toEqual(["Today", "Tomorrow", "Next week"]);
-  expect(quick(panel).map((row) => row.querySelector(".page-check-quick-meta").textContent)).toEqual(["Thu, Oct 29", "Fri, Oct 30", "Thu, Nov 5"]);
+  expect(quick(panel).map((row) => row.querySelector(".blockeditor-check-quick-label").textContent)).toEqual(["Today", "Tomorrow", "Next week"]);
+  expect(quick(panel).map((row) => row.querySelector(".blockeditor-check-quick-meta").textContent)).toEqual(["Thu, Oct 29", "Fri, Oct 30", "Thu, Nov 5"]);
   expect(quick(panel).every((row) => row.tagName === "BUTTON" && row.querySelector("svg") !== null)).toBe(true);
   const expected = ["2026-10-29", "2026-10-30", "2026-11-05"];
   expected.forEach((due, i) => {
     quick(open(view).panel)[i].click();
     expect(view.state.doc.child(0).attrs.due).toBe(due);
-    expect(document.querySelector(".page-check-date")).toBeNull();
+    expect(document.querySelector(".blockeditor-check-date")).toBeNull();
   });
 });
 
@@ -36,7 +36,7 @@ test("the calendar opens on this month, steps to the next, and a day writes its 
   const view = fresh();
   const { panel } = open(view);
   expect(monthLabel(panel)).toBe("October 2026");
-  expect([...panel.querySelectorAll(".page-check-cal-dow")].map((head) => head.textContent)).toEqual(["S", "M", "T", "W", "T", "F", "S"]);
+  expect([...panel.querySelectorAll(".blockeditor-check-cal-dow")].map((head) => head.textContent)).toEqual(["S", "M", "T", "W", "T", "F", "S"]);
   expect(days(panel)).toHaveLength(35);
   expect(days(panel).filter((day) => day.dataset.outside === "true").length).toBe(4);
   const today = days(panel).find((day) => day.dataset.today === "true");
@@ -48,7 +48,7 @@ test("the calendar opens on this month, steps to the next, and a day writes its 
   const target = days(panel).find((day) => day.getAttribute("aria-label") === "Wednesday, November 4, 2026");
   target.click();
   expect(view.state.doc.child(0).attrs.due).toBe("2026-11-04");
-  expect(document.querySelector(".page-check-date")).toBeNull();
+  expect(document.querySelector(".blockeditor-check-date")).toBeNull();
 });
 
 test("the calendar opens on the item's own month and marks its day as picked", () => {
@@ -64,7 +64,7 @@ test("Clear date is disabled without a date and writes null when there is one, i
   const empty = fresh();
   const first = open(empty).panel.querySelector('[data-check="clear-date"]');
   expect(first.disabled).toBe(true);
-  press(document.querySelector(".page-check-date"), "Escape");
+  press(document.querySelector(".blockeditor-check-date"), "Escape");
 
   const view = fresh({ due: "2026-11-04" });
   const { panel } = open(view);
@@ -74,7 +74,7 @@ test("Clear date is disabled without a date and writes null when there is one, i
   expect(clear.querySelector("svg")).not.toBeNull();
   clear.click();
   expect(view.state.doc.child(0).attrs.due).toBeNull();
-  expect(document.querySelector(".page-check-date")).toBeNull();
+  expect(document.querySelector(".blockeditor-check-date")).toBeNull();
   let undone;
   history.undo(view.state, (tr) => { undone = view.state.apply(tr); });
   expect(undone.doc.child(0).attrs.due).toBe("2026-11-04");
@@ -85,7 +85,7 @@ test("Escape closes the panel and returns focus to the tag", () => {
   const { tag, panel } = open(view);
   expect(tag.getAttribute("aria-expanded")).toBe("true");
   press(panel.querySelector('[data-check="date-day"]'), "Escape");
-  expect(document.querySelector(".page-check-date")).toBeNull();
+  expect(document.querySelector(".blockeditor-check-date")).toBeNull();
   expect(tag.getAttribute("aria-expanded")).toBe("false");
   expect(document.activeElement).toBe(tag);
 });

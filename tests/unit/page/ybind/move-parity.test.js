@@ -11,7 +11,7 @@ beforeEach(() => { jest.spyOn(Date, "now").mockImplementation(() => 1000000); })
 afterEach(() => { jest.restoreAllMocks(); });
 
 const bound = (value) => {
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(value)) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(value)) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = createPageEditor(mount, { doc: binding.doc(), dispatch: binding.dispatch, history: false, undo: binding.undo, redo: binding.redo, board: binding.board });

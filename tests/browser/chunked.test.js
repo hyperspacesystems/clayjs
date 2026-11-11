@@ -41,7 +41,7 @@ const fetched = (win) =>
 async function planClosure(isEditMode) {
   const { runtime } = await fetch('/dist/m/manifest.json').then((response) => response.json());
   const manifest = (await import(`/dist/m/${runtime}`)).default;
-  const plan = resolveModules(new URLSearchParams('plugins=page'), isEditMode, { isDraftMode: false, hasSap: false });
+  const plan = resolveModules(new URLSearchParams('plugins=blockeditor'), isEditMode, { isDraftMode: false, hasSap: false });
   const want = new Set();
   const add = (file) => {
     if (!file || want.has(file)) return;
@@ -141,9 +141,9 @@ describe('the chunked release in edit mode', () => {
 
   it('mounts the Document editor and resolves clay.ready and page.ready', async () => {
     expect(win.clay.__chunked).to.equal(true);
-    expect(win.clay.page).to.exist;
-    await win.clay.page.ready;
-    expect(win.clay.page.view).to.be.an('object');
+    expect(win.clay.blockeditor).to.exist;
+    await win.clay.blockeditor.ready;
+    expect(win.clay.blockeditor.view).to.be.an('object');
   });
 
   it('preloads every file of its plan before clay:ready', async () => {
@@ -158,7 +158,7 @@ describe('the chunked release in edit mode', () => {
   // a chunk order that breaks the editor, or a plugin stubbed out of the release,
   // has to fail here.
   it('takes typing into the article through its editor and saves it', async () => {
-    const view = win.clay.page.view;
+    const view = win.clay.blockeditor.view;
     const { state } = view;
     const Selection = state.selection.constructor;
     let at = null;
@@ -171,7 +171,7 @@ describe('the chunked release in edit mode', () => {
     await new Promise((resolve) => setTimeout(resolve, 150));
 
     expect(view.state.doc.textContent).to.contain('Typed into the article.');
-    expect(win.document.querySelector('article.page [data-id="p1"]').textContent).to.contain('Typed into the article.');
+    expect(win.document.querySelector('article.blockeditor [data-id="p1"]').textContent).to.contain('Typed into the article.');
 
     // flush, not force: a checkpoint save can start mid-typing on a slow machine, and force()
     // resolves on that in-flight save; flush() waits until the host holds the current bytes.
@@ -304,8 +304,8 @@ describe('a satellite that runs before clay.js, with no runtime manifest', () =>
   });
 
   it('mounts the page plugin from that one tree', async () => {
-    await win.clay.page.ready;
-    expect(win.clay.page.view).to.be.an('object');
+    await win.clay.blockeditor.ready;
+    expect(win.clay.blockeditor.view).to.be.an('object');
   });
 });
 
@@ -332,8 +332,8 @@ describe('a satellite that runs after clay.js, with no runtime manifest', () => 
   });
 
   it('mounts the page plugin from that one tree', async () => {
-    await win.clay.page.ready;
-    expect(win.clay.page.view).to.be.an('object');
+    await win.clay.blockeditor.ready;
+    expect(win.clay.blockeditor.view).to.be.an('object');
   });
 });
 
@@ -437,8 +437,8 @@ describe('a satellite that runs before clay.js', () => {
   });
 
   it('mounts the page plugin and keeps one copy of the save pipeline', async () => {
-    await win.clay.page.ready;
-    expect(win.clay.page.view).to.be.an('object');
+    await win.clay.blockeditor.ready;
+    expect(win.clay.blockeditor.view).to.be.an('object');
     expectOneCopy(win);
   });
 });
@@ -461,8 +461,8 @@ describe('a satellite whose release manifest is gone, before clay.js', () => {
   });
 
   it('mounts the page plugin from that one tree', async () => {
-    await win.clay.page.ready;
-    expect(win.clay.page.view).to.be.an('object');
+    await win.clay.blockeditor.ready;
+    expect(win.clay.blockeditor.view).to.be.an('object');
     expectOneCopy(win);
   });
 });

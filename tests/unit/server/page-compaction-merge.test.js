@@ -14,7 +14,7 @@ import { buildCandidate, isCheckpointKey } from "../../../src/live/page-compacti
 
 const doc = (...parts) => `<!doctype html><html><body>${parts.join("")}</body></html>`;
 const pageTag = (value, at = null) =>
-  `<script type="application/json" merge="page" clay="live"${at ? ` live-at="${at}"` : ""}>${JSON.stringify(value)}</script>`;
+  `<script type="application/json" merge="blockeditor" clay="live"${at ? ` live-at="${at}"` : ""}>${JSON.stringify(value)}</script>`;
 
 let clients = 200;
 const insert = (text, client = (clients += 1)) => {
@@ -46,10 +46,10 @@ const html = (value) => doc(pageTag(value));
 const setOp = (key, value) => ({ op: "set", path: ["y", key], value });
 
 const frame = (room, n, ops) => ({
-  name: "page",
+  name: "blockeditor",
   epoch: room.epoch,
   n,
-  pageGeneration: room.pageTransition.id,
+  blockeditorGeneration: room.blockeditorTransition.id,
   compaction: 1,
   ops,
 });
@@ -72,7 +72,7 @@ const hostRoom = (c, value = page()) => {
 
 const send = (rooms, room, n, pairs) => rooms.apply(room, "a", frame(room, n, pairs.map(([key, value]) => setOp(key, value))));
 
-const store = (room) => room.stores.get("page");
+const store = (room) => room.stores.get("blockeditor");
 
 const runCompaction = (rooms, room, { overflow = false } = {}) => {
   const job = rooms.beginCompaction(room, { overflow });
@@ -120,7 +120,7 @@ test("a stale capture saved before a commit merges with nothing lost and lands i
   const result = rooms.fileWritten("/p.html", doc(pageTag(capture, stampOf(room.epoch, 1, serializeLive(capture)))));
 
   expect(result.valueChanged).toBe(false);
-  expect(result.landed).toEqual(["page"]);
+  expect(result.landed).toEqual(["blockeditor"]);
   expect(store(room).landed).not.toBe(-1);
   expect(store(room).landed).toBe(1);
   expect(Object.keys(store(room).value.y)).toEqual(keys);
@@ -199,7 +199,7 @@ test("a file whose union with the room is over the store cap folds instead of dr
   const admittedKey = Object.keys(store(room).value.y).find((key) => key.startsWith("uk-"));
 
   expect(rooms.fileWritten("/p.html", html(saved)).valueChanged).toBe(true);
-  expect(room.stores.get("page")).toBeDefined();
+  expect(room.stores.get("blockeditor")).toBeDefined();
   const keys = Object.keys(store(room).value.y);
   expect(keys).toHaveLength(1);
   expect(keys[0]).not.toBe(admittedKey);
@@ -291,7 +291,7 @@ test("landed and dirtiness after a clean capture, a capture before an admission 
 
   const clean = copy(store(room).value);
   const landedClean = rooms.fileWritten("/p.html", doc(pageTag(clean, stampOf(room.epoch, 1, serializeLive(clean)))));
-  expect(landedClean).toEqual({ room, valueChanged: false, landed: ["page"] });
+  expect(landedClean).toEqual({ room, valueChanged: false, landed: ["blockeditor"] });
   expect(store(room).landed).toBe(1);
   expect(roomIsDirty(room)).toBe(false);
 
@@ -309,7 +309,7 @@ test("landed and dirtiness after a clean capture, a capture before an admission 
 
   const after = copy(store(room).value);
   const landedAfter = rooms.fileWritten("/p.html", doc(pageTag(after, stampOf(room.epoch, 2, serializeLive(after)))));
-  expect(landedAfter).toEqual({ room, valueChanged: false, landed: ["page"] });
+  expect(landedAfter).toEqual({ room, valueChanged: false, landed: ["blockeditor"] });
   expect(store(room).landed).toBe(2);
   expect(roomIsDirty(room)).toBe(false);
 });

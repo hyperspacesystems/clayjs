@@ -23,18 +23,18 @@ function fileName(title) {
 }
 
 // The panel sits in its own shadow root beside the editor, so the page's CSS cannot restyle
-// it. The page's --page-* tokens still reach it, and it keeps the editor's font and colour.
+// it. The page's --blockeditor-* tokens still reach it, and it keeps the editor's font and colour.
 const PANEL_CSS = `
 :host{font:inherit !important;color:inherit !important}
-.page-export-panel{max-width:46ch;margin:8px 0;padding:10px 12px;border:1px solid var(--page-pop-line);border-radius:8px;background:var(--page-pop-bg);color:var(--page-pop-ink);box-shadow:var(--page-pop-shadow);font-size:.88em}
-.page-export-title{margin:0 0 2px;font-weight:600}
-.page-export-when{margin:0 0 6px;color:var(--page-ink-soft)}
-.page-export-losses{margin:6px 0;padding-left:1.1em}
-.page-export-losses li{margin:2px 0}
-.page-export-acts{display:flex;gap:6px;margin-top:8px}
-.page-export-btn{border:0;padding:4px 8px;border-radius:6px;background:none;color:inherit;font:inherit;cursor:pointer}
-.page-export-btn:hover{background:var(--page-pop-hover)}
-.page-export-panel[data-state="loss"] .page-export-title{color:var(--page-danger, #9E3B2F)}
+.blockeditor-export-panel{max-width:46ch;margin:8px 0;padding:10px 12px;border:1px solid var(--blockeditor-pop-line);border-radius:8px;background:var(--blockeditor-pop-bg);color:var(--blockeditor-pop-ink);box-shadow:var(--blockeditor-pop-shadow);font-size:.88em}
+.blockeditor-export-title{margin:0 0 2px;font-weight:600}
+.blockeditor-export-when{margin:0 0 6px;color:var(--blockeditor-ink-soft)}
+.blockeditor-export-losses{margin:6px 0;padding-left:1.1em}
+.blockeditor-export-losses li{margin:2px 0}
+.blockeditor-export-acts{display:flex;gap:6px;margin-top:8px}
+.blockeditor-export-btn{border:0;padding:4px 8px;border-radius:6px;background:none;color:inherit;font:inherit;cursor:pointer}
+.blockeditor-export-btn:hover{background:var(--blockeditor-pop-hover)}
+.blockeditor-export-panel[data-state="loss"] .blockeditor-export-title{color:var(--blockeditor-danger, #9E3B2F)}
 `;
 
 export function createFeature({ view = null, download = downloadHtml, fetch: fetchImpl = null, now = () => new Date() } = {}) {
@@ -51,7 +51,7 @@ export function createFeature({ view = null, download = downloadHtml, fetch: fet
   const button = (act, label) => {
     const b = doc.createElement("button");
     b.type = "button";
-    b.className = "page-export-btn";
+    b.className = "blockeditor-export-btn";
     b.dataset.act = act;
     b.textContent = label;
     return b;
@@ -70,28 +70,28 @@ export function createFeature({ view = null, download = downloadHtml, fetch: fet
   // the one action that does anything — a download, and only when nothing is missing.
   function draw(s) {
     const box = s.panel ?? (s.panel = doc.createElement("aside"));
-    box.className = "page-export-panel";
+    box.className = "blockeditor-export-panel";
     box.dataset.state = s.ready ? "ready" : "loss";
     box.setAttribute("contenteditable", "false");
     box.setAttribute("role", "dialog");
     box.setAttribute("aria-modal", "false");
-    box.setAttribute("aria-labelledby", "page-export-title");
+    box.setAttribute("aria-labelledby", "blockeditor-export-title");
     box.dataset.at = s.at.toISOString();
     box.setAttribute("tabindex", "-1");
     box.textContent = "";
     const title = doc.createElement("p");
-    title.className = "page-export-title";
-    title.id = "page-export-title";
+    title.className = "blockeditor-export-title";
+    title.id = "blockeditor-export-title";
     const heading = s.ready ? "Reading copy" : "This page cannot be a reading copy yet";
     title.textContent = s.title ? `${heading}: ${s.title}` : heading;
     const when = doc.createElement("p");
-    when.className = "page-export-when";
+    when.className = "blockeditor-export-when";
     const said = `${s.at.toLocaleString()} · ${s.embedded} ${s.embedded === 1 ? "resource" : "resources"} inside the file`;
     when.textContent = said;
     box.append(title, when);
     if (s.losses.length) {
       const list = doc.createElement("ul");
-      list.className = "page-export-losses";
+      list.className = "blockeditor-export-losses";
       for (const entry of s.losses) {
         const item = doc.createElement("li");
         item.textContent = entry.message;
@@ -100,12 +100,12 @@ export function createFeature({ view = null, download = downloadHtml, fetch: fet
       box.append(list);
     }
     const acts = doc.createElement("div");
-    acts.className = "page-export-acts";
+    acts.className = "blockeditor-export-acts";
     if (s.ready) acts.append(button("download", "Download"), button("close", "Close"));
     else acts.append(button("retry", "Try again"), button("close", "Close"));
     box.append(acts);
     const first = acts.firstChild;
-    if (!s.ui) s.ui = mountEditorUI({ name: "page-export", content: box, css: [PANEL_CSS], parent: view.dom.parentElement ?? doc.body });
+    if (!s.ui) s.ui = mountEditorUI({ name: "blockeditor-export", content: box, css: [PANEL_CSS], parent: view.dom.parentElement ?? doc.body });
     // The panel is what a person lands on: the download when there is one to take,
     // and the list of what stopped it when there is not.
     (s.ready ? first : box).focus?.();

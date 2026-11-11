@@ -96,7 +96,7 @@ export async function runPlan(plan, cfg = DEFAULT, { seed = 1, quiet = false } =
   const initial = seedValue(seedBlocks);
   const initChars = new Set(uniq(seedBlocks.map((b) => b.text).join('')));
   const refuse = { until: new Map() };
-  const room = createRoom(sim, { page: initial }, {
+  const room = createRoom(sim, { blockeditor: initial }, {
     latency: () => 20 + sim.rand() * 100, answerLatency: () => 20 + sim.rand() * 100,
     refuse: (clientId) => (sim.now() < (refuse.until.get(clientId) ?? -1) ? { status: 503, body: { code: 'busy' }, retryAfter: 2 } : null),
   });
@@ -134,13 +134,13 @@ export async function runPlan(plan, cfg = DEFAULT, { seed = 1, quiet = false } =
   const exec = (a) => {
     try {
       const t = a.tab ? tabs.get(a.tab) : null;
-      if (a.kind === 'checkpoint') { marks.push(sim.now()); file = clone(room.stores.get('page').value); room.land('page', room.seq); return; }
+      if (a.kind === 'checkpoint') { marks.push(sim.now()); file = clone(room.stores.get('blockeditor').value); room.land('blockeditor', room.seq); return; }
       if (a.kind === 'loss') {
         marks.push(sim.now(), sim.now() + (a.gap ?? 0));
-        if (a.fresh) { file = clone(room.stores.get('page').value); room.land('page', room.seq); }
+        if (a.fresh) { file = clone(room.stores.get('blockeditor').value); room.land('blockeditor', room.seq); }
         cfg.debug?.('loss', { sim, room, tabs, file });
-        sim.after(5, () => { losses.push(sim.now()); room.restart({ page: file }); });
-        if (a.gap) sim.after(5 + a.gap, () => { losses.push(sim.now()); room.restart({ page: file }); });
+        sim.after(5, () => { losses.push(sim.now()); room.restart({ blockeditor: file }); });
+        if (a.gap) sim.after(5 + a.gap, () => { losses.push(sim.now()); room.restart({ blockeditor: file }); });
         return;
       }
       if (a.kind === 'leave') { if (t && tabs.size > 1) { room.close(t.id); try { t.binding.dispose(); t.editor.destroy(); t.lane.stop(); } catch {} tabs.delete(t.id); gone.add(t.id); } return; }
@@ -270,7 +270,7 @@ export async function runPlan(plan, cfg = DEFAULT, { seed = 1, quiet = false } =
   if (crashed) return { findings, plan };
   const problems = check({ room, tabs });
   problems.push(...(await reload({ sim, room, tabs })));
-  const value = clone(room.stores.get('page').value);
+  const value = clone(room.stores.get('blockeditor').value);
   const finalBlocks = [];
   docOfValue(value).forEach((n) => finalBlocks.push(n.isTextblock ? n.textContent : ''));
   const finalText = finalBlocks.join('\n');

@@ -26,8 +26,8 @@ const BLOCKS = [
   { id: "h", t: "heading", text: "Notes" },
   { id: "p", t: "paragraph", text: "Hello" },
 ];
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
-const ARTICLE_SEL = "article[data-page]";
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
+const ARTICLE_SEL = "article[data-blockeditor]";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
@@ -43,19 +43,19 @@ const tick = async (turns = 40) => { for (let i = 0; i < turns; i++) await Promi
 const render = (blocks) => renderFromTags([JSON.stringify(seedValue(blocks))]);
 const articleHtml = (blocks = BLOCKS) => {
   const { html, rev } = render(blocks);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const tagHtml = (blocks = BLOCKS) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(seedValue(blocks))}</script>`;
+const tagHtml = (blocks = BLOCKS) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(seedValue(blocks))}</script>`;
 const articleOf = (html) => new DOMParser().parseFromString(html, "text/html").querySelector(ARTICLE_SEL);
 // A page tag stating a value this module built, rather than one a seed wrote.
-const tagValueHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagValueHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 
 // The page a peer saved from the page this tab holds: the same blocks plus one edit, so
 // the value it states descends from the tag the tab was served.
 async function descendantValue(blocks, edit) {
   const { createStore } = await import("../../../src/live/store.js");
   const { createYPageBinding, LOCAL, yValueOf } = await import("../../../src/page/ybind/index.js");
-  const store = createStore({ name: "page", value: seedValue(blocks) });
+  const store = createStore({ name: "blockeditor", value: seedValue(blocks) });
   const binding = createYPageBinding({ store });
   binding.ydoc.transact(() => binding.pd.flow.insert(binding.pd.flow.length, edit), LOCAL);
   const value = yValueOf(binding.ydoc);
@@ -69,7 +69,7 @@ async function descendantValue(blocks, edit) {
 const FILE = (body, { head = "", rev = "r1" } = {}) =>
   `<!doctype html><html><head><title>Notes</title>${head}</head><body>${body.replace("<article", `<article data-rev="${rev}"`)}</body></html>`;
 
-const readerHtml = (body) => `<!doctype html><html><head><title>Notes</title></head><body><article data-page="1">${body}</article></body></html>`;
+const readerHtml = (body) => `<!doctype html><html><head><title>Notes</title></head><body><article data-blockeditor="1">${body}</article></body></html>`;
 
 const context = ({ represented = null, reader = null, initial = false } = {}) => ({
   generation: 1,
@@ -120,7 +120,7 @@ async function load({
   document.head.innerHTML = head;
   document.body.innerHTML = html;
 
-  const extensions = ["page", "sync"];
+  const extensions = ["blockeditor", "sync"];
   const saves = [];
   const sent = [];
   const sources = [];
@@ -169,7 +169,7 @@ async function load({
     ...realEditor,
     createPageEditor: (mount, options) => {
       if (MODE.factory === "throw") {
-        mount.appendChild(document.createElement("div")).className = "page-shell";
+        mount.appendChild(document.createElement("div")).className = "blockeditor-shell";
         throw new Error("the editor could not be built");
       }
       return realEditor.createPageEditor(mount, options);
@@ -252,7 +252,7 @@ test("importing the plugin in view starts no editor, takes no claim and writes n
 
   expect(page.ready).toBe(null);
   expect(page.view).toBe(null);
-  expect(document.querySelector(".page-shell")).toBe(null);
+  expect(document.querySelector(".blockeditor-shell")).toBe(null);
   expect(ownerOf(article())).toBe(null);
   expect(saves).toHaveLength(0);
   expect(sent).toHaveLength(0);
@@ -273,15 +273,15 @@ test("preparation stages the represented page without input, and the commit open
     // open and nothing has been written.
     expect(harness.page.view).toBeTruthy();
     expect(harness.page.view.editable).toBe(false);
-    expect(harness.page.view.dom.closest(".page-shell").inert).toBe(true);
+    expect(harness.page.view.dom.closest(".blockeditor-shell").inert).toBe(true);
     expect(inputReady()).toHaveLength(0);
     expect(harness.ownerOf(article())).toBe("editor");
     expect(harness.saves).toHaveLength(0);
-    expect(harness.storeOf("page").value).toEqual(seedPageFromArticle(articleOf(bytes)));
+    expect(harness.storeOf("blockeditor").value).toEqual(seedPageFromArticle(articleOf(bytes)));
 
     lease.enable();
     expect(harness.page.view.editable).toBe(true);
-    expect(harness.page.view.dom.closest(".page-shell").inert).toBe(false);
+    expect(harness.page.view.dom.closest(".blockeditor-shell").inert).toBe(false);
     expect(inputReady()).toHaveLength(1);
     expect(harness.page.status).toMatchObject({ phase: "ready" });
     expect(harness.saves).toHaveLength(0);
@@ -348,7 +348,7 @@ test("a real edit after a second preparation saves the page once", async () => {
     expect(await until(() => harness.saves.length > 0)).toBe(true);
     await tick(80);
     expect(harness.saves).toHaveLength(1);
-    expect(blocksFromYValue(harness.storeOf("page").value).p.c).toBe("Hello there");
+    expect(blocksFromYValue(harness.storeOf("blockeditor").value).p.c).toBe("Hello there");
   } finally {
     two.dispose();
     facts.commitModeFacts({ mode: "view", isEditMode: false });
@@ -380,7 +380,7 @@ test("a details the reader opened locally does not change the staged page", asyn
   const lease = harness.pageParticipant().prepare(context({ represented: handoff.represented, reader: handoff }));
   try {
     await lease.ready;
-    expect(harness.storeOf("page").value).toEqual(fromReceipt);
+    expect(harness.storeOf("blockeditor").value).toEqual(fromReceipt);
   } finally {
     lease.dispose();
   }
@@ -390,7 +390,7 @@ test("a page tag another tab changed is replaced by the receipt's tag", async ()
   // Another tab saved this page at a version of the format this tab cannot read. The
   // reader paints the file it represented onto the article and its tag, so the page a
   // session opens from the DOM is the one the reader holds.
-  const served = '<script type="application/json" merge="page" clay="live">{"v":2,"y":{}}</script>';
+  const served = '<script type="application/json" merge="blockeditor" clay="live">{"v":2,"y":{}}</script>';
   const harness = await load({ html: articleHtml(), head: served });
   const bytes = FILE(articleHtml(), { head: tagHtml(BLOCKS) });
   const reader = await harness.openReader(bytes);
@@ -434,7 +434,7 @@ test("the first entry after another tab saved mounts that file and stages its pa
   const lease = harness.pageParticipant().prepare(context({ represented: handoff.represented, reader: handoff }));
   try {
     await lease.ready;
-    expect(harness.storeOf("page").value).toEqual(seedValue(OTHER));
+    expect(harness.storeOf("blockeditor").value).toEqual(seedValue(OTHER));
     expect(article().textContent).toContain("Newer V2");
     expect(article().textContent).not.toContain("Hello");
     lease.enable();
@@ -455,7 +455,7 @@ test("an edit, a view and another tab's save: the next entry mounts that save", 
   one.dispose();
   await tick();
   expect(harness.saves).toHaveLength(0);
-  expect(harness.storeOf("page")).toBe(null);
+  expect(harness.storeOf("blockeditor")).toBe(null);
 
   // The reader keeps the file through the exit; another tab saves over it while this one
   // is in view, so the file the next entry is handed is that save.
@@ -465,7 +465,7 @@ test("an edit, a view and another tab's save: the next entry mounts that save", 
   const two = harness.pageParticipant().prepare(context({ represented: second.represented, reader: newer }));
   try {
     await two.ready;
-    expect(harness.storeOf("page").value).toEqual(seedValue(OTHER));
+    expect(harness.storeOf("blockeditor").value).toEqual(seedValue(OTHER));
     expect(article().textContent).toContain("Newer V2");
     expect(harness.saves).toHaveLength(0);
   } finally {
@@ -475,7 +475,7 @@ test("an edit, a view and another tab's save: the next entry mounts that save", 
 
 test("a store the app opened itself survives the session's release", async () => {
   const harness = await load({ head: tagHtml() });
-  const app = window.clay.live("page");
+  const app = window.clay.live("blockeditor");
   const reader = await harness.openReader(FILE(articleHtml(), { head: tagHtml() }));
   const handoff = await reader.prepareHandoff({});
   const lease = harness.pageParticipant().prepare(context({ represented: handoff.represented, reader: handoff }));
@@ -485,8 +485,8 @@ test("a store the app opened itself survives the session's release", async () =>
     lease.dispose();
   }
   await tick();
-  expect(harness.storeOf("page")).toBeTruthy();
-  expect(window.clay.live("page")).toBe(app);
+  expect(harness.storeOf("blockeditor")).toBeTruthy();
+  expect(window.clay.live("blockeditor")).toBe(app);
 });
 
 test("a store the app opened itself is brought to the newer represented file", async () => {
@@ -500,7 +500,7 @@ test("a store the app opened itself is brought to the newer represented file", a
     { id: "p", t: "paragraph", text: "New peer writing" },
   ];
   const harness = await load({ head: tagHtml() });
-  const app = window.clay.live("page");
+  const app = window.clay.live("blockeditor");
   const bytes = FILE(articleHtml(advanced), { head: tagHtml(advanced) });
   const reader = await harness.openReader(bytes, { etag: "stamp-2", seq: 2 });
   const handoff = await reader.prepareHandoff({});
@@ -510,8 +510,8 @@ test("a store the app opened itself is brought to the newer represented file", a
   try {
     await lease.ready;
     // The very store the app holds, now at the file's page.
-    expect(window.clay.live("page")).toBe(app);
-    expect(blocksFromYValue(harness.storeOf("page").value).p.c)
+    expect(window.clay.live("blockeditor")).toBe(app);
+    expect(blocksFromYValue(harness.storeOf("blockeditor").value).p.c)
       .toEqual(blocksFromYValue(seedValue(advanced)).p.c);
     lease.enable();
     expect(harness.page.view).toBeTruthy();
@@ -528,7 +528,7 @@ test("a store the app opened itself takes up a newer file that descends from it"
   // carries the store's own history plus the peer's edit, so the file's updates merge into
   // the store before anything mounts, and the editor shows what the file states.
   const harness = await load({ head: tagHtml() });
-  const app = window.clay.live("page");
+  const app = window.clay.live("blockeditor");
   const newer = await descendantValue(BLOCKS, " there");
   const bytes = FILE(articleHtml(), { head: tagValueHtml(newer) });
   const reader = await harness.openReader(bytes, { etag: "stamp-2", seq: 2 });
@@ -537,7 +537,7 @@ test("a store the app opened itself takes up a newer file that descends from it"
   const lease = harness.pageParticipant().prepare(context({ represented: handoff.represented, reader: handoff }));
   try {
     await lease.ready;
-    expect(window.clay.live("page")).toBe(app);
+    expect(window.clay.live("blockeditor")).toBe(app);
     lease.enable();
     expect(harness.page.view).toBeTruthy();
     expect(article().textContent).toContain("Hello there");
@@ -559,7 +559,7 @@ test("a represented file without the page tag seeds from its article", async () 
   const lease = harness.pageParticipant().prepare(context({ represented: handoff.represented, reader: handoff }));
   try {
     await lease.ready;
-    expect(harness.storeOf("page").value).toEqual(seedPageFromArticle(articleOf(bytes)));
+    expect(harness.storeOf("blockeditor").value).toEqual(seedPageFromArticle(articleOf(bytes)));
     expect(article().textContent).toContain("Newer V2");
   } finally {
     lease.dispose();
@@ -578,7 +578,7 @@ test("a represented file that states a page tag stages that tag's page", async (
   const lease = harness.pageParticipant().prepare(context({ represented: handoff.represented, reader: handoff }));
   try {
     await lease.ready;
-    expect(harness.storeOf("page").value).toEqual(seedValue(OTHER));
+    expect(harness.storeOf("blockeditor").value).toEqual(seedValue(OTHER));
     expect(article().textContent).toContain("Newer V2");
   } finally {
     lease.dispose();
@@ -608,7 +608,7 @@ test("a hand-edited article is adopted on entry, not left waiting on the lane", 
     ]);
     expect(settled).toBe("ready");
     // The hand edit is in the page the session stages, so the client is the adopter.
-    expect(blocksFromYValue(harness.storeOf("page").value).p.c).toBe(handEdited);
+    expect(blocksFromYValue(harness.storeOf("blockeditor").value).p.c).toBe(handEdited);
     expect(harness.page.view.editable).toBe(false);
     liveLease.enable();
     lease.enable();
@@ -674,7 +674,7 @@ test("the exit of an explicit edit boot adopts its install and ends the editor",
   }
 
   expect(harness.page.view).toBe(null);
-  expect(document.querySelector(".page-shell")).toBe(null);
+  expect(document.querySelector(".blockeditor-shell")).toBe(null);
   // The accepted page is what the exit leaves: the article the save wrote.
   expect(article().textContent).toContain("Hello there");
   expect(harness.ownerOf(article())).toBe(null);
@@ -708,7 +708,7 @@ test("the exit saves this tab's own typing under its permit and leaves", async (
   try {
     const view = harness.page.view;
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
-    expect(harness.storeOf("page").pending.length).toBeGreaterThan(0);
+    expect(harness.storeOf("blockeditor").pending.length).toBeGreaterThan(0);
 
     const result = await leave(lease);
     expect(result.ok).toBe(true);
@@ -716,7 +716,7 @@ test("the exit saves this tab's own typing under its permit and leaves", async (
     // ops are in the capture that produced these bytes.
     expect(harness.saves).toHaveLength(1);
     expect(harness.saves[0].body).toContain("Hello there");
-    expect(harness.storeOf("page").pending).toEqual([]);
+    expect(harness.storeOf("blockeditor").pending).toEqual([]);
     const unsaved = await import("../../../src/lib/unsaved-state.js");
     expect(unsaved.pendingIds()).toEqual([]);
   } finally {
@@ -750,7 +750,7 @@ test("a refused exit checkpoint names the page, keeps the text and sends nothing
     expect(result.ok).toBe(false);
     expect(result.pending).toContain("page:live");
     // The text is still this tab's: nothing was acknowledged and nothing was dropped.
-    expect(harness.storeOf("page").pending.length).toBeGreaterThan(0);
+    expect(harness.storeOf("blockeditor").pending.length).toBeGreaterThan(0);
     expect(harness.page.view).toBeTruthy();
 
     // No restart of the save after the refusal, and none on the next turn of the clock.
@@ -776,7 +776,7 @@ test("a 412 refuses the leave as a conflict and keeps the text", async () => {
     expect(result.code).toBe("conflict");
     expect(harness.saves).toHaveLength(1);
     expect(harness.page.view.state.doc.textContent).toContain("Hello there");
-    expect(harness.storeOf("page").pending.length).toBeGreaterThan(0);
+    expect(harness.storeOf("blockeditor").pending.length).toBeGreaterThan(0);
   } finally {
     lease.dispose();
     facts.commitModeFacts({ mode: "view", isEditMode: false });
@@ -875,7 +875,7 @@ test("after a refusal the retry saves the same obligation", async () => {
     expect(retried.ok).toBe(true);
     expect(harness.saves).toHaveLength(2);
     expect(harness.saves[1].body).toContain("Hello there");
-    expect(harness.storeOf("page").pending).toEqual([]);
+    expect(harness.storeOf("blockeditor").pending).toEqual([]);
   } finally {
     lease.dispose();
     facts.commitModeFacts({ mode: "view", isEditMode: false });

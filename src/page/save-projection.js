@@ -12,8 +12,8 @@ import { customTitle, writeTitle } from "./document-title-dom.js";
 import { blocksFromPageValues } from "./ybind/decode.js";
 import { YDecodeError } from "./ybind/provider.js";
 
-export const ARTICLE = "article[data-page]";
-const PAGE = /^page(\.[0-9]+)?$/;
+export const ARTICLE = "article[data-blockeditor]";
+const PAGE = /^blockeditor(\.[0-9]+)?$/;
 
 export function pageTags(root) {
   return [...root.querySelectorAll('script[merge][clay~="live"]')].filter((el) => PAGE.test(el.getAttribute("merge")));

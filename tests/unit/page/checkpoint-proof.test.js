@@ -29,7 +29,7 @@ const PATH_AUTHORITY = { host: "http://localhost:8788", documentId: "/doc.html",
 const GENERATION = "3f".repeat(16);
 const CONTEXT = { authority: AUTHORITY, lineage: { generation: GENERATION } };
 const ACCEPTED = { authority: AUTHORITY, lineage: { generation: GENERATION } };
-const HREF = "/_/page-state";
+const HREF = "/_/blockeditor-state";
 const ETAG = '"file-1"';
 
 const stateOf = (doc) => ({ v: 1, g: 0, y: { seed: toBase64(Y.encodeStateAsUpdateV2(doc)) } });
@@ -72,7 +72,7 @@ const ARTICLE_B = articleOfPageState(STATE_B);
 const stranger = load(seed);
 const foreign = edit(stranger, (flow) => flow.insert(2, "Z"));
 
-// A fixture page-state adapter: the contract every host answers, over a state we name.
+// A fixture blockeditor-state adapter: the contract every host answers, over a state we name.
 const adapter = (over = {}) => async (url, init) => {
   const state = over.state ?? STATE_B;
   const status = over.status ?? 200;
@@ -134,7 +134,7 @@ test("the capture's own proof covers what its bytes carried, never an edit made 
   expect(proof.covered).toEqual([{ id: "added", revision: 1 }]);
   expect(proof.proof.capture).toBe("capture-1");
   expect(proof.proof.stateDigest).toBe(await digestOf(STATE_A));
-  expect(proof.proof.receipt).toEqual({ file: ETAG, pageState: await digestOf(STATE_A) });
+  expect(proof.proof.receipt).toEqual({ file: ETAG, blockeditorState: await digestOf(STATE_A) });
 
   // The same two records against the bytes that carry the later edit are both covered.
   const grown = await captureProof({ ...captured({ state: STATE_B, article: ARTICLE_B }), records: [record("added", 1, added), record("later", 2, later)] });
@@ -197,7 +197,7 @@ test("server and other-writer checkpoints cover insertions and deletions, and no
   });
   expect(proven.ok).toBe(true);
   expect(proven.covered).toEqual([{ id: "added", revision: 1 }, { id: "removed", revision: 2 }]);
-  expect(proven.proof.receipt).toEqual({ file: ETAG, pageState: await digestOf(STATE_B) });
+  expect(proven.proof.receipt).toEqual({ file: ETAG, blockeditorState: await digestOf(STATE_B) });
 
   // The state an earlier version stored covers the insertion and not the deletion.
   const earlier = await readPageState({ href: HREF, etag: ETAG, fetch: adapter({ state: STATE_A }) });
@@ -295,7 +295,7 @@ test("a lost reply keeps everything, and a verified refetch clears exactly what 
   const attempts = [];
   const read = async ({ etag }) => {
     attempts.push(etag);
-    if (attempts.length === 1) return { ok: false, code: "unavailable", message: "The page-state request did not complete" };
+    if (attempts.length === 1) return { ok: false, code: "unavailable", message: "The blockeditor-state request did not complete" };
     return readPageState({ href: HREF, etag, fetch: adapter({ state: STATE_B }) });
   };
 
@@ -325,7 +325,7 @@ test("a pinned capture is proved without asking the host, and retires only what 
 });
 
 test("412, 428 and 404 from the conditional read each keep every record", async () => {
-  for (const [status, code] of [[412, "etag-mismatch"], [428, "etag-required"], [404, "no-page-state"]]) {
+  for (const [status, code] of [[412, "etag-mismatch"], [428, "etag-required"], [404, "no-blockeditor-state"]]) {
     const page = channel();
     page.add("added", 1);
     const answer = await readPageState({ href: HREF, etag: ETAG, fetch: refusedBy(status) });
@@ -355,18 +355,18 @@ test("the client never asks without a condition, and asks with the accepted one"
   expect(calls[0].init.cache).toBe("no-store");
   expect(new URL(calls[0].url).pathname).toBe(HREF);
 
-  expect(await readPageState({ href: null, etag: ETAG, fetch: counting })).toMatchObject({ ok: false, code: "no-page-state" });
+  expect(await readPageState({ href: null, etag: ETAG, fetch: counting })).toMatchObject({ ok: false, code: "no-blockeditor-state" });
   expect(await readPageState({ href: HREF, etag: ETAG, fetch: async () => { throw new Error("offline"); } })).toMatchObject({ ok: false, code: "unavailable" });
 });
 
-test("the page-state resource comes from discovery, and only from a host that announced it", async () => {
+test("the blockeditor-state resource comes from discovery, and only from a host that announced it", async () => {
   const { hostPageStateHref, resetHostMeta } = await import("../../../src/core/host-meta.js");
   const discovery = (body) => async () => ({ ok: true, status: 200, text: async () => JSON.stringify(body) });
-  const announcing = { spec: 1, extensions: ["page-recovery-v1"], document: { pageState: { href: "/_/page-state" } } };
+  const announcing = { spec: 1, extensions: ["blockeditor-recovery-v1"], document: { blockeditorState: { href: "/_/blockeditor-state" } } };
 
   resetHostMeta();
   global.fetch = discovery(announcing);
-  expect(await hostPageStateHref()).toBe("/_/page-state");
+  expect(await hostPageStateHref()).toBe("/_/blockeditor-state");
 
   resetHostMeta();
   global.fetch = discovery({ ...announcing, extensions: [] });
@@ -377,6 +377,6 @@ test("the page-state resource comes from discovery, and only from a host that an
   expect(await hostPageStateHref()).toBeNull();
 
   resetHostMeta();
-  global.fetch = discovery({ ...announcing, document: { pageState: { href: "" } } });
+  global.fetch = discovery({ ...announcing, document: { blockeditorState: { href: "" } } });
   expect(await hostPageStateHref()).toBeNull();
 });

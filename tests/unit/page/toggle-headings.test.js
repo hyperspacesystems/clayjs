@@ -24,11 +24,11 @@ afterEach(() => { document.body.innerHTML = ""; });
 
 const TOGGLE_H2 = () => I.BLOCK_TYPES.find((b) => b.key === "toggle-h2");
 const TOGGLE_PLAIN = () => I.BLOCK_TYPES.find((b) => b.key === "toggle");
-const row = (view, label) => [...view.dom.parentElement.querySelectorAll(".page-menu-item")]
-  .find((r) => r.querySelector(".page-menu-label").textContent === label);
-const checked = (view) => [...view.dom.parentElement.querySelectorAll(".page-menu-item")]
+const row = (view, label) => [...view.dom.parentElement.querySelectorAll(".blockeditor-menu-item")]
+  .find((r) => r.querySelector(".blockeditor-menu-label").textContent === label);
+const checked = (view) => [...view.dom.parentElement.querySelectorAll(".blockeditor-menu-item")]
   .filter((r) => r.getAttribute("aria-checked") === "true")
-  .map((r) => r.querySelector(".page-menu-label").textContent);
+  .map((r) => r.querySelector(".blockeditor-menu-label").textContent);
 const record = (view, id) => blockMap(view.state.doc)[id];
 const settle = () => new Promise((done) => setTimeout(done, 0));
 
@@ -42,7 +42,7 @@ const open = (spec) => {
 
 const articleOf = (inner, rev = "0") => {
   const parsed = new DOMParser().parseFromString(
-    `<!DOCTYPE html><html><body><article data-page="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
+    `<!DOCTYPE html><html><body><article data-blockeditor="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
     "text/html",
   );
   return parsed.querySelector("article");
@@ -67,7 +67,7 @@ test("Slash and Turn into list Toggle heading 1, 2 and 3, and `> ` still writes 
 test("Turn into makes the caret's toggle a toggle heading and leaves its body where it is", async () => {
   const { view, asked } = open(BODY());
   select(view, posOf(view, "t"));
-  view.dom.parentElement.querySelector(".page-tool-turn").click();
+  view.dom.parentElement.querySelector(".blockeditor-tool-turn").click();
   row(view, "Toggle heading 2").click();
   expect(asked).toHaveLength(1);
   await settle();
@@ -77,7 +77,7 @@ test("Turn into makes the caret's toggle a toggle heading and leaves its body wh
   expect(shape(view)).toBe("Summary | Body<t | Z");
 
   // The row the menu shows as current is the one the block now is.
-  view.dom.parentElement.querySelector(".page-tool-turn").click();
+  view.dom.parentElement.querySelector(".blockeditor-tool-turn").click();
   expect(checked(view)).toEqual(["Toggle heading 2"]);
 });
 
@@ -210,10 +210,10 @@ test("a writer that does not know the level keeps it for this one", () => {
 test("a gate that refuses writes nothing and leaves the toggle's level unchanged", async () => {
   const { view } = open(BODY());
   const asked = [];
-  view.runFormatCommand = async () => { asked.push(true); return { status: "upgrade-required", code: "page-format-upgrade-required" }; };
+  view.runFormatCommand = async () => { asked.push(true); return { status: "upgrade-required", code: "blockeditor-format-upgrade-required" }; };
   const before = view.state.doc;
 
-  expect(await I.turnBlocks(view, TOGGLE_H2(), ["t"])).toEqual({ ok: false, code: "page-format-upgrade-required", retry: false });
+  expect(await I.turnBlocks(view, TOGGLE_H2(), ["t"])).toEqual({ ok: false, code: "blockeditor-format-upgrade-required", retry: false });
   expect(asked).toHaveLength(1);
   // Nothing was dispatched at all, so no level was written and history has no entry.
   expect(view.state.doc).toBe(before);
@@ -226,7 +226,7 @@ test("a page with no format gate refuses a toggle heading and writes nothing", a
   const { view } = open(BODY());
   delete view.runFormatCommand;
   const before = view.state.doc;
-  expect(await I.turnBlocks(view, TOGGLE_H2(), ["t"])).toEqual({ ok: false, code: "page-format-unsupported" });
+  expect(await I.turnBlocks(view, TOGGLE_H2(), ["t"])).toEqual({ ok: false, code: "blockeditor-format-unsupported" });
   expect(view.state.doc).toBe(before);
 });
 
@@ -269,7 +269,7 @@ test("undo puts the toggle's level back the way it was", async () => {
 test("a saved page's toggle heading pastes back as a toggle heading", () => {
   const box = document.createElement("div");
   box.innerHTML = B.flattenPastedHTML(renderModel(project({ t: { t: "toggle", pos: "00000001", c: "Summary", level: 2 } })), document);
-  const toggle = box.querySelector("div[data-page-toggle]");
+  const toggle = box.querySelector("div[data-blockeditor-toggle]");
   expect(toggle.getAttribute("data-level")).toBe("2");
   expect(toggle.textContent).toBe("Summary");
   expect(box.querySelector("h2")).toBeNull();

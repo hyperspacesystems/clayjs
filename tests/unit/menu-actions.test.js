@@ -112,8 +112,8 @@ test("a document with neither page nor undo gets no pair and no Ask AI item", as
 // A Block-based document keeps its history in its own editor, so its pair reads that
 // service and never hyper-undo's.
 function asPageDocument(history) {
-  window.clay.editPlugins = ["menu", "page"];
-  window.clay.page = { history };
+  window.clay.editPlugins = ["menu", "blockeditor"];
+  window.clay.blockeditor = { history };
   document.dispatchEvent(new CustomEvent("clay:modechange"));
 }
 
@@ -149,7 +149,7 @@ test("in edit mode the pair follows history and clicks reach the undo service", 
   expect(isDisabled("clay.undo.redo")).toBe(false);
 });
 
-test("a page plugin document's pair renders, follows clay.page.history and clicks reach it", async () => {
+test("a page plugin document's pair renders, follows clay.blockeditor.history and clicks reach it", async () => {
   await boot({ plugins: "menu", edit: true });
 
   const history = { undo: jest.fn(), redo: jest.fn(), canUndo: true, canRedo: false };
@@ -171,7 +171,7 @@ test("a page plugin document's pair renders, follows clay.page.history and click
 
   // The editor closed after the item was drawn: the press reaches nothing and throws
   // nothing, because the service is read at use time.
-  window.clay.page = null;
+  window.clay.blockeditor = null;
   expect(() => click(buttonOf("clay.undo.undo"))).not.toThrow();
   expect(history.undo).toHaveBeenCalledTimes(1);
 });
@@ -182,10 +182,10 @@ test("an ordinary document with undo loaded still uses clay.undo, not a page on 
   const undo = { undo: jest.fn(), redo: jest.fn(), canUndo: true, canRedo: false };
   window.clay.undo = undo;
   const pageHistory = { undo: jest.fn(), redo: jest.fn(), canUndo: false, canRedo: true };
-  window.clay.page = { history: pageHistory };
+  window.clay.blockeditor = { history: pageHistory };
   document.dispatchEvent(new CustomEvent("clay:modechange"));
 
-  expect(window.clay.editPlugins).not.toContain("page");
+  expect(window.clay.editPlugins).not.toContain("blockeditor");
   expect(isDisabled("clay.undo.undo")).toBe(false);
   expect(isDisabled("clay.undo.redo")).toBe(true);
 
@@ -215,17 +215,17 @@ test("Ask AI starts the picker in edit mode, and says so when it cannot", async 
 });
 
 test("a Block document in view mode gets Ask AI only when the host lists the helper", async () => {
-  await boot({ plugins: "menu,ai-edit,page", helpers: [{ name: "ai-edit", state: "ready" }] });
-  expect(window.clay.editPlugins).toContain("page");
+  await boot({ plugins: "menu,ai-edit,blockeditor", helpers: [{ name: "ai-edit", state: "ready" }] });
+  expect(window.clay.editPlugins).toContain("blockeditor");
   for (let i = 0; i < 50 && !buttonOf("clay.ai"); i++) await wait(10);
   expect(buttonOf("clay.ai")).not.toBeNull();
 });
 
 test("a Block document in view mode whose host lists no ai-edit helper gets no item", async () => {
-  await boot({ plugins: "menu,ai-edit,page" });
+  await boot({ plugins: "menu,ai-edit,blockeditor" });
   await flush();
 
-  expect(window.clay.editPlugins).toContain("page");
+  expect(window.clay.editPlugins).toContain("blockeditor");
   expect(buttonOf("clay.ai")).toBeNull();
   expect(buttonOf("clay.download")).not.toBeNull();
 });
@@ -328,13 +328,13 @@ test("a reload entry waits for the page's AI surface before opening the picker",
   const pick = await spyOnPick();
   let release;
   const ready = new Promise((resolve) => { release = resolve; });
-  window.clay.page = { ready, ai: null };
+  window.clay.blockeditor = { ready, ai: null };
 
   await wait(80);
   expect(pick).not.toHaveBeenCalled();
 
   release();
-  window.clay.page.ai = {};
+  window.clay.blockeditor.ai = {};
   for (let i = 0; i < 100 && pick.mock.calls.length === 0; i++) await wait(10);
 
   expect(pick).toHaveBeenCalledTimes(1);
@@ -346,8 +346,8 @@ test("a reload entry waits for the page's AI surface before opening the picker",
 // opening the DOM path over the editor.
 test("Cmd+J on a Block document before ai-edit loads is left to the browser", async () => {
   await boot({ plugins: "menu,ai-edit", edit: true, settle: false, helpers: [{ name: "ai-edit", state: "ready" }] });
-  document.body.insertAdjacentHTML("afterbegin", '<article data-page="1"></article>');
-  window.clay.editPlugins = [...window.clay.editPlugins, "page"];
+  document.body.insertAdjacentHTML("afterbegin", '<article data-blockeditor="1"></article>');
+  window.clay.editPlugins = [...window.clay.editPlugins, "blockeditor"];
   const panelShown = () => {
     const panel = document.querySelector('[data-clay-ai-edit="panel"]');
     return !!panel && !panel.hidden;
@@ -369,7 +369,7 @@ test("Cmd+J on a Block document before ai-edit loads is left to the browser", as
     expect(panelShown()).toBe(false);
     expect(document.querySelectorAll("[data-edit-id]").length).toBe(0);
   } finally {
-    document.querySelector("article[data-page]")?.remove();
+    document.querySelector("article[data-blockeditor]")?.remove();
   }
 });
 
@@ -506,6 +506,50 @@ test("Download names upload paths in full", async () => {
       expect(html).toContain(`src="${location.origin}/_/uploads/cover.jpg"`);
       expect(html).toContain("https://x.example/_/uploads/keep.png");
     }
+  } finally {
+    anchorClick.mockRestore();
+  }
+});
+
+test("Download of a page document leaves out the page store and names uploads in full", async () => {
+  await boot({ plugins: "menu", edit: true });
+  window.clay.getHTML = () =>
+    '<!doctype html><html><head><script type="application/json" merge="blockeditor" clay="live" live-at="x">{"v":1,"g":0,"y":{"seed":"AAA"}}</script><script type="application/json" merge="blockeditor.1" clay="live">{"v":1}</script><script type="application/json" merge="blockeditor.tools" clay="live">{}</script><script type="application/json" merge="blockeditor.settings" clay="live">{}</script></head><body><article class="blockeditor" data-blockeditor="1" data-rev="r1"><figure data-type="image"><img src="/_/uploads/cover.jpg"></figure></article><script src="https://clayjs.com/v1/clay.js?plugins=blockeditor"></script></body></html>';
+  const { createObjectURL, anchorClick } = setupDownload();
+
+  try {
+    click(buttonOf("clay.download"));
+    await flush();
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    const text = await blobText(createObjectURL.mock.calls[0][0]);
+    expect(text).not.toContain('merge="blockeditor"');
+    expect(text).not.toContain('merge="blockeditor.1"');
+    expect(text).toContain('merge="blockeditor.tools"');
+    expect(text).toContain('merge="blockeditor.settings"');
+    expect(text).toContain("clay.js");
+    expect(text).toContain(`src="${location.origin}/_/uploads/cover.jpg"`);
+    expect(text).toContain('data-rev="r1"');
+  } finally {
+    anchorClick.mockRestore();
+  }
+});
+
+test("Download of a document with no page article keeps its live stores", async () => {
+  await boot({ plugins: "menu", edit: true });
+  window.clay.getHTML = () =>
+    '<!doctype html><html><head><script type="application/json" merge="blockeditor" clay="live">{"v":1}</script><script type="application/json" merge="blockeditor.1" clay="live">{"v":1}</script><script type="application/json" merge="blockeditor.tools" clay="live">{}</script></head><body><div id="content">start</div></body></html>';
+  const { createObjectURL, anchorClick } = setupDownload();
+
+  try {
+    click(buttonOf("clay.download"));
+    await flush();
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    const text = await blobText(createObjectURL.mock.calls[0][0]);
+    expect(text).toContain('merge="blockeditor"');
+    expect(text).toContain('merge="blockeditor.1"');
+    expect(text).toContain('merge="blockeditor.tools"');
   } finally {
     anchorClick.mockRestore();
   }

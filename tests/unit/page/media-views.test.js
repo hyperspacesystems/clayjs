@@ -16,9 +16,9 @@ const image = (attrs = {}) => {
   view.coordsAtPos = () => ({ left: 0, right: 0, top: 0, bottom: 0 });
   return view;
 };
-const figure = (view) => view.dom.querySelector("figure.page-image");
-const caption = (view) => figure(view).querySelector(".page-image-caption");
-const frame = (view) => figure(view).querySelector(".page-image-frame");
+const figure = (view) => view.dom.querySelector("figure.blockeditor-image");
+const caption = (view) => figure(view).querySelector(".blockeditor-image-caption");
+const frame = (view) => figure(view).querySelector(".blockeditor-image-frame");
 const attrs = (view) => view.state.doc.child(1).attrs;
 const press = (el, k) => { const e = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }); el.dispatchEvent(e); return e.defaultPrevented; };
 const ptr = (type, props = {}) => {
@@ -37,7 +37,7 @@ describe("ImageView", () => {
 
   test("the align bar sets left and right as one undo step each, and Centre clears the attribute", () => {
     const view = image();
-    const bar = figure(view).querySelector(".page-image-align");
+    const bar = figure(view).querySelector(".blockeditor-image-align");
     const pressed = () => [...bar.children].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.align);
     expect([figure(view).dataset.align, pressed()]).toEqual([undefined, ["center"]]);
     bar.querySelector('[data-align="left"]').click();
@@ -138,7 +138,7 @@ describe("the width handle", () => {
     const view = image({ width: 300 });
     view.dom.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400 });
     frame(view).getBoundingClientRect = () => ({ left: 0, top: 0, width: 300, height: 200, right: 300, bottom: 200 });
-    return { view, handle: figure(view).querySelector(".page-image-handle") };
+    return { view, handle: figure(view).querySelector(".blockeditor-image-handle") };
   };
 
   test("dragging resizes the frame live and commits an integer pixel width on release, as one undo step", () => {
@@ -185,17 +185,17 @@ describe("the width handle", () => {
 
 describe("FileView", () => {
   const file = (a = {}) => editor([["p", "paragraph", "P"], ["f", "file", "", { src: "/files/a.pdf", name: "Report.pdf", size: 2 * 1024 * 1024, mime: "application/pdf", ...a }]]);
-  const link = (view) => view.dom.querySelector(".page-file-link");
+  const link = (view) => view.dom.querySelector(".blockeditor-file-link");
 
   test("draws the name as a link that opens in a new tab, with the size beside it", () => {
     const view = file();
     expect([link(view).getAttribute("href"), link(view).target, link(view).rel]).toEqual(["/files/a.pdf", "_blank", "noopener noreferrer"]);
-    expect([view.dom.querySelector(".page-file-name").textContent, view.dom.querySelector(".page-file-meta").textContent]).toEqual(["Report.pdf", "2.0 MB"]);
-    expect(view.dom.querySelector(".page-file").dataset.id).toBe("f");
+    expect([view.dom.querySelector(".blockeditor-file-name").textContent, view.dom.querySelector(".blockeditor-file-meta").textContent]).toEqual(["Report.pdf", "2.0 MB"]);
+    expect(view.dom.querySelector(".blockeditor-file").dataset.id).toBe("f");
   });
 
   test("sizes read as bytes, kilobytes or megabytes, and an unknown size shows nothing", () => {
-    const meta = (size) => { const v = file({ size }); const t = v.dom.querySelector(".page-file-meta").textContent; document.body.innerHTML = ""; return t; };
+    const meta = (size) => { const v = file({ size }); const t = v.dom.querySelector(".blockeditor-file-meta").textContent; document.body.innerHTML = ""; return t; };
     expect([meta(500), meta(1536), meta(null)]).toEqual(["500 B", "2 KB", ""]);
   });
 
@@ -206,7 +206,7 @@ describe("FileView", () => {
 
   test("a missing name reads 'file'", () => {
     const view = file({ name: "" });
-    expect(view.dom.querySelector(".page-file-name").textContent).toBe("file");
+    expect(view.dom.querySelector(".blockeditor-file-name").textContent).toBe("file");
   });
 });
 

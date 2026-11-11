@@ -82,12 +82,12 @@ afterEach(() => {
 const initial = seedValue([{ id: "p", text: "hello" }, { id: "q", text: "world" }]);
 
 function tab(client) {
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(initial)) });
-  const entries = new Map([["page", { store }]]);
-  const seed = () => new Map([["page", { value: store.authoritative, ephemeral: false, text: JSON.stringify(initial) }]]);
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(initial)) });
+  const entries = new Map([["blockeditor", { store }]]);
+  const seed = () => new Map([["blockeditor", { value: store.authoritative, ephemeral: false, text: JSON.stringify(initial) }]]);
   const transport = localTransport({ seed, key: KEY });
   const lane = createFastLane({ transport, entries });
-  store.onLocal((ops) => lane.local("page", ops, store.mark));
+  store.onLocal((ops) => lane.local("blockeditor", ops, store.mark));
   const ydoc = new Y.Doc();
   ydoc.clientID = client;
   for (const k of Object.keys(initial.y).sort()) Y.applyUpdateV2(ydoc, dec(initial.y[k]), NET);

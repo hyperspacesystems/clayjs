@@ -13,9 +13,9 @@ afterEach(() => {
 
 const DOC = [["a", "paragraph", "First"], ["b", "paragraph", "Second"]];
 
-const dock = (view) => view.dom.parentElement.querySelector(".page-dock");
-const panel = (view) => view.dom.parentElement.querySelector(".page-settings");
-const gear = (view) => dock(view).querySelector(".page-tool-settings");
+const dock = (view) => view.dom.parentElement.querySelector(".blockeditor-dock");
+const panel = (view) => view.dom.parentElement.querySelector(".blockeditor-settings");
+const gear = (view) => dock(view).querySelector(".blockeditor-tool-settings");
 const switches = (view) => [...panel(view).querySelectorAll('[role="switch"]')];
 const frame = () => new Promise((done) => window.requestAnimationFrame(() => done()));
 
@@ -25,7 +25,7 @@ const install = (overrides = {}) => {
     set: jest.fn(() => Promise.resolve()),
     ...overrides,
   };
-  window.clay = { page: { settings } };
+  window.clay = { blockeditor: { settings } };
   return settings;
 };
 
@@ -47,7 +47,7 @@ test("the gear opens the panel with both switches on, read from the page", async
   expect(panel(view).hidden).toBe(false);
   expect(gear(view).getAttribute("aria-expanded")).toBe("true");
   expect(panel(view).getAttribute("role")).toBe("dialog");
-  expect(panel(view).querySelector(".page-settings-title").textContent).toBe("Document settings");
+  expect(panel(view).querySelector(".blockeditor-settings-title").textContent).toBe("Document settings");
   expect(switches(view).map((s) => s.getAttribute("aria-checked"))).toEqual(["true", "true"]);
   expect(switches(view).map((s) => panel(view).querySelector(`#${s.getAttribute("aria-labelledby")}`).textContent))
     .toEqual(["Checklist assignees", "Checklist due dates"]);
@@ -81,7 +81,7 @@ test("Escape closes the panel and gives focus back to the gear", () => {
   install();
   const view = editor(DOC);
   gear(view).click();
-  expect(document.activeElement).toBe(panel(view).querySelector(".page-settings-close"));
+  expect(document.activeElement).toBe(panel(view).querySelector(".blockeditor-settings-close"));
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   expect(panel(view).hidden).toBe(true);
   expect(gear(view).getAttribute("aria-expanded")).toBe("false");
@@ -101,10 +101,10 @@ test("on a phone the More menu carries Document settings and opens the same pane
   await withPhone(async () => {
     const view = editor(DOC);
     const bar = dock(view);
-    expect([...bar.querySelectorAll(".page-tool-primary")].map((b) => b.dataset.cmd ?? "more")).toEqual(["strong", "em", "link", "more"]);
-    bar.querySelector(".page-tool-more").click();
-    const menu = view.dom.parentElement.querySelector(".page-menu");
-    const row = [...menu.querySelectorAll(".page-menu-item")].find((r) => r.querySelector(".page-menu-label").textContent === "Document settings");
+    expect([...bar.querySelectorAll(".blockeditor-tool-primary")].map((b) => b.dataset.cmd ?? "more")).toEqual(["strong", "em", "link", "more"]);
+    bar.querySelector(".blockeditor-tool-more").click();
+    const menu = view.dom.parentElement.querySelector(".blockeditor-menu");
+    const row = [...menu.querySelectorAll(".blockeditor-menu-item")].find((r) => r.querySelector(".blockeditor-menu-label").textContent === "Document settings");
     expect(row).toBeTruthy();
     const focused = [];
     view.focus = () => focused.push("editor");

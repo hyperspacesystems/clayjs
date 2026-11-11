@@ -59,7 +59,7 @@ const textOf = (value) => {
 function openTab({ factory, writerId, value, clientID }) {
   const recovery = createRecovery({ indexedDB: factory, writerId });
   const channel = pageChannel(recovery);
-  const store = createStore({ name: "page", value });
+  const store = createStore({ name: "blockeditor", value });
   const journal = createPageJournal({ channel, key: KEY, context: contextFor, base: canonicalPageBytes(value) });
   const binding = createYPageBinding({
     store,
@@ -82,7 +82,7 @@ async function save(tab) {
     accepted,
     article: "<p>saved</p>",
     state,
-    receipt: { file: "etag-1", pageState: await digestHex(canonicalPageBytes(state)) },
+    receipt: { file: "etag-1", blockeditorState: await digestHex(canonicalPageBytes(state)) },
   });
   const answer = await tab.channel.checkpoint({ records, proof });
   expect(answer.ok).toBe(true);

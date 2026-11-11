@@ -18,7 +18,7 @@ import { openPageMenu } from "./chrome.js";
 // blocks.js's STEP, read here rather than imported from it: this module is part
 // of the projection's graph, and blocks.js reads the projection's constants as it
 // loads. A command of ours is one undo item by itself, like every other command.
-const STEP = "page-step";
+const STEP = "blockeditor-step";
 const asStep = (tr) => history.closeHistory(tr).setMeta(STEP, true);
 
 const holds = (mark, attrs) => !!mark && Object.keys(mark.type.attrs).every((name) => mark.attrs[name] === attrs[name]);
@@ -55,7 +55,7 @@ function remove(view, type) {
 // format, and a refusal leaves the content exactly as it was.
 export function runFormat(view, apply) {
   const run = view.runFormatCommand;
-  if (typeof run !== "function") return Promise.resolve({ status: "unsupported-host", code: "page-format-unsupported", retry: false });
+  if (typeof run !== "function") return Promise.resolve({ status: "unsupported-host", code: "blockeditor-format-unsupported", retry: false });
   return run(apply);
 }
 

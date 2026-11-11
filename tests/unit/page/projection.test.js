@@ -12,7 +12,7 @@ import { RECORD } from "./fixtures/all-kinds.js";
  */
 
 function throughBytes(html, rev) {
-  const page = `<!DOCTYPE html><html><body><main><article class="page" clay="freeze" data-page="1" data-rev="${rev}">\n${html}\n</article></main></body></html>`;
+  const page = `<!DOCTYPE html><html><body><main><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}">\n${html}\n</article></main></body></html>`;
   const first = new DOMParser().parseFromString(page, "text/html");
   const bytes = "<!DOCTYPE html>" + first.documentElement.outerHTML;
   return new DOMParser().parseFromString(bytes, "text/html").querySelector("article");
@@ -31,7 +31,7 @@ const roundTripValues = (values) => {
   return { blocks, model, html, rev, article, parsed };
 };
 
-const articleOf = (inner) => new DOMParser().parseFromString(`<!DOCTYPE html><html><body><article data-page="1">${inner}</article></body></html>`, "text/html").querySelector("article");
+const articleOf = (inner) => new DOMParser().parseFromString(`<!DOCTYPE html><html><body><article data-blockeditor="1">${inner}</article></body></html>`, "text/html").querySelector("article");
 
 const KINDS = ["paragraph", "heading", "list_item", "toggle", "callout", "code_block", "divider", "image", "table", "chart", "board", "tool", "preserved"];
 

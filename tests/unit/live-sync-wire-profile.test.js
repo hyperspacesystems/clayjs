@@ -49,10 +49,10 @@ test.each([
   [['sync', 'sync-worker'], 'v1'],
   [['sync', 'live-data', 'sync-worker-data'], 'v2'],
   [['sync', 'live-data', 'sync-worker-data', 'presence'], 'v2'],
-  [['conditional','data-guard-v1','data-read','data-write','format','live-data','live-provenance','page','page-awareness-v1','page-format-v1','page-recovery-v1','people','presence','receipts','record-awareness-v1','scoped-stylesheet','sync','sync-worker','upload','wire'], 'direct'],
-  [['conditional','data-guard-v1','data-read','data-write','format','live-data','live-provenance','page','page-awareness-v1','page-format-v1','page-recovery-v1','people','presence','receipts','record-awareness-v1','scoped-stylesheet','sync','sync-worker','sync-worker-data','upload','wire'], 'v2'],
-  [['conditional','copy-policy-v1','data-guard-v1','data-read','format','live-data','live-provenance','page','page-awareness-v1','page-recovery-v1','people','presence','presence-editing','receipts','record-awareness-v1','save-history','scoped-stylesheet','sync','upload','page-format-v1'], 'direct'],
-  [['conditional','data-guard-v1','data-read','data-write','page','page-awareness-v1','page-format-v1','page-recovery-v1','receipts','record-awareness-v1','sync','sync-worker','upload','wire'], 'v1'],
+  [['conditional','data-guard-v1','data-read','data-write','format','live-data','live-provenance','blockeditor','blockeditor-awareness-v1','blockeditor-format-v1','blockeditor-recovery-v1','people','presence','receipts','record-awareness-v1','scoped-stylesheet','sync','sync-worker','upload','wire'], 'direct'],
+  [['conditional','data-guard-v1','data-read','data-write','format','live-data','live-provenance','blockeditor','blockeditor-awareness-v1','blockeditor-format-v1','blockeditor-recovery-v1','people','presence','receipts','record-awareness-v1','scoped-stylesheet','sync','sync-worker','sync-worker-data','upload','wire'], 'v2'],
+  [['conditional','copy-policy-v1','data-guard-v1','data-read','format','live-data','live-provenance','blockeditor','blockeditor-awareness-v1','blockeditor-recovery-v1','people','presence','presence-editing','receipts','record-awareness-v1','save-history','scoped-stylesheet','sync','upload','blockeditor-format-v1'], 'direct'],
+  [['conditional','data-guard-v1','data-read','data-write','blockeditor','blockeditor-awareness-v1','blockeditor-format-v1','blockeditor-recovery-v1','receipts','record-awareness-v1','sync','sync-worker','upload','wire'], 'v1'],
   [['sync', 'live-data', 'sync-worker'], 'direct'],
   [['sync', 'sync-worker-data'], 'direct'],
   [['live-data', 'sync-worker-data'], 'direct'],
@@ -145,7 +145,7 @@ test('v2 live stream delivers readiness and parsed room events through the real 
     expect(opened).toHaveBeenCalledWith({ clientId: sync.clientId, lane: sync.lane });
     const payloads = [
       ['data', { seq: 900, op: { kind: 'set' } }],
-      ['data-state', { seen: { [sync.clientId]: 7 }, saved: { [sync.clientId]: 5 }, pageTransition: 'stable' }],
+      ['data-state', { seen: { [sync.clientId]: 7 }, saved: { [sync.clientId]: 5 }, blockeditorTransition: 'stable' }],
       ['data-writer', { clientId: sync.clientId, conn: 'proof' }],
     ];
     for (const [name, data] of payloads) send({ type: 'event', event: name, data });

@@ -34,7 +34,7 @@ afterEach(() => {
 });
 
 function open({ blocks = [PARAGRAPH], tools = {} } = {}) {
-  const store = createStore({ name: "page", value: seedValue(blocks.map((block) => ({ ...block }))) });
+  const store = createStore({ name: "blockeditor", value: seedValue(blocks.map((block) => ({ ...block }))) });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = createPageEditor(mount, {
@@ -52,7 +52,7 @@ function open({ blocks = [PARAGRAPH], tools = {} } = {}) {
       },
     },
   };
-  const toolStore = createStore({ name: "page.tools", value: tools }).handle;
+  const toolStore = createStore({ name: "blockeditor.tools", value: tools }).handle;
   const ai = createPageAi({ getView: () => view, store: toolStore, acceptState: async () => ({ ok: true }) });
   cleanups.push(() => {
     if (!view.isDestroyed) view.destroy();
@@ -120,12 +120,12 @@ let reply = null;
 let tabCounter = 100;
 
 function peer(sim, room, id, { blocks, page, tools, acceptState }) {
-  const store = createStore({ name: "page", value: clone(page ?? seedValue(blocks)) });
-  const toolStore = createStore({ name: "page.tools", value: clone(tools) });
-  const entries = new Map([["page", { store }], ["page.tools", { store: toolStore }]]);
+  const store = createStore({ name: "blockeditor", value: clone(page ?? seedValue(blocks)) });
+  const toolStore = createStore({ name: "blockeditor.tools", value: clone(tools) });
+  const entries = new Map([["blockeditor", { store }], ["blockeditor.tools", { store: toolStore }]]);
   const lane = createFastLane({ transport: room.transport(id, { person: id }), entries, now: sim.now, setTimer: sim.setTimer, clearTimer: sim.clearTimer });
-  store.onLocal((ops) => lane.local("page", ops, store.mark));
-  toolStore.onLocal((ops) => lane.local("page.tools", ops, toolStore.mark));
+  store.onLocal((ops) => lane.local("blockeditor", ops, store.mark));
+  toolStore.onLocal((ops) => lane.local("blockeditor.tools", ops, toolStore.mark));
   const ydoc = new Y.Doc();
   ydoc.clientID = 10000 + tabCounter++;
   const binding = createYPageBinding({ store, ydoc, setTimer: sim.setTimer, clearTimer: sim.clearTimer, captureTimeout: 0 });
@@ -161,7 +161,7 @@ function peer(sim, room, id, { blocks, page, tools, acceptState }) {
 async function pair({ blocks, tools, roomOpts = {}, acceptState } = {}) {
   const seed = TOOL_SEED();
   const sim = new Sim(7);
-  const initial = { page: clone(seedValue(blocks ?? seed.blocks)), "page.tools": clone(tools ?? seed.tools) };
+  const initial = { blockeditor: clone(seedValue(blocks ?? seed.blocks)), "blockeditor.tools": clone(tools ?? seed.tools) };
   const room = createRoom(sim, initial, roomOpts);
   window.clay = {
     wire: {
@@ -207,7 +207,7 @@ function removeBlock(tab, id) {
 }
 
 function save(sim, room, tab) {
-  for (const [name, store] of [["page", tab.store], ["page.tools", tab.tools]]) {
+  for (const [name, store] of [["blockeditor", tab.store], ["blockeditor.tools", tab.tools]]) {
     const fast = store.handle.status.mode === "fast";
     const value = clone(fast ? store.authoritative : store.value);
     const at = fast ? { epoch: tab.lane.status.epoch, seq: tab.lane.status.seq, hash: textHash(serializeLive(value)) } : null;
@@ -220,10 +220,10 @@ function save(sim, room, tab) {
 async function reopen({ sim, room, a }) {
   save(sim, room, a);
   await sim.idle();
-  const page = clone(room.stores.get("page").value);
-  const tools = clone(room.stores.get("page.tools").value);
-  room.land("page", room.seq);
-  room.land("page.tools", room.seq);
+  const page = clone(room.stores.get("blockeditor").value);
+  const tools = clone(room.stores.get("blockeditor.tools").value);
+  room.land("blockeditor", room.seq);
+  room.land("blockeditor.tools", room.seq);
   const fresh = peer(sim, room, "reopen", { page, tools });
   const opened = fresh.view.state.doc;
   fresh.start();
@@ -332,7 +332,7 @@ for (const first of ["a", "b"]) {
     expect(toolOf(b, "t").rev).toBe(revB);
 
     await sim.idle();
-    expect(room.stores.get("page").log.map((e) => e.from)).toEqual([first, first === "a" ? "b" : "a"]);
+    expect(room.stores.get("blockeditor").log.map((e) => e.from)).toEqual([first, first === "a" ? "b" : "a"]);
     const survivor = toolOf(a, "t");
     expect(toolOf(b, "t")).toEqual(survivor);
     expect(survivor.rev === revA || survivor.rev === revB).toBe(true);

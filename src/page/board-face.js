@@ -10,4 +10,4 @@ export function el(doc, tag, cls, attrs = {}, text = null) {
 
 export const initialOf = (name) => ([...String(name).trim()][0] ?? "?").toUpperCase();
 
-export const cardFace = (doc, name) => el(doc, "span", "page-board-face", { "aria-hidden": "true" }, initialOf(name));
+export const cardFace = (doc, name) => el(doc, "span", "blockeditor-board-face", { "aria-hidden": "true" }, initialOf(name));

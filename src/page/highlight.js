@@ -1,7 +1,7 @@
 // Syntax colours for code blocks. A code block with a language gets inline
 // decorations from Pierre's highlighter, loaded on first use (src/vendor/pierre/).
 // Only blocks on screen are highlighted, and only after typing pauses. Colours are
-// --page-code-token-* variables, so each page theme sets them.
+// --blockeditor-code-token-* variables, so each page theme sets them.
 import { state, view as pmView } from "../vendor/prosemirror.vendor.js";
 import { schema } from "./schema.js";
 import { asStep } from "./blocksel.js";
@@ -54,7 +54,7 @@ const color = (name) => ({ color: name });
 const THEME = {
   name: "page",
   appearance: "light",
-  cssVariables: { prefix: "--page-code-token-" },
+  cssVariables: { prefix: "--blockeditor-code-token-" },
   style: {
     syntax: {
       comment: color("comment"),
@@ -99,7 +99,7 @@ export async function tokenize(code, lang) {
   return codeToTokens(code, { lang, theme: THEME }).tokens;
 }
 
-const FOREGROUND = "var(--page-code-token-foreground)";
+const FOREGROUND = "var(--blockeditor-code-token-foreground)";
 const styleOf = (t) => {
   const s = [];
   if (t.color && t.color !== FOREGROUND) s.push(`color: ${t.color}`);
@@ -246,7 +246,7 @@ export class CodeBlockView {
     this.dom = doc.createElement("pre");
     this.contentDOM = doc.createElement("code");
     this.select = doc.createElement("select");
-    this.select.className = "page-code-lang";
+    this.select.className = "blockeditor-code-lang";
     this.select.contentEditable = "false";
     this.select.setAttribute("aria-label", "Code language");
     for (const [id, label] of LANGS) this.select.append(new Option(label, id));

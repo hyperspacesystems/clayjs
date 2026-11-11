@@ -9,14 +9,15 @@ import { $, hostOf } from "./helpers/editor-ui.js";
 // its exact text while the page is typed in, here and from a peer.
 
 await jest.unstable_mockModule("../../src/core/host-meta.js", () => ({
-  hostMeta: async () => ({ spec: 1, extensions: ["page"], document: null }),
-  hostSupports: async (name) => name === "page",
+  hostMeta: async () => ({ spec: 1, extensions: ["blockeditor"], document: null }),
+  hostSupports: async (name) => name === "blockeditor",
   hostMetaOutcome: () => "ok",
   querySaveOutcome: () => null,
   resetHostMeta: () => {},
 }));
 
 await jest.unstable_mockModule("../../src/core/save.js", () => ({
+  claimFailure: () => {},
   savePageForce: async () => ({ ok: true, msgType: "success" }),
   savePage: async () => ({ ok: true, msgType: "success" }),
   savePageThrottled: () => {},
@@ -49,10 +50,10 @@ const { open } = await import("../../src/plugins/menu/seo.js");
 const { FIELDS, readHead } = await import("../../src/plugins/menu/seo-head.js");
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleOf = (value) => {
   const { html, rev } = projection.renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 const tick = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms));
 const settle = async () => {
@@ -74,9 +75,9 @@ function setPage(blocks, { custom = null } = {}) {
     title.textContent = custom;
     document.head.appendChild(title);
   }
-  if (!storeOf("page")) live("page");
-  const store = storeOf("page");
-  live("page").update((data) => {
+  if (!storeOf("blockeditor")) live("blockeditor");
+  const store = storeOf("blockeditor");
+  live("blockeditor").update((data) => {
     for (const key of Object.keys(data)) delete data[key];
     Object.assign(data, clone(value));
   });
@@ -98,7 +99,7 @@ function setValue(key, value) {
 async function mount(blocks, options) {
   const fixture = setPage(blocks, options);
   await page.install();
-  window.clay.page = page;
+  window.clay.blockeditor = page;
   await settle();
   return { ...fixture, view: page.view };
 }
@@ -122,7 +123,7 @@ test("Use the first heading takes the first root H1, not a nested one, and clear
     { id: "h", t: "heading", text: "Root title", attrs: { level: 1 } },
     { id: "p", t: "paragraph", text: "Body" },
   ], { custom: "My own title" });
-  expect(document.querySelector('article[data-page] h1[data-id="n"]')).not.toBeNull();
+  expect(document.querySelector('article[data-blockeditor] h1[data-id="n"]')).not.toBeNull();
   expect(titleText()).toBe("My own title");
 
   await openSheet();

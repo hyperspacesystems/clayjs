@@ -10,9 +10,9 @@ import { editor, key, keyOn, posOf, select } from "./view-helpers.js";
 afterEach(() => { document.body.innerHTML = ""; });
 
 const part = (view, cls) => view.dom.parentElement.querySelector(cls);
-const dock = (view) => part(view, ".page-dock");
+const dock = (view) => part(view, ".blockeditor-dock");
 const controls = (view) => [...dock(view).querySelectorAll("button")];
-const primary = (view) => [...dock(view).querySelectorAll(".page-tool-primary")];
+const primary = (view) => [...dock(view).querySelectorAll(".blockeditor-tool-primary")];
 const phone = (run) => {
   const media = window.matchMedia;
   window.matchMedia = (query) => ({ matches: query === "(max-width: 560px)", media: query, addEventListener() {}, removeEventListener() {} });
@@ -44,11 +44,11 @@ test("Escape from a block selection focuses the first toolbar control", async ()
 test("Escape closes an open menu before it moves focus", () => {
   const view = editor(DOC);
   view.focus();
-  part(view, ".page-tool-turn").click();
-  expect(part(view, ".page-menu").hidden).toBe(false);
+  part(view, ".blockeditor-tool-turn").click();
+  expect(part(view, ".blockeditor-menu").hidden).toBe(false);
   key(view, "Escape");
-  expect(part(view, ".page-menu").hidden).toBe(true);
-  expect(document.activeElement).toBe(part(view, ".page-tool-turn"));
+  expect(part(view, ".blockeditor-menu").hidden).toBe(true);
+  expect(document.activeElement).toBe(part(view, ".blockeditor-tool-turn"));
 });
 
 test("the toolbar is one tab stop, and the arrows walk it", () => {
@@ -90,7 +90,7 @@ test("a phone walks only its four controls and skips the desktop-only ones", () 
     const list = primary(view);
     expect(list).toHaveLength(4);
     expect(list.filter((b) => b.tabIndex === 0)).toEqual([list[0]]);
-    for (const hidden of dock(view).querySelectorAll(".page-tool-desk")) expect(hidden.tabIndex).toBe(-1);
+    for (const hidden of dock(view).querySelectorAll(".blockeditor-tool-desk")) expect(hidden.tabIndex).toBe(-1);
     keyOn(list[0], "ArrowRight");
     keyOn(list[1], "ArrowRight");
     keyOn(list[2], "ArrowRight");
@@ -104,7 +104,7 @@ test("a phone walks only its four controls and skips the desktop-only ones", () 
 // from the stylesheet.
 test("a control the stylesheet hides is never the toolbar\u0027s tab stop", () => {
   const css = document.createElement("style");
-  css.textContent = ".page-tool-more { display: none; }";
+  css.textContent = ".blockeditor-tool-more { display: none; }";
   document.head.append(css);
   try {
     const view = editor(DOC);

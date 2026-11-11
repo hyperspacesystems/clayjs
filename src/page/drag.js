@@ -57,7 +57,7 @@ export class BlockDrag {
     this.onClick = onClick;
     this.shell = view.dom.parentElement;
     this.line = document.createElement("div");
-    this.line.className = "page-drop";
+    this.line.className = "blockeditor-drop";
     this.line.hidden = true;
     this.line.setAttribute("aria-hidden", "true");
     this.shell.append(this.line);
@@ -139,7 +139,7 @@ export class BlockDrag {
     this.view.dispatch(st.tr.setSelection(selectBlocks(st.doc, span.lo, span.hi)));
     this.shell.classList.add("is-dragging");
     const probe = this.shell.appendChild(document.createElement("div"));
-    probe.style.cssText = "position:absolute;visibility:hidden;width:var(--page-indent)";
+    probe.style.cssText = "position:absolute;visibility:hidden;width:var(--blockeditor-indent)";
     this.indentPx = probe.getBoundingClientRect().width || 27;
     probe.remove();
     this.scroller = scrollParent(this.view.dom);
@@ -182,9 +182,9 @@ export class BlockDrag {
     }
     this.shell.dataset.drop = "ok";
     this.line.hidden = false;
-    this.line.style.setProperty("--page-drop-y", `${line - shellBox.top}px`);
-    this.line.style.setProperty("--page-drop-x", `${edLeft - shellBox.left + s.target.depth * this.indentPx}px`);
-    this.line.style.setProperty("--page-drop-w", `${view.dom.getBoundingClientRect().right - edLeft - s.target.depth * this.indentPx}px`);
+    this.line.style.setProperty("--blockeditor-drop-y", `${line - shellBox.top}px`);
+    this.line.style.setProperty("--blockeditor-drop-x", `${edLeft - shellBox.left + s.target.depth * this.indentPx}px`);
+    this.line.style.setProperty("--blockeditor-drop-w", `${view.dom.getBoundingClientRect().right - edLeft - s.target.depth * this.indentPx}px`);
   }
 
   loop() {

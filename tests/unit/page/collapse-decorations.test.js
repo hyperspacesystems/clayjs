@@ -8,11 +8,11 @@ import { createYPageBinding } from "../../../src/page/ybind/index.js";
 import { buildLongDocument } from "./helpers/long-document.js";
 
 const spans = (set) => JSON.stringify(set.find().map((d) => [d.from, d.to, d.spec, d.type.attrs ?? null]));
-const blockAttrs = (view) => [...view.dom.children].map((el) => [el.className.includes("page-hidden"), el.getAttribute("style"), el.getAttribute("data-marker"), el.getAttribute("aria-expanded"), !!el.querySelector(".page-toggle-button")]);
+const blockAttrs = (view) => [...view.dom.children].map((el) => [el.className.includes("blockeditor-hidden"), el.getAttribute("style"), el.getAttribute("data-marker"), el.getAttribute("data-expanded"), el.querySelector(".blockeditor-toggle-button")?.getAttribute("aria-expanded") ?? null, !!el.querySelector(".blockeditor-toggle-button")]);
 
 function open() {
   const fixture = buildLongDocument();
-  const binding = createYPageBinding({ store: createStore({ name: "page", value: JSON.parse(JSON.stringify(fixture.value)) }), captureTimeout: 0 });
+  const binding = createYPageBinding({ store: createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(fixture.value)) }), captureTimeout: 0 });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = createPageEditor(mount, { doc: binding.doc(), dispatch: binding.dispatch, history: false, undo: binding.undo, redo: binding.redo, board: binding.board });
   binding.attach(view);
@@ -58,5 +58,22 @@ test("typing across the long document leaves every block's collapse attributes a
     expect(a.binding.stats.mismatch).toBe(0);
   } finally {
     a.close();
+  }
+}, 120000);
+
+test("a toggle's open state is on its disclosure button, never on the block (axe aria-allowed-attr)", () => {
+  const { view, close } = open();
+  try {
+    const toggles = [...view.dom.querySelectorAll(".blockeditor-toggle")];
+    expect(toggles.length).toBeGreaterThan(0);
+    for (const block of toggles) {
+      expect(block.hasAttribute("aria-expanded")).toBe(false);
+      const button = block.querySelector(".blockeditor-toggle-button");
+      if (!button) continue;
+      expect(button.getAttribute("aria-expanded")).toBe(block.getAttribute("data-expanded"));
+    }
+    expect(view.dom.querySelectorAll(".blockeditor-toggle-button[aria-expanded]").length).toBeGreaterThan(0);
+  } finally {
+    close();
   }
 }, 120000);

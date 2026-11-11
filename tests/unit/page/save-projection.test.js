@@ -10,8 +10,8 @@ let snapshot, live, projection;
 
 beforeAll(async () => {
   window.clayEditMode = true;
-  document.head.innerHTML = `<script type="application/json" merge="page" clay="live" live-format="lines">${TAG}</script>`;
-  document.body.innerHTML = `<main><article class="page" clay="freeze" data-page="1" data-rev="stale">${ARTICLE_AT_LOAD}</article></main>`;
+  document.head.innerHTML = `<script type="application/json" merge="blockeditor" clay="live" live-format="lines">${TAG}</script>`;
+  document.body.innerHTML = `<main><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="stale">${ARTICLE_AT_LOAD}</article></main>`;
   // Order matters and is the point: the page transform first, save-freeze
   // second. Without the static import in save-projection.js, save-freeze would
   // register after it and its restore would win.
@@ -24,11 +24,11 @@ beforeAll(async () => {
 const saved = () => new DOMParser().parseFromString(snapshot.captureForSaveAndComparison({ flushUndo: false, emitForSync: false }).forSave, "text/html");
 
 test("the saved article is the projection of the store, not the load-time article or the editor DOM", () => {
-  const page = live("page");
+  const page = live("blockeditor");
   page.set("blocks.p.c", "New text from the store");
   page.set("blocks.n", { t: "paragraph", pos: "3", c: "Added" });
   // The editor's own DOM inside the article: never saved.
-  document.querySelector("article").innerHTML = '<div class="page-shell"><div class="page-editor" contenteditable="true">EDITOR DOM</div></div>';
+  document.querySelector("article").innerHTML = '<div class="blockeditor-shell"><div class="blockeditor-editor" contenteditable="true">EDITOR DOM</div></div>';
   const doc = saved();
   const article = doc.querySelector("article");
   expect(article.querySelector('[data-id="p"]').textContent).toBe("New text from the store");
@@ -37,7 +37,7 @@ test("the saved article is the projection of the store, not the load-time articl
   expect(article.textContent).not.toContain("Old text");
   expect(article.getAttribute("clay")).toBe("freeze");
   // The article and the tag in the same bytes describe the same blocks.
-  const tag = doc.querySelector('script[merge="page"]').textContent;
+  const tag = doc.querySelector('script[merge="blockeditor"]').textContent;
   expect(JSON.parse(tag).blocks.p.c).toBe("New text from the store");
   expect(article.getAttribute("data-rev")).toBe(projection.renderFromTags([tag]).rev);
 });
@@ -63,7 +63,7 @@ test("two captures in a row give identical bytes", () => {
 
 test("a page with no live page tag is left alone", () => {
   const doc = document.implementation.createHTMLDocument("");
-  doc.body.innerHTML = '<article data-page="1" data-rev="x"><p>Hand</p></article>';
+  doc.body.innerHTML = '<article data-blockeditor="1" data-rev="x"><p>Hand</p></article>';
   projection.projectInto(doc);
   const article = doc.querySelector("article");
   expect(article.innerHTML).toBe("<p>Hand</p>");
@@ -71,18 +71,18 @@ test("a page with no live page tag is left alone", () => {
 });
 
 test("the article and the tag agree after a tombstone", () => {
-  const page = live("page");
+  const page = live("blockeditor");
   page.set("deleted.n", true);
   page.delete("blocks.n");
   const doc = saved();
   const article = doc.querySelector("article");
   expect(article.querySelector('[data-id="n"]')).toBeNull();
-  const tag = doc.querySelector('script[merge="page"]').textContent;
+  const tag = doc.querySelector('script[merge="blockeditor"]').textContent;
   expect(article.getAttribute("data-rev")).toBe(projection.renderFromTags([tag]).rev);
 });
 
 test("a captured model's title is projected with it, never the live title", () => {
-  const page = live("page");
+  const page = live("blockeditor");
   page.set("blocks.h.c", "Title A");
   const clone = snapshot.captureSnapshot({ flushUndo: false });
   page.set("blocks.h.c", "Title B");
@@ -97,7 +97,7 @@ test("a captured model's title is projected with it, never the live title", () =
 });
 
 test("an empty first H1 projects the Untitled placeholder as a title, never as article text", () => {
-  const page = live("page");
+  const page = live("blockeditor");
   page.set("blocks.h.c", "");
   const clone = snapshot.captureSnapshot({ flushUndo: false });
 
@@ -109,7 +109,7 @@ test("an empty first H1 projects the Untitled placeholder as a title, never as a
 });
 
 test("a custom title marker keeps the snapshot's exact title, including an empty one", () => {
-  const page = live("page");
+  const page = live("blockeditor");
   page.set("blocks.h.c", "Derived after this");
   const meta = document.head.appendChild(document.createElement("meta"));
   meta.setAttribute("name", "clay-seo-title-mode");
@@ -136,7 +136,7 @@ test("a custom title marker keeps the snapshot's exact title, including an empty
 
 test("the editor's Untitled placeholder never reaches the saved bytes", async () => {
   const { createPageEditor } = await import("../../../src/page/editor.js");
-  const page = live("page");
+  const page = live("blockeditor");
   page.set("blocks.h.c", "");
   const host = document.querySelector("article").appendChild(document.createElement("div"));
   const view = createPageEditor(host, { blocks: { h: { t: "heading", pos: "A", level: 1, c: "" } }, features: null });
@@ -144,7 +144,7 @@ test("the editor's Untitled placeholder never reaches the saved bytes", async ()
     expect(view.dom.querySelector('[data-placeholder="Untitled"]')).not.toBeNull();
     const html = saved().documentElement.outerHTML;
     expect(html).not.toContain("data-placeholder");
-    expect(html).not.toContain("page-title-placeholder");
+    expect(html).not.toContain("blockeditor-title-placeholder");
   } finally {
     view.destroy();
     host.remove();

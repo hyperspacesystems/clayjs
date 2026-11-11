@@ -29,16 +29,16 @@ const open = (blocks = { tbl }) => {
 };
 const shell = (view) => view.dom.parentElement;
 const part = (view, cls) => shell(view).querySelector(cls);
-const menu = (view) => part(view, ".page-menu");
-const items = (view) => [...menu(view).querySelectorAll(".page-menu-item")];
-const labels = (view) => items(view).map((row) => row.querySelector(".page-menu-label").textContent);
+const menu = (view) => part(view, ".blockeditor-menu");
+const items = (view) => [...menu(view).querySelectorAll(".blockeditor-menu-item")];
+const labels = (view) => items(view).map((row) => row.querySelector(".blockeditor-menu-label").textContent);
 const isOpen = (view) => !menu(view).hidden;
-const live = (view) => part(view, ".page-live").textContent;
-const wrapper = (view) => view.dom.querySelector(".page-table");
-const actionsButton = (view) => wrapper(view).querySelector(".page-table-actions");
-const colButton = (view, id) => wrapper(view).querySelector(`th[data-col="${id}"] .page-table-col-menu`);
-const handle = (view, id = "c1") => wrapper(view).querySelector(`th[data-col="${id}"] .page-table-resize`);
-const rowButton = (view, id) => wrapper(view).querySelector(`tr[data-id="${id}"] .page-table-row-menu`);
+const live = (view) => part(view, ".blockeditor-live").textContent;
+const wrapper = (view) => view.dom.querySelector(".blockeditor-table");
+const actionsButton = (view) => wrapper(view).querySelector(".blockeditor-table-actions");
+const colButton = (view, id) => wrapper(view).querySelector(`th[data-col="${id}"] .blockeditor-table-col-menu`);
+const handle = (view, id = "c1") => wrapper(view).querySelector(`th[data-col="${id}"] .blockeditor-table-resize`);
+const rowButton = (view, id) => wrapper(view).querySelector(`tr[data-id="${id}"] .blockeditor-table-row-menu`);
 const record = (view, index = 0) => blockJson(view.state.doc.child(index));
 const tableId = (view) => view.state.doc.child(0).attrs.id;
 const grid = (view) => {
@@ -58,12 +58,12 @@ const walkTo = (view, text) => {
   const at = labels(view).indexOf(text);
   expect(at).toBeGreaterThanOrEqual(0);
   for (let i = 0; i < at; i++) keyOn(active(), "ArrowDown");
-  expect(active().querySelector(".page-menu-label").textContent).toBe(text);
+  expect(active().querySelector(".blockeditor-menu-label").textContent).toBe(text);
   keyOn(active(), "Enter");
   return at;
 };
 const clickItem = (view, text) => {
-  const row = items(view).find((item) => item.querySelector(".page-menu-label").textContent === text);
+  const row = items(view).find((item) => item.querySelector(".blockeditor-menu-label").textContent === text);
   expect(row).toBeTruthy();
   row.click();
 };
@@ -153,7 +153,7 @@ describe("the Table actions menu", () => {
 
   test("offers Chart this table", () => {
     const view = opened();
-    expect([...menu(view).querySelectorAll(".page-menu-item")].some((item) => item.textContent.includes("Chart this table"))).toBe(true);
+    expect([...menu(view).querySelectorAll(".blockeditor-menu-item")].some((item) => item.textContent.includes("Chart this table"))).toBe(true);
   });
 
   test("inserts a row and a column from the keyboard", () => {
@@ -210,13 +210,13 @@ describe("the Table actions menu", () => {
   test("takes the name field from the menu and writes one name", () => {
     const view = opened();
     walkTo(view, "Rename column");
-    const input = wrapper(view).querySelector("input.page-table-rename");
+    const input = wrapper(view).querySelector("input.blockeditor-table-rename");
     expect(active()).toBe(input);
     expect(input.value).toBe("Name");
     input.value = "Person";
     keyOn(input, "Enter");
     expect(record(view).cols.c1.name).toBe("Person");
-    expect(wrapper(view).querySelector('th[data-col="c1"] .page-table-col-menu').textContent).toBe("Person");
+    expect(wrapper(view).querySelector('th[data-col="c1"] .blockeditor-table-col-menu').textContent).toBe("Person");
     expect(live(view)).toBe("Column renamed");
     expect(active()).toBe(colButton(view, "c1"));
   });
@@ -224,12 +224,12 @@ describe("the Table actions menu", () => {
   test("Escape in the name field cancels it and writes nothing", () => {
     const view = opened();
     walkTo(view, "Rename column");
-    const input = wrapper(view).querySelector("input.page-table-rename");
+    const input = wrapper(view).querySelector("input.blockeditor-table-rename");
     const before = JSON.stringify(record(view));
     input.value = "Person";
     keyOn(input, "Escape");
     expect(JSON.stringify(record(view))).toBe(before);
-    expect(wrapper(view).querySelector("input.page-table-rename")).toBe(null);
+    expect(wrapper(view).querySelector("input.blockeditor-table-rename")).toBe(null);
     expect(active()).toBe(colButton(view, "c1"));
     expect(history.undo(view.state, view.dispatch)).toBe(false);
   });
@@ -237,14 +237,14 @@ describe("the Table actions menu", () => {
   test("a typed name refuses the exit by name, stays in the field, and a blur commits it", async () => {
     const view = opened();
     walkTo(view, "Rename column");
-    const input = wrapper(view).querySelector("input.page-table-rename");
+    const input = wrapper(view).querySelector("input.blockeditor-table-rename");
     input.value = "Person";
     expect(pendingIds()).toEqual(["table-rename"]);
 
     const refused = await runSaveBarrier({ timeoutMs: 1000 });
     expect(refused).toMatchObject({ ok: false, code: "pending-input" });
     expect(refused.pending).toEqual(["table-rename"]);
-    expect(wrapper(view).querySelector("input.page-table-rename")).toBe(input);
+    expect(wrapper(view).querySelector("input.blockeditor-table-rename")).toBe(input);
     expect(input.value).toBe("Person");
 
     input.blur();
@@ -319,10 +319,10 @@ describe("ids survive a peer's edit", () => {
     const view = open();
     colButton(view, "c1").click();
     clickItem(view, "Rename");
-    const input = wrapper(view).querySelector("input.page-table-rename");
+    const input = wrapper(view).querySelector("input.blockeditor-table-rename");
     input.value = "Pers";
     peerCellEdit(view);
-    expect(wrapper(view).querySelector("input.page-table-rename")).toBe(input);
+    expect(wrapper(view).querySelector("input.blockeditor-table-rename")).toBe(input);
     expect(input.value).toBe("Pers");
     expect(active()).toBe(input);
     keyOn(input, "Enter");
@@ -371,8 +371,8 @@ describe("leaving the menu and leaving edit", () => {
     expect(openActions(view)).toBe(true);
     view.destroy();
     await Promise.resolve();
-    expect(document.querySelector(".page-menu")).toBe(null);
-    expect(document.querySelector(".page-table")).toBe(null);
+    expect(document.querySelector(".blockeditor-menu")).toBe(null);
+    expect(document.querySelector(".blockeditor-table")).toBe(null);
     expect(active()).toBe(document.body);
     expect(() => keyOn(document.body, "Enter")).not.toThrow();
   });

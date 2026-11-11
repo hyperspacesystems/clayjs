@@ -525,7 +525,7 @@ test("a saved-lane frame is a file: the applied event says disk and names the la
   // What the reader needs is the tag: a saved-lane frame is a file, and only the
   // live lane carries keystrokes nobody saved.
   document.body.innerHTML =
-    '<article data-page="1" clay="freeze"><p data-id="a">before</p></article>';
+    '<article data-blockeditor="1" clay="freeze"><p data-id="a">before</p></article>';
   save.setLastSavedContents(snapshot.captureForComparison());
   save.setUnsavedChanges(false);
   await Promise.resolve();
@@ -539,7 +539,7 @@ test("a saved-lane frame is a file: the applied event says disk and names the la
   const onApplied = (event) => applied.push(event.detail);
   document.addEventListener("clay:sync-applied", onApplied);
 
-  const frame = '<!DOCTYPE html><html><head></head><body><article data-page="1" clay="freeze"><p data-id="a">after</p></article></body></html>';
+  const frame = '<!DOCTYPE html><html><head></head><body><article data-blockeditor="1" clay="freeze"><p data-id="a">after</p></article></body></html>';
   await sync._doApplyUpdate(frame, 4, null, "disk-2");
 
   document.removeEventListener("clay:sync-applied", onApplied);

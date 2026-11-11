@@ -63,7 +63,7 @@ export async function buildPageCompactionWorker(outdir = DIST) {
   });
   const inputs = Object.keys(result.metafile.inputs);
   if (!inputs.some((file) => file.includes('src/live/page-compaction.js'))) {
-    throw new Error('the page compaction worker bundle has no page-compaction input');
+    throw new Error('the page compaction worker bundle has no blockeditor-compaction input');
   }
   return inputs;
 }

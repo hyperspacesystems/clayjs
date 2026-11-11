@@ -12,7 +12,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 const open = (options = {}) => {
-  const store = createStore({ name: "page", value: seedValue([{ id: "p", text: "First" }]) });
+  const store = createStore({ name: "blockeditor", value: seedValue([{ id: "p", text: "First" }]) });
   const binding = createYPageBinding({ store, ...options });
   const result = { store, binding };
   opened.push(result);
@@ -221,7 +221,7 @@ test("default lifecycle runs in plain Node without a host or DOM", () => {
     import { createYPageBinding, seedValue } from ${JSON.stringify(bindingUrl)};
     import { createStore } from ${JSON.stringify(storeUrl)};
     if (typeof window !== "undefined" || typeof document !== "undefined") throw new Error("Unexpected DOM");
-    const store = createStore({ name: "page", value: seedValue([{id:"p",text:"First"}]) });
+    const store = createStore({ name: "blockeditor", value: seedValue([{id:"p",text:"First"}]) });
     const binding = createYPageBinding({ store });
     process.stdout.write(JSON.stringify(await binding.flush()));
     binding.dispose(); binding.ydoc.destroy();

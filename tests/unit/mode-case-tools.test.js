@@ -256,7 +256,7 @@ test("a sweep draws the same schedules, byte for byte, from the same seed", asyn
 
 test("a sweep where no schedule reaches its preconditions fails instead of passing", () => {
   const out = path.join(scratch, "sweep-zero");
-  const result = run(["sweep", "--seed", "4242", "--schedules", "3", "--fixtures", "page-host", "--out", out]);
+  const result = run(["sweep", "--seed", "4242", "--schedules", "3", "--fixtures", "blockeditor-host", "--out", out]);
 
   expect(result.status).toBe(1);
   expect(String(result.stdout)).toContain("0 valid, 3 invalid");

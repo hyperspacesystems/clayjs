@@ -21,14 +21,14 @@ afterEach(() => {
 });
 
 export const open = (value = initial) => {
-  const store = createStore({ name: "page", value: clone(value) });
+  const store = createStore({ name: "blockeditor", value: clone(value) });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const view = createPageEditor(document.body.appendChild(document.createElement("div")), { doc: binding.doc(), dispatch: binding.dispatch, history: false, undo: binding.undo, redo: binding.redo, board: binding.board, features: boardLoaded });
   binding.attach(view);
   installPageFeature({ view, board: binding.board, undo: binding.undo, redo: binding.redo }, "board", boardFeature);
   const updates = [];
   binding.ydoc.on("updateV2", (update, origin) => { if (origin !== NET && origin !== ORIGINS_ORIGIN) updates.push(update); });
-  const tab = { store, binding, view, updates, root: () => view.dom.querySelector(".page-board") };
+  const tab = { store, binding, view, updates, root: () => view.dom.querySelector(".blockeditor-board") };
   tabs.push(tab);
   return tab;
 };
@@ -41,7 +41,7 @@ export const stored = (tab) => {
   const decoded = blocksFromYValue(tab.store.value).bd;
   return { columns: decoded.columns, cards: decoded.cards };
 };
-export const lanes = (tab) => [...tab.root().querySelectorAll(".page-board-lane[data-col]")].map((lane) => `${lane.querySelector(".page-board-name").textContent}: ${[...lane.querySelectorAll(".page-board-card .page-board-title")].map((title) => title.textContent).join(", ")}`);
+export const lanes = (tab) => [...tab.root().querySelectorAll(".blockeditor-board-lane[data-col]")].map((lane) => `${lane.querySelector(".blockeditor-board-name").textContent}: ${[...lane.querySelectorAll(".blockeditor-board-card .blockeditor-board-title")].map((title) => title.textContent).join(", ")}`);
 export const control = (scope, key) => [...scope.querySelectorAll("[data-focus]")].find((node) => node.dataset.focus === key);
 export const keyOn = (target, key, options = {}) => target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...options }));
 export const deliver = (from, to) => {

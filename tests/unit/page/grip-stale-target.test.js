@@ -11,7 +11,7 @@ test('releasing a grip after a peer insertion opens actions for the original blo
   view.dispatch(view.state.tr.insert(0,view.state.schema.nodes.paragraph.create({id:'peer'},view.state.schema.text('Peer'))).setMeta(REMOTE_META,true));
   chrome.drag.end({type:'pointerup',pointerId:1});
   const actual=chrome.menu.ids;
-  [...chrome.menuEl.querySelectorAll('.page-menu-item')].find(r=>r.querySelector('.page-menu-label').textContent==='Delete').click();
+  [...chrome.menuEl.querySelectorAll('.blockeditor-menu-item')].find(r=>r.querySelector('.blockeditor-menu-label').textContent==='Delete').click();
   const remaining=[];view.state.doc.forEach(n=>remaining.push(n.attrs.id));
   expect(captured.roots.map(r=>r.id)).toEqual(['b']);
   expect(actual).toEqual(['b']);

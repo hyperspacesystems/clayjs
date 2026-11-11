@@ -1,7 +1,7 @@
 import { applySavedArticle, prepareSavedArticle } from "../../../src/page/view.js";
 
 const FILE = (inner, { rev = "r1", title = "Reader" } = {}) =>
-  `<!doctype html><html><head><title>${title}</title></head><body><article class="page" clay="freeze" data-page="1" data-rev="${rev}">${inner}</article></body></html>`;
+  `<!doctype html><html><head><title>${title}</title></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}">${inner}</article></body></html>`;
 
 const load = (html) => {
   document.documentElement.innerHTML = new DOMParser().parseFromString(html, "text/html").documentElement.innerHTML;

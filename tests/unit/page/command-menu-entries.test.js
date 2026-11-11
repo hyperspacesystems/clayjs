@@ -42,11 +42,11 @@ const page = () => {
   select(view, posOf(view, "a"));
   return view;
 };
-const menu = (view) => view.dom.parentElement.querySelector(".page-menu");
-const rows = (view) => [...menu(view).querySelectorAll(".page-menu-item")];
-const row = (view, label) => rows(view).find((r) => r.querySelector(".page-menu-label").textContent === label);
+const menu = (view) => view.dom.parentElement.querySelector(".blockeditor-menu");
+const rows = (view) => [...menu(view).querySelectorAll(".blockeditor-menu-item")];
+const row = (view, label) => rows(view).find((r) => r.querySelector(".blockeditor-menu-label").textContent === label);
 const slash = (view, query) => { for (const ch of `/${query}`) typeText(view, ch); };
-const more = (view) => view.dom.parentElement.querySelector(".page-dock .page-tool-more");
+const more = (view) => view.dom.parentElement.querySelector(".blockeditor-dock .blockeditor-tool-more");
 
 test("opening a page and both menus imports no command module", async () => {
   const view = page();

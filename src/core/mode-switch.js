@@ -114,7 +114,7 @@ const syncLane = (mod) => (mod && (mod.liveSync ?? mod.default ?? mod)) || null;
  * it represents, the queue it is holding, and the calls that apply, give back and retire
  * them.
  *
- * The page-view reader answers first, because a Document's reader owns the article; a
+ * The blockeditor-view reader answers first, because a Document's reader owns the article; a
  * generic-sync document's saved lane answers next. A document with neither has no reader
  * and needs no handoff. A reader that represents no file throws `not-acquired`, which is
  * the reload: nothing has been prepared yet, so the page can still be replaced.
@@ -143,10 +143,10 @@ export async function prepareReader(handle, context = {}) {
 }
 
 /**
- * Start the reader a view holds, from the file the session left: the page-view reader
+ * Start the reader a view holds, from the file the session left: the blockeditor-view reader
  * paints that receipt at once and asks the host for nothing, and the saved lane starts
  * with it, so a second entry has a file without waiting for a frame. Every reader the page
- * ran before the entry starts again, so a page-view reader that follows generic sync's
+ * ran before the entry starts again, so a blockeditor-view reader that follows generic sync's
  * saved lane gets that lane back too. `accepted` null starts the reader as a view boot does.
  *
  * @param {object} handle - the loader's handle
@@ -163,7 +163,7 @@ export function startReader(handle, accepted = null) {
     const start = pageView.restart ?? pageView.start;
     start({ sync, represented: accepted });
     // Every reader the page ran before the entry comes back, not the first one found:
-    // with `plugins=page,sync` the page-view reader follows generic sync's saved lane,
+    // with `plugins=blockeditor,sync` the blockeditor-view reader follows generic sync's saved lane,
     // so that lane is restarted too and the article keeps following other tabs.
     if (!sync) return undefined;
   }

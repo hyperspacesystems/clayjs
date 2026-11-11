@@ -19,7 +19,7 @@ const fakeStorage = (entries = [], { throwOnGet = false } = {}) => {
 };
 
 const open = (blocks, extra = {}) => {
-  const store = createStore({ name: "page", value: seedValue(blocks) });
+  const store = createStore({ name: "blockeditor", value: seedValue(blocks) });
   const binding = createYPageBinding({ store, ...extra });
   const view = new pmView.EditorView(document.body.appendChild(document.createElement("div")), { state: EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }), dispatchTransaction: (tr) => binding.dispatch(tr) });
   binding.attach(view);
@@ -73,7 +73,7 @@ test("content without an identifiable author gets no automatic deleted-block-edi
   const { view, binding, pd } = open([{ id: "p", text: "hello" }, { id: "q", text: "world" }], { onNotice: (notice) => notices.push(notice) });
   let key = null;
   for (let it = pd.flow._start; it; it = it.right) if (!it.deleted && it.content.embed && it.content.embed.b === "q") key = `${it.id.client}.${it.id.clock}`;
-  pd.ydoc.transact(() => pd.gone.set(key, { b: "q", e: null }), "page-net");
+  pd.ydoc.transact(() => pd.gone.set(key, { b: "q", e: null }), "blockeditor-net");
   expect(texts(view)).toEqual(["hello"]);
   expect(binding.bridge.walk.orphans.map((orphan) => orphan.text)).toEqual(["world"]);
   expect(notices.filter((notice) => notice.kind === "deleted-block-edit")).toEqual([]);

@@ -171,7 +171,7 @@ export function migrateHybridValues(values) {
 // so every rebuild of the same article is byte-identical (two tabs converge) and rebuilds of
 // different articles never share Yjs item ids.
 export function seedClientId(blocks) {
-  const id = parseInt(hash64(`page-seed:v1:${canon(blocks)}`).slice(0, 8), 16) >>> 0;
+  const id = parseInt(hash64(`blockeditor-seed:v1:${canon(blocks)}`).slice(0, 8), 16) >>> 0;
   return id < 2 ? id + 2 : id;
 }
 

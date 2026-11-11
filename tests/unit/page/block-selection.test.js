@@ -35,7 +35,7 @@ test("a block selection covers whole blocks and copies them whole", () => {
 test("it round-trips through JSON and Selection.fromJSON", () => {
   const s = withBlocks(make(SPEC), 1, 2, true);
   const json = s.selection.toJSON();
-  expect(json.type).toBe("page-block");
+  expect(json.type).toBe("blockeditor-block");
   const back = Selection.fromJSON(s.doc, json);
   expect(back instanceof BlockSelection).toBe(true);
   expect(back.eq(s.selection)).toBe(true);

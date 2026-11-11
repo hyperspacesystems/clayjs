@@ -114,9 +114,9 @@ const roomBoundSave = async (name) => {
   };
 };
 
-test("a page-converting refusal releases the captured edits without an uncertainty notice", async () => {
+test("a blockeditor-converting refusal releases the captured edits without an uncertainty notice", async () => {
   const { refuse } = await roomBoundSave("precommit");
-  await refuse(503, "page-converting");
+  await refuse(503, "blockeditor-converting");
   await wait(120);
   expect(notices.filter((notice) => notice.name === "precommit" && notice.code === "save-uncertain")).toEqual([]);
 });

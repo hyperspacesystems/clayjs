@@ -7,7 +7,7 @@ import { createYPageBinding, seedValue, docFromValue, enc } from "../../../../sr
 globalThis.ClipboardEvent ??= class ClipboardEvent extends Event {};
 
 const open = (initial) => {
-  const store = createStore({ name: "page", value: initial });
+  const store = createStore({ name: "blockeditor", value: initial });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const editor = new view.EditorView(document.body.appendChild(document.createElement("div")), {
     state: state.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }),
@@ -89,7 +89,7 @@ test("batched remote inserts around the caret keep it and type there", () => {
 
 test("merged nonadjacent remote edits keep the caret and type there", () => {
   const initial = seedValue([{ id: "p", text: "abcdefghij" }]);
-  const store = createStore({ name: "page", value: initial });
+  const store = createStore({ name: "blockeditor", value: initial });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const editor = new view.EditorView(document.body.appendChild(document.createElement("div")), {
     state: state.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }),

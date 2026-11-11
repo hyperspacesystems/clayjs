@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "id": "page-pending-selector-target",
-  "fixture": "page-host",
+  "id": "blockeditor-pending-selector-target",
+  "fixture": "blockeditor-host",
   "boot": {
     "mode": "edit",
     "live": true,

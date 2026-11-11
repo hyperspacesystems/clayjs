@@ -21,13 +21,13 @@ const BLOCKS = [
   { id: "h", t: "heading", text: "Notes" },
   { id: "p", t: "paragraph", text: "Hello" },
 ];
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const flushAsync = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
 
 const pageHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 
 const TABLE = {
@@ -45,18 +45,18 @@ const BLANK_TABLE = { id: "blank", t: "table", attrs: { cols: {}, rows: {} } };
 // The article a save writes: the page tags projected onto the article by the real
 // save transform, with the tag then dropped so the file carries none.
 const savedArticle = (value = seedValue([...BLOCKS, TABLE, BLANK_TABLE])) => {
-  const doc = new DOMParser().parseFromString('<article data-page="1"></article>', "text/html");
+  const doc = new DOMParser().parseFromString('<article data-blockeditor="1"></article>', "text/html");
   const tag = doc.createElement("script");
   tag.setAttribute("type", "application/json");
-  tag.setAttribute("merge", "page");
+  tag.setAttribute("merge", "blockeditor");
   tag.setAttribute("clay", "live");
   tag.textContent = JSON.stringify(value);
   doc.body.append(tag);
   projectInto(doc);
-  return doc.querySelector("article[data-page]").outerHTML;
+  return doc.querySelector("article[data-blockeditor]").outerHTML;
 };
 
-const articleOf = (html) => new DOMParser().parseFromString(html, "text/html").querySelector("article[data-page]");
+const articleOf = (html) => new DOMParser().parseFromString(html, "text/html").querySelector("article[data-blockeditor]");
 const expectedTagText = (html) => serializeLive(seedPageFromArticle(articleOf(html)));
 const pageTag = () => document.querySelector(TAG_SEL);
 
@@ -80,7 +80,7 @@ async function load({ html = pageHtml(), head = "", liveData = false, answer = (
   document.head.innerHTML = head;
   document.body.innerHTML = html;
 
-  const extensions = liveData ? ["page", "live-data", "conditional"] : ["page"];
+  const extensions = liveData ? ["blockeditor", "live-data", "conditional"] : ["blockeditor"];
   const saves = [];
   const order = [];
   const sent = [];
@@ -176,7 +176,7 @@ test("a page with one article and no tag boots from its article, holding its see
   // The seed is a value in memory: the document gains no tag, so no boot can read
   // one back as a page the file already has.
   expect(pageTag()).toBe(null);
-  expect(serializeLive(storeOf("page").value)).toBe(expected);
+  expect(serializeLive(storeOf("blockeditor").value)).toBe(expected);
   expect(page.view.dom.textContent).toContain("Hello");
 });
 
@@ -231,7 +231,7 @@ test("an untouched page booted from its article does not read as unsaved", async
   expect(pageTag()).toBe(null);
   // The staged store is in no comparison domain, so it cannot be the reason a page
   // reads dirty.
-  expect(snapshot.captureForDirtyCheck()).not.toContain('merge="page"');
+  expect(snapshot.captureForDirtyCheck()).not.toContain('merge="blockeditor"');
   expect(warning.hasUnsavedChanges()).toBe(false);
 });
 
@@ -260,7 +260,7 @@ test("two articles and no tag are still abandoned, with no tag inserted", async 
     await page.ready;
 
     expect(page.view).toBe(null);
-    expect(document.querySelectorAll("article[data-page]")).toHaveLength(2);
+    expect(document.querySelectorAll("article[data-blockeditor]")).toHaveLength(2);
     expect(pageTag()).toBe(null);
     expect(warn).toHaveBeenCalled();
   } finally {
@@ -271,7 +271,7 @@ test("two articles and no tag are still abandoned, with no tag inserted", async 
 test("a page that already has its tag keeps it untouched", async () => {
   const value = seedValue(BLOCKS);
   const authored = JSON.stringify(value, null, 2);
-  const tag = `<script type="application/json" merge="page" clay="live">${authored}</script>`;
+  const tag = `<script type="application/json" merge="blockeditor" clay="live">${authored}</script>`;
   const { page } = await load({ html: pageHtml(value), head: tag });
 
   await page.ready;

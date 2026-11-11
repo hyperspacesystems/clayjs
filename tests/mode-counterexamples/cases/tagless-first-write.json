@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "tagless-first-write",
-  "fixture": "page-host",
+  "fixture": "blockeditor-host",
   "boot": { "mode": "edit", "live": true, "destination": "host" },
   "steps": [
     { "op": "settle", "ms": 200 },

@@ -127,7 +127,7 @@ class Presence {
       this._gate = Promise.all([
         hostSupports('presence'),
         hostSupports('record-awareness-v1'),
-        hostSupports('page-awareness-v1'),
+        hostSupports('blockeditor-awareness-v1'),
       ]).then(([supported, recordAwareness, pageAwareness]) => {
         store.setCapabilities({ supported, recordAwareness, pageAwareness });
         return supported === true;

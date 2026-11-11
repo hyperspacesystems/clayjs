@@ -26,7 +26,7 @@ test("every seed entry reads the same client in the browser and on the host", ()
   const hostDocument = new JSDOM("").window.document;
   for (const entry of vectors.seeds) {
     const file = fileOf(entry);
-    const browser = seedPageFromArticle(new JSDOM(file).window.document.querySelector("article[data-page]"));
+    const browser = seedPageFromArticle(new JSDOM(file).window.document.querySelector("article[data-blockeditor]"));
     const found = articleOf(file, hostDocument);
     expect(found).not.toBeNull();
     const host = seedPageFromArticle(found.article);

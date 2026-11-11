@@ -41,7 +41,7 @@ const deleteUpdate = (client, sources, index, length) => {
 };
 
 const setOp = (key, value) => ({ op: "set", path: ["y", key], value });
-const pageState = (over = {}) => ({ compaction: 1, failed: null, retired: new Set(), ...over });
+const blockeditorState = (over = {}) => ({ compaction: 1, failed: null, retired: new Set(), ...over });
 
 const freeze = ({ y, ops, state }) => ({
   y: JSON.parse(JSON.stringify(y)),
@@ -226,10 +226,10 @@ const deletionOnly = (client, sources, index, length) => {
 
 test("admits a whole client key and reports what it adds", () => {
   const y = { [checkpointKey]: insertUpdate(200, "checkpoint") };
-  const result = admit({ y, ops: [setOp(clientKey(0), insertUpdate(1, "hello"))], state: pageState() });
+  const result = admit({ y, ops: [setOp(clientKey(0), insertUpdate(1, "hello"))], state: blockeditorState() });
   expect(result).toMatchObject({ added: 1, deleted: 0, inserts: true, limit: COMPACTION.activeBytes });
   expect(result.shape.normal).toBe(true);
-  const deleting = admit({ y, ops: [setOp(clientKey(1), deletionOnly(2, [insertUpdate(3, "hello")], 0, 2))], state: pageState() });
+  const deleting = admit({ y, ops: [setOp(clientKey(1), deletionOnly(2, [insertUpdate(3, "hello")], 0, 2))], state: blockeditorState() });
   expect(deleting.deleted).toBe(2);
   expect(deleting.limit).toBe(COMPACTION.activeBytes + COMPACTION.deleteReserve);
 });
@@ -237,18 +237,18 @@ test("admits a whole client key and reports what it adds", () => {
 test("treats a set identical to the stored value as a no-op", () => {
   const value = insertUpdate(1, "hello");
   const y = { [clientKey(0)]: value };
-  const result = admit({ y, ops: [setOp(clientKey(0), value)], state: pageState() });
+  const result = admit({ y, ops: [setOp(clientKey(0), value)], state: blockeditorState() });
   expect(result).toMatchObject({ added: 0, deleted: 0, inserts: false });
 });
 
 test("refuses a frame from a client that did not declare the version", () => {
-  const result = admit({ y: {}, ops: [], state: pageState({ compaction: 0 }) });
-  expect(result).toEqual({ error: "page-upgrade" });
+  const result = admit({ y: {}, ops: [], state: blockeditorState({ compaction: 0 }) });
+  expect(result).toEqual({ error: "blockeditor-upgrade" });
   expect(ROOM_ERROR_STATUS[result.error]).toBe(404);
 });
 
 test("a room whose compaction failed admits frames against its byte limit without asking for a fold", () => {
-  const result = admit({ y: {}, ops: [], state: pageState({ failed: { reason: "compaction-failed", at: 1 } }) });
+  const result = admit({ y: {}, ops: [], state: blockeditorState({ failed: { reason: "compaction-failed", at: 1 } }) });
   expect(result).toMatchObject({ added: 0, failed: true, shape: null });
   expect(result.limit).toBeGreaterThan(0);
 });
@@ -265,16 +265,16 @@ test("refuses a deletion, a foreign key shape, a changed value and a retired key
     [setOp(clientKey(1), insertUpdate(4, "hello"))],
   ];
   for (const ops of cases) {
-    const result = admit({ y, ops, state: pageState({ retired: new Set([clientKey(1)]) }) });
-    expect(result).toEqual({ error: "page-immutable" });
+    const result = admit({ y, ops, state: blockeditorState({ retired: new Set([clientKey(1)]) }) });
+    expect(result).toEqual({ error: "blockeditor-immutable" });
     expect(ROOM_ERROR_STATUS[result.error]).toBe(409);
   }
 });
 
 test("refuses a value that is not a decodable update", () => {
   for (const value of ["not base64!!", Y.toBase64(new Uint8Array([1, 2, 3])), undefined]) {
-    const result = admit({ y: {}, ops: [setOp(clientKey(0), value)], state: pageState() });
-    expect(result).toEqual({ error: "page-update-invalid" });
+    const result = admit({ y: {}, ops: [setOp(clientKey(0), value)], state: blockeditorState() });
+    expect(result).toEqual({ error: "blockeditor-update-invalid" });
     expect(ROOM_ERROR_STATUS[result.error]).toBe(422);
   }
 });
@@ -282,14 +282,14 @@ test("refuses a value that is not a decodable update", () => {
 test("refuses more than four new entries in one frame", () => {
   const ops = [];
   for (let i = 0; i < 5; i++) ops.push(setOp(clientKey(i), insertUpdate(10 + i, `entry ${i}`)));
-  const result = admit({ y: {}, ops, state: pageState() });
-  expect(result).toEqual({ error: "page-batch" });
+  const result = admit({ y: {}, ops, state: blockeditorState() });
+  expect(result).toEqual({ error: "blockeditor-batch" });
   expect(ROOM_ERROR_STATUS[result.error]).toBe(409);
 });
 
 test("asks for a checkpoint when the page is out of normal form", () => {
   const y = { [checkpointKey]: insertUpdate(200, "one"), [`c${tag}-2`]: insertUpdate(201, "two") };
-  const result = admit({ y, ops: [setOp(clientKey(0), insertUpdate(1, "hello"))], state: pageState() });
+  const result = admit({ y, ops: [setOp(clientKey(0), insertUpdate(1, "hello"))], state: blockeditorState() });
   expect(result).toEqual({ error: "checkpoint-required", retryAfter: 0 });
   expect(ROOM_ERROR_STATUS[result.error]).toBe(503);
 });
@@ -297,7 +297,7 @@ test("asks for a checkpoint when the page is out of normal form", () => {
 test("asks for a checkpoint when new entries would pass the loose bound", () => {
   const y = {};
   for (let i = 0; i < COMPACTION.loose; i++) y[looseKey(i)] = insertUpdate(100 + i, `entry ${i}`);
-  expect(admit({ y, ops: [setOp(clientKey(0), insertUpdate(300, "hello"))], state: pageState() }))
+  expect(admit({ y, ops: [setOp(clientKey(0), insertUpdate(300, "hello"))], state: blockeditorState() }))
     .toEqual({ error: "checkpoint-required", retryAfter: 0 });
 });
 
@@ -357,8 +357,8 @@ test("the union keeps a whole file entry only when the room does not hold it", (
 
 test("ROOM_ERROR_STATUS names every refusal with its status", () => {
   expect(ROOM_ERROR_STATUS).toEqual({
-    "checkpoint-required": 503, "page-full": 409, "compaction-failed": 409,
-    "page-immutable": 409, "page-batch": 409, "page-update-invalid": 422, "page-upgrade": 404,
+    "checkpoint-required": 503, "blockeditor-full": 409, "compaction-failed": 409,
+    "blockeditor-immutable": 409, "blockeditor-batch": 409, "blockeditor-update-invalid": 422, "blockeditor-upgrade": 404,
   });
   expect(Object.isFrozen(ROOM_ERROR_STATUS)).toBe(true);
 });

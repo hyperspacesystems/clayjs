@@ -8,8 +8,8 @@ import { downloadHtml, documentName } from "../core/download.js";
 // table does not know falls to `error`, which leaves the existing generic
 // "Couldn't save" feedback exactly as it was.
 const SAVE_STATE_BY_CODE = Object.freeze({
-  "page-converting": "retrying",
-  "page-capacity": "retrying",
+  "blockeditor-converting": "retrying",
+  "blockeditor-capacity": "retrying",
   busy: "retrying",
   "rate-limited": "retrying",
   offline: "retrying",
@@ -17,17 +17,17 @@ const SAVE_STATE_BY_CODE = Object.freeze({
   "network-error": "retrying",
   timeout: "retrying",
   "save-history-pending": "retrying",
-  "page-condition-required": "blocked",
-  "page-conversion-refused": "blocked",
-  "page-conversion-required": "blocked",
-  "page-conversion-stale": "blocked",
+  "blockeditor-condition-required": "blocked",
+  "blockeditor-conversion-refused": "blocked",
+  "blockeditor-conversion-required": "blocked",
+  "blockeditor-conversion-stale": "blocked",
   "save-id-reused": "blocked",
   "too-large": "blocked",
   "unsupported-host": "blocked",
   "save-history-refresh-required": "blocked",
   "provenance-unsupported": "blocked",
   "receipt-expired": "blocked",
-  "page-full": "blocked",
+  "blockeditor-full": "blocked",
   "compaction-failed": "blocked",
 });
 
@@ -55,7 +55,7 @@ function saveStateFor({ ok = false, code = null, offline = false } = {}) {
 function withoutPageTag(html) {
   let doc;
   try { doc = new DOMParser().parseFromString(html, "text/html"); } catch { return html; }
-  const tags = [...doc.querySelectorAll('script[type="application/json"][merge="page"][clay~="live"]')]
+  const tags = [...doc.querySelectorAll('script[type="application/json"][merge="blockeditor"][clay~="live"]')]
     .filter((el) => !el.closest("template") && !el.closest("noscript"));
   if (tags.length !== 1) return html;
   const outer = tags[0].outerHTML;
@@ -83,7 +83,7 @@ async function copyPageText() {
   try {
     const { forSave } = captureForSaveAndComparison({ emitForSync: false });
     const doc = new DOMParser().parseFromString(forSave, "text/html");
-    const articles = doc.querySelectorAll("article[data-page]");
+    const articles = doc.querySelectorAll("article[data-blockeditor]");
     if (articles.length !== 1) return false;
     await navigator.clipboard.writeText(articles[0].textContent);
     return true;

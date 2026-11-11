@@ -255,7 +255,7 @@ for (const host of hosts) {
       expect(disk).toContain("Ship it");
       expect(disk).toContain("https://clayjs.com/v1/clay.js");
       expect(disk).toContain("https://clayjs.com/v1/sap.js");
-      expect(disk).toContain("https://clayjs.com/v1/src/page/themes/light-1.css");
+      expect(disk).toContain("https://clayjs.com/v1/src/blockeditor/themes/light-1.css");
       expect(disk).not.toContain("/_/clayjs/");
       expect(disk).not.toContain("clay-runtime-map");
       expect(disk).not.toContain("documentetag");
@@ -415,7 +415,7 @@ for (const host of hosts) {
     test("the Page document\u0027s first switch to edit loads only release files the host serves, read with the host\u0027s own load plan", async () => {
       count(host.name);
       const query = CLAY_SCRIPT.exec(page)[1].replace(/^https:\/\/clayjs\.com\/v1\/clay\.js\?/, "");
-      expect(query).toBe("plugins=page,menu");
+      expect(query).toBe("plugins=blockeditor,menu");
 
       const tempDir = await mkdtemp(path.join(os.tmpdir(), `edit-set-${host.name}-`));
       try {
@@ -515,7 +515,7 @@ for (const host of hosts) {
       expect(disk).not.toContain("/_/clayjs/");
       expect(disk).not.toContain("clay-runtime-map");
       expect(disk).not.toContain("documentetag");
-      expect(disk).toContain("https://clayjs.com/v1/clay.js?plugins=page,menu");
+      expect(disk).toContain("https://clayjs.com/v1/clay.js?plugins=blockeditor,menu");
     }, CASE_TIMEOUT);
   });
 }

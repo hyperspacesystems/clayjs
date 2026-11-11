@@ -124,7 +124,7 @@ const sameGeneration = (a, b) => Boolean(a && b) && typeof a.generation === "str
  * @param {{authority: Object, lineage: Object}} options.accepted - the identity and generation it was saved under
  * @param {string} options.article - the final outgoing canonical article
  * @param {Object} options.state - the accepted page state
- * @param {{file: string, pageState: string}} options.receipt - the persisted pair
+ * @param {{file: string, blockeditorState: string}} options.receipt - the persisted pair
  * @param {boolean} [options.saved]
  * @returns {Promise<Object>}
  */
@@ -159,8 +159,8 @@ async function checkProof(proof) {
   if (proof.saved !== true) fail("not-saved", "Only a save that succeeded under admission makes a proof");
   if (typeof proof.capture !== "string" || !proof.capture) fail("missing-capture", "A proof belongs to the capture it saved");
   const receipt = proof.receipt;
-  if (!receipt || typeof receipt.file !== "string" || !receipt.file || typeof receipt.pageState !== "string" || !receipt.pageState) {
-    fail("missing-receipt", "A proof names the persisted file and page-state pair");
+  if (!receipt || typeof receipt.file !== "string" || !receipt.file || typeof receipt.blockeditorState !== "string" || !receipt.blockeditorState) {
+    fail("missing-receipt", "A proof names the persisted file and blockeditor-state pair");
   }
   const accepted = proof.accepted;
   if (!accepted || !accepted.authority || !accepted.lineage || typeof accepted.lineage.generation !== "string" || !accepted.lineage.generation) {

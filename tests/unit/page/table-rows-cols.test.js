@@ -10,17 +10,17 @@ const tbl = {
   cols: { c1: { pos: "1", name: "Name" }, c2: { pos: "2", name: "Owner" }, c3: { pos: "3", name: "Amount" } },
   rows: { r1: { pos: "1", cells: { c1: "a", c2: "x", c3: "1" } }, r2: { pos: "2", cells: { c1: "b", c2: "y", c3: "2" } } },
 };
-const menu = (view) => view.dom.parentElement.querySelector(".page-menu");
-const labels = (view) => [...menu(view).querySelectorAll(".page-menu-item")].map((row) => row.querySelector(".page-menu-label").textContent);
-const item = (view, label) => [...menu(view).querySelectorAll(".page-menu-item")].find((row) => row.querySelector(".page-menu-label").textContent === label);
+const menu = (view) => view.dom.parentElement.querySelector(".blockeditor-menu");
+const labels = (view) => [...menu(view).querySelectorAll(".blockeditor-menu-item")].map((row) => row.querySelector(".blockeditor-menu-label").textContent);
+const item = (view, label) => [...menu(view).querySelectorAll(".blockeditor-menu-item")].find((row) => row.querySelector(".blockeditor-menu-label").textContent === label);
 const record = (view, index = 0) => blockJson(view.state.doc.child(index));
 const grid = (table) => { const cols = orderedIds(table.cols); return orderedIds(table.rows).map((id) => cols.map((col) => table.rows[id].cells[col])); };
 const file = (body) => new File([body], "values.csv", { type: "text/csv" });
 
 test("the + bars add a row at the bottom and a column at the right, each one undo step", () => {
   const view = editor([], { blocks: { tbl } });
-  const addRow = view.dom.querySelector(".page-table-add-row");
-  const addCol = view.dom.querySelector(".page-table-add-col");
+  const addRow = view.dom.querySelector(".blockeditor-table-add-row");
+  const addCol = view.dom.querySelector(".blockeditor-table-add-col");
   expect([addRow.getAttribute("aria-label"), addCol.getAttribute("aria-label")]).toEqual(["Add a row", "Add a column"]);
   expect(addRow.contentEditable).toBe("false");
   addRow.click();
@@ -40,14 +40,14 @@ test("the + bars add a row at the bottom and a column at the right, each one und
 
 test("the row menu inserts, moves and deletes rows, offering only the moves that exist", () => {
   const view = editor([], { blocks: { tbl } });
-  view.dom.querySelector(".page-table-row-menu:not([hidden])").click();
+  view.dom.querySelector(".blockeditor-table-row-menu:not([hidden])").click();
   expect(labels(view)).toEqual(["Insert above", "Insert below", "Move down", "Select row", "Delete row"]);
   item(view, "Move down").click();
   const moved = record(view);
   expect(orderedIds(moved.rows)).toEqual(["r2", "r1"]);
   expect(moved.rows.r2.pos).toBe("2");
   expect(grid(moved)).toEqual([["b", "y", "2"], ["a", "x", "1"]]);
-  view.dom.querySelectorAll(".page-table-row-menu:not([hidden])")[1].click();
+  view.dom.querySelectorAll(".blockeditor-table-row-menu:not([hidden])")[1].click();
   expect(labels(view)).toEqual(["Insert above", "Insert below", "Move up", "Select row", "Delete row"]);
 });
 

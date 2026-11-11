@@ -169,11 +169,11 @@ describe("the link plugin", () => {
     const view = page();
     const a = posOf(view, "p");
     view.dispatch(view.state.tr.setMeta(linkKey, { from: a + 3, to: a + 7 }));
-    expect(view.dom.querySelectorAll(".page-link-pending").length).toBe(1);
+    expect(view.dom.querySelectorAll(".blockeditor-link-pending").length).toBe(1);
     view.dispatch(view.state.tr.insertText("xy", a));
     expect(linkKey.getState(view.state)).toEqual({ from: a + 5, to: a + 9 });
     view.dispatch(view.state.tr.setMeta(linkKey, null));
-    expect(view.dom.querySelectorAll(".page-link-pending").length).toBe(0);
+    expect(view.dom.querySelectorAll(".blockeditor-link-pending").length).toBe(0);
   });
 
   test("the clipboard parser drops a pasted javascript: link and keeps its text", () => {
@@ -193,8 +193,8 @@ describe("the link popover", () => {
   const setup = (blocks = [["p", "paragraph", "go here now"], ["c", "code_block", "x.io"]]) => {
     const view = editor(blocks);
     view.coordsAtPos = () => ({ left: 10, right: 10, top: 20, bottom: 30 });
-    const pop = view.dom.parentElement.querySelector(".page-link");
-    const input = pop.querySelector(".page-link-input");
+    const pop = view.dom.parentElement.querySelector(".blockeditor-link");
+    const input = pop.querySelector(".blockeditor-link-input");
     return { view, pop, input, a: posOf(view, "p") };
   };
   const modK = (view) => key(view, "k", { ctrlKey: true });
@@ -210,7 +210,7 @@ describe("the link popover", () => {
     select(view, a + 3, a + 7);
     expect(modK(view)).toBe(true);
     expect([pop.hidden, pop.dataset.mode, document.activeElement === input]).toEqual([false, "edit", true]);
-    expect(view.dom.querySelectorAll(".page-link-pending").length).toBe(1);
+    expect(view.dom.querySelectorAll(".blockeditor-link-pending").length).toBe(1);
   });
 
   test("an unsafe address is refused: the field is marked invalid and the editor stays open", () => {
@@ -229,7 +229,7 @@ describe("the link popover", () => {
     input.value = "example.com";
     keyOn(input, "Enter");
     expect(linkRange(view.state.doc, a + 5)).toEqual({ from: a + 3, to: a + 7, href: "https://example.com" });
-    expect([pop.hidden, view.dom.querySelectorAll(".page-link-pending").length]).toEqual([true, 0]);
+    expect([pop.hidden, view.dom.querySelectorAll(".blockeditor-link-pending").length]).toEqual([true, 0]);
   });
 
   test("Mod+K with the caret inside a link edits that link, prefilled", () => {
@@ -289,7 +289,7 @@ describe("the link popover", () => {
     view.dispatch(view.state.tr.addMark(a + 3, a + 7, LINK.create({ href: "https://example.com/x" })));
     select(view, a + 5);
     expect([pop.hidden, pop.dataset.mode]).toEqual([false, "view"]);
-    expect(pop.querySelector(".page-link-url").textContent).toBe("example.com/x");
+    expect(pop.querySelector(".blockeditor-link-url").textContent).toBe("example.com/x");
     expect(pop.querySelector('[data-act="open"]').getAttribute("target")).toBe("_blank");
     expect(pop.querySelector('[data-act="open"]').getAttribute("rel")).toBe("noopener noreferrer");
     select(view, a + 3);
@@ -345,7 +345,7 @@ describe("the link popover", () => {
     const prompt = jest.fn();
     window.prompt = prompt;
     select(view, a + 3, a + 7);
-    const button = view.dom.parentElement.querySelector('.page-tool[data-mark="link"], .page-tool[aria-label="Link"]');
+    const button = view.dom.parentElement.querySelector('.blockeditor-tool[data-mark="link"], .blockeditor-tool[aria-label="Link"]');
     button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
     button.click();
     expect(prompt).not.toHaveBeenCalled();
@@ -382,10 +382,10 @@ describe("review regressions", () => {
       view.dispatch(view.state.tr.addMark(1, 5, LINK.create({ href: "https://example.test" })));
       select(view, 2);
       key(view, "k", { ctrlKey: true });
-      keyOn(view.dom.parentElement.querySelector(".page-link-input"), "Escape");
+      keyOn(view.dom.parentElement.querySelector(".blockeditor-link-input"), "Escape");
       view.dispatch(view.state.tr.addMark(1, 5, LINK.create({ href: "javascript:void(0)" })));
       key(view, "k", { ctrlKey: true });
-      for (const a of view.dom.parentElement.querySelectorAll(".page-link a")) expect(a.hasAttribute("href")).toBe(false);
+      for (const a of view.dom.parentElement.querySelectorAll(".blockeditor-link a")) expect(a.hasAttribute("href")).toBe(false);
     } finally { view.destroy(); }
   });
 
@@ -407,7 +407,7 @@ describe("review regressions", () => {
       key(view, "k", { ctrlKey: true });
       expect(() => view.dispatch(view.state.tr.delete(1, 22).setMeta(REMOTE, true))).not.toThrow();
       expect(linkKey.getState(view.state)).toBeNull();
-      expect(view.dom.parentElement.querySelector(".page-link").hidden).toBe(true);
+      expect(view.dom.parentElement.querySelector(".blockeditor-link").hidden).toBe(true);
     } finally { view.destroy(); }
   });
 
@@ -428,7 +428,7 @@ describe("review regressions", () => {
       view.coordsAtPos = () => ({ left: 0, bottom: 20 });
       select(view, posOf(view, "p", true));
       key(view, "k", { ctrlKey: true });
-      const input = view.dom.parentElement.querySelector(".page-link-input");
+      const input = view.dom.parentElement.querySelector(".blockeditor-link-input");
       input.value = "example.test";
       keyOn(input, "Enter");
       typeText(view, "!");

@@ -80,10 +80,10 @@ describe("selection across a closed toggle", () => {
   test("closed bodies get the hidden class and the summary reports collapsed", () => {
     const s0 = fold();
     const decos = B.decorationsFor(s0.doc).find();
-    const hidden = decos.filter((d) => d.type.attrs && d.type.attrs.class === "page-hidden");
+    const hidden = decos.filter((d) => d.type.attrs && d.type.attrs.class === "blockeditor-hidden");
     expect(hidden.map((d) => s0.doc.nodeAt(d.from).attrs.id)).toEqual(["b1", "b2"]);
-    const summary = decos.find((d) => d.type.attrs && d.type.attrs["aria-expanded"] !== undefined);
-    expect(summary.type.attrs["aria-expanded"]).toBe("false");
+    const summary = decos.find((d) => d.type.attrs && d.type.attrs["data-expanded"] !== undefined);
+    expect(summary.type.attrs["data-expanded"]).toBe("false");
   });
 
   test("an open toggle hides nothing", () => {

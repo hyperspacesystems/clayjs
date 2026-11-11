@@ -9,8 +9,8 @@ const tbl = {
   cols: { c1: { pos: "1", name: "Name" }, c2: { pos: "2", name: "Owner" } },
   rows: { r1: { pos: "1", cells: { c1: "a", c2: "x" } } },
 };
-const menu = (view) => view.dom.parentElement.querySelector(".page-menu");
-const item = (view, label) => [...menu(view).querySelectorAll(".page-menu-item")].find((row) => row.querySelector(".page-menu-label").textContent === label);
+const menu = (view) => view.dom.parentElement.querySelector(".blockeditor-menu");
+const item = (view, label) => [...menu(view).querySelectorAll(".blockeditor-menu-item")].find((row) => row.querySelector(".blockeditor-menu-label").textContent === label);
 const cols = (view) => blockJson(view.state.doc.child(0)).cols;
 const pointer = (type, target, clientX) => target.dispatchEvent(Object.assign(new MouseEvent(type, { bubbles: true, cancelable: true, clientX }), { pointerId: 1 }));
 
@@ -18,7 +18,7 @@ test("dragging a column border stores a clamped width as one step and draws a fi
   const view = editor([], { blocks: { tbl } });
   expect(view.dom.querySelectorAll("colgroup col")).toHaveLength(2);
   expect(view.dom.querySelector("table").classList.contains("is-sized")).toBe(false);
-  const handle = view.dom.querySelector('th[data-col="c1"] .page-table-resize');
+  const handle = view.dom.querySelector('th[data-col="c1"] .blockeditor-table-resize');
   expect(handle.getAttribute("aria-label")).toBe("Resize column Name");
   expect(handle.getAttribute("role")).toBe("separator");
   expect(handle.getAttribute("aria-orientation")).toBe("vertical");
@@ -42,7 +42,7 @@ test("dragging a column border stores a clamped width as one step and draws a fi
 test("a live drag survives the editor's mutation observer: the table view is kept and the width lands", async () => {
   const view = editor([], { blocks: { tbl } });
   const table = view.dom.querySelector("table");
-  const handle = view.dom.querySelector('th[data-col="c1"] .page-table-resize');
+  const handle = view.dom.querySelector('th[data-col="c1"] .blockeditor-table-resize');
   pointer("pointerdown", handle, 100);
   pointer("pointermove", view.dom.ownerDocument, 130);
   await new Promise((resolve) => setTimeout(resolve, 20));
@@ -57,7 +57,7 @@ test("a live drag survives the editor's mutation observer: the table view is kep
 test("the Width menu is the button equivalent: Wider, Narrower, Fit and Reset widths", () => {
   const view = editor([], { blocks: { tbl } });
   view.dom.querySelector('th[data-col="c2"] button').click();
-  expect(item(view, "Width ▸").querySelector(".page-menu-hint")?.textContent ?? "Auto").toMatch(/Auto/);
+  expect(item(view, "Width ▸").querySelector(".blockeditor-menu-hint")?.textContent ?? "Auto").toMatch(/Auto/);
   item(view, "Width ▸").click();
   expect(item(view, "Reset widths")).toBeUndefined();
   item(view, "Wider").click();
@@ -127,7 +127,7 @@ const stubDrawn = (view, widths) => {
     th.getBoundingClientRect = () => ({ width: widths[th.dataset.col], height: 16, top: 0, left: 0, right: widths[th.dataset.col], bottom: 16 });
   }
 };
-const dblclick = (view, colId) => view.dom.querySelector(`th[data-col="${colId}"] .page-table-resize`).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+const dblclick = (view, colId) => view.dom.querySelector(`th[data-col="${colId}"] .blockeditor-table-resize`).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
 const fitThroughMenu = (view, colId) => {
   view.dom.querySelector(`th[data-col="${colId}"] button`).click();
   item(view, "Width ▸").click();
@@ -138,7 +138,7 @@ const fitThroughMenu = (view, colId) => {
 test("the first width on a table that fills the page stores the drawn widths of every column in one step", () => {
   const view = editor([], { blocks: { tbl } });
   stubDrawn(view, { c1: 400, c2: 300 });
-  const handle = view.dom.querySelector('th[data-col="c1"] .page-table-resize');
+  const handle = view.dom.querySelector('th[data-col="c1"] .blockeditor-table-resize');
   pointer("pointerdown", handle, 100);
   pointer("pointermove", view.dom.ownerDocument, 140);
   pointer("pointerup", view.dom.ownerDocument, 140);
@@ -173,7 +173,7 @@ test("double-clicking a handle on a table with no widths changes nothing", () =>
 
 test("the resize handle says what a double-click does", () => {
   const view = editor([], { blocks: { tbl } });
-  for (const handle of view.dom.querySelectorAll(".page-table-resize")) {
+  for (const handle of view.dom.querySelectorAll(".blockeditor-table-resize")) {
     expect(handle.title).toBe("Drag or use the arrow keys to resize, double-click to reset the table to the page width");
   }
 });

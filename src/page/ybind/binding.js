@@ -26,7 +26,7 @@ export function createYPageBinding({ store, ydoc = new Y.Doc(), onNotice = () =>
     // A full or failed room stops offering at once, but the checkpoint of what it already
     // admitted goes out before the page locks and holds every save.
     onStopped: (reason) => {
-      if (reason !== "page-full" && reason !== "compaction-failed") { onStopped(reason); return; }
+      if (reason !== "blockeditor-full" && reason !== "compaction-failed") { onStopped(reason); return; }
       Promise.resolve(requestCheckpoint?.({ timeoutMs: 10_000 })).catch(() => {}).finally(() => onStopped(reason));
     },
     onLocalUpdate: debt.local,

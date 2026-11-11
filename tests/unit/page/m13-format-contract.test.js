@@ -10,7 +10,7 @@ import { blocksFromYValue } from "../../../src/page/ybind/decode.js";
 import { yValueOf } from "../../../src/page/ybind/provider.js";
 import { seedPageFromArticle } from "../../../src/page/ybind/migrate.js";
 import { M13_CASES, NEIGHBOUR, caseOf } from "../../fixtures/page/formats/m13-cases.mjs";
-import { PAGE_FORMAT, PAGE_FORMAT_EXTENSION, PAGE_FORMAT_META, PAGE_FORMAT_UPGRADE, pageFormatFloor } from "../../../src/page/format-level.js";
+import { PAGE_FORMAT, PAGE_FORMAT_EXTENSION, PAGE_FORMAT_META, PAGE_FORMAT_UPGRADE, blockeditorFormatFloor } from "../../../src/page/format-level.js";
 import { createFormatGate } from "../../../src/page/format-gate.js";
 import { captureFormat, checkPageFormatAdmission } from "../../../src/server/rooms/index.js";
 
@@ -25,7 +25,7 @@ import { captureFormat, checkPageFormatAdmission } from "../../../src/server/roo
  * The other half of the row is here as well, driven through the room's admission helper
  * and the format gate: once the document's floor is 1 every case's capture is refused to a
  * writer with no floor-1 capability, before anything is written; floor-0 text stays
- * writable by every writer; and a host that does not advertise `page-format-v1` keeps the
+ * writable by every writer; and a host that does not advertise `blockeditor-format-v1` keeps the
  * new-format command off until it does.
  */
 
@@ -33,7 +33,7 @@ const clean = fragmentCleaner(document);
 const byId = (items) => new Map(items.map((item) => [item.id, item]));
 const articleOf = (inner, rev) => {
   const parsed = new DOMParser().parseFromString(
-    `<!DOCTYPE html><html><body><article data-page="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
+    `<!DOCTYPE html><html><body><article data-blockeditor="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
     "text/html",
   );
   return parsed.querySelector("article");
@@ -63,7 +63,7 @@ const openR = ({ records }) => {
 // A document opened on the checkpoint, where one neighbouring paragraph is edited through
 // the editor exactly as a person would.
 const editNeighbour = (blocks) => {
-  const store = createStore({ name: "page", value: JSON.parse(JSON.stringify(seedValueOf(blocks))) });
+  const store = createStore({ name: "blockeditor", value: JSON.parse(JSON.stringify(seedValueOf(blocks))) });
   const binding = createYPageBinding({ store, captureTimeout: 0 });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = new pmView.EditorView(mount, {
@@ -97,9 +97,9 @@ const seedValueOf = (blocks) => {
 const withoutPos = ({ pos, ...rest }) => rest;
 
 const marker = (floor) => `<meta name="${PAGE_FORMAT_META}" content="${floor}">`;
-const pageTag = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value).replace(/</g, "\\u003c")}</script>`;
+const pageTag = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value).replace(/</g, "\\u003c")}</script>`;
 const fileOf = (inner, rev, value, floor = 0) =>
-  `<!doctype html>\n<html>\n<head>${floor ? marker(floor) : ""}<title>t</title></head>\n<body>\n<article data-page="1" data-rev="${rev}">\n${inner}\n</article>${pageTag(value)}\n</body>\n</html>`;
+  `<!doctype html>\n<html>\n<head>${floor ? marker(floor) : ""}<title>t</title></head>\n<body>\n<article data-blockeditor="1" data-rev="${rev}">\n${inner}\n</article>${pageTag(value)}\n</body>\n</html>`;
 
 // A saved page file: the article this writer renders from the records, and the page value
 // the editor would capture from it.
@@ -201,7 +201,7 @@ test.each(M13_CASES.map((entry) => entry.name))(
     // The capture needs floor 1, which is why the document rose.
     expect(captureFormat(capture.html)).toBe(1);
     const stored = fileFor(records, 1).html;
-    expect(pageFormatFloor(stored)).toBe(1);
+    expect(blockeditorFormatFloor(stored)).toBe(1);
 
     const thrown = refusal(() => checkPageFormatAdmission({ currentHtml: stored, html: capture.html, capability: 0, admitted: [1] }));
     expect(thrown).not.toBeNull();
@@ -210,8 +210,8 @@ test.each(M13_CASES.map((entry) => entry.name))(
     expect(thrown.statusCode).toBe(409);
     // The pre-R writer's capture is untouched: no marker was added and no floor moved.
     expect(capture.html).toBe(fileFor(records).html);
-    expect(pageFormatFloor(capture.html)).toBe(0);
-    expect(pageFormatFloor(stored)).toBe(1);
+    expect(blockeditorFormatFloor(capture.html)).toBe(0);
+    expect(blockeditorFormatFloor(stored)).toBe(1);
   },
 );
 
@@ -232,14 +232,14 @@ test.each(M13_CASES.map((entry) => entry.name))(
 );
 
 test.each(M13_CASES.map((entry) => entry.name))(
-  "a host that does not advertise page-format-v1 keeps the new-format command of the %s row off until it does",
+  "a host that does not advertise blockeditor-format-v1 keeps the new-format command of the %s row off until it does",
   async (name) => {
     const adapter = gateHost();
     let advertised = false;
     const gate = createFormatGate({ host: adapter, supported: () => advertised });
     const applied = [];
     const refused = await gate.run({ apply: () => applied.push(name) });
-    expect(refused).toMatchObject({ status: "unsupported-host", code: "page-format-unsupported" });
+    expect(refused).toMatchObject({ status: "unsupported-host", code: "blockeditor-format-unsupported" });
     expect(refused.extension).toBe(PAGE_FORMAT_EXTENSION);
     expect(applied).toEqual([]);
     expect(adapter.calls.activate).toBe(0);

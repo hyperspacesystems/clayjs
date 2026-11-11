@@ -13,7 +13,7 @@ test("viewers get the outline but no gutters, menus or editors", () => {
   expect([...document.querySelectorAll("#outline a")].map((a) => a.textContent)).toEqual(["Goals", "After launch"]);
   expect($("[data-richclay-active]")).toBeNull();
   expect($('[data-id="t-1"] input').disabled).toBe(true);
-  expect($(".page > h1").hasAttribute("contenteditable")).toBe(false);
+  expect($(".blockeditor > h1").hasAttribute("contenteditable")).toBe(false);
 });
 
 test("typing / or clicking does nothing for a viewer", async () => {

@@ -145,7 +145,7 @@ const JOURNAL = [
   "  <head>",
   "    <title>Journal</title>",
   "  </head>",
-  '  <body class=journal data-page=\'today\'>',
+  '  <body class=journal data-blockeditor=\'today\'>',
   "    <header id=masthead>",
   "      <h1>Journal</h1>",
   "    </header>",

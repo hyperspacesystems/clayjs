@@ -72,7 +72,7 @@ const open = (blocks, { load = realLoad, upload = recordingUpload().upload } = {
 };
 
 const openTab = (initial, { load = realLoad, upload = recordingUpload().upload } = {}) => {
-  const store = createStore({ name: "page", value: initial });
+  const store = createStore({ name: "blockeditor", value: initial });
   const binding = createYPageBinding({ store, setTimer: () => 1, clearTimer: () => {} });
   const calls = [];
   const reports = [];
@@ -104,9 +104,9 @@ const slash = (view) => {
   view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.content.size - 1)));
   const { from, to } = view.state.selection;
   view.someProp("handleTextInput", (handler) => handler(view, from, to, "/", () => view.state.tr.insertText("/", from, to)));
-  return view.dom.parentElement.querySelector(".page-menu");
+  return view.dom.parentElement.querySelector(".blockeditor-menu");
 };
-const pick = (menu, label) => [...menu.querySelectorAll(".page-menu-item")].find((row) => row.querySelector(".page-menu-label")?.textContent === label);
+const pick = (menu, label) => [...menu.querySelectorAll(".blockeditor-menu-item")].find((row) => row.querySelector(".blockeditor-menu-label")?.textContent === label);
 const clip = (files, html = "") => ({ files, getData: (type) => (type === "text/html" ? html : "") });
 const paste = (view, data) => {
   const event = { clipboardData: data, preventDefault() { event.defaultPrevented = true; } };
@@ -130,7 +130,7 @@ test("a text-only document's editor boots without loading the media view part", 
   expect(calls).toEqual([]);
   await flush();
   expect(calls).toEqual([]);
-  expect(view.dom.querySelector("figure.page-image")).toBe(null);
+  expect(view.dom.querySelector("figure.blockeditor-image")).toBe(null);
 });
 
 test("opening the slash menu loads nothing", async () => {
@@ -145,21 +145,21 @@ test("opening the slash menu loads nothing", async () => {
 test("a document with an image boots with the media view part loaded", async () => {
   const { view, calls } = open({ p: PARAGRAPH, img: IMAGE });
   expect(calls).toEqual(["media"]);
-  expect(view.dom.querySelector("figure.page-image")).toBe(null);
-  expect(await waitFor(() => view.dom.querySelector("figure.page-image"))).toBe(true);
-  const img = view.dom.querySelector("figure.page-image img");
+  expect(view.dom.querySelector("figure.blockeditor-image")).toBe(null);
+  expect(await waitFor(() => view.dom.querySelector("figure.blockeditor-image"))).toBe(true);
+  const img = view.dom.querySelector("figure.blockeditor-image img");
   expect([img.getAttribute("src"), img.alt]).toEqual(["/a.png", "A door"]);
-  expect(view.dom.querySelector("figure.page-image .page-image-caption").textContent).toBe("Front door");
+  expect(view.dom.querySelector("figure.blockeditor-image .blockeditor-image-caption").textContent).toBe("Front door");
 });
 
 test("a document with a file boots with the media view part loaded", async () => {
   const { view, calls } = open({ p: PARAGRAPH, doc: FILE });
   expect(calls).toEqual(["media"]);
-  expect(view.dom.querySelector(".page-file .page-file-icon")).toBe(null);
-  expect(await waitFor(() => view.dom.querySelector(".page-file .page-file-icon"))).toBe(true);
-  const link = view.dom.querySelector(".page-file a.page-file-link");
+  expect(view.dom.querySelector(".blockeditor-file .blockeditor-file-icon")).toBe(null);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-file .blockeditor-file-icon"))).toBe(true);
+  const link = view.dom.querySelector(".blockeditor-file a.blockeditor-file-link");
   expect(link.getAttribute("href")).toBe("/a.pdf");
-  expect(view.dom.querySelector(".page-file-name").textContent).toBe("a.pdf");
+  expect(view.dom.querySelector(".blockeditor-file-name").textContent).toBe("a.pdf");
 });
 
 test("a pasted image file inserts exactly one image once media loads, with the file's bytes", async () => {
@@ -176,7 +176,7 @@ test("a pasted image file inserts exactly one image once media loads, with the f
   expect(images(view)[0].attrs.src).toBe("/uploads/1-paste.png");
   expect(up.calls.map((f) => f.name)).toEqual(["paste.png"]);
   expect(await bytesOf(up.calls[0])).toBe("pasted bytes");
-  expect(await waitFor(() => view.dom.querySelector("figure.page-image img")?.getAttribute("src") === "/uploads/1-paste.png")).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector("figure.blockeditor-image img")?.getAttribute("src") === "/uploads/1-paste.png")).toBe(true);
 });
 
 test("a dropped file inserts exactly one file block once media loads, with the file's bytes", async () => {
@@ -198,7 +198,7 @@ test("a dropped file inserts exactly one file block once media loads, with the f
 test("the picker copies the chosen files before the view part loads", async () => {
   const up = recordingUpload();
   const { view, calls } = open({ p: PARAGRAPH }, { upload: up.upload });
-  const input = view.dom.parentElement.querySelector(".page-file-input");
+  const input = view.dom.parentElement.querySelector(".blockeditor-file-input");
   input.click = () => {};
   expect(pickFiles(view, "image/*", hostPlace(view.state, 0))).toBe(true);
   let reads = 0;
@@ -220,7 +220,7 @@ test("a pick made before the view part loads keeps text typed during the load an
     { a: { pos: "V", t: "paragraph", c: "Hello world" }, b: { pos: "W", t: "paragraph", c: "" } },
     { load: () => loadGate.then(() => realLoad("media")), upload: (f) => uploadGate.then(() => up.upload(f)) },
   );
-  const input = view.dom.parentElement.querySelector(".page-file-input");
+  const input = view.dom.parentElement.querySelector(".blockeditor-file-input");
   input.click = () => {};
   const menu = slash(view);
   pick(menu, "Image").click();
@@ -231,7 +231,7 @@ test("a pick made before the view part loads keeps text typed during the load an
   typeIn(view, 1, "ABC");
   expect(view.state.doc.child(0).textContent).toBe("ABCHello world");
   releaseLoad();
-  expect(await waitFor(() => view.dom.querySelector(".page-upload"))).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector(".blockeditor-upload"))).toBe(true);
   releaseUpload();
   expect(await waitFor(() => images(view).length === 1)).toBe(true);
   const texts = [];
@@ -270,12 +270,12 @@ test("destroying one editor keeps another editor\u2019s bookmark drawing", async
   const second = open({ p: PARAGRAPH }, { upload: never });
   paste(first.view, clip([file("first.png")]));
   paste(second.view, clip([file("second.png")]));
-  expect(await waitFor(() => first.view.dom.querySelector(".page-upload"))).toBe(true);
-  expect(await waitFor(() => second.view.dom.querySelector(".page-upload"))).toBe(true);
+  expect(await waitFor(() => first.view.dom.querySelector(".blockeditor-upload"))).toBe(true);
+  expect(await waitFor(() => second.view.dom.querySelector(".blockeditor-upload"))).toBe(true);
   second.view.destroy();
   typeIn(first.view, 1, "x");
   await flush();
-  expect(first.view.dom.querySelector(".page-upload")).not.toBe(null);
+  expect(first.view.dom.querySelector(".blockeditor-upload")).not.toBe(null);
 });
 
 // The registry is keyed per editor by a weak reference: a dropped editor's views are
@@ -306,7 +306,7 @@ test("an image that arrives from a peer loads the view part", async () => {
   const base = b.store.authoritative;
   b.store.rebase({ ...base, y: { ...base.y, "peer-1": value } }, { source: "remote", frame: { ops: [{ op: "set", path: ["y", "peer-1"], value }] } });
   expect(b.calls).toEqual(["media"]);
-  expect(await waitFor(() => b.view.dom.querySelector("figure.page-image img")?.getAttribute("src") === "/peer.png")).toBe(true);
+  expect(await waitFor(() => b.view.dom.querySelector("figure.blockeditor-image img")?.getAttribute("src") === "/peer.png")).toBe(true);
   expect(images(b.view)).toHaveLength(1);
 });
 
@@ -315,7 +315,7 @@ test("a failed load leaves the text editable and the image's src intact", async 
   await flush();
   await flush();
   expect(reports).toHaveLength(1);
-  expect(view.dom.querySelector("figure.page-image")).toBe(null);
+  expect(view.dom.querySelector("figure.blockeditor-image")).toBe(null);
   expect(view.dom.querySelector('figure[data-type="image"]')).not.toBe(null);
   expect(view.editable).toBe(true);
   expect(images(view)).toHaveLength(1);
@@ -335,7 +335,7 @@ test("a rejected load still uploads the pasted file once and inserts the image, 
   expect(up.calls.map((f) => f.name)).toEqual(["kept.png"]);
   expect(await bytesOf(up.calls[0])).toBe("kept bytes");
   expect(images(view)[0].attrs.src).toBe("/uploads/1-kept.png");
-  expect(view.dom.querySelector("figure.page-image")).toBe(null);
+  expect(view.dom.querySelector("figure.blockeditor-image")).toBe(null);
   expect(view.dom.querySelector('figure[data-type="image"] img')?.getAttribute("src")).toBe("/uploads/1-kept.png");
   expect(view.editable).toBe(true);
   expect(view.state.doc.child(0).textContent).toBe("Hi ");
@@ -352,9 +352,9 @@ test("an install while composing waits for compositionend", async () => {
   release();
   await flush();
   await flush();
-  expect(view.dom.querySelector("figure.page-image")).toBe(null);
+  expect(view.dom.querySelector("figure.blockeditor-image")).toBe(null);
   view.dom.dispatchEvent(new CompositionEvent("compositionend"));
-  expect(await waitFor(() => view.dom.querySelector("figure.page-image"))).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector("figure.blockeditor-image"))).toBe(true);
 });
 
 test("selection, the undo stack and the save output are the same before and after the view part installs", async () => {
@@ -368,7 +368,7 @@ test("selection, the undo stack and the save output are the same before and afte
   });
   const before = snap();
   release();
-  expect(await waitFor(() => view.dom.querySelector("figure.page-image"))).toBe(true);
+  expect(await waitFor(() => view.dom.querySelector("figure.blockeditor-image"))).toBe(true);
   expect(snap()).toEqual(before);
   expect(history.undo(view.state)).toBe(true);
 });
@@ -385,7 +385,7 @@ test("after relaying both ways, two peers have the same projection", async () =>
   paste(a.view, clip([file("peer.png")]));
   expect(await waitFor(() => images(a.view).length === 1)).toBe(true);
   send(a, b, "peer-1");
-  await waitFor(() => b.view.dom.querySelector("figure.page-image"));
+  await waitFor(() => b.view.dom.querySelector("figure.blockeditor-image"));
   b.view.dispatch(b.view.state.tr.insertText("!", 2));
   send(b, a, "peer-2");
   await flush();

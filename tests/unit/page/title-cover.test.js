@@ -56,13 +56,13 @@ const open = (spec, { upload = recordingUpload().upload, gate = true } = {}) => 
 };
 
 const record = (view, id) => blockMap(view.state.doc)[id];
-const header = (view) => view.dom.querySelector("header[data-page-heading]");
-const coverImg = (view) => header(view)?.querySelector("img[data-page-cover]");
-const panelHost = () => document.querySelector('clay-editor-ui[data-clay-ui="page-cover"]');
-const panel = () => panelHost()?.shadowRoot.querySelector(".page-cover-panel") ?? null;
+const header = (view) => view.dom.querySelector("header[data-blockeditor-heading]");
+const coverImg = (view) => header(view)?.querySelector("img[data-blockeditor-cover]");
+const panelHost = () => document.querySelector('clay-editor-ui[data-clay-ui="blockeditor-cover"]');
+const panel = () => panelHost()?.shadowRoot.querySelector(".blockeditor-cover-panel") ?? null;
 const acts = () => [...(panel()?.querySelectorAll("[data-act]") ?? [])].map((b) => b.dataset.act);
 const press = (act) => panel().querySelector(`[data-act="${act}"]`).click();
-const chooser = () => document.querySelector("input.page-cover-input");
+const chooser = () => document.querySelector("input.blockeditor-cover-input");
 const attrsOf = (view, id) => {
   const a = record(view, id) ?? {};
   return { src: a.pageCoverSrc ?? null, alt: a.pageCoverAlt ?? "", x: a.pageCoverX ?? 50, y: a.pageCoverY ?? 50 };
@@ -82,7 +82,7 @@ const key = (name) => document.dispatchEvent(new KeyboardEvent("keydown", { key:
 
 const articleOf = (inner, rev = "0") => {
   const parsed = new DOMParser().parseFromString(
-    `<!DOCTYPE html><html><body><article data-page="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
+    `<!DOCTYPE html><html><body><article data-blockeditor="1" data-rev="${rev}">\n${inner}\n</article></body></html>`,
     "text/html",
   );
   return parsed.querySelector("article");
@@ -130,7 +130,7 @@ test("Add cover makes the title when the page has no H1: one admitted transactio
   history.undoNoScroll(view.state, view.dispatch);
   expect(view.state.doc.childCount).toBe(1);
   expect(canon(blockMap(view.state.doc))).toBe(canon(blockMap(before)));
-  expect(view.dom.querySelector("header[data-page-heading]")).toBeNull();
+  expect(view.dom.querySelector("header[data-blockeditor-heading]")).toBeNull();
 });
 
 test("a host that stores no files offers the embed choice, and only that choice keeps the image", async () => {
@@ -206,19 +206,19 @@ test("a title deleted, or a format that refuses, while the upload is in the air 
   expect(await waitFor(() => first.asked.length === 1)).toBe(true);
   await settle();
   expect(first.view.state.doc).toBe(gone);
-  expect(first.view.dom.querySelector("header[data-page-heading]")).toBeNull();
+  expect(first.view.dom.querySelector("header[data-blockeditor-heading]")).toBeNull();
 
   // A document whose format moved under the upload writes nothing either: the gate answers
   // first and its refusal is the command's own.
   const second = open(PAGE());
-  second.view.runFormatCommand = async () => ({ status: "upgrade-required", code: "page-format-upgrade-required" });
+  second.view.runFormatCommand = async () => ({ status: "upgrade-required", code: "blockeditor-format-upgrade-required" });
   const before = second.view.state.doc;
   await runPageCommand(second.view, "titleCover", {});
   chooseFile(file());
   await settle();
   await settle();
   expect(second.view.state.doc).toBe(before);
-  expect(second.view.dom.querySelector("header[data-page-heading]")).toBeNull();
+  expect(second.view.dom.querySelector("header[data-blockeditor-heading]")).toBeNull();
 });
 
 test("the reposition previews without writing, and Apply is one undo step", async () => {
@@ -267,7 +267,7 @@ test("a remote icon and a local cover are different fields: neither overwrites t
 
   expect(await waitFor(() => record(view, "h").pageCoverSrc === "/uploads/1-cover.png")).toBe(true);
   expect(record(view, "h").pageIcon).toBe("\u{1F308}");
-  expect(header(view).querySelector("span[data-page-icon]").textContent).toBe("\u{1F308}");
+  expect(header(view).querySelector("span[data-blockeditor-icon]").textContent).toBe("\u{1F308}");
   expect(coverImg(view)).not.toBeNull();
 
   // Undo takes back the cover, the way a second person's own change would, and leaves the
@@ -282,7 +282,7 @@ test("the saved page carries the cover, reopens with it, and an older writer kee
   const shape = project(blockMap(view.state.doc));
   expect(documentTitle(shape)).toBe("Notes");
   const html = renderModel(shape);
-  expect(html).toBe(`<header data-id="h" data-page-heading="1"><img data-page-cover src="/cover.jpg" alt="A door" style="object-position:50% 50%"><h1>Notes</h1></header>\n<p data-id="b">Body</p>`);
+  expect(html).toBe(`<header data-id="h" data-blockeditor-heading="1"><img data-blockeditor-cover src="/cover.jpg" alt="A door" style="object-position:50% 50%"><h1>Notes</h1></header>\n<p data-id="b">Body</p>`);
   expect(canon(parseModel(articleOf(html, revOf(shape))))).toBe(canon(shape));
 
   // R has no cover of its own: a heading it could not decorate carries the attributes in its
@@ -290,7 +290,7 @@ test("the saved page carries the cover, reopens with it, and an older writer kee
   const env = envelopeAttrs({ pageCoverSrc: "/cover.jpg", pageCoverAlt: "A door", pageCoverX: 10, pageCoverY: 90 });
   const theirs = parseModel(articleOf(`<h1 data-id="h" ${OPAQUE}="${env[OPAQUE]}" ${VALUE}="${env[VALUE]}">Notes</h1>`));
   expect(theirs).toEqual([{ id: "h", t: "heading", level: 1, pageCoverSrc: "/cover.jpg", pageCoverAlt: "A door", pageCoverX: 10, pageCoverY: 90, c: "Notes" }]);
-  expect(renderModel(theirs)).toContain(`<img data-page-cover src="/cover.jpg" alt="A door" style="object-position:10% 90%">`);
+  expect(renderModel(theirs)).toContain(`<img data-blockeditor-cover src="/cover.jpg" alt="A door" style="object-position:10% 90%">`);
   expect(canon(parseModel(articleOf(renderModel(theirs))))).toBe(canon(theirs));
 });
 
@@ -334,11 +334,11 @@ test("an answer that arrives after the edit left is inert", async () => {
 
   feature.dispose();
   expect(panelHost()).toBeNull();
-  expect(document.querySelector("input.page-cover-input")).toBeNull();
+  expect(document.querySelector("input.blockeditor-cover-input")).toBeNull();
   held.release();
   await settle();
   await settle();
 
   expect(view.state.doc).toBe(before);
-  expect(view.dom.querySelector("header[data-page-heading]")).toBeNull();
+  expect(view.dom.querySelector("header[data-blockeditor-heading]")).toBeNull();
 });

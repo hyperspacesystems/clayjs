@@ -31,12 +31,12 @@ function file(edit = () => {}, from = value) {
   const doc = document.implementation.createHTMLDocument("");
   const tag = doc.createElement("script");
   tag.type = "application/json";
-  tag.setAttribute("merge", "page");
+  tag.setAttribute("merge", "blockeditor");
   tag.setAttribute("clay", "live");
   tag.textContent = JSON.stringify(from);
   doc.head.appendChild(tag);
   const article = doc.createElement("article");
-  article.setAttribute("data-page", "1");
+  article.setAttribute("data-blockeditor", "1");
   article.setAttribute("data-rev", revOf(model));
   article.innerHTML = renderModel(model, { clean: fragmentCleaner(doc) });
   doc.body.appendChild(article);
@@ -46,7 +46,7 @@ function file(edit = () => {}, from = value) {
 const handEdit = (article) => { article.querySelector('[data-id="p1"]').textContent = "Revenue fell and costs stayed flat."; };
 const classify = (source) => classifyFile(source.article, source.tags);
 function open() {
-  const store = createStore({ name: "page", value: clone(value) });
+  const store = createStore({ name: "blockeditor", value: clone(value) });
   const binding = createYPageBinding({ store });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = new pmView.EditorView(mount, {

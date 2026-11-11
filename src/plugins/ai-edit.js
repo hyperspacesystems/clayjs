@@ -127,11 +127,11 @@ async function helperStateNow() {
 
 // The page half of "rewrite a chosen area", read at use time: it is null until the
 // page plugin's own dynamic import lands, and on any page that is no Block document.
-const pageAi = () => window.clay?.page?.ai || null;
+const pageAi = () => window.clay?.blockeditor?.ai || null;
 
 // A Block document whose own surface has not loaded yet (or failed): the DOM path
 // must stand down, because morphing the editor would replace it.
-const isBlockDoc = () => !!window.clay?.editPlugins?.includes('page') && !!document.querySelector('article[data-page]');
+const isBlockDoc = () => !!window.clay?.editPlugins?.includes('blockeditor') && !!document.querySelector('article[data-blockeditor]');
 const blockDocWithoutSurface = () => isBlockDoc() && !pageAi()?.active();
 
 // ---------------------------------------------------------------- observers (undo/autosave)

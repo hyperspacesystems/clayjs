@@ -27,7 +27,7 @@ afterEach(() => {
 
 const seeded = () => seedValue([{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
 const tab = (initial = seeded()) => {
-  const store = createStore({ name: "page", value: initial });
+  const store = createStore({ name: "blockeditor", value: initial });
   const binding = createYPageBinding({ store });
   const editor = new view.EditorView(document.body.appendChild(document.createElement("div")), {
     state: state.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }),

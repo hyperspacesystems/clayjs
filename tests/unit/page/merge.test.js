@@ -11,7 +11,7 @@ const base = P.blocksOfValues([RECORD]);
 const fallbackOf = (id) => base[id]?.artifact?.fallbackHtml ?? "";
 const articleOf = (model, rev) => {
   const a = document.createElement("article");
-  a.setAttribute("data-page", "");
+  a.setAttribute("data-blockeditor", "");
   if (rev) a.setAttribute("data-rev", rev);
   a.innerHTML = P.renderModel(model, { fallbackOf, clean });
   return a;

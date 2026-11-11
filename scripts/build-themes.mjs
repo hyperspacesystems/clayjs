@@ -19,7 +19,7 @@ export async function compileTheme({ root, name, outPath }) {
   // Font URLs are relative to the stylesheet that names them, and the same theme is
   // served at more than one path, so the depth comes from `outPath`, not a constant.
   const dir = path.dirname(outPath);
-  const source = await readFile(path.join(root, "src/page/themes", `${name}.source.css`), "utf8");
+  const source = await readFile(path.join(root, "src/blockeditor/themes", `${name}.source.css`), "utf8");
   const rel = (file) => path.relative(dir, `fonts/${file}`).split(path.sep).join("/");
 
   let out = "";
@@ -29,7 +29,7 @@ export async function compileTheme({ root, name, outPath }) {
     last = match.index + match[0].length;
     const url = match[1];
     if (url.startsWith("./") || url.startsWith("../")) {
-      const css = await readFile(path.join(root, "src/page/themes", url), "utf8");
+      const css = await readFile(path.join(root, "src/blockeditor/themes", url), "utf8");
       if (/@import/.test(css)) throw new Error(`${name}: ${url} imports another sheet; the compile inlines one level`);
       out += `${css}\n`;
     } else if (url.startsWith("https://fonts.googleapis.com/")) {

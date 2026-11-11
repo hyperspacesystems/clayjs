@@ -148,14 +148,14 @@ describe("resolveModules", () => {
   });
 
   // The menu draws the Edit switch and claygoo, which nothing on first paint reads,
-  // so a Document with `plugins=page,menu` loads it after the reader is ready in
+  // so a Document with `plugins=blockeditor,menu` loads it after the reader is ready in
   // both modes: a reader's first paint and first keystroke do not pay for it.
   test("menu is late in view and edit, and stays out of the boot list", () => {
-    const view = resolveModules(params({ plugins: "page,menu" }), false);
+    const view = resolveModules(params({ plugins: "blockeditor,menu" }), false);
     expect(view.plugins).not.toContain("plugins/menu.js");
     expect(view.late).toEqual(["plugins/menu.js"]);
 
-    const edit = resolveModules(params({ plugins: "page,menu" }), true);
+    const edit = resolveModules(params({ plugins: "blockeditor,menu" }), true);
     expect(edit.plugins).not.toContain("plugins/menu.js");
     expect(edit.late).toEqual(["plugins/menu.js", "plugins/wire.js", "plugins/ai-edit.js", "plugins/source.js"]);
   });
@@ -200,30 +200,30 @@ describe("resolveModules", () => {
     expect(view.late).not.toContain("plugins/wire.js");
   });
 
-  test("plugins=page implies live and sync, which load before it", () => {
-    const { plugins } = resolveModules(params({ plugins: "page" }), true);
+  test("plugins=blockeditor implies live and sync, which load before it", () => {
+    const { plugins } = resolveModules(params({ plugins: "blockeditor" }), true);
     expect(plugins).toContain("sync/live-sync.js");
     expect(plugins).toContain("plugins/live.js");
     expect(plugins.indexOf("sync/live-sync.js")).toBeLessThan(plugins.indexOf("plugins/page.js"));
     expect(plugins.indexOf("plugins/live.js")).toBeLessThan(plugins.indexOf("plugins/page.js"));
   });
 
-  test("plugins=page implies upload, so its image blocks can store files", () => {
-    const { plugins } = resolveModules(params({ plugins: "page" }), true);
+  test("plugins=blockeditor implies upload, so its image blocks can store files", () => {
+    const { plugins } = resolveModules(params({ plugins: "blockeditor" }), true);
     expect(plugins).toContain("plugins/upload.js");
     expect(plugins.indexOf("plugins/upload.js")).toBeLessThan(plugins.indexOf("plugins/page.js"));
   });
 
   test("exclude=upload still drops upload from a page", () => {
-    const { plugins } = resolveModules(params({ plugins: "page", exclude: "upload" }), true);
+    const { plugins } = resolveModules(params({ plugins: "blockeditor", exclude: "upload" }), true);
     expect(plugins).not.toContain("plugins/upload.js");
   });
 
   // Cmd+J inside a Block document is ai-edit's composer, so the editor half of `page`
   // brings the plugin and the wire it sends through, on every document that already
   // asked for `page` — after the editor is ready, not before it.
-  test("plugins=page implies ai-edit and the wire, which load after the editor is ready", () => {
-    const { plugins, late } = resolveModules(params({ plugins: "page,menu,indicator" }), true);
+  test("plugins=blockeditor implies ai-edit and the wire, which load after the editor is ready", () => {
+    const { plugins, late } = resolveModules(params({ plugins: "blockeditor,menu,indicator" }), true);
     expect(plugins).not.toContain("plugins/wire.js");
     expect(plugins).not.toContain("plugins/ai-edit.js");
     expect(late).toContain("plugins/wire.js");
@@ -232,8 +232,8 @@ describe("resolveModules", () => {
   });
 
   // The reader half implies nothing: a reader loads no editor, no wire and no composer.
-  test("plugins=page in view mode brings neither the wire nor ai-edit", () => {
-    const { plugins, late } = resolveModules(params({ plugins: "page,menu,indicator" }), false);
+  test("plugins=blockeditor in view mode brings neither the wire nor ai-edit", () => {
+    const { plugins, late } = resolveModules(params({ plugins: "blockeditor,menu,indicator" }), false);
     expect(plugins).not.toContain("plugins/wire.js");
     expect(plugins).not.toContain("plugins/ai-edit.js");
     expect(late).not.toContain("plugins/wire.js");
@@ -243,7 +243,7 @@ describe("resolveModules", () => {
   // Excluding the wire has to run after the implications, or `page` re-adds ai-edit
   // with nothing to send through.
   test("exclude=wire drops ai-edit from a page too", () => {
-    const { plugins, late } = resolveModules(params({ plugins: "page,menu,indicator", exclude: "wire" }), true);
+    const { plugins, late } = resolveModules(params({ plugins: "blockeditor,menu,indicator", exclude: "wire" }), true);
     expect(plugins).not.toContain("plugins/wire.js");
     expect(plugins).not.toContain("plugins/ai-edit.js");
     expect(late).not.toContain("plugins/wire.js");
@@ -252,7 +252,7 @@ describe("resolveModules", () => {
   });
 
   test("exclude=ai-edit takes the AI entry points off a page that implies it", () => {
-    const { plugins, late } = resolveModules(params({ plugins: "page,menu,indicator", exclude: "ai-edit" }), true);
+    const { plugins, late } = resolveModules(params({ plugins: "blockeditor,menu,indicator", exclude: "ai-edit" }), true);
     expect(plugins).not.toContain("plugins/ai-edit.js");
     expect(late).not.toContain("plugins/ai-edit.js");
     expect(late).toContain("plugins/wire.js");
@@ -290,19 +290,19 @@ describe("resolveModules", () => {
   // The editor half is editOnly, so in view mode `page` brings nothing with it:
   // neither the generic sync, the live data service nor the uploader. A reader is
   // its reader half alone, on a saved transport of its own.
-  test("plugins=page in view mode brings neither live nor sync", () => {
-    const { plugins, late } = resolveModules(params({ plugins: "page" }), false);
+  test("plugins=blockeditor in view mode brings neither live nor sync", () => {
+    const { plugins, late } = resolveModules(params({ plugins: "blockeditor" }), false);
     expect(plugins).toEqual(["plugins/page-view.js"]);
     expect(late).toEqual([]);
   });
 
-  test("plugins=page,sync in view mode keeps the sync the tag asked for", () => {
-    const { plugins } = resolveModules(params({ plugins: "page,sync" }), false);
+  test("plugins=blockeditor,sync in view mode keeps the sync the tag asked for", () => {
+    const { plugins } = resolveModules(params({ plugins: "blockeditor,sync" }), false);
     expect(plugins).toEqual(["plugins/page-view.js", "sync/live-sync.js"]);
   });
 
-  test("plugins=page,live in view mode keeps live and adds no sync", () => {
-    const { plugins } = resolveModules(params({ plugins: "page,live" }), false);
+  test("plugins=blockeditor,live in view mode keeps live and adds no sync", () => {
+    const { plugins } = resolveModules(params({ plugins: "blockeditor,live" }), false);
     expect(plugins).toEqual(["plugins/page-view.js", "plugins/live.js"]);
   });
 
@@ -310,9 +310,9 @@ describe("resolveModules", () => {
   // asked for them.
   test("exclude=sync or exclude=live leaves the view-mode reader in place", () => {
     for (const query of [
-      { plugins: "page,sync", exclude: "sync" },
-      { plugins: "page,live", exclude: "live" },
-      { plugins: "page", exclude: "sync,live,upload" },
+      { plugins: "blockeditor,sync", exclude: "sync" },
+      { plugins: "blockeditor,live", exclude: "live" },
+      { plugins: "blockeditor", exclude: "sync,live,upload" },
     ]) {
       expect(resolveModules(params(query), false).plugins).toEqual(["plugins/page-view.js"]);
     }
@@ -423,9 +423,9 @@ test("draft mode keeps the core: a visitor's tab paints the totals of its own dr
   expect(resolveModules(params(), false, { isDraftMode: true, hasSap: true }).plugins).toContain("plugins/derive.js");
 });
 
-describe("page-view, the reader half of page", () => {
+describe("blockeditor-view, the reader half of page", () => {
   test("view mode adds it, and nothing else page would have implied", () => {
-    const { plugins } = resolveModules(params({ plugins: "page" }), false);
+    const { plugins } = resolveModules(params({ plugins: "blockeditor" }), false);
     expect(plugins).not.toContain("plugins/page.js");
     expect(plugins).toEqual(["plugins/page-view.js"]);
   });
@@ -433,14 +433,14 @@ describe("page-view, the reader half of page", () => {
   // An explicitly requested sync still loads, and the reader comes before it so
   // the feed's listener exists first.
   test("view mode adds it before an explicitly requested live sync", () => {
-    const { plugins } = resolveModules(params({ plugins: "page,sync" }), false);
+    const { plugins } = resolveModules(params({ plugins: "blockeditor,sync" }), false);
     expect(plugins).toContain("sync/live-sync.js");
     expect(plugins.indexOf("plugins/page-view.js"))
       .toBeLessThan(plugins.indexOf("sync/live-sync.js"));
   });
 
   test("edit mode loads the editor half and no reader", () => {
-    const { plugins } = resolveModules(params({ plugins: "page" }), true);
+    const { plugins } = resolveModules(params({ plugins: "blockeditor" }), true);
     expect(plugins).toContain("plugins/page.js");
     expect(plugins).not.toContain("plugins/page-view.js");
   });
@@ -448,14 +448,14 @@ describe("page-view, the reader half of page", () => {
   // The page is kept for a page document, but the editor half is edit-only: a call
   // that says edit mode is off loads neither half.
   test("draft mode without edit mode loads neither half of a page", () => {
-    const { plugins } = resolveModules(params({ plugins: "page" }), false, { isDraftMode: true });
+    const { plugins } = resolveModules(params({ plugins: "blockeditor" }), false, { isDraftMode: true });
     expect(plugins).not.toContain("plugins/page.js");
     expect(plugins).not.toContain("plugins/page-view.js");
   });
 
   test("draft mode keeps page and live for a page document", () => {
     const { plugins } = resolveModules(
-      params({ plugins: "page,visitor-drafts,visitor-menu,menu,indicator" }), true, { isDraftMode: true });
+      params({ plugins: "blockeditor,visitor-drafts,visitor-menu,menu,indicator" }), true, { isDraftMode: true });
     expect(plugins).toContain("plugins/page.js");
     expect(plugins).toContain("plugins/live.js");
     expect(plugins).not.toContain("plugins/sync.js");
@@ -469,43 +469,64 @@ describe("page-view, the reader half of page", () => {
     expect(plugins).not.toContain("plugins/live.js");
   });
 
-  test("plugins=page-view is unknown: a URL cannot ask for the reader half", () => {
+  test("plugins=blockeditor-view is unknown: a URL cannot ask for the reader half", () => {
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
-    const { plugins } = resolveModules(params({ plugins: "page-view" }), false);
-    expect(warn).toHaveBeenCalledWith('clayjs: unknown plugin "page-view"');
+    const { plugins } = resolveModules(params({ plugins: "blockeditor-view" }), false);
+    expect(warn).toHaveBeenCalledWith('clayjs: unknown plugin "blockeditor-view"');
     expect(plugins).toEqual([]);
     warn.mockRestore();
+  });
+
+  test("plugins=page is an unknown plugin and loads no editor", () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { plugins, late } = resolveModules(params({ plugins: "page" }), true);
+    expect([...plugins, ...late]).not.toContain("plugins/page.js");
+    expect([...plugins, ...late]).not.toContain("plugins/page-view.js");
+    expect([...plugins, ...late]).not.toContain("plugins/live.js");
+    expect(warn).toHaveBeenCalledWith('clayjs: unknown plugin "page"');
+    warn.mockRestore();
+  });
+
+  test("plugins=blockeditor in draft mode keeps the editor and live", () => {
+    const { plugins } = resolveModules(
+      params({ plugins: "blockeditor,visitor-drafts,visitor-menu,menu,indicator" }), true, { isDraftMode: true });
+    expect(plugins).toContain("plugins/page.js");
+    expect(plugins).toContain("plugins/live.js");
+    expect(plugins).not.toContain("plugins/sync.js");
+    expect(plugins).not.toContain("plugins/upload.js");
+    expect(plugins).not.toContain("plugins/menu.js");
+    expect(plugins).not.toContain("plugins/page-view.js");
   });
 });
 
 // A Document's editor owns its article's rich text, so richclay has nothing to do
-// there; `plugins=page,richclay` still loads it for a page that asks by name. And
+// there; `plugins=blockeditor,richclay` still loads it for a page that asks by name. And
 // nothing a first keystroke waits for includes `source`: its install is asynchronous
 // and a save before it lands is the ordinary full serialization.
 describe("a Document's plugin plan", () => {
   const everywhere = (plan) => [...plan.core, ...plan.plugins, ...plan.late];
 
-  test("plugins=page: no richclay anywhere, the wire, the composer and source in late", () => {
-    const plan = resolveModules(params({ plugins: "page" }), true);
+  test("plugins=blockeditor: no richclay anywhere, the wire, the composer and source in late", () => {
+    const plan = resolveModules(params({ plugins: "blockeditor" }), true);
     expect(everywhere(plan)).not.toContain("plugins/richclay.js");
     expect(plan.plugins).not.toContain("plugins/source.js");
     expect(plan.late).toEqual(["plugins/wire.js", "plugins/ai-edit.js", "plugins/source.js"]);
   });
 
-  test("plugins=page,richclay: asking for it by name defeats the displacement", () => {
-    const plan = resolveModules(params({ plugins: "page,richclay" }), true);
+  test("plugins=blockeditor,richclay: asking for it by name defeats the displacement", () => {
+    const plan = resolveModules(params({ plugins: "blockeditor,richclay" }), true);
     expect(plan.plugins).toContain("plugins/richclay.js");
     expect(plan.late).toEqual(["plugins/wire.js", "plugins/ai-edit.js", "plugins/source.js"]);
   });
 
-  test("plugins=page,source: source stays late even when named", () => {
-    const plan = resolveModules(params({ plugins: "page,source" }), true);
+  test("plugins=blockeditor,source: source stays late even when named", () => {
+    const plan = resolveModules(params({ plugins: "blockeditor,source" }), true);
     expect(plan.plugins).not.toContain("plugins/source.js");
     expect(plan.late).toEqual(["plugins/wire.js", "plugins/ai-edit.js", "plugins/source.js"]);
   });
 
-  test("view mode plugins=page: neither richclay nor source", () => {
-    const plan = resolveModules(params({ plugins: "page" }), false);
+  test("view mode plugins=blockeditor: neither richclay nor source", () => {
+    const plan = resolveModules(params({ plugins: "blockeditor" }), false);
     expect(everywhere(plan)).not.toContain("plugins/richclay.js");
     expect(everywhere(plan)).not.toContain("plugins/source.js");
   });
@@ -524,11 +545,11 @@ describe("a Document's plugin plan", () => {
   // hyper-undo takes Cmd+Z for the whole window, so it would fight the history the
   // document's own editor keeps. This is the one name that loses even when the page
   // asks for it by hand.
-  test("plugins=page,undo: undo is left out though it was named, and says so", () => {
+  test("plugins=blockeditor,undo: undo is left out though it was named, and says so", () => {
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
-    const plan = resolveModules(params({ plugins: "page,undo" }), true);
+    const plan = resolveModules(params({ plugins: "blockeditor,undo" }), true);
     expect(everywhere(plan)).not.toContain("plugins/undo.js");
-    expect(warn).toHaveBeenCalledWith('clayjs: plugin "undo" cannot run with "page" and was left out');
+    expect(warn).toHaveBeenCalledWith('clayjs: plugin "undo" cannot run with "blockeditor" and was left out');
     warn.mockRestore();
   });
 
@@ -596,7 +617,7 @@ describe("late plugins start loading on their own", () => {
     jest.resetModules();
     jest.restoreAllMocks();
     document.documentElement.innerHTML =
-      '<head><title>Notes</title></head><body><article clay="freeze" data-page="1"><p>Hi</p></article></body>';
+      '<head><title>Notes</title></head><body><article clay="freeze" data-blockeditor="1"><p>Hi</p></article></body>';
     window.clay = {};
     window.clayEditMode = true;
     globalThis.fetch = jest.fn(async () => ({

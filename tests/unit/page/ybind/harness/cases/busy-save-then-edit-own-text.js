@@ -10,7 +10,7 @@ export async function run() {
     const sim = new Sim(1);
     const initial = { blocks: { p: { t: 'paragraph', pos: 'B', c: 'alpha bravo charlie delta echo foxtrot' } }, deleted: {} };
     const refuse = { until: -1 };
-    const room = createRoom(sim, { page: initial }, { latency: () => 60, answerLatency: () => 60, refuse: (id) => (id === 'a' && sim.now() < refuse.until ? { status: 503, body: { code: 'busy' }, retryAfter: 2 } : null) });
+    const room = createRoom(sim, { blockeditor: initial }, { latency: () => 60, answerLatency: () => 60, refuse: (id) => (id === 'a' && sim.now() < refuse.until ? { status: 503, body: { code: 'busy' }, retryAfter: 2 } : null) });
     const tabs = new Map(['a', 'b'].map((id) => [id, makeTab(sim, room, id, JSON.parse(JSON.stringify(initial)), { quiet: 500 })]));
     for (const t of tabs.values()) t.start();
     const a = tabs.get('a'), b = tabs.get('b');

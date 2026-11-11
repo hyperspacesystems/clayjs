@@ -18,16 +18,16 @@ import { styleWithLegacyId } from "../lib/style.js";
 const { Plugin, PluginKey } = state;
 const { Decoration, DecorationSet } = pmView;
 
-export const awarenessKey = new PluginKey("page-awareness");
+export const awarenessKey = new PluginKey("blockeditor-awareness");
 
-const STYLE_ID = "page-awareness-style";
+const STYLE_ID = "blockeditor-awareness-style";
 const STYLE_CSS = `
-.page-remote-selection { background-color: color-mix(in srgb, var(--page-remote-color, currentColor) 22%, transparent); }
-.page-remote-caret { position: relative; display: inline-block; width: 0; height: 1.1em; vertical-align: text-bottom; }
-.page-remote-caret::before { content: ""; position: absolute; inset-inline-start: -1px; top: 0; bottom: 0; width: 2px; background: var(--page-remote-color, currentColor); }
-.page-remote-name { position: absolute; inset-inline-start: -1px; bottom: 100%; padding: 1px 4px; border-radius: 4px; background: var(--page-remote-color, currentColor); color: #fff; font-size: 10px; line-height: 1.4; white-space: nowrap; pointer-events: none; }
-.page-remote-cell { outline: 2px solid var(--page-remote-color, currentColor); outline-offset: -2px; }
-.page-remote-block { box-shadow: inset 2px 0 0 var(--page-remote-color, currentColor); }
+.blockeditor-remote-selection { background-color: color-mix(in srgb, var(--blockeditor-remote-color, currentColor) 22%, transparent); }
+.blockeditor-remote-caret { position: relative; display: inline-block; width: 0; height: 1.1em; vertical-align: text-bottom; }
+.blockeditor-remote-caret::before { content: ""; position: absolute; inset-inline-start: -1px; top: 0; bottom: 0; width: 2px; background: var(--blockeditor-remote-color, currentColor); }
+.blockeditor-remote-name { position: absolute; inset-inline-start: -1px; bottom: 100%; padding: 1px 4px; border-radius: 4px; background: var(--blockeditor-remote-color, currentColor); color: #fff; font-size: 10px; line-height: 1.4; white-space: nowrap; pointer-events: none; }
+.blockeditor-remote-cell { outline: 2px solid var(--blockeditor-remote-color, currentColor); outline-offset: -2px; }
+.blockeditor-remote-block { box-shadow: inset 2px 0 0 var(--blockeditor-remote-color, currentColor); }
 `;
 
 // A fixed palette, chosen for contrast against both page themes. A peer's id
@@ -42,11 +42,11 @@ export const colorOf = (id) => {
 
 const caretElement = (doc, name, color) => {
   const bar = doc.createElement("span");
-  bar.className = "page-remote-caret";
+  bar.className = "blockeditor-remote-caret";
   bar.setAttribute("aria-hidden", "true");
-  bar.style.setProperty("--page-remote-color", color);
+  bar.style.setProperty("--blockeditor-remote-color", color);
   const tag = doc.createElement("span");
-  tag.className = "page-remote-name";
+  tag.className = "blockeditor-remote-name";
   tag.textContent = name;
   bar.appendChild(tag);
   return bar;
@@ -78,19 +78,19 @@ export function decorationsFor({ binding, doc, snapshot, epoch }) {
     for (const session of person.sessions ?? []) {
       if (session.you) continue;
       const target = session.editing;
-      if (!target || target.kind !== "page" || target.v !== PRESENCE_VERSION) continue;
+      if (!target || target.kind !== "blockeditor" || target.v !== PRESENCE_VERSION) continue;
       if (target.epoch !== epoch || target.generation !== generation) continue;
       const spot = decodeSelection(context, target.selection);
       if (!spot) continue;
       if (spot.kind === "text") {
-        if (spot.to > spot.from) decorations.push(Decoration.inline(spot.from, spot.to, { class: "page-remote-selection", style: `--page-remote-color:${color}` }));
+        if (spot.to > spot.from) decorations.push(Decoration.inline(spot.from, spot.to, { class: "blockeditor-remote-selection", style: `--blockeditor-remote-color:${color}` }));
         decorations.push(Decoration.widget(spot.to, (view) => caretElement(view.dom.ownerDocument, name, color), { side: 1, key: `caret:${person.id}:${session.id}` }));
       } else if (spot.kind === "cell") {
-        decorations.push(Decoration.node(spot.from, spot.to, { class: "page-remote-cell", style: `--page-remote-color:${color}` }));
+        decorations.push(Decoration.node(spot.from, spot.to, { class: "blockeditor-remote-cell", style: `--blockeditor-remote-color:${color}` }));
         decorations.push(Decoration.widget(spot.from + 1, (view) => caretElement(view.dom.ownerDocument, name, color), { side: -1, key: `cell:${person.id}:${session.id}` }));
       } else if (spot.kind === "blocks") {
         const [first] = spot.ranges;
-        for (const range of spot.ranges) decorations.push(Decoration.node(range.from, range.to, { class: "page-remote-block", style: `--page-remote-color:${color}` }));
+        for (const range of spot.ranges) decorations.push(Decoration.node(range.from, range.to, { class: "blockeditor-remote-block", style: `--blockeditor-remote-color:${color}` }));
         decorations.push(Decoration.widget(first.from + 1, (view) => caretElement(view.dom.ownerDocument, name, color), { side: -1, key: `blocks:${person.id}:${session.id}` }));
       }
     }
@@ -133,7 +133,7 @@ export function createPageAwareness({ binding, view, store = presenceStore, epoc
       store.setTarget(null);
       return;
     }
-    store.setTarget({ kind: "page", v: PRESENCE_VERSION, epoch, generation: binding.awareness.generation(), selection });
+    store.setTarget({ kind: "blockeditor", v: PRESENCE_VERSION, epoch, generation: binding.awareness.generation(), selection });
   };
 
   const rebuild = (next) => {
@@ -252,9 +252,9 @@ export async function installPageAwareness({ binding, view, store = presenceStor
   store.setCapabilities({
     supported: extensions.includes("presence"),
     recordAwareness: extensions.includes("record-awareness-v1"),
-    pageAwareness: extensions.includes("page-awareness-v1"),
+    pageAwareness: extensions.includes("blockeditor-awareness-v1"),
   });
-  if (!extensions.includes("page-awareness-v1")) return null;
+  if (!extensions.includes("blockeditor-awareness-v1")) return null;
   const epoch = answer.document?.awareness?.scope;
   if (typeof epoch !== "string" || !epoch) return null;
   return createPageAwareness({ binding, view, store, epoch });

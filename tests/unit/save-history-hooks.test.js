@@ -156,7 +156,7 @@ describe("capture-bound save hooks", () => {
 
     responses.save = (n) =>
       n <= 3
-        ? { status: 503, headers: { "Retry-After": "0" }, body: { msg: "Converting.", code: "page-converting", reason: "page-converting" } }
+        ? { status: 503, headers: { "Retry-After": "0" }, body: { msg: "Converting.", code: "blockeditor-converting", reason: "blockeditor-converting" } }
         : { body: { msg: "Saved", etag: "stored-retry" } };
 
     const result = await coreMod.saveHtml("<html><body>retry</body></html>");

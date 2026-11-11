@@ -46,7 +46,7 @@ const register = (def) => {
 const livePending = () => pendingSources[pendingSources.length - 1].isPending();
 
 const open = ({ value = seedValue(BLOCKS()), journal = null, compact = undefined, view = true, ...extra } = {}) => {
-  const store = createStore({ name: "page", value: clone(value) });
+  const store = createStore({ name: "blockeditor", value: clone(value) });
   const binding = createYPageBinding({
     store,
     setTimer: () => 1,
@@ -94,7 +94,7 @@ const acknowledge = (tab) => {
 // The accepted bytes this tab would send now: one page state carrying its whole document.
 const stateOf = (tab) => ({ v: 1, g: 0, y: { seed: enc(Y.encodeStateAsUpdateV2(tab.binding.ydoc)) } });
 const acceptedHtml = (state) =>
-  `<article data-page="1">${articleOfPageState(state)}</article><script type="application/json" merge="page" clay="live">${JSON.stringify(state)}</script>`;
+  `<article data-blockeditor="1">${articleOfPageState(state)}</article><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(state)}</script>`;
 const saving = (tab) => {
   const state = acceptedPageState(acceptedHtml(stateOf(tab)));
   expect(state).not.toBeNull();
@@ -208,7 +208,7 @@ test("an accepted article that disagrees with its tags proves nothing", () => {
   const tab = open();
   type(tab, "!");
   const state = stateOf(tab);
-  const html = `<article data-page="1"><p>another article entirely</p></article><script type="application/json" merge="page" clay="live">${JSON.stringify(state)}</script>`;
+  const html = `<article data-blockeditor="1"><p>another article entirely</p></article><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(state)}</script>`;
   expect(acceptedPageState(html)).toBeNull();
   expect(tab.binding.filePending()).toBe(true);
   expect(saving(tab)).toBe(true);
@@ -218,9 +218,9 @@ test("missing and malformed accepted tags prove nothing", () => {
   const tab = open();
   type(tab, "!");
   expect(acceptedPageState(undefined)).toBeNull();
-  expect(acceptedPageState("<article data-page=\"1\">no tag</article>")).toBeNull();
-  expect(acceptedPageState("<article data-page=\"1\">x</article><script merge=\"page\" clay=\"live\">{oops")).toBeNull();
-  expect(acceptedPageState("<article data-page=\"1\">x</article><script merge=\"page\" clay=\"live\">{\"v\":1}</script>")).toBeNull();
+  expect(acceptedPageState("<article data-blockeditor=\"1\">no tag</article>")).toBeNull();
+  expect(acceptedPageState("<article data-blockeditor=\"1\">x</article><script merge=\"blockeditor\" clay=\"live\">{oops")).toBeNull();
+  expect(acceptedPageState("<article data-blockeditor=\"1\">x</article><script merge=\"blockeditor\" clay=\"live\">{\"v\":1}</script>")).toBeNull();
   // A decoding or coverage failure keeps the obligation.
   expect(tab.binding.acceptFile(null)).toBe(false);
   expect(tab.binding.acceptFile({ v: 1, g: 0, y: { seed: "not base64" } })).toBe(false);
@@ -371,7 +371,7 @@ test("a title with an icon and a cover still reads as accepted bytes", () => {
     { id: "p", text: "hello" },
   ]);
   const article = articleOfPageState(value);
-  expect(article).toContain("data-page-icon");
-  expect(article).toContain("data-page-cover");
+  expect(article).toContain("data-blockeditor-icon");
+  expect(article).toContain("data-blockeditor-cover");
   expect(acceptedPageState(acceptedHtml(value))).not.toBeNull();
 });

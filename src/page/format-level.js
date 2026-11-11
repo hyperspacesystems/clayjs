@@ -3,10 +3,10 @@
 //
 // The canonical marker is document metadata, outside the unchanged `{v,g,y}`
 // page value:
-//   <meta name="clay-page-format" content="1">
+//   <meta name="clay-blockeditor-format" content="1">
 // Absence means floor 0. A document's floor only ever rises, and every path that
 // writes a page declares the capability it writes with in
-// `X-Clay-Page-Format`. The value is protocol capability, not authorization: the
+// `X-Clay-Blockeditor-Format`. The value is protocol capability, not authorization: the
 // host still applies every permission check.
 //
 // `requiredPageFormat` answers the other direction: what floor does THIS content
@@ -15,7 +15,7 @@
 
 export {
   PAGE_FORMAT, PAGE_FORMAT_HEADER, PAGE_FORMAT_META, PAGE_FORMAT_EXTENSION, PAGE_FORMAT_UPGRADE,
-  formatCapability, pageFormatFloor, withPageFormatFloor, knownPageFormatFloor, notePageFormatFloor,
+  formatCapability, blockeditorFormatFloor, withPageFormatFloor, knownPageFormatFloor, notePageFormatFloor,
 } from "../core/page-format.js";
 import { PAGE_FORMAT, PAGE_FORMAT_UPGRADE, formatCapability } from "../core/page-format.js";
 

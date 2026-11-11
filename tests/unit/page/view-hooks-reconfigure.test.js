@@ -6,7 +6,7 @@ const fresh = () => editor([
   ["check", "list_item", "task one", { kind: "check" }],
   ["plain", "paragraph", "x"],
 ]);
-const boxes = (view) => view.dom.querySelectorAll(".page-check-controls").length;
+const boxes = (view) => view.dom.querySelectorAll(".blockeditor-check-controls").length;
 
 test("a reconfigure keeps the feature view hooks and their widgets", () => {
   const view = fresh();

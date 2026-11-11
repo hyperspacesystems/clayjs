@@ -116,8 +116,8 @@ export async function measureSaveAccept({ records = 200, history = 0 } = {}) {
   const lap = (name, since) => { marks[name] = +(performance.now() - since).toFixed(1); return performance.now(); };
 
   let t = performance.now();
-  const html = `<!DOCTYPE html><html><body><article data-page>${article}</article></body></html>`;
-  parseHtml(html).querySelector("article[data-page]")?.innerHTML ?? null;
+  const html = `<!DOCTYPE html><html><body><article data-blockeditor>${article}</article></body></html>`;
+  parseHtml(html).querySelector("article[data-blockeditor]")?.innerHTML ?? null;
   t = lap("parseArticle", t);
   const proven = await proofs.captureProof({ capture: "c1", records: logged, accepted: CONTEXT, article, state, etag: '"e1"' });
   t = lap("captureProof", t);

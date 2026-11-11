@@ -12,5 +12,5 @@ test("the page format constants load outside a browser", async () => {
   const { PAGE_FORMAT, PAGE_FORMAT_HEADER } = await import("../../src/core/page-format.js");
 
   expect(PAGE_FORMAT).toBe(1);
-  expect(PAGE_FORMAT_HEADER).toBe("X-Clay-Page-Format");
+  expect(PAGE_FORMAT_HEADER).toBe("X-Clay-Blockeditor-Format");
 });

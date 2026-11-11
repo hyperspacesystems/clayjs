@@ -29,12 +29,12 @@ const fake = () => {
   const calls = [];
   const run = (code, lang) => {
     calls.push([code, lang]);
-    return Promise.resolve([[{ content: code.slice(0, 5), offset: 0, color: "var(--page-code-token-keyword)", fontStyle: 0 }]]);
+    return Promise.resolve([[{ content: code.slice(0, 5), offset: 0, color: "var(--blockeditor-code-token-keyword)", fontStyle: 0 }]]);
   };
   return { calls, run };
 };
 const decos = (view) => highlightKey.getState(view.state).find();
-const picker = (view) => view.dom.querySelector("select.page-code-lang");
+const picker = (view) => view.dom.querySelector("select.blockeditor-code-lang");
 
 const PARAGRAPH = { t: "paragraph", pos: "B", c: "Hi" };
 const CODE = { t: "code_block", pos: "B", c: "const x = 1", lang: "javascript" };

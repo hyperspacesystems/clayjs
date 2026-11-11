@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 function open(value) {
-  const binding = createYPageBinding({ store: createStore({ name: "page", value }), captureTimeout: 0 });
+  const binding = createYPageBinding({ store: createStore({ name: "blockeditor", value }), captureTimeout: 0 });
   const mount = document.body.appendChild(document.createElement("div"));
   const view = new pmView.EditorView(mount, {
     state: pmState.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }),

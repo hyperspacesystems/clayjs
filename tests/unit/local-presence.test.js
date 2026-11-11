@@ -344,7 +344,7 @@ test("a broadcast document's session goes with its lease (broadcast-cycle-sessio
     ok: true,
     text: async () => JSON.stringify({
       spec: 1,
-      extensions: ["page-awareness-v1", "record-awareness-v1"],
+      extensions: ["blockeditor-awareness-v1", "record-awareness-v1"],
       document: { awareness: { transport: "broadcast", scope: "id:doc-1", label: "This computer" } },
     }),
   }));

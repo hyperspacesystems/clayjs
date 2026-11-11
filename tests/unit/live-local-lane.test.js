@@ -938,7 +938,7 @@ test("Opus 7: a first read, and a read from another epoch, carry the epoch's mov
 // with a tab that cannot read it. The move happens only once an accepted receipt
 // covers the pending work, keeps every store, and an interrupted move leaves the
 // tab where it was rather than abandoning its pending operations.
-const FORMAT_KEY = "clay-live:/game.html:page-format:1";
+const FORMAT_KEY = "clay-live:/game.html:blockeditor-format:1";
 
 // A lock per channel name, as the platform's Web Locks are: a scope change takes
 // a different name, so it is not queued behind the room this tab just left.
@@ -998,8 +998,8 @@ function tabAt(tags, { key = KEY, floor = 0 } = {}) {
 test("the lane's scope follows the document's floor", async () => {
   scopedLocks();
   const { localLaneKey, FORMAT_SCOPE, ROOM_SCOPE } = await import("../../src/live/local-lane.js");
-  expect(FORMAT_SCOPE).toBe("page-format:1");
-  expect(ROOM_SCOPE).toBe("page-rooms:2");
+  expect(FORMAT_SCOPE).toBe("blockeditor-format:1");
+  expect(ROOM_SCOPE).toBe("blockeditor-rooms:2");
   expect(localLaneKey(0, "/game.html")).toBe(`clay-live:/game.html:${ROOM_SCOPE}`);
   expect(localLaneKey(1, "/game.html")).toBe(`clay-live:/game.html:${FORMAT_SCOPE}:${ROOM_SCOPE}`);
   expect(localLaneKey(2, "/game.html")).toBe(`clay-live:/game.html:${FORMAT_SCOPE}:${ROOM_SCOPE}`);

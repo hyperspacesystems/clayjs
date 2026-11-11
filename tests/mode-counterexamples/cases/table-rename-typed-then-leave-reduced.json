@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "table-rename-typed-then-leave-reduced",
-  "fixture": "page-host",
+  "fixture": "blockeditor-host",
   "boot": {
     "mode": "edit",
     "live": true,
@@ -10,23 +10,23 @@
   "steps": [
     {
       "op": "click",
-      "target": ".page-plus"
+      "target": ".blockeditor-plus"
     },
     {
       "op": "click",
-      "target": "#page-menu-1-18"
+      "target": "#blockeditor-menu-1-18"
     },
     {
       "op": "click",
-      "target": ".page-table-actions"
+      "target": ".blockeditor-table-actions"
     },
     {
       "op": "click",
-      "target": "#page-menu-1-11"
+      "target": "#blockeditor-menu-1-11"
     },
     {
       "op": "input",
-      "target": ".page-table-rename",
+      "target": ".blockeditor-table-rename",
       "value": "Budget"
     },
     {

@@ -36,7 +36,7 @@ const html = `<!DOCTYPE html>
 <body>
   <h1>Yjs page lab</h1>
   <p>Open this page in two or three windows of the same browser.</p>
-  <script type="application/json" merge="page" clay="live ephemeral">${seed}</script>
+  <script type="application/json" merge="blockeditor" clay="live ephemeral">${seed}</script>
   <div id="lab-root" clay="no-save no-watch"></div>
   <script type="module" src="/tests/fixtures/ypage-lab/boot.js"></script>
 </body>

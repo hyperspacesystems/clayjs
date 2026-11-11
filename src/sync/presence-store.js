@@ -315,7 +315,7 @@ export class PresenceStore {
         const awareness = meta?.document && typeof meta.document === 'object' ? meta.document.awareness : null;
         if (
           awareness && awareness.transport === 'broadcast' &&
-          (extensions.includes('page-awareness-v1') || extensions.includes('record-awareness-v1'))
+          (extensions.includes('blockeditor-awareness-v1') || extensions.includes('record-awareness-v1'))
         ) {
           const scope = typeof awareness.scope === 'string' && awareness.scope ? awareness.scope : null;
           return import('./local-presence.js').then(({ localPresence }) => {

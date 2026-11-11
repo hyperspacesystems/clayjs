@@ -25,7 +25,7 @@ function open(folds = 1) {
     peer.getText("flow").insert(4 + i, "x");
     value.y[`u6-${i + 1}`] = update;
   }
-  const store = createStore({ name: "page", value });
+  const store = createStore({ name: "blockeditor", value });
   const ydoc = docFromValue(value);
   ydoc.clientID = 5;
   const provider = createYProvider({ store, ydoc, setTimer: (fn) => { queue.push(fn); return queue.length; }, clearTimer: () => {} });

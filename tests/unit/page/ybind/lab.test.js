@@ -5,7 +5,7 @@ import { startLab } from "../../../fixtures/ypage-lab/lab.js";
 globalThis.ClipboardEvent ??= class ClipboardEvent extends Event { constructor(t, i = {}) { super(t, i); this.clipboardData = i.clipboardData ?? null; } };
 
 const open = () => {
-  const store = createStore({ name: "page", value: seedValue([{ id: "lab1", text: "hello" }, { id: "lab2", text: "world" }]) });
+  const store = createStore({ name: "blockeditor", value: seedValue([{ id: "lab1", text: "hello" }, { id: "lab2", text: "world" }]) });
   const root = document.body.appendChild(document.createElement("div"));
   const lab = startLab({ root, store, interval: 1000000 });
   return { store, root, lab };

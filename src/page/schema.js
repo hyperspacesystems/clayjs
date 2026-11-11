@@ -52,7 +52,7 @@ export const schema = new model.Schema({
         due: { default: null },
       },
       toDOM: (n) => ["div", ref(n, {
-        class: "page-li",
+        class: "blockeditor-li",
         "data-kind": n.attrs.kind,
         "data-indent": String(n.attrs.indent),
         "data-checked": n.attrs.checked ? "true" : "false",
@@ -68,7 +68,7 @@ export const schema = new model.Schema({
       group: "block",
       content: "inline*",
       attrs: block,
-      toDOM: (n) => ["aside", ref(n, { class: "page-callout" }), 0],
+      toDOM: (n) => ["aside", ref(n, { class: "blockeditor-callout" }), 0],
     },
     code_block: {
       group: "block",
@@ -83,7 +83,7 @@ export const schema = new model.Schema({
       group: "block",
       content: "inline*",
       attrs: { ...block, open: { default: false }, level: { default: null } },
-      toDOM: (n) => ["div", ref(n, { class: "page-toggle", "data-open": n.attrs.open ? "true" : "false", ...(n.attrs.level ? { "data-level": String(n.attrs.level) } : {}) }), 0],
+      toDOM: (n) => ["div", ref(n, { class: "blockeditor-toggle", "data-open": n.attrs.open ? "true" : "false", ...(n.attrs.level ? { "data-level": String(n.attrs.level) } : {}) }), 0],
     },
     divider: {
       group: "block",
@@ -97,7 +97,7 @@ export const schema = new model.Schema({
       group: "block",
       atom: true,
       attrs: { ...block, maxLevel: { default: null } },
-      toDOM: (n) => ["div", ref(n, { class: "page-toc", "data-type": "toc", ...(n.attrs.maxLevel ? { "data-max-level": String(n.attrs.maxLevel) } : {}) })],
+      toDOM: (n) => ["div", ref(n, { class: "blockeditor-toc", "data-type": "toc", ...(n.attrs.maxLevel ? { "data-max-level": String(n.attrs.maxLevel) } : {}) })],
     },
     image: {
       group: "block",
@@ -110,7 +110,7 @@ export const schema = new model.Schema({
       group: "block",
       atom: true,
       attrs: { ...block, src: { default: "" }, name: { default: "" }, size: { default: null }, mime: { default: null } },
-      toDOM: (n) => ["div", ref(n, { class: "page-file", "data-type": "file", "data-src": safeFileHref(n.attrs.src) ?? "", "data-name": n.attrs.name, "data-size": n.attrs.size == null ? "" : String(n.attrs.size), "data-mime": n.attrs.mime ?? "" }),
+      toDOM: (n) => ["div", ref(n, { class: "blockeditor-file", "data-type": "file", "data-src": safeFileHref(n.attrs.src) ?? "", "data-name": n.attrs.name, "data-size": n.attrs.size == null ? "" : String(n.attrs.size), "data-mime": n.attrs.mime ?? "" }),
         ["a", { href: safeFileHref(n.attrs.src), target: "_blank", rel: "noopener noreferrer" }, n.attrs.name || "file"]],
     },
     table: {
@@ -174,8 +174,8 @@ export const schema = new model.Schema({
       selectable: true,
       attrs: { ...block, raw: { default: null } },
       toDOM: (n) => ["div", ref(n, { "data-type": "newer-format", "data-format": String(n.attrs.raw?.t ?? ""), contenteditable: "false" }),
-        ["span", { class: "page-newer-format" }, `Newer format: ${String(n.attrs.raw?.t ?? "")}`],
-        ["span", { class: "page-newer-format-text" }, n.textContent]],
+        ["span", { class: "blockeditor-newer-format" }, `Newer format: ${String(n.attrs.raw?.t ?? "")}`],
+        ["span", { class: "blockeditor-newer-format-text" }, n.textContent]],
     },
 
     text: { group: "inline" },
@@ -202,7 +202,7 @@ export const schema = new model.Schema({
       attrs: { id: {} },
       inclusive: false,
       excludes: "mention date link",
-      toDOM: (m) => ["span", { "data-page-mention": m.attrs.id }, 0],
+      toDOM: (m) => ["span", { "data-blockeditor-mention": m.attrs.id }, 0],
     },
     // A date mention is the calendar date as ordinary ISO text with this mark over it:
     // `date` is YYYY-MM-DD, and no time, zone, reminder or relative word is stored.
@@ -210,7 +210,7 @@ export const schema = new model.Schema({
       attrs: { date: {} },
       inclusive: false,
       excludes: "mention date link",
-      toDOM: (m) => ["time", { datetime: m.attrs.date, "data-page-date": "" }, 0],
+      toDOM: (m) => ["time", { datetime: m.attrs.date, "data-blockeditor-date": "" }, 0],
     },
     // The floor-1 formats (format-native.js): written as named descriptors,
     // drawn as the elements the saved article keeps for them.

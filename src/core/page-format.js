@@ -1,20 +1,20 @@
 // The document format floor as the save wire carries it: the canonical
-//   <meta name="clay-page-format" content="1">
-// marker (absence is floor 0, a floor only rises) and the `X-Clay-Page-Format`
+//   <meta name="clay-blockeditor-format" content="1">
+// marker (absence is floor 0, a floor only rises) and the `X-Clay-Blockeditor-Format`
 // capability header every page write declares. Core code because every save sends
 // the header; what content needs which floor lives in `page/format-level.js`.
 
 import { PAGE_FORMAT } from "./page-format-wire.js";
 export { PAGE_FORMAT, PAGE_FORMAT_HEADER } from "./page-format-wire.js";
-export const PAGE_FORMAT_META = "clay-page-format";
-export const PAGE_FORMAT_EXTENSION = "page-format-v1";
-export const PAGE_FORMAT_UPGRADE = "page-format-upgrade-required";
+export const PAGE_FORMAT_META = "clay-blockeditor-format";
+export const PAGE_FORMAT_EXTENSION = "blockeditor-format-v1";
+export const PAGE_FORMAT_UPGRADE = "blockeditor-format-upgrade-required";
 
 // Every helper here is a plain function with no top-level work, so a client that
 // imports one of them carries only that one.
 const level = (value) => (Number.isSafeInteger(value) && value > 0 ? value : 0);
 
-const metaTag = (html) => /<meta\b[^>]*\bname\s*=\s*["']?clay-page-format["']?[^>]*>/i.exec(html);
+const metaTag = (html) => /<meta\b[^>]*\bname\s*=\s*["']?clay-blockeditor-format["']?[^>]*>/i.exec(html);
 
 // A capability as a request declares it: a missing or unreadable header is no
 // capability at all, so it can never authorize a write.
@@ -25,7 +25,7 @@ export function formatCapability(value) {
 }
 
 // The floor a document carries. Absent or unreadable metadata is floor 0.
-export function pageFormatFloor(html) {
+export function blockeditorFormatFloor(html) {
   if (typeof html !== "string") return 0;
   const tag = metaTag(html);
   if (!tag) return 0;
@@ -40,7 +40,7 @@ export function withPageFormatFloor(html, floor) {
   const want = level(floor);
   if (typeof html !== "string" || !want) return html;
   const tag = metaTag(html);
-  if (tag && pageFormatFloor(tag[0]) === want) return html;
+  if (tag && blockeditorFormatFloor(tag[0]) === want) return html;
   const marker = `<meta name="${PAGE_FORMAT_META}" content="${want}">`;
   if (tag) return html.slice(0, tag.index) + marker + html.slice(tag.index + tag[0].length);
   const at = /<\/head\s*>/i.exec(html) || /<body\b/i.exec(html);

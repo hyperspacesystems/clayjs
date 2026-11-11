@@ -30,7 +30,7 @@ const livePending = () => pendingSources[pendingSources.length - 1].isPending();
 
 const open = ({ requestCheckpoint = null, requestExitCheckpoint = null, onStopped = () => {} } = {}) => {
   const value = seedValue(BLOCKS());
-  const store = createStore({ name: "page", value: clone(value) });
+  const store = createStore({ name: "blockeditor", value: clone(value) });
   const ydoc = new Y.Doc();
   ydoc.clientID = 5;
   const room = { value: clone(value) };
@@ -95,7 +95,7 @@ test("an exit flush with an unadmitted outbox reports not ok", async () => {
   h.enter();
   h.type("a");
   h.type("b");
-  h.refuse("page-full");
+  h.refuse("blockeditor-full");
 
   expect(h.store.pending).toHaveLength(0);
   expect(h.binding.provider.pending).toBe(true);
@@ -105,7 +105,7 @@ test("an exit flush with an unadmitted outbox reports not ok", async () => {
   expect(textOf(h.ydoc)).toBe("bahello");
 });
 
-test.each(["page-full", "compaction-failed"])("a %s refusal asks for one checkpoint and then stops the page", async (code) => {
+test.each(["blockeditor-full", "compaction-failed"])("a %s refusal asks for one checkpoint and then stops the page", async (code) => {
   const checkpoints = [];
   const stopped = [];
   const h = open({
@@ -134,7 +134,7 @@ test("a full page checkpoints what the room admitted before it locks the page", 
   h.enter();
   h.type("a");
 
-  h.store.deliver({ phase: "refused", code: "page-full" });
+  h.store.deliver({ phase: "refused", code: "blockeditor-full" });
   await after();
   // The checkpoint of what the room did admit is on its way, and the page is not
   // locked yet: a save it holds would otherwise cover nothing of this tab's work.
@@ -142,8 +142,8 @@ test("a full page checkpoints what the room admitted before it locks the page", 
 
   settle({ ok: true });
   await after();
-  expect(order).toEqual(["checkpoint", "stopped:page-full"]);
-  expect(h.binding.provider.stopped).toBe("page-full");
+  expect(order).toEqual(["checkpoint", "stopped:blockeditor-full"]);
+  expect(h.binding.provider.stopped).toBe("blockeditor-full");
 });
 
 test("a refusal that is not about capacity neither checkpoints nor stops the page", async () => {
@@ -155,7 +155,7 @@ test("a refusal that is not about capacity neither checkpoints nor stops the pag
   });
   h.enter();
   h.type("a");
-  h.store.deliver({ phase: "refused", code: "page-immutable" });
+  h.store.deliver({ phase: "refused", code: "blockeditor-immutable" });
   await after();
   expect(stopped).toEqual([]);
   expect(checkpoints).toEqual([]);
@@ -169,7 +169,7 @@ test("a blocked page keeps every character typed and writes no further frame", (
   expect(Object.keys(h.store.value.y).filter((key) => key[0] === "u")).toHaveLength(1);
   expect(h.binding.provider.pending).toBe(true);
 
-  h.refuse("page-full");
+  h.refuse("blockeditor-full");
   const afterRefusal = keys(h.store);
   const value = clone(h.store.value);
 

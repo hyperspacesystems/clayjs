@@ -44,12 +44,12 @@ const until = async (check, tries = 300) => {
 };
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const handEdit = (doc) => { doc.querySelector('article[data-page] [data-id="p"]').textContent = "Hello, edited by hand"; };
+const handEdit = (doc) => { doc.querySelector('article[data-blockeditor] [data-id="p"]').textContent = "Hello, edited by hand"; };
 const text = (page) => page.view.state.doc.child(0).textContent;
 
 const marks = [];
@@ -68,7 +68,7 @@ async function open({
   html = articleHtml(),
   head = tagHtml(seedValue(BLOCKS)),
   edit = null,
-  extensions = ["page"],
+  extensions = ["blockeditor"],
   room = "ok",
   writer = null,
 } = {}) {
@@ -90,7 +90,7 @@ async function open({
     seq: 0,
     writer,
     conn: 0,
-    stores: { page: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
+    stores: { blockeditor: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
   });
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
@@ -102,6 +102,7 @@ async function open({
   }));
 
   await jest.unstable_mockModule("../../../src/core/save.js", () => ({
+    claimFailure: () => {},
     savesAdmitted: () => true,
     savePageForce: async () => ({ ok: true, msgType: "success" }),
     savePage: async () => ({ ok: true, msgType: "success" }),
@@ -144,7 +145,7 @@ async function open({
     createPageEditor: (mount, options) => {
       staged.push({ connected: mount.isConnected });
       if (MODE.factory === "throw") {
-        mount.appendChild(document.createElement("div")).className = "page-shell";
+        mount.appendChild(document.createElement("div")).className = "blockeditor-shell";
         throw new Error("the editor could not be built");
       }
       return realEditor.createPageEditor(mount, options);
@@ -166,18 +167,18 @@ async function open({
 
   const states = [];
   const onState = (event) => states.push(event.detail);
-  document.addEventListener("clay:page-save-state", onState);
-  cleanups.push(() => document.removeEventListener("clay:page-save-state", onState));
+  document.addEventListener("clay:blockeditor-save-state", onState);
+  cleanups.push(() => document.removeEventListener("clay:blockeditor-save-state", onState));
 
   const { live } = await import("../../../src/plugins/live.js");
   window.clay = {
     live: (name) => {
-      if (name !== "page") return live(name);
+      if (name !== "blockeditor") return live(name);
       const handle = live(name);
       return room === "defer" ? { ready: roomGate.promise.then(() => handle.ready) } : handle;
     },
   };
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   const loaded = article.innerHTML;
   const { page } = await import("../../../src/plugins/page.js");
   const { ownerOf } = await import("../../../src/page/runtime-owner.js");
@@ -218,7 +219,7 @@ test("the editor is built out of the page and moved in whole, then measured in p
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
   const { page, article, staged, refreshed } = await open({
     head: tagHtml(value),
-    html: `<article data-page="1" data-rev="${rev}">${html}</article>`,
+    html: `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`,
   });
   try {
     await page.ready;
@@ -228,10 +229,10 @@ test("the editor is built out of the page and moved in whole, then measured in p
     // editor was ever on the page while it was being made.
     expect(staged).toEqual([{ connected: false }]);
     // The article element itself is the one that was on the page at boot.
-    expect(document.querySelector("article[data-page]")).toBe(article);
-    expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
-    expect(document.querySelectorAll(".page-editor")).toHaveLength(1);
-    expect(article.querySelectorAll(".page-shell")).toHaveLength(1);
+    expect(document.querySelector("article[data-blockeditor]")).toBe(article);
+    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
+    expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(1);
+    expect(article.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
     // One measurement pass, with the shell already in the article.
     expect(refreshed).toEqual([{ connected: true }]);
     expect(marks.at(-1)).toMatchObject({ name: "document:input-ready" });
@@ -255,8 +256,8 @@ test("a mount that fails leaves the saved article untouched and the article free
 
     expect(page.status).toMatchObject({ phase: "blocked", reason: "mount-failed" });
     expect(article.innerHTML).toBe(before);
-    expect(document.querySelectorAll(".page-shell")).toHaveLength(0);
-    expect(document.querySelectorAll(".page-editor")).toHaveLength(0);
+    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
+    expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(0);
     expect(ownerOf(article)).toBe(null);
     noInput(page);
 
@@ -265,7 +266,7 @@ test("a mount that fails leaves the saved article untouched and the article free
     await page.install();
     await flushAsync();
     expect(page.status).toMatchObject({ phase: "ready" });
-    expect(document.querySelectorAll(".page-shell")).toHaveLength(1);
+    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
     expect(ownerOf(article)).toBe("editor");
     page.dispose();
   } finally {
@@ -277,29 +278,29 @@ test("a slow wait says so quietly after a moment, and a fast one never does", as
   const { page, roomGate } = await open({ room: "defer" });
   try {
     // At first nothing is said: the saved article is on screen and that is enough.
-    expect(document.querySelectorAll(".page-boot-status")).toHaveLength(0);
-    expect(await until(() => document.querySelectorAll(".page-boot-status").length === 1)).toBe(true);
+    expect(document.querySelectorAll(".blockeditor-boot-status")).toHaveLength(0);
+    expect(await until(() => document.querySelectorAll(".blockeditor-boot-status").length === 1)).toBe(true);
 
-    const note = document.querySelector(".page-boot-status");
+    const note = document.querySelector(".blockeditor-boot-status");
     expect(note.getAttribute("clay")).toBe("editor-ui");
     expect(note.getAttribute("role")).toBe("status");
     expect(note.textContent).toBe("Loading the editor\u2026");
     // The saved article is still there under it, and nothing takes input.
-    expect(document.querySelector('article[data-page] [data-id="p"]')).toBeTruthy();
+    expect(document.querySelector('article[data-blockeditor] [data-id="p"]')).toBeTruthy();
     noInput(page);
 
     roomGate.resolve();
     await page.ready;
     expect(page.status).toMatchObject({ phase: "ready" });
-    expect(document.querySelectorAll(".page-boot-status")).toHaveLength(0);
+    expect(document.querySelectorAll(".blockeditor-boot-status")).toHaveLength(0);
 
     // A boot that settles inside the moment leaves no waiting line behind, now or
     // a moment later.
     await page.install();
     await flushAsync();
-    expect(document.querySelectorAll(".page-boot-status")).toHaveLength(0);
+    expect(document.querySelectorAll(".blockeditor-boot-status")).toHaveLength(0);
     await new Promise((resolve) => setTimeout(resolve, 220));
-    expect(document.querySelectorAll(".page-boot-status")).toHaveLength(0);
+    expect(document.querySelectorAll(".blockeditor-boot-status")).toHaveLength(0);
     page.dispose();
   } finally {
     page.dispose();
@@ -307,7 +308,7 @@ test("a slow wait says so quietly after a moment, and a fast one never does", as
 });
 
 test("an adoption another tab owns keeps this tab's staged view until the writer lands it", async () => {
-  const { page, ownerOf, article } = await open({ edit: handEdit, writer: "other", extensions: ["page", "live-data"] });
+  const { page, ownerOf, article } = await open({ edit: handEdit, writer: "other", extensions: ["blockeditor", "live-data"] });
   try {
     // Waiting for the elected writer, not blocked: the staged editor is in the
     // article over the room's state, and it takes no key.
@@ -318,9 +319,9 @@ test("an adoption another tab owns keeps this tab's staged view until the writer
     expect(page.view.isDestroyed).toBe(false);
     expect(article.textContent).toContain("Hello");
     expect(article.textContent).not.toContain("edited by hand");
-    expect(article.querySelectorAll(".page-shell")).toHaveLength(1);
-    expect(document.querySelectorAll(".page-editor")).toHaveLength(1);
-    expect(document.querySelectorAll(".page-boot-status")).toHaveLength(0);
+    expect(article.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
+    expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(1);
+    expect(document.querySelectorAll(".blockeditor-boot-status")).toHaveLength(0);
     // The view is still this tab's, so the article goes with it if the boot ends.
     expect(ownerOf(article)).toBe("editor");
     noInput(page);

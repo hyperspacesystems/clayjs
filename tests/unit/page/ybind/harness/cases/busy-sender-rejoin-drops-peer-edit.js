@@ -8,7 +8,7 @@ export async function run() {
   const { TextSelection } = pmState;
   const sim = new Sim(1);
   const initial = { blocks: { p: { t: 'paragraph', pos: 'B', c: 'alpha bravo charlie delta echo foxtrot golf hotel' } }, deleted: {} };
-  const room = createRoom(sim, { page: initial }, {
+  const room = createRoom(sim, { blockeditor: initial }, {
     latency: () => 60, answerLatency: () => 60,
     refuse: (id) => (id === 'b' && sim.now() > 4087 && sim.now() < 6739 ? { status: 503, body: { code: 'busy' }, retryAfter: 2 } : null),
   });

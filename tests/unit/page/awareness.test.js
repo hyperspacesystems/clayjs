@@ -40,7 +40,7 @@ const pump = () => {
   while (frames.length) frames.shift()();
 };
 const tab = (initial = seed(), { epoch = EPOCH, capabilities = true, focused = true } = {}) => {
-  const store = createStore({ name: "page", value: initial });
+  const store = createStore({ name: "blockeditor", value: initial });
   const binding = createYPageBinding({ store });
   const editor = new view.EditorView(document.body.appendChild(document.createElement("div")), {
     state: state.EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }),
@@ -86,10 +86,10 @@ const show = (one, sessions) => {
 };
 const showTarget = (viewer, sender) => show(viewer, [sender.presence.target]);
 const place = (one, selection) => decodeSelection({ ...one.binding.awareness.map(), doc: one.view.state.doc }, selection);
-const carets = (one) => [...one.view.dom.querySelectorAll(".page-remote-caret")];
+const carets = (one) => [...one.view.dom.querySelectorAll(".blockeditor-remote-caret")];
 const names = (one) => carets(one).map((el) => el.textContent);
-const ranges = (one) => [...one.view.dom.querySelectorAll(".page-remote-selection")].map((el) => el.textContent);
-const cells = (one) => [...one.view.dom.querySelectorAll(".page-remote-cell")];
+const ranges = (one) => [...one.view.dom.querySelectorAll(".blockeditor-remote-selection")].map((el) => el.textContent);
+const cells = (one) => [...one.view.dom.querySelectorAll(".blockeditor-remote-cell")];
 
 test("a peer's caret is drawn where their text is, with their name", () => {
   const a = tab(), b = tab();
@@ -97,7 +97,7 @@ test("a peer's caret is drawn where their text is, with their name", () => {
   showTarget(b, a);
   expect(carets(b)).toHaveLength(1);
   expect(names(b)).toEqual(["Ada Lovelace"]);
-  expect(a.presence.target).toMatchObject({ kind: "page", v: 1, epoch: EPOCH, generation: 0 });
+  expect(a.presence.target).toMatchObject({ kind: "blockeditor", v: 1, epoch: EPOCH, generation: 0 });
   expect(a.presence.target.selection.kind).toBe("text");
 });
 
@@ -186,7 +186,7 @@ test("two sessions by one person draw two carets", () => {
   show(b, [first, second]);
   expect(carets(b)).toHaveLength(2);
   expect(names(b)).toEqual(["Ada Lovelace", "Ada Lovelace"]);
-  expect(new Set(carets(b).map((el) => el.style.getPropertyValue("--page-remote-color"))).size).toBe(1);
+  expect(new Set(carets(b).map((el) => el.style.getPropertyValue("--blockeditor-remote-color"))).size).toBe(1);
 });
 
 test("a person's colour comes from the fixed palette, never from the frame", () => {
@@ -198,7 +198,7 @@ test("a person's colour comes from the fixed palette, never from the frame", () 
   });
   pump();
   expect(carets(b)).toHaveLength(1);
-  expect(carets(b)[0].style.getPropertyValue("--page-remote-color")).toBe(colorOf("p_eve"));
+  expect(carets(b)[0].style.getPropertyValue("--blockeditor-remote-color")).toBe(colorOf("p_eve"));
   expect(carets(b)[0].querySelector("img")).toBeNull();
   expect(names(b)).toEqual(["<img src=x onerror=alert(1)>"]);
 });
@@ -322,7 +322,7 @@ test("install decides from what the host announced, and the scope is the epoch",
   one.awareness = null;
   const meta = {
     spec: 1,
-    extensions: ["presence", "page-awareness-v1"],
+    extensions: ["presence", "blockeditor-awareness-v1"],
     document: { awareness: { transport: "broadcast", scope: "id:doc-9", label: "This computer" } },
   };
   const handle = await installPageAwareness({ binding: one.binding, view: one.view, store: one.presence, meta });
@@ -332,7 +332,7 @@ test("install decides from what the host announced, and the scope is the epoch",
   expect(one.presence.getSnapshot().pageAwareness).toBe(true);
   one.view.dom.dispatchEvent(new Event("focus"));
   caretIn(one, "q", 1);
-  expect(one.presence.target).toMatchObject({ kind: "page", epoch: "id:doc-9" });
+  expect(one.presence.target).toMatchObject({ kind: "blockeditor", epoch: "id:doc-9" });
   expect(await installPageAwareness({ binding: one.binding, view: one.view, store: one.presence, meta: { spec: 1, extensions: ["presence"], document: null } })).toBeNull();
 });
 
@@ -346,6 +346,6 @@ test("decorationsFor is pure: the same snapshot and document give the same decor
   const second = decorationsFor({ binding: b.binding, doc: b.view.state.doc, snapshot: snapshot.getSnapshot(), epoch: EPOCH });
   const shape = (set) => set.find().map((d) => [d.from, d.to, d.type.attrs?.class ?? d.type.spec?.class ?? "widget"]);
   expect(shape(first)).toEqual(shape(second));
-  expect(shape(first).some(([, , kind]) => kind === "widget" || kind === "page-remote-selection")).toBe(true);
+  expect(shape(first).some(([, , kind]) => kind === "widget" || kind === "blockeditor-remote-selection")).toBe(true);
   expect(first.find().length).toBeGreaterThan(0);
 });

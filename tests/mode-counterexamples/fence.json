@@ -149,7 +149,7 @@
       "runner": "cli"
     },
     {
-      "path": "tests/mode-counterexamples/cases/round3/page-pending-selector-target.json",
+      "path": "tests/mode-counterexamples/cases/round3/blockeditor-pending-selector-target.json",
       "status": "pass",
       "runner": "cli"
     },
@@ -251,7 +251,7 @@
     },
     {
       "repo": "starter-templates",
-      "path": "apps/unreleased/02-page/page.html"
+      "path": "apps/unreleased/02-blockeditor/blockeditor.html"
     }
   ]
 }

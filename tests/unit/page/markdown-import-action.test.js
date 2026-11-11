@@ -38,8 +38,8 @@ const held = (name, text) => {
   const read = new Promise((resolve) => { release = () => resolve(text); });
   return { file: { name, size: text.length, text: () => read }, release };
 };
-const panel = () => document.querySelector(".page-import-preview");
-const rows = (selector) => [...(panel()?.querySelectorAll(`${selector} .page-import-row`) ?? [])].map((row) => row.textContent);
+const panel = () => document.querySelector(".blockeditor-import-preview");
+const rows = (selector) => [...(panel()?.querySelectorAll(`${selector} .blockeditor-import-row`) ?? [])].map((row) => row.textContent);
 const click = (what) => panel().querySelector(`[data-import="${what}"]`).click();
 const record = (view, id) => blockMap(view.state.doc)[id];
 const ids = (view) => { const out = []; view.state.doc.forEach((node) => out.push(node.attrs.id)); return out; };
@@ -54,7 +54,7 @@ test("the blocks go in at the selection, with fresh ids, between the halves of t
   select(view, posOf(view, "b") + 2);
   expect(await importFile(view, "notes.md", "# Heading\n\nSome *body* text")).toEqual({ ok: true, preview: true });
   expect(panel()).not.toBeNull();
-  expect(panel().querySelector(".page-import-summary").textContent).toBe("2 blocks");
+  expect(panel().querySelector(".blockeditor-import-summary").textContent).toBe("2 blocks");
   expect(view.state.doc.textContent).toBe("AlphaBravo");
 
   await insert();
@@ -147,19 +147,19 @@ test("a peer that deletes the target refuses, and the preview stays open to copy
   expect(view.state.doc).toBe(before);
   expect(shape(view)).toBe("Alpha");
   expect(panel()).not.toBeNull();
-  expect(panel().querySelector(".page-import-error").textContent).toMatch(/changed/);
+  expect(panel().querySelector(".blockeditor-import-error").textContent).toMatch(/changed/);
 });
 
 test("a refused format upgrade writes nothing and keeps the preview", async () => {
   const view = editor(PAGE());
-  view.runFormatCommand = async () => ({ status: "upgrade-required", code: "page-format-upgrade-required" });
+  view.runFormatCommand = async () => ({ status: "upgrade-required", code: "blockeditor-format-upgrade-required" });
   select(view, posOf(view, "a") + 1);
   await importFile(view, "notes.md", "> Quoted\n\nAfter");
   const before = view.state.doc;
   await insert();
   expect(view.state.doc).toBe(before);
   expect(panel()).not.toBeNull();
-  expect(panel().querySelector(".page-import-error").textContent).toMatch(/newer page format/);
+  expect(panel().querySelector(".blockeditor-import-error").textContent).toMatch(/newer page format/);
 
   // A gate that lets the newer format through writes the quoted line where it was asked.
   view.runFormatCommand = async (apply) => ({ status: "applied", result: await apply({ floor: 1 }) });
@@ -174,8 +174,8 @@ test("the preview lists what was kept as written and what was refused", async ()
   const view = editor(PAGE());
   select(view, posOf(view, "b") + 1);
   await importFile(view, "notes.md", "Text [link](javascript:alert(1))\n\n[ref]: https://example.com\n");
-  expect(rows(".page-import-refused")).toEqual(["link: javascript:alert(1)"]);
-  expect(rows(".page-import-unsupported")).toEqual(["def: [ref]: https://example.com"]);
+  expect(rows(".blockeditor-import-refused")).toEqual(["link: javascript:alert(1)"]);
+  expect(rows(".blockeditor-import-unsupported")).toEqual(["def: [ref]: https://example.com"]);
   await insert("cancel");
   expect(shape(view)).toBe("Alpha | Bravo");
 });
@@ -184,7 +184,7 @@ test("raw HTML arrives cleaned, and the preview names each block it cleaned", as
   const view = editor(PAGE());
   select(view, posOf(view, "b") + 1);
   await importFile(view, "notes.md", '<img src="x" onerror="alert(1)">\n\n<script>alert(1)</script>\n');
-  expect(rows(".page-import-unsupported")).toEqual([
+  expect(rows(".blockeditor-import-unsupported")).toEqual([
     'HTML block cleaned: <img src="x" onerror="alert(1)">',
     "HTML block cleaned: <script>alert(1)</script>",
   ]);
@@ -205,7 +205,7 @@ test("a parse failure keeps the preview open with its error and inserts nothing"
   const before = view.state.doc;
   expect(await feature.run({ file: file("notes.md", "# One") })).toEqual({ ok: true, preview: true });
   expect(view.state.doc).toBe(before);
-  expect(panel().querySelector(".page-import-error").textContent).toMatch(/no type/);
+  expect(panel().querySelector(".blockeditor-import-error").textContent).toMatch(/no type/);
   expect(panel().querySelector('[data-import="insert"]').disabled).toBe(true);
   feature.dispose();
 });
@@ -253,7 +253,7 @@ async function enterWithPageLease(view) {
   editMode.noteLiveSwitch({ loaded: {}, modules: {}, edit: { core: [], plugins: [], late: [] }, view: { plugins: [], late: [] }, attachEditCore() {}, attach() {} });
   window.clay.setMode = editMode.setMode;
   const unregister = editMode.modeLifecycle.register({
-    id: `test:page-session-${++sessions}`,
+    id: `test:blockeditor-session-${++sessions}`,
     prepare: () => ({
       enable: () => setEditorActive(view, true),
       quiesce: () => setEditorActive(view, false, { quiesce: true }),
@@ -298,7 +298,7 @@ test("a refused exit keeps the preview", async () => {
   try {
     select(view, posOf(view, "b") + 1);
     await importFile(view, "notes.md", "Text *kept*\n\nSecond block");
-    expect(panel().querySelector(".page-import-summary").textContent).toBe("2 blocks");
+    expect(panel().querySelector(".blockeditor-import-summary").textContent).toBe("2 blocks");
 
     const answer = await session.setMode("view");
 
@@ -306,7 +306,7 @@ test("a refused exit keeps the preview", async () => {
     expect(answer.pending).toEqual(["markdown-import-preview"]);
     expect(panel()).not.toBeNull();
     expect(pendingIds()).toEqual(["markdown-import-preview"]);
-    expect(panel().querySelector(".page-import-summary").textContent).toBe("2 blocks");
+    expect(panel().querySelector(".blockeditor-import-summary").textContent).toBe("2 blocks");
     await insert("cancel");
     expect(await session.setMode("view")).toMatchObject({ ok: true, mode: "view" });
   } finally {

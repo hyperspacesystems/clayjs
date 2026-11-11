@@ -4,7 +4,7 @@
 import { state } from "../vendor/prosemirror.vendor.js";
 import { STEP } from "./blocks.js";
 
-export const HISTORY_INTENT = "page-history-intent";
+export const HISTORY_INTENT = "blockeditor-history-intent";
 export const GROUP_MS = 500;
 
 const blockIdAt = (doc, pos) => {
@@ -29,7 +29,7 @@ export function continuesGroup(prev, next) {
 const DELETES = { deleteContentBackward: -1, deleteContentForward: 1 };
 const pendingDeletes = new WeakMap();
 const PENDING_MS = 1000;
-export const DERIVED = "page-derived";
+export const DERIVED = "blockeditor-derived";
 
 // A native deletion arrives as a DOM change with no handler, sometimes after a delayed flush
 // (Android waits 20 ms), so the beforeinput that announced it is held with the document it saw

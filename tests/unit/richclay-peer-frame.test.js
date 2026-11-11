@@ -18,7 +18,7 @@ class FakeEventSource extends EventTarget {
 
 const BODY = `
 <main>
-<h1 class="page-title">Surfaces</h1>
+<h1 class="blockeditor-title">Surfaces</h1>
 <p class="caption">A caption the CMS edits as plain text.</p>
 <div class="block" editable><h2>Team plan</h2><p>$12 per seat per month, billed yearly.</p></div>
 <div class="block" data-richclay aria-label="Attached editor"><p>Business: $24 per seat per month.</p></div>

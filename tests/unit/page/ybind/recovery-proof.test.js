@@ -38,7 +38,7 @@ Object.defineProperty(globalThis, "crypto", { value: webcrypto, configurable: tr
 
 const FIXTURE = JSON.parse(readFileSync(new URL("../../../fixtures/page/recovery/capsule.json", import.meta.url), "utf8"));
 const ACCEPTED = { authority: FIXTURE.context.authority, lineage: FIXTURE.context.lineage };
-const RECEIPT = { file: "doc.html", pageState: "doc.page-state" };
+const RECEIPT = { file: "doc.html", blockeditorState: "doc.blockeditor-state" };
 
 const bytesOf = (text) => fromBase64(text);
 const stateOf = (doc) => ({ v: 1, g: 0, y: { seed: toBase64(Y.encodeStateAsUpdateV2(doc)) } });
@@ -59,7 +59,7 @@ const proofOf = (state, records, over = {}) => pageProof({
   capture: "capture-1",
   records,
   accepted: ACCEPTED,
-  article: "<article data-page>ac from the room</article>",
+  article: "<article data-blockeditor>ac from the room</article>",
   state,
   receipt: RECEIPT,
   ...over,
@@ -312,9 +312,9 @@ test("a proof names the capture, the saved pair and the exact bytes", async () =
   await expect(validatePageCheckpoint(null, asked)).rejects.toThrow(/needs a proof/);
   await expect(validatePageCheckpoint({ ...proof, saved: false }, asked)).rejects.toThrow(/save that succeeded/);
   await expect(validatePageCheckpoint({ ...proof, capture: "" }, asked)).rejects.toThrow(/the capture it saved/);
-  await expect(validatePageCheckpoint({ ...proof, receipt: { file: "doc.html" } }, asked)).rejects.toThrow(/persisted file and page-state pair/);
+  await expect(validatePageCheckpoint({ ...proof, receipt: { file: "doc.html" } }, asked)).rejects.toThrow(/persisted file and blockeditor-state pair/);
   await expect(validatePageCheckpoint({ ...proof, state: stateOf(new Y.Doc()) }, asked)).rejects.toThrow(/not the one the proof was made over/);
-  await expect(validatePageCheckpoint({ ...proof, article: "<article data-page>other</article>" }, asked)).rejects.toThrow(/not the one the proof was made over/);
+  await expect(validatePageCheckpoint({ ...proof, article: "<article data-blockeditor>other</article>" }, asked)).rejects.toThrow(/not the one the proof was made over/);
   await expect(validatePageCheckpoint({ ...proof, records: [{ id: "rec-2", revision: 2 }] }, asked)).rejects.toThrow(/bytes each record owns/);
 });
 

@@ -3,10 +3,10 @@ import { cloneJson, serializeLive } from './live-data-ops.js';
 
 export function makePageTransition({ room = null, format = 'yjs', sources = [], receipts = new Map() } = {}) {
   const archived = new Map([...receipts].map(([key, receipt]) => [key, cloneJson(receipt)]));
-  const history = [...(room?.pageTransition?.history ?? [])];
+  const history = [...(room?.blockeditorTransition?.history ?? [])];
   if (archived.size) history.push({
     epoch: room.epoch,
-    generation: room.pageTransition?.id ?? null,
+    generation: room.blockeditorTransition?.id ?? null,
     receiptGeneration: room.receiptGeneration ?? 0,
     sources: [...sources],
     receipts: archived,

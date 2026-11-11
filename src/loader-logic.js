@@ -39,10 +39,10 @@ export const PLUGIN_PATHS = {
   // A live JSON tag as an in-memory object (clay.live). Not editOnly: a reader's
   // tab still shows the game, and its writes stay in that tab.
   live:      { path: "plugins/live.js",           editOnly: false, default: false },
-  page:      { path: "plugins/page.js",           editOnly: true,  default: false },
-  // The reader half of `page`, added by resolveModules for a Document in view mode
+  blockeditor: { path: "plugins/page.js",          editOnly: true,  default: false },
+  // The reader half of `blockeditor`, added by resolveModules for a Document in view mode
   // and never named in a URL: the reader's article follows each saved file.
-  "page-view": { path: "plugins/page-view.js", editOnly: false, default: false, internal: true },
+  "blockeditor-view": { path: "plugins/page-view.js", editOnly: false, default: false, internal: true },
   sortable:  { path: "plugins/sortable.js",        editOnly: true,  default: false },
   undo:      { path: "plugins/undo.js",            editOnly: true,  default: false },
   unsent:    { path: "plugins/unsent.js",          editOnly: true,  default: false },
@@ -160,7 +160,7 @@ export const MODULES = {
 
 // `source` is last on purpose: its install captures a save clone, so it wants every
 // plugin that registers a document transform to have registered it first.
-const PLUGIN_ORDER = ["visitor-drafts", "visitor-menu", "richclay", "indicator", "sortable", "undo", "unsent", "quickcrop", "upload", "people", "menu", "upgrade", "cms", "page-view", "sync", "live", "page", "message", "like", "wire", "ai-edit", "demo", "derive", "bind-text", "source"];
+const PLUGIN_ORDER = ["visitor-drafts", "visitor-menu", "richclay", "indicator", "sortable", "undo", "unsent", "quickcrop", "upload", "people", "menu", "upgrade", "cms", "blockeditor-view", "sync", "live", "blockeditor", "message", "like", "wire", "ai-edit", "demo", "derive", "bind-text", "source"];
 
 // A plugin that cannot do its whole job alone. hypercms reads the cropper through
 // a capability lookup (`clay.quickcrop`) and silently uploads the raw file when it
@@ -190,19 +190,19 @@ const PLUGIN_ORDER = ["visitor-drafts", "visitor-menu", "richclay", "indicator",
 // The menu is how a person opens the CMS: hypercms adds no button of its own. It loads
 // in view too, because that is where a person starts, and it shows itself only to
 // someone who can edit. A page with its own control uses exclude=menu.
-const IMPLIES = { cms: ["quickcrop", "upload", "menu"], "ai-edit": ["wire"], page: ["live", "sync", "upload", "wire", "ai-edit"] };
+const IMPLIES = { cms: ["quickcrop", "upload", "menu"], "ai-edit": ["wire"], blockeditor: ["live", "sync", "upload", "wire", "ai-edit"] };
 
 // A Document's editor owns its article's rich text, so richclay (for [editable]) has
-// nothing to do there; plugins=page,richclay still loads it.
-const DISPLACES = { page: ["richclay"] };
+// nothing to do there; plugins=blockeditor,richclay still loads it.
+const DISPLACES = { blockeditor: ["richclay"] };
 // A Document's editor keeps its own history, the same one Cmd+Z in the editor uses, and
 // hyper-undo takes Cmd+Z for the whole window: loaded together the two would fight over
 // every press. This is the one pair where a name the page asked for by hand still loses.
-const CANNOT_RUN_WITH = { page: ["undo"] };
+const CANNOT_RUN_WITH = { blockeditor: ["undo"] };
 // No first paint or keystroke waits for these. source keeps the file's bytes outside
 // the edited parts stable; a save before it installs is the ordinary full serialization.
 // upgrade only asks the host for a newer version once `clay.ready` resolves.
-// The editor half of `page` owns AI editing, so only a page that asked for it can wait
+// The editor half of `blockeditor` owns AI editing, so only a page that asked for it can wait
 // for the wire and the composer; everywhere else they are ordinary plugins.
 const LATE = new Set(["source", "sortable", "menu", "upgrade"]);
 const LATE_WITH_PAGE = new Set(["wire", "ai-edit"]);
@@ -224,7 +224,7 @@ function parseCsv(params, key, enabled, apply) {
 // Each of these talks to the host or writes outside the visitor's own record, so a
 // page that keeps its edits in this browser cannot carry them. A page document keeps
 // page and live: the editor runs on a store this browser keeps.
-const DRAFT_DROPS = ["sync", "live", "page", "upload", "quickcrop", "cms", "people", "menu", "upgrade", "wire", "ai-edit", "demo", "source"];
+const DRAFT_DROPS = ["sync", "live", "blockeditor", "upload", "quickcrop", "cms", "people", "menu", "upgrade", "wire", "ai-edit", "demo", "source"];
 
 // The one core module a document asks for by what it declares: shared site values are
 // tracked only on a page whose rules tag names them, and only where a save reaches the
@@ -257,13 +257,13 @@ export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap
   if (hasSap) enabled.add("derive");
   // Two or more looks need the dock's variant pill, and only someone who can edit sees it.
   if (hasVariants && (isEditMode || canEdit)) enabled.add("menu");
-  if (!isEditMode && !isDraftMode && enabled.has("page")) enabled.add("page-view");
+  if (!isEditMode && !isDraftMode && enabled.has("blockeditor")) enabled.add("blockeditor-view");
   // A plugin this mode does not load brings nothing with it, whether a default put
   // it in the set or the tag named it. A page that wants what an edit-only plugin
-  // implies in view mode names that plugin too. `page` is the case that matters
+  // implies in view mode names that plugin too. `blockeditor` is the case that matters
   // most: a reader loads its reader half and no generic sync, live data service or
-  // upload, so `plugins=page` in view mode resolves to page-view alone and the
-  // saved transport page-view owns is the only stream.
+  // upload, so `plugins=blockeditor` in view mode resolves to blockeditor-view alone and the
+  // saved transport blockeditor-view owns is the only stream.
   for (const name of [...enabled]) {
     if (excluded.has(name)) continue;
     if (PLUGIN_PATHS[name].editOnly && !isEditMode) continue;
@@ -276,8 +276,8 @@ export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap
   if (isDraftMode) {
     // A page document keeps its editor and the store under it: a visitor edits the real
     // page, and the save pipeline's draft transport is its only host.
-    const keepsPage = enabled.has("page");
-    for (const name of DRAFT_DROPS) if (!(keepsPage && (name === "page" || name === "live"))) enabled.delete(name);
+    const keepsPage = enabled.has("blockeditor");
+    for (const name of DRAFT_DROPS) if (!(keepsPage && (name === "blockeditor" || name === "live"))) enabled.delete(name);
     for (const path of DRAFT_DROPS_CORE) {
       const at = core.indexOf(path);
       if (at > -1) core.splice(at, 1);
@@ -311,7 +311,7 @@ export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap
     if (!enabled.has(name)) continue;
     const spec = PLUGIN_PATHS[name];
     if ((spec.editOnly && !isEditMode) || (spec.draft && !isDraftMode)) continue;
-    const lateHere = LATE.has(name) || (LATE_WITH_PAGE.has(name) && enabled.has("page"));
+    const lateHere = LATE.has(name) || (LATE_WITH_PAGE.has(name) && enabled.has("blockeditor"));
     (lateHere ? late : plugins).push(spec.ownerPath && !isDraftMode ? spec.ownerPath : spec.path);
   }
   return { core, plugins, late };

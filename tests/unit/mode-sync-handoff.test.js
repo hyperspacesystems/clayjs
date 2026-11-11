@@ -68,9 +68,9 @@ const served = (stamp, body) =>
   `<!DOCTYPE html><html${stamp ? ` documentetag="${stamp}"` : ""}><head><title>Reader</title></head><body>${body}</body></html>`;
 
 const FILE = (inner, { rev = "r1", title = "Reader" } = {}) =>
-  `<!doctype html><html><head><title>${title}</title></head><body><article class="page" clay="freeze" data-page="1" data-rev="${rev}" data-id="a">${inner}</article></body></html>`;
+  `<!doctype html><html><head><title>${title}</title></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rev}" data-id="a">${inner}</article></body></html>`;
 
-const ARTICLE = (word) => `<article data-page="1"><p data-id="a">${word}</p></article>`;
+const ARTICLE = (word) => `<article data-blockeditor="1"><p data-id="a">${word}</p></article>`;
 
 const text = () => document.querySelector('article [data-id="a"]')?.textContent ?? null;
 
@@ -79,7 +79,7 @@ const frame = (data) => ({ data: JSON.stringify(data) });
 
 const load = (html) => {
   document.documentElement.innerHTML = new DOMParser().parseFromString(html, "text/html").documentElement.innerHTML;
-  return document.querySelector("article[data-page]");
+  return document.querySelector("article[data-blockeditor]");
 };
 
 let startReader;
@@ -126,7 +126,7 @@ afterEach(() => {
   pageView?.stop();
   // The roster outlives a session by design: a participant this file queued for one test
   // is taken back here, so the next session starts from the same roster.
-  for (const id of ["test:page", "test:page-fails"]) lifecycle?.forgetParticipant(id);
+  for (const id of ["test:page", "test:blockeditor-fails"]) lifecycle?.forgetParticipant(id);
 });
 
 // The reader's own transport, started on an accepted file, and the host's end of it,
@@ -162,7 +162,7 @@ test("a handoff takes the transport's queue without stopping it, and commit reti
   expect(text()).toBe("A");
   expect(applied(seen)).toHaveLength(0);
   expect(source.closed).toBe(false);
-  expect(ownerOf(document.querySelector("article[data-page]"))).toBe("reader");
+  expect(ownerOf(document.querySelector("article[data-blockeditor]"))).toBe("reader");
 
   await handoff.reconcile();
   expect(text()).toBe("B");
@@ -170,7 +170,7 @@ test("a handoff takes the transport's queue without stopping it, and commit reti
   expect(applied(seen)).toHaveLength(1);
 
   expect(handoff.commit()).toBe(true);
-  expect(ownerOf(document.querySelector("article[data-page]"))).toBe(null);
+  expect(ownerOf(document.querySelector("article[data-blockeditor]"))).toBe(null);
   expect(source.closed).toBe(true);
   expect(reader.stop()).toEqual({ bytes: next, etag: "E2", seq: 2 });
 });
@@ -259,7 +259,7 @@ test("a live-lane preview is not a saved file, and a fed reader keeps the saved 
   expect(handoff.represented).toEqual({ bytes: newer, etag: "E8", seq: 6 });
 
   expect(handoff.commit()).toBe(true);
-  expect(ownerOf(document.querySelector("article[data-page]"))).toBe(null);
+  expect(ownerOf(document.querySelector("article[data-blockeditor]"))).toBe(null);
 });
 
 test("an apply in flight is the file the switch is handed", async () => {
@@ -382,7 +382,7 @@ test("no receipt, no handoff: the reader keeps the article and its claim", async
   load(served(null, ARTICLE("served")));
   const reader = startReader({ documentURL: "/index.html" });
   await flush();
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   const handoff = await reader.prepareHandoff({});
   expect(handoff.commit()).toBe(false);
   expect(ownerOf(article)).toBe("reader");
@@ -394,7 +394,7 @@ test("no receipt, no handoff: the reader keeps the article and its claim", async
 test("one owner, one stream and no extra listeners across 100 entries and exits", async () => {
   const bytes = FILE('<p data-id="a">A</p>');
   load(served(null, ARTICLE("served")));
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   const add = jest.spyOn(document, "addEventListener");
   const remove = jest.spyOn(document, "removeEventListener");
 
@@ -440,7 +440,7 @@ const TOOL = `<section data-type="tool" data-id="tool-1" data-rev="r1"><script t
 
 test("a yielded reader gives the claim up and keeps the files the lane delivers", async () => {
   const { reader, source, bytes } = await openReader();
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   const handoff = await reader.prepareHandoff({});
 
   expect(handoff.yieldArticle()).toBe(true);
@@ -465,7 +465,7 @@ test("reclaim repaints the receipt, re-claims, and resume applies the file held 
   const bytes = FILE(`${TOOL}<details data-id="d1"><summary>More</summary><p data-id="d2">inside</p></details><p data-id="a">A</p>`);
   load(served(null, ARTICLE("served")));
   const reader = startReader({ represented: { bytes, etag: "E1", seq: 1 }, documentURL: "/index.html" });
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   expect(await until(() => sources.length > 0)).toBe(true);
   expect(await until(() => article.querySelector('[data-live-tool="on"]'))).toBe(true);
   const source = sources.at(-1);
@@ -505,7 +505,7 @@ test("reclaim repaints the receipt, re-claims, and resume applies the file held 
 
 test("a commit after a yield paints nothing and releases no claim it does not hold", async () => {
   const { reader, source, bytes } = await openReader();
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   const handoff = await reader.prepareHandoff({});
 
   handoff.yieldArticle();
@@ -527,7 +527,7 @@ test("a commit after a yield paints nothing and releases no claim it does not ho
 });
 
 // ---------------------------------------------------------------------------
-// The controller's half on a Document: the page-view reader owns the article, and the
+// The controller's half on a Document: the blockeditor-view reader owns the article, and the
 // Page gives that claim up for the session and takes it back when the session is refused.
 // ---------------------------------------------------------------------------
 
@@ -558,7 +558,7 @@ async function documentPage() {
 
 test("an entry gives the Page the reader\u0027s file, and the reader\u0027s article goes with it", async () => {
   const { bytes, receipt } = await documentPage();
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   const seen = {};
   facts.registerModeParticipant({
     id: "test:page",
@@ -585,9 +585,9 @@ test("an entry gives the Page the reader\u0027s file, and the reader\u0027s arti
 
 test("a Page that throws after the yield leaves the reader holding the article again, and painting", async () => {
   await documentPage();
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   facts.registerModeParticipant({
-    id: "test:page-fails",
+    id: "test:blockeditor-fails",
     order: 400,
     prepare(context) {
       context.reader?.yieldArticle();
@@ -606,9 +606,9 @@ test("a Page that throws after the yield leaves the reader holding the article a
   expect(() => claim(article, "editor")).toThrow(/already has a reader runtime/);
 });
 
-test("an exit starts the page-view reader from the accepted receipt and fetches nothing", async () => {
+test("an exit starts the blockeditor-view reader from the accepted receipt and fetches nothing", async () => {
   const { bytes, receipt } = await documentPage();
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   facts.registerModeParticipant({
     id: "test:page",
     order: 400,

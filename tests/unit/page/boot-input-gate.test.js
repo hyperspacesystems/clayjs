@@ -39,12 +39,12 @@ const until = async (check, tries = 400) => {
   return false;
 };
 
-const tagHtml = (value) => `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script>`;
+const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
-const handEdit = (doc) => { doc.querySelector('article[data-page] [data-id="p"]').textContent = ADOPTED; };
+const handEdit = (doc) => { doc.querySelector('article[data-blockeditor] [data-id="p"]').textContent = ADOPTED; };
 
 // A hand edit that adds a block the saved tag never had, so the editor has to install
 // a part the boot did not know to fetch until the adoption landed.
@@ -52,7 +52,7 @@ const handImage = (doc) => {
   const { html } = renderFromTags([JSON.stringify(seedValue([...BLOCKS, IMAGE]))]);
   const parsed = document.createElement("article");
   parsed.innerHTML = html;
-  doc.querySelector('article[data-page] [data-id="p"]').after(parsed.querySelector('[data-id="img"]'));
+  doc.querySelector('article[data-blockeditor] [data-id="p"]').after(parsed.querySelector('[data-id="img"]'));
 };
 
 const marks = [];
@@ -66,7 +66,7 @@ afterAll(() => { delete globalThis.performance.mark; });
 
 const MODE = { mediaGate: null };
 
-async function open({ edit = null, blocks = BLOCKS, extensions = ["page", "live-data"], writer = null, mediaGate = null } = {}) {
+async function open({ edit = null, blocks = BLOCKS, extensions = ["blockeditor", "live-data"], writer = null, mediaGate = null } = {}) {
   jest.resetModules();
   window.clayEditMode = true;
   MODE.mediaGate = mediaGate;
@@ -83,7 +83,7 @@ async function open({ edit = null, blocks = BLOCKS, extensions = ["page", "live-
     seq: room.seq,
     writer: room.writer,
     conn: 0,
-    stores: { page: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
+    stores: { blockeditor: { value: clone(value), ephemeral: false, last: 0, landed: 0 } },
   });
 
   await jest.unstable_mockModule("../../../src/core/host-meta.js", () => ({
@@ -95,6 +95,7 @@ async function open({ edit = null, blocks = BLOCKS, extensions = ["page", "live-
   }));
 
   await jest.unstable_mockModule("../../../src/core/save.js", () => ({
+    claimFailure: () => {},
     savesAdmitted: () => true,
     savePageForce: async () => ({ ok: true, msgType: "success" }),
     savePage: async () => ({ ok: true, msgType: "success" }),
@@ -151,7 +152,7 @@ async function open({ edit = null, blocks = BLOCKS, extensions = ["page", "live-
 
   const { live } = await import("../../../src/plugins/live.js");
   window.clay = { live: (name) => live(name) };
-  const article = document.querySelector("article[data-page]");
+  const article = document.querySelector("article[data-blockeditor]");
   const { page } = await import("../../../src/plugins/page.js");
 
   // The elected writer's adoption, as the room delivers it to every other tab.
@@ -162,7 +163,7 @@ async function open({ edit = null, blocks = BLOCKS, extensions = ["page", "live-
     handlersRef.h.frame({
       epoch: room.epoch,
       seq: room.seq,
-      name: "page",
+      name: "blockeditor",
       from: "other",
       n: room.seq,
       ops: Object.entries(updates).map(([key, encoded]) => ({ op: "set", path: ["y", key], value: encoded })),
@@ -179,7 +180,7 @@ afterEach(() => {
 
 const editableNodes = () => document.querySelectorAll('[contenteditable="true"]').length;
 const markNames = () => marks.map((entry) => entry.name);
-const shellOf = (article) => article.querySelector(".page-shell");
+const shellOf = (article) => article.querySelector(".blockeditor-shell");
 
 test("the waiting shell takes no input of any kind, and takes it at ready", async () => {
   const { page, article, adoptFromWriter } = await open({ edit: handEdit, writer: "other" });
@@ -215,11 +216,11 @@ test("a control inside the waiting editor writes nothing", async () => {
     expect(await until(() => page.status?.phase === "adopting")).toBe(true);
     await flushAsync();
 
-    const li = article.querySelector('.page-li[data-kind="check"]');
+    const li = article.querySelector('.blockeditor-li[data-kind="check"]');
     expect(li).toBeTruthy();
     // The checkbox is a control the editor answers even while it is not editable, so
     // the shell it sits in is what refuses the click: an inert subtree takes none.
-    expect(li.closest(".page-shell").inert).toBe(true);
+    expect(li.closest(".blockeditor-shell").inert).toBe(true);
     expect(page.view.editable).toBe(false);
     expect(page.view.state.doc.child(1).attrs.checked).toBe(false);
 
@@ -229,7 +230,7 @@ test("a control inside the waiting editor writes nothing", async () => {
 
     // Nothing was clicked into a write while the boot waited.
     expect(page.view.state.doc.child(1).attrs.checked).toBe(false);
-    expect(article.querySelector('.page-li[data-kind="check"]').closest(".page-shell").inert).toBe(false);
+    expect(article.querySelector('.blockeditor-li[data-kind="check"]').closest(".blockeditor-shell").inert).toBe(false);
   } finally {
     page.dispose();
   }
@@ -240,10 +241,10 @@ test("the waiting line sits above the editor while the adoption is waited on", a
   try {
     expect(await until(() => page.status?.phase === "adopting")).toBe(true);
     await flushAsync();
-    expect(article.querySelectorAll(".page-boot-status")).toHaveLength(0);
+    expect(article.querySelectorAll(".blockeditor-boot-status")).toHaveLength(0);
 
-    expect(await until(() => article.querySelectorAll(".page-boot-status").length === 1)).toBe(true);
-    const note = article.querySelector(".page-boot-status");
+    expect(await until(() => article.querySelectorAll(".blockeditor-boot-status").length === 1)).toBe(true);
+    const note = article.querySelector(".blockeditor-boot-status");
     // Above the editor, where the person is looking, not below its bottom padding.
     expect(article.firstElementChild).toBe(note);
     expect(note.compareDocumentPosition(shellOf(article)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -255,7 +256,7 @@ test("the waiting line sits above the editor while the adoption is waited on", a
     await flushAsync();
 
     expect(page.status).toMatchObject({ phase: "ready" });
-    expect(article.querySelectorAll(".page-boot-status")).toHaveLength(0);
+    expect(article.querySelectorAll(".blockeditor-boot-status")).toHaveLength(0);
     expect(editableNodes()).toBe(1);
   } finally {
     page.dispose();
@@ -284,14 +285,14 @@ test("a part only the adopted document needs is loaded before input", async () =
     expect(editableNodes()).toBe(0);
     expect(shellOf(article).inert).toBe(true);
     expect(markNames()).not.toContain("document:input-ready");
-    expect(article.querySelectorAll(".page-image")).toHaveLength(0);
+    expect(article.querySelectorAll(".blockeditor-image")).toHaveLength(0);
 
     mediaGate.resolve();
     await page.ready;
     await flushAsync();
 
     expect(page.status).toMatchObject({ phase: "ready" });
-    expect(article.querySelectorAll(".page-image")).toHaveLength(1);
+    expect(article.querySelectorAll(".blockeditor-image")).toHaveLength(1);
     expect(page.view.editable).toBe(true);
     expect(shellOf(article).inert).toBe(false);
     expect(markNames().at(-1)).toBe("document:input-ready");

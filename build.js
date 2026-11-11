@@ -238,11 +238,11 @@ async function fontSources() {
   return out;
 }
 
-// The Document's Light 1 theme, authored as an @import chain in src/page/themes and served
+// The Document's Light 1 theme, authored as an @import chain in src/blockeditor/themes and served
 // compiled. The chain stays in the repo (scripts/build-themes.mjs) and a saved document
 // keeps the URL it already names, so the fixed path is the source of truth here.
 const COMPILED_THEME = 'light-1';
-const THEME_ASSET = `page/themes/${COMPILED_THEME}.css`;
+const THEME_ASSET = `blockeditor/themes/${COMPILED_THEME}.css`;
 
 // Where the compiled theme is served besides the document URL: one style asset in the
 // release, so a local host reproduces the page's appearance offline from the manifest.
@@ -506,7 +506,7 @@ await emitAssets([...fonts, theme]);
 // The package's own served path carries the compiled bytes too, not the authoring
 // chain, so a tarball built from this tree serves one request like the site does. The
 // chain lives beside it as light-1.source.css.
-await writeFile(join(ROOT, 'src/page/themes', `${COMPILED_THEME}.css`), await compileTheme({ root: ROOT, name: COMPILED_THEME, outPath: `src/page/themes/${COMPILED_THEME}.css` }));
+await writeFile(join(ROOT, 'src/blockeditor/themes', `${COMPILED_THEME}.css`), await compileTheme({ root: ROOT, name: COMPILED_THEME, outPath: `src/blockeditor/themes/${COMPILED_THEME}.css` }));
 
 // The inventory, last: it hashes the chunk manifest and everything above it.
 await buildOfflineManifest({ root: ROOT, dist: DIST });
@@ -677,7 +677,7 @@ for (const [prefix, version] of served) {
   if (CHUNKED.has(version)) required.push(`${prefix}/m/manifest.json`);
   for (const asset of fonts) required.push(`${prefix}/${asset.to}`);
   if (treePrefixes.has(prefix)) {
-    required.push(`${prefix}/${THEME_ASSET}`, `${prefix}/src/page/themes/${COMPILED_THEME}.css`);
+    required.push(`${prefix}/${THEME_ASSET}`, `${prefix}/src/blockeditor/themes/${COMPILED_THEME}.css`);
   }
 }
 for (const rel of required) {

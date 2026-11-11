@@ -25,7 +25,7 @@ const artifact = (label) => ({
 const SERVED = (rev, label, state = { count: 1 }) => {
   const value = seedValue([{ id: "tool-1", t: "tool", attrs: { artifact: artifact(label), rev, state } }]);
   const rendered = renderFromTags([JSON.stringify(value)]);
-  return `<!DOCTYPE html><html><head><script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script><script type="application/json" merge="page.tools" clay="live">${JSON.stringify({ "tool-1": { [rev]: state } })}</script></head><body><article class="page" clay="freeze" data-page="1" data-rev="${rendered.rev}">${rendered.html}</article></body></html>`;
+  return `<!DOCTYPE html><html><head><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script><script type="application/json" merge="blockeditor.tools" clay="live">${JSON.stringify({ "tool-1": { [rev]: state } })}</script></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${rendered.rev}">${rendered.html}</article></body></html>`;
 };
 
 const sources = [];
@@ -62,7 +62,7 @@ test("tools mount from the served article at boot when no stream ever opens", as
   install();
 
   const { boot } = await import("../../../src/loader.js");
-  await boot("https://clayjs.com/v1", new URLSearchParams("plugins=page"), () => {});
+  await boot("https://clayjs.com/v1", new URLSearchParams("plugins=blockeditor"), () => {});
   await flush();
 
   // The stream exists but never opened, so no file can arrive.

@@ -9,7 +9,7 @@ import * as Y from "../../../../src/vendor/yjs.vendor.js";
 
 const { EditorState, TextSelection } = pmState;
 const open = (blocks, extra = {}) => {
-  const store = createStore({ name: "page", value: seedValue(blocks) });
+  const store = createStore({ name: "blockeditor", value: seedValue(blocks) });
   const binding = createYPageBinding({ store, ...extra });
   const view = new pmView.EditorView(document.body.appendChild(document.createElement("div")), { state: EditorState.create({ doc: binding.doc(), plugins: [identityPlugin()] }), dispatchTransaction: (tr) => binding.dispatch(tr) });
   binding.attach(view);
@@ -118,7 +118,7 @@ test("a peer removal exposes the block through the shared recovery list and Rest
   const { view, binding, pd } = open([{ id: "p", text: "hello" }, { id: "q", text: "world" }]);
   let key = null;
   for (let it = pd.flow._start; it; it = it.right) if (!it.deleted && it.content.embed && it.content.embed.b === "q") key = `${it.id.client}.${it.id.clock}`;
-  pd.ydoc.transact(() => pd.gone.set(removeKey(key, "move-1"), { blockId: "q", end: null, sv: [] }), "page-net");
+  pd.ydoc.transact(() => pd.gone.set(removeKey(key, "move-1"), { blockId: "q", end: null, sv: [] }), "blockeditor-net");
   expect(texts(view)).toEqual(["hello"]);
   expect(binding.recoverable).toHaveLength(1);
   const record = binding.recoverable[0];

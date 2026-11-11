@@ -15,7 +15,7 @@ const rev0 = P.revOf(model0);
 
 const articleOf = (model, blocks) => {
   const article = document.createElement("article");
-  article.setAttribute("data-page", "1");
+  article.setAttribute("data-blockeditor", "1");
   article.setAttribute("data-rev", P.revOf(model));
   article.innerHTML = P.renderModel(model, { fallbackOf: (id) => blocks[id]?.artifact?.fallbackHtml ?? "", clean: P.fragmentCleaner(document) });
   return article;

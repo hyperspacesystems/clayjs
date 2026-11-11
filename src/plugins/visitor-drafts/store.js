@@ -60,8 +60,8 @@ function same(a, b) {
 }
 
 const STORE_SEL = 'script[type="application/json"][merge][clay~="live"]';
-const ARTICLE_SEL = "article[data-page]";
-const isPagePart = (name) => name === "page" || /^page\.\d+$/.test(name);
+const ARTICLE_SEL = "article[data-blockeditor]";
+const isPagePart = (name) => name === "blockeditor" || /^blockeditor\.\d+$/.test(name);
 const canonical = (live) => JSON.stringify(Object.keys(live).sort().map((name) => [name, live[name]]));
 
 // A page document's page: every live store's value and the article the save projected
@@ -73,16 +73,16 @@ function readUnit(source) {
   for (const tag of source.querySelectorAll(STORE_SEL)) {
     try { live[tag.getAttribute("merge")] = JSON.parse(tag.textContent); } catch { return null; }
   }
-  return { live, page: { rev: articles[0].getAttribute("data-rev") || "", html: articles[0].innerHTML } };
+  return { live, blockeditor: { rev: articles[0].getAttribute("data-rev") || "", html: articles[0].innerHTML } };
 }
 
-const sameUnit = (a, b) => (!a || !b ? a === b : a.page.rev === b.page.rev && canonical(a.live) === canonical(b.live));
+const sameUnit = (a, b) => (!a || !b ? a === b : a.blockeditor.rev === b.blockeditor.rev && canonical(a.live) === canonical(b.live));
 
 function unitOf(record) {
-  if (!isPlain(record?.live) || !isPlain(record?.page)) return null;
-  const { live, page } = record;
-  if (!Object.keys(live).length || typeof page.rev !== "string" || typeof page.html !== "string") return null;
-  return { live, page };
+  if (!isPlain(record?.live) || !isPlain(record?.blockeditor)) return null;
+  const { live, blockeditor } = record;
+  if (!Object.keys(live).length || typeof blockeditor.rev !== "string" || typeof blockeditor.html !== "string") return null;
+  return { live, blockeditor };
 }
 
 const hasIds = (rows) => Array.isArray(rows)
@@ -280,7 +280,7 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     if (!unit) return null;
     readServed();
     if (!served) return unit;
-    const differs = unit.page.rev !== served.page.rev ||
+    const differs = unit.blockeditor.rev !== served.blockeditor.rev ||
       Object.keys(unit.live).some((name) => !isPagePart(name) && JSON.stringify(unit.live[name]) !== JSON.stringify(served.live[name]));
     // An untouched page is never recorded, so the owner's later page reaches a visitor who
     // never wrote in it. Once this tab has held a recorded page, every page is recorded,
@@ -578,7 +578,7 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     const id = newId();
     const raw = stored && sameUnit(unit, theirs)
       ? stored
-      : JSON.stringify({ v: RECORD_VERSION, savedAt: now().toISOString(), id, ancestry, data, ...(unit && { live: unit.live, page: unit.page }) });
+      : JSON.stringify({ v: RECORD_VERSION, savedAt: now().toISOString(), id, ancestry, data, ...(unit && { live: unit.live, blockeditor: unit.blockeditor }) });
     if (raw !== stored) {
       try {
         if (!storage) throw new Error("no storage");

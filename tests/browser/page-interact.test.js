@@ -74,12 +74,12 @@ const spanIds = () => {
 };
 const move = (x, y) => sendMouse({ type: 'move', position: [Math.round(x), Math.round(y)] });
 const isBlockSelection = () => view.state.selection instanceof BlockSelection;
-const grip = () => mount.querySelector('.page-grip');
-const dropLine = () => mount.querySelector('.page-drop');
-const menu = () => mount.querySelector('.page-menu');
+const grip = () => mount.querySelector('.blockeditor-grip');
+const dropLine = () => mount.querySelector('.blockeditor-drop');
+const menu = () => mount.querySelector('.blockeditor-menu');
 const indentPx = () => {
-  const probe = mount.querySelector('.page-shell').appendChild(document.createElement('div'));
-  probe.style.cssText = 'position:absolute;visibility:hidden;width:var(--page-indent)';
+  const probe = mount.querySelector('.blockeditor-shell').appendChild(document.createElement('div'));
+  probe.style.cssText = 'position:absolute;visibility:hidden;width:var(--blockeditor-indent)';
   const w = probe.getBoundingClientRect().width;
   probe.remove();
   return w;
@@ -244,7 +244,7 @@ describe('dragging a block in a browser', () => {
     await settle();
     expect(ids()).to.deep.equal(before);
     expect(dropLine().hidden).to.equal(true);
-    expect(mount.querySelector('.page-shell').classList.contains('is-dragging')).to.equal(false);
+    expect(mount.querySelector('.blockeditor-shell').classList.contains('is-dragging')).to.equal(false);
   });
 });
 
@@ -255,10 +255,10 @@ describe('menus, links and uploads in a browser', () => {
     put(startOf('p'));
     const until = async (fn, ms = 4000) => { const end = Date.now() + ms; while (Date.now() < end) { if (fn()) return true; await settle(50); } return false; };
     expect(paste([PNG()])).to.not.equal(null);
-    expect(await until(() => mount.querySelector('.page-upload'))).to.equal(true);
+    expect(await until(() => mount.querySelector('.blockeditor-upload'))).to.equal(true);
     finish({ ok: true, uploads: [{ url: '/uploads/door.png' }] });
-    expect(await until(() => !mount.querySelector('.page-upload'))).to.equal(true);
-    expect(mount.querySelector('figure.page-image img').getAttribute('src')).to.equal('/uploads/door.png');
+    expect(await until(() => !mount.querySelector('.blockeditor-upload'))).to.equal(true);
+    expect(mount.querySelector('figure.blockeditor-image img').getAttribute('src')).to.equal('/uploads/door.png');
   });
 
   it('Mod+K focuses the link field; Esc returns focus with the selection intact', async () => {
@@ -266,7 +266,7 @@ describe('menus, links and uploads in a browser', () => {
     put(startOf('p'), endOf('p'));
     const { from, to } = view.state.selection;
     await press(`${MOD}+k`);
-    const input = mount.querySelector('.page-link-input');
+    const input = mount.querySelector('.blockeditor-link-input');
     expect(document.activeElement).to.equal(input);
     await press('Escape');
     expect(view.hasFocus()).to.equal(true);
@@ -318,7 +318,7 @@ describe('menus, links and uploads in a browser', () => {
     await hover('p');
     put(startOf('p'), endOf('p'));
     await press(`${MOD}+k`);
-    expect(mount.querySelector('.page-link').hidden).to.equal(false);
+    expect(mount.querySelector('.blockeditor-link').hidden).to.equal(false);
     put(endOf('z'));
     if (paste([PNG()]) !== null) await settle();
     const root = document.scrollingElement;
@@ -359,7 +359,7 @@ describe('Backspace and Delete with a selection', () => {
       await sendMouse({ type: 'up' });
       for (let i = 0; i < 5; i++) await sendKeys({ press: 'Shift+ArrowRight' });
       await settle();
-      const bubble = mount.querySelector('.page-bubble');
+      const bubble = mount.querySelector('.blockeditor-bubble');
       expect(bubble.hidden, 'bubble shown').to.equal(false);
       const picked = view.state.doc.textBetween(view.state.selection.from, view.state.selection.to);
       await move(...center(bubble.querySelector('[data-cmd="strong"]')));
@@ -413,8 +413,8 @@ describe('Backspace and Delete with a selection', () => {
 
     it(`${key} deletes a clicked image`, async () => {
       setup({ a: { t: 'paragraph', pos: 'V', c: 'Above' }, i: { t: 'image', pos: 'W', src: 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==', width: 200 }, c: { t: 'paragraph', pos: 'X', c: 'Below' } });
-      expect(await until(() => mount.querySelector('.page-image-frame')), 'image view loaded').to.equal(true);
-      await move(...center(mount.querySelector('.page-image-frame')));
+      expect(await until(() => mount.querySelector('.blockeditor-image-frame')), 'image view loaded').to.equal(true);
+      await move(...center(mount.querySelector('.blockeditor-image-frame')));
       await sendMouse({ type: 'down' });
       await sendMouse({ type: 'up' });
       await settle();
@@ -426,7 +426,7 @@ describe('Backspace and Delete with a selection', () => {
 
 describe('code block colours in a browser', () => {
   const until = async (fn, ms = 4000) => { const end = Date.now() + ms; while (Date.now() < end) { if (fn()) return true; await settle(50); } return false; };
-  const keywordSpans = (id) => [...el(id).querySelectorAll('code span[style]')].filter((s) => s.getAttribute('style').includes('--page-code-token-keyword'));
+  const keywordSpans = (id) => [...el(id).querySelectorAll('code span[style]')].filter((s) => s.getAttribute('style').includes('--blockeditor-code-token-keyword'));
 
   it('a block on screen is coloured; one far below waits until it is scrolled into view', async () => {
     const blocks = LONG(80);
@@ -458,8 +458,8 @@ describe('code block colours in a browser', () => {
 
   it('the language picker colours a plain block', async () => {
     setup({ c: { t: 'code_block', pos: 'V', c: 'SELECT 1 FROM t' } });
-    expect(await until(() => el('c').querySelector('select.page-code-lang'))).to.equal(true);
-    const picker = el('c').querySelector('select.page-code-lang');
+    expect(await until(() => el('c').querySelector('select.blockeditor-code-lang'))).to.equal(true);
+    const picker = el('c').querySelector('select.blockeditor-code-lang');
     picker.value = 'sql';
     picker.dispatchEvent(new Event('change'));
     expect(view.state.doc.child(0).attrs.lang).to.equal('sql');

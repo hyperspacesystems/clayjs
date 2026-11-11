@@ -6,7 +6,7 @@
 <title>Conflict notice, real module</title>
 <style>
   :root { --bg:#fbfaf8; --fg:#26231f; --soft:#6d6862; --rule:#e4e0d9; }
-  html[data-page="dark"] { --bg:#14161a; --fg:#e6e8ec; --soft:#939aa6; --rule:#2a2e35; }
+  html[data-blockeditor="dark"] { --bg:#14161a; --fg:#e6e8ec; --soft:#939aa6; --rule:#2a2e35; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--fg);
          font:16px/1.65 Georgia,serif; }
@@ -32,7 +32,7 @@
   <button onclick="fire('conflict',{changedBy:'another-tab'})">Refused (another tab)</button>
   <button onclick="fire('saved')">A save lands</button>
   <button onclick="window.__fail=!window.__fail;this.textContent=window.__fail?'Keep mine: fails':'Keep mine: works'">Keep mine: works</button>
-  <button onclick="t('data-page','dark')">Light / dark page</button>
+  <button onclick="t('data-blockeditor','dark')">Light / dark page</button>
   <button onclick="t('data-hostile','')">Hostile page CSS</button>
 </div>
 

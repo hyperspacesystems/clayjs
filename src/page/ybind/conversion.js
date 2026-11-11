@@ -2,7 +2,7 @@ import { cloneJson } from "../../live/ops.js";
 import { canon } from "../projection.js";
 import { migrateHybridValues, YMigrationError } from "./migrate.js";
 
-const PAGE = /^page(\.[0-9]+)?$/;
+const PAGE = /^blockeditor(\.[0-9]+)?$/;
 
 export async function prepareHybridConversion(tags) {
   try {

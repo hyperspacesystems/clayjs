@@ -22,7 +22,7 @@ import { chartModel, renderChartSvg } from '../../src/page/rich/chart.js';
 const tag = (name, value, ephemeral = false) =>
   `<script type="application/json" clay="live${ephemeral ? ' ephemeral' : ''}" merge="${name}">${serializeLive(value)}</script>`;
 const html = (value, other = '') =>
-  `<!doctype html><html><head><title>Keep this title</title></head><body><article data-page data-rev="old">old article</article>${tag('page', value)}${tag('game', { score: 0 })}${tag('presence', { viewers: 1 }, true)}${other}<footer>Keep this footer</footer></body></html>`;
+  `<!doctype html><html><head><title>Keep this title</title></head><body><article data-blockeditor data-rev="old">old article</article>${tag('blockeditor', value)}${tag('game', { score: 0 })}${tag('presence', { viewers: 1 }, true)}${other}<footer>Keep this footer</footer></body></html>`;
 const createDocument = () => new JSDOM('').window.document;
 const roomOf = (value) => {
   const rooms = createRooms({ newEpoch: () => 'checkpoint-test' });
@@ -33,17 +33,17 @@ const roomOf = (value) => {
   return { rooms, room, source, capture, render };
 };
 const apply = (rooms, room, client, name, n, ops) => {
-  const result = rooms.apply(room, client, { name, n, ops, epoch: room.epoch, pageGeneration: room.pageTransition?.id ?? null });
+  const result = rooms.apply(room, client, { name, n, ops, epoch: room.epoch, blockeditorGeneration: room.blockeditorTransition?.id ?? null });
   expect(result.seq).toBeGreaterThan(0);
   return result;
 };
 const editPage = (rooms, room, client, n, change) => {
-  const doc = docFromValue(room.stores.get('page').value, { strict: true });
+  const doc = docFromValue(room.stores.get('blockeditor').value, { strict: true });
   doc.clientID = Number(client);
   change(doc.getText('flow'));
   const update = enc(Y.encodeStateAsUpdateV2(doc));
   doc.destroy();
-  return apply(rooms, room, client, 'page', n, [{ op: 'set', path: ['y', `edit-${client}-${n}`], value: update }]);
+  return apply(rooms, room, client, 'blockeditor', n, [{ op: 'set', path: ['y', `edit-${client}-${n}`], value: update }]);
 };
 const normalized = (text) => text.replace(/>\s+</g, '><').trim();
 
@@ -56,7 +56,7 @@ test('captures both editors, writes persistent tags and matching article, and su
   apply(rooms, room, '200', 'game', 1, [{ op: 'add', path: ['score'], n: 1 }]);
   const pinned = capture();
   expect(pinned.seq).toBe(4);
-  expect(pinned.stores.map((store) => store.name)).toEqual(['page', 'game']);
+  expect(pinned.stores.map((store) => store.name)).toEqual(['blockeditor', 'game']);
   expect(pinned.stores.every((store) => store.liveAt.startsWith('checkpoint-test:4:'))).toBe(true);
   for (const store of pinned.stores) {
     expect(parseBy(store.provenance).frames).toEqual([['100', [[1, 1]]], ['200', [[1, 1]]]]);
@@ -84,7 +84,7 @@ test('captures both editors, writes persistent tags and matching article, and su
       if (typeof document !== 'undefined' || typeof window !== 'undefined') throw Error('DOM globals present');
       const html = readFileSync(process.argv[1], 'utf8');
       const tags = Object.fromEntries(liveTags(html).map((tag) => [tag.name, JSON.parse(tag.text)]));
-      console.log(JSON.stringify({ text: blocksFromYValue(tags.page).p.c, score: tags.game.score, article: html.match(/<article[^>]*>([\\s\\S]*?)<\\/article>/)[1] }));
+      console.log(JSON.stringify({ text: blocksFromYValue(tags.blockeditor).p.c, score: tags.game.score, article: html.match(/<article[^>]*>([\\s\\S]*?)<\\/article>/)[1] }));
     `;
     const restarted = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script, file], { encoding: 'utf8' }));
     expect(restarted).toEqual({ text: 'aXc', score: 2, article: '<p data-id="p">aXc</p>' });
@@ -101,9 +101,9 @@ test('later frames remain dirty when the captured file is reconciled', () => {
   editPage(rooms, room, '200', 1, (flow) => flow.insert(2, 'X'));
   apply(rooms, room, '200', 'game', 1, [{ op: 'add', path: ['score'], n: 1 }]);
   rooms.fileWritten(room.key, written.html);
-  expect(blocksFromYValue(room.stores.get('page').value).p.c).toBe('aXc');
+  expect(blocksFromYValue(room.stores.get('blockeditor').value).p.c).toBe('aXc');
   expect(room.stores.get('game').value.score).toBe(2);
-  expect(room.stores.get('page').landed).toBeLessThan(room.stores.get('page').last);
+  expect(room.stores.get('blockeditor').landed).toBeLessThan(room.stores.get('blockeditor').last);
   expect(room.stores.get('game').landed).toBeLessThan(room.stores.get('game').last);
   expect(isCheckpointCurrent(written.html, capture())).toBe(false);
 });
@@ -137,15 +137,15 @@ test('renders hand-written expected heading, marked paragraph, list and board HT
 
 test('refuses incomplete page parts until the missing frame arrives', () => {
   const { rooms, room, source, capture, render } = roomOf(seedValue([{ id: 'p', t: 'paragraph', text: 'text' }]));
-  const doc = docFromValue(room.stores.get('page').value, { strict: true });
+  const doc = docFromValue(room.stores.get('blockeditor').value, { strict: true });
   doc.clientID = 300;
   doc.getText('flow').insert(2, '!');
   const update = enc(Y.encodeStateAsUpdateV2(doc));
   doc.destroy();
   const middle = Math.ceil(update.length / 2);
-  apply(rooms, room, '300', 'page', 1, [{ op: 'set', path: ['y', 'later.0.2'], value: update.slice(0, middle) }]);
-  expect(render(source, capture())).toEqual({ kind: 'refused', reason: 'incomplete-page' });
-  apply(rooms, room, '300', 'page', 2, [{ op: 'set', path: ['y', 'later.1.2'], value: update.slice(middle) }]);
+  apply(rooms, room, '300', 'blockeditor', 1, [{ op: 'set', path: ['y', 'later.0.2'], value: update.slice(0, middle) }]);
+  expect(render(source, capture())).toEqual({ kind: 'refused', reason: 'incomplete-blockeditor' });
+  apply(rooms, room, '300', 'blockeditor', 2, [{ op: 'set', path: ['y', 'later.1.2'], value: update.slice(middle) }]);
   expect(render(source, capture()).kind).toBe('ok');
 });
 
@@ -157,7 +157,7 @@ test('checkpoints unknown page content into its envelope and refuses table proje
   doc.destroy();
   const kept = roomOf(bad).render();
   expect(kept.kind).toBe('ok');
-  expect(kept.html).toContain('<div data-id="p" data-clay-page-opaque="1"');
+  expect(kept.html).toContain('<div data-id="p" data-clay-blockeditor-opaque="1"');
   expect(kept.html).toContain('>text</div>');
   const table = seedValue([{ id: 't', t: 'table' }]);
   expect(roomOf(table).render()).toEqual({ kind: 'refused', reason: 'unsupported-projection' });
@@ -183,7 +183,7 @@ test('renders a table chart through the shared checkpoint projection', () => {
 
 test('refuses a document missing its page article or a persistent tag', () => {
   const { source, capture, render } = roomOf(seedValue([{ id: 'p', t: 'paragraph', text: 'text' }]));
-  expect(render(source.replace('article data-page', 'article'), capture()))
+  expect(render(source.replace('article data-blockeditor', 'article'), capture()))
     .toEqual({ kind: 'refused', reason: 'invalid-document' });
   expect(render(source.replace('clay="live" merge="game"', 'clay="live ephemeral" merge="game"'), capture()))
     .toEqual({ kind: 'refused', reason: 'invalid-document' });
@@ -299,16 +299,16 @@ test('a room whose writer merged an edit to the same words it changed checkpoint
   expect(handEdited).not.toBe(saved.html);
   const fileDoc = createDocument();
   fileDoc.documentElement.innerHTML = handEdited.replace(/^<!doctype html>/i, '');
-  const tags = [...fileDoc.querySelectorAll('script[merge="page"]')].map((tag) => JSON.parse(tag.textContent));
-  const found = classifyFile(fileDoc.querySelector('article[data-page]'), tags);
+  const tags = [...fileDoc.querySelectorAll('script[merge="blockeditor"]')].map((tag) => JSON.parse(tag.textContent));
+  const found = classifyFile(fileDoc.querySelector('article[data-blockeditor]'), tags);
   expect(found.kind).toBe('adopt');
 
   const r = roomOf(seedValue([{ id: 'p', t: 'paragraph', text: 'a q d' }]));
   apply(r.rooms, r.room, '100', 'game', 1, [{ op: 'add', path: ['score'], n: 1 }]);
   expect(renderCheckpoint(handEdited, r.capture(), { createDocument })).toEqual({ kind: 'refused', reason: 'needs-adoption' });
-  const y = r.room.stores.get('page').value.y;
+  const y = r.room.stores.get('blockeditor').value.y;
   const key = Object.keys(y)[0];
-  const claim = (n, adopted) => r.rooms.apply(r.room, '100', { name: 'page', n, epoch: r.room.epoch, pageGeneration: r.room.pageTransition?.id ?? null, ops: [{ op: 'set', path: ['y', key], value: y[key] }], adopted });
+  const claim = (n, adopted) => r.rooms.apply(r.room, '100', { name: 'blockeditor', n, epoch: r.room.epoch, blockeditorGeneration: r.room.blockeditorTransition?.id ?? null, ops: [{ op: 'set', path: ['y', key], value: y[key] }], adopted });
   expect(claim(1, 'not-this-article').seq).toBeGreaterThan(0);
   expect(renderCheckpoint(handEdited, r.capture(), { createDocument })).toEqual({ kind: 'refused', reason: 'needs-adoption' });
   expect(claim(2, found.A).seq).toBeGreaterThan(0);

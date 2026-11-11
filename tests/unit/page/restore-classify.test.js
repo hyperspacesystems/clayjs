@@ -9,7 +9,7 @@ import { classifyFile } from "../../../src/page/adopt.js";
 const record = { blocks: { a: { t: "paragraph", pos: "1", c: "version one" }, b: { t: "paragraph", pos: "2", c: "keep" } }, deleted: {} };
 const blocks = blocksOfValues([record]);
 const model = project(blocks);
-const file = `<!DOCTYPE html><html><head><script type="application/json" merge="page" clay="live">${JSON.stringify(record)}</script></head><body><article class="page" clay="freeze" data-page="1" data-rev="${revOf(model)}">\n${renderModel(model)}\n</article></body></html>`;
+const file = `<!DOCTYPE html><html><head><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(record)}</script></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${revOf(model)}">\n${renderModel(model)}\n</article></body></html>`;
 
 test("the restored file is not re-adopted, and its projection shows the restored text", () => {
   const doc = new DOMParser().parseFromString(file, "text/html");

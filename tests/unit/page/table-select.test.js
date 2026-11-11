@@ -22,8 +22,8 @@ const grid = (view) => { const table = blockJson(view.state.doc.child(0)); const
 const selected = (view) => [...view.dom.querySelectorAll("td.is-cell-selected")].map((cell) => cell.querySelector("span").textContent);
 beforeAll(() => { document.elementFromPoint = () => null; });
 afterAll(() => { delete document.elementFromPoint; });
-const menu = (view) => view.dom.parentElement.querySelector(".page-menu");
-const item = (view, label) => [...menu(view).querySelectorAll(".page-menu-item")].find((row) => row.querySelector(".page-menu-label").textContent === label);
+const menu = (view) => view.dom.parentElement.querySelector(".blockeditor-menu");
+const item = (view, label) => [...menu(view).querySelectorAll(".blockeditor-menu-item")].find((row) => row.querySelector(".blockeditor-menu-label").textContent === label);
 
 test("dragging from one cell to another selects the rectangle between them", () => {
   const view = editor([], { blocks: { tbl } });
@@ -124,7 +124,7 @@ test("Select row and Select column are the button equivalents of a drag", () => 
   view.dom.querySelector('th[data-col="c2"] button').click();
   item(view, "Select column").click();
   expect(selected(view)).toEqual(["b1", "say \"hi\"\tthere", "b3"]);
-  view.dom.querySelectorAll(".page-table-row-menu:not([hidden])")[2].click();
+  view.dom.querySelectorAll(".blockeditor-table-row-menu:not([hidden])")[2].click();
   item(view, "Select row").click();
   expect(selected(view)).toEqual(["a3", "b3", "c3"]);
 });

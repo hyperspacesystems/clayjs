@@ -28,10 +28,10 @@
 // admitted editors again and persists the marker, so a legacy registration that
 // lands between `capabilities()` and `activate()` is refused rather than missed.
 
-import { PAGE_FORMAT, PAGE_FORMAT_EXTENSION, PAGE_FORMAT_UPGRADE, formatCapability, notePageFormatFloor, pageFormatDecision, pageFormatFloor } from "./format-level.js";
+import { PAGE_FORMAT, PAGE_FORMAT_EXTENSION, PAGE_FORMAT_UPGRADE, formatCapability, notePageFormatFloor, pageFormatDecision, blockeditorFormatFloor } from "./format-level.js";
 import { registerUnsavedState } from "../lib/unsaved-state.js";
 
-const PENDING_COMMAND = "page-format-command";
+const PENDING_COMMAND = "blockeditor-format-command";
 
 const UPGRADE_MESSAGE = "This document uses a newer page format; update the editor in the other tabs to keep writing";
 
@@ -80,7 +80,7 @@ export function createFormatGate({
   async function read() {
     try {
       const answer = await host.read();
-      note(answer?.floor ?? pageFormatFloor(answer?.html));
+      note(answer?.floor ?? blockeditorFormatFloor(answer?.html));
     } catch {}
     return floor;
   }
@@ -106,7 +106,7 @@ export function createFormatGate({
 
   async function activateNow() {
     if (disposed) return { status: "disposed", retry: false };
-    if (!(await supportedHere())) return { status: "unsupported-host", code: "page-format-unsupported", extension: PAGE_FORMAT_EXTENSION };
+    if (!(await supportedHere())) return { status: "unsupported-host", code: "blockeditor-format-unsupported", extension: PAGE_FORMAT_EXTENSION };
     await read();
     if (floor >= PAGE_FORMAT) {
       await requestLane();
@@ -120,11 +120,11 @@ export function createFormatGate({
     try {
       answer = await host.activate({ floor: PAGE_FORMAT, capability, revision: stamp.revision, installed: stamp.installed });
     } catch (error) {
-      return { status: "failed", code: "page-format-activation-failed", error, retry: true };
+      return { status: "failed", code: "blockeditor-format-activation-failed", error, retry: true };
     }
     if (!answer || answer.accepted !== true) {
       if (answer?.code === PAGE_FORMAT_UPGRADE) return upgrade(PAGE_FORMAT);
-      return { status: "failed", code: answer?.code ?? "page-format-activation-failed", retry: true };
+      return { status: "failed", code: answer?.code ?? "blockeditor-format-activation-failed", retry: true };
     }
     if (disposed) {
       // The save was accepted, so the document is at floor 1 either way; this

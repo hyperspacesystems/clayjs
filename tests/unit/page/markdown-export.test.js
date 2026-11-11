@@ -65,8 +65,8 @@ const blobText = (blob) => new Promise((resolve, reject) => {
   reader.onerror = () => reject(reader.error);
   reader.readAsText(blob);
 });
-const panel = () => document.querySelector(".page-export-preview");
-const rows = (selector) => [...(panel()?.querySelectorAll(`${selector} .page-export-row`) ?? [])].map((row) => row.textContent);
+const panel = () => document.querySelector(".blockeditor-export-preview");
+const rows = (selector) => [...(panel()?.querySelectorAll(`${selector} .blockeditor-export-row`) ?? [])].map((row) => row.textContent);
 const settle = async (turns = 4) => {
   for (let i = 0; i < turns; i++) await new Promise((done) => setTimeout(done, 0));
 };
@@ -181,10 +181,10 @@ test("the decorated title and the TOC are written as semantic HTML and listed", 
   expect(extensions.map((one) => one.name)).toEqual(["Page icon", "Page cover", "Table of contents"]);
   expect(extensions.map((one) => one.block)).toEqual(["b0", "b0", "b2"]);
   expect(text).toContain("<header");
-  expect(text).toContain('data-page-icon aria-hidden="true"');
+  expect(text).toContain('data-blockeditor-icon aria-hidden="true"');
   expect(text).toContain("<h1>Notes</h1>");
   expect(text).toContain('data-type="toc"');
-  expect(text).toContain('<a href="#page-block-');
+  expect(text).toContain('<a href="#blockeditor-block-');
   expect(text).toContain(">Second</a>");
   expect(text).toContain("\n## Second\n");
 });
@@ -211,9 +211,9 @@ test("the report is shown before anything downloads, and the file is the page's 
   ]);
   expect(await runPageCommand(view, "exportMarkdown")).toEqual({ ok: true, preview: true });
   expect(panel()).not.toBeNull();
-  expect(panel().querySelector(".page-export-summary").textContent).toBe("4 blocks \u00b7 2 kept as HTML \u00b7 1 lost");
-  expect(rows(".page-export-extensions")).toEqual(["Page icon", "Table of contents"]);
-  expect(rows(".page-export-losses")).toEqual(["owner"]);
+  expect(panel().querySelector(".blockeditor-export-summary").textContent).toBe("4 blocks \u00b7 2 kept as HTML \u00b7 1 lost");
+  expect(rows(".blockeditor-export-extensions")).toEqual(["Page icon", "Table of contents"]);
+  expect(rows(".blockeditor-export-losses")).toEqual(["owner"]);
   expect(blobs).toHaveLength(0);
 
   panel().querySelector('[data-export="download"]').click();

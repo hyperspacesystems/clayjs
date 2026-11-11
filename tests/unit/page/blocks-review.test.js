@@ -1,4 +1,4 @@
-import { createPageEditor as makePageEditor, pageState } from "../../../src/page/editor.js";
+import { createPageEditor as makePageEditor, blockeditorState } from "../../../src/page/editor.js";
 import { state as pmState, history } from "../../../src/vendor/prosemirror.vendor.js";
 import { blockMap } from "../../../src/page/model.js";
 import { schema } from "../../../src/page/schema.js";
@@ -121,7 +121,7 @@ test("the record round-trips through blockMap after the fixes", () => {
   const view = editor([["o", "toggle", "outer", { open: true }], ["b", "paragraph", "body", { parent: "o" }]]);
   expect(Object.keys(blockMap(view.state.doc)).sort()).toEqual(["b", "o"]);
   expect(schema.nodes.toggle).toBeDefined();
-  expect(pageState(null).doc.childCount).toBe(1);
+  expect(blockeditorState(null).doc.childCount).toBe(1);
 });
 
 test("Shift+Left from below a closed toggle extends the selection over the whole toggle", () => {
@@ -182,7 +182,7 @@ test("Tab stops at indent 8", () => {
 });
 
 test("two empty pages get different first block ids", () => {
-  expect(pageState(null).doc.child(0).attrs.id).not.toBe(pageState(null).doc.child(0).attrs.id);
+  expect(blockeditorState(null).doc.child(0).attrs.id).not.toBe(blockeditorState(null).doc.child(0).attrs.id);
 });
 
 describe("Delete just above a toggle", () => {

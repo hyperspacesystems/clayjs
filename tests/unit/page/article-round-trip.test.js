@@ -7,7 +7,7 @@ import { RECORD } from "./fixtures/all-kinds.js";
 
 /**
  * A tool's code and state live in the rendered article, so a page rebuilt from
- * its <article data-page> alone keeps every tool: no Yjs tag needed.
+ * its <article data-blockeditor> alone keeps every tool: no Yjs tag needed.
  */
 
 const v0 = migrateHybridValues([RECORD]);
@@ -17,7 +17,7 @@ const rev0 = P.revOf(model0);
 
 const articleOf = (model, blocks) => {
   const article = document.createElement("article");
-  article.setAttribute("data-page", "1");
+  article.setAttribute("data-blockeditor", "1");
   article.setAttribute("data-rev", P.revOf(model));
   article.innerHTML = P.renderModel(model, { fallbackOf: (id) => blocks[id]?.artifact?.fallbackHtml ?? "", clean: P.fragmentCleaner(document) });
   return article;
@@ -83,7 +83,7 @@ test("readers mount a tool from the article, with no page tag", async () => {
   const blocks = { "tool-1": { t: "tool", pos: "1", artifact, rev: "r1", state: { count: 3 } } };
   const model = P.project(blocks);
   document.body.innerHTML = articleOf(model, blocks).outerHTML;
-  expect(document.querySelector('script[merge="page"]')).toBeNull();
+  expect(document.querySelector('script[merge="blockeditor"]')).toBeNull();
   const stop = startPageView(document);
   await new Promise((resolve) => setTimeout(resolve, 20));
   const section = document.querySelector('section[data-type="tool"]');

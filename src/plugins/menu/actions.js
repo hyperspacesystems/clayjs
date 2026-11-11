@@ -35,7 +35,7 @@ function whenPresent(get, ms = READY_MS) {
 // so the surface it needs is not there yet. Waiting here is bounded: a page that never
 // gets one ends at the same unavailable message a missing helper does.
 function waitForPageAi(ms = PAGE_READY_MS) {
-  const page = clay().page;
+  const page = clay().blockeditor;
   if (!page) return Promise.resolve(true);
   const start = Date.now();
   return new Promise((resolve) => {
@@ -43,7 +43,7 @@ function waitForPageAi(ms = PAGE_READY_MS) {
     const finish = (ok) => { if (!done) { done = true; clearTimeout(timer); resolve(ok); } };
     const tick = () => {
       if (done) return;
-      if (clay().page?.ai) return finish(true);
+      if (clay().blockeditor?.ai) return finish(true);
       if (Date.now() - start >= ms) return finish(false);
       setTimeout(tick, 50);
     };
@@ -95,10 +95,10 @@ export function attachActions({ addItem, note, currentMode }) {
   // A Document keeps its history in its own editor, so the pair reads the page's service
   // there and hyper-undo everywhere else. Reading it at use time means an editor that
   // closed after the item was drawn takes the press with it.
-  const historySource = () => (pageWants("page") && clay().page?.history ? clay().page.history : pageWants("undo") ? clay().undo : null);
+  const historySource = () => (pageWants("blockeditor") && clay().blockeditor?.history ? clay().blockeditor.history : pageWants("undo") ? clay().undo : null);
 
   function renderUndo() {
-    if (!pageWants("page") && !pageWants("undo")) return;
+    if (!pageWants("blockeditor") && !pageWants("undo")) return;
     const live = currentMode() === "edit" && historySource();
     // The menu loads late, so edits made before it are read from the service itself.
     if (!heard && live && typeof live.canUndo === "boolean") history = { canUndo: live.canUndo, canRedo: !!live.canRedo };
@@ -144,7 +144,7 @@ export function attachActions({ addItem, note, currentMode }) {
       const loaded = clay().aiEdit || (currentMode() === "edit" ? await whenPresent(() => clay().aiEdit) : null);
       if (loaded?.available) {
         if (!(await loaded.available())) return;
-      } else if (!loaded && pageWants("page")) {
+      } else if (!loaded && pageWants("blockeditor")) {
         // In view mode a Block document has no plugin to ask, so the host's own
         // discovery says whether an ai-edit helper exists at all.
         const meta = await hostMeta();
@@ -159,7 +159,7 @@ export function attachActions({ addItem, note, currentMode }) {
         keys: keys("⌘J", "Ctrl+J"),
         run: resumable("ai", async () => {
           const ai = await whenPresent(() => clay().aiEdit);
-          const ready = ai && (pageWants("page") || !!clay().page) ? await waitForPageAi() : !!ai;
+          const ready = ai && (pageWants("blockeditor") || !!clay().blockeditor) ? await waitForPageAi() : !!ai;
           const opened = ready ? await ai.pick() : false;
           if (!opened) note("Ask AI isn't available on this page right now.");
         }),
@@ -184,6 +184,18 @@ export function attachActions({ addItem, note, currentMode }) {
     });
   }
 
+  // The Yjs page store (`blockeditor`, and its split parts `blockeditor.1`, `blockeditor.2`, …) holds upload paths
+  // inside base64 updates, where no text rewrite reaches them. A copy that leaves this host
+  // leaves those tags out, as Hyperclay's own download does: the article names every upload
+  // in full, and the editor that opens the copy seeds the page from it.
+  const PAGE_STORE_TAG = /<script\b[^>]*>[\s\S]*?<\/script>\n?/gi;
+  const isPageStoreTag = (tag) => {
+    const open = tag.slice(0, tag.indexOf(">") + 1);
+    return /\bmerge="blockeditor(?:\.\d+)?"/.test(open) && /\bclay="[^"]*\blive\b/.test(open);
+  };
+  const withoutPageStore = (html) =>
+    /<article\b[^>]*\bdata-blockeditor\b/.test(html) ? html.replace(PAGE_STORE_TAG, (tag) => (isPageStoreTag(tag) ? "" : tag)) : html;
+
   // The copy is what a save would send now, unsaved edits included. A reader has no
   // unsaved edits, so the saved file is the same document.
   addItem({
@@ -199,8 +211,10 @@ export function attachActions({ addItem, note, currentMode }) {
           if (response.ok) html = await response.text();
         }
       } catch {}
-      // Upload paths only resolve on this host, so the copy names them in full.
+      // A copy that leaves this host keeps nothing that only resolves on it: the page store
+      // goes, and upload paths are named in full. A file: copy has no host to leave.
       if (typeof html === "string" && /^https?:$/.test(location.protocol)) {
+        html = withoutPageStore(html);
         html = html.replace(/(^|[^\w./:-])\/_\/uploads\//g, `$1${location.origin}/_/uploads/`);
       }
       if (typeof html !== "string" || !(await downloadHtml({ html, name: `${documentName()}.html` }))) {

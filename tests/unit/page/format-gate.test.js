@@ -1,7 +1,7 @@
 import {
   PAGE_FORMAT, PAGE_FORMAT_HEADER, PAGE_FORMAT_META, PAGE_FORMAT_UPGRADE,
   formatCapability, knownPageFormatFloor, notePageFormatFloor, pageFormatDecision,
-  floorZero, pageFormatFloor, pageFormatRefusal, requiredPageFormat, withPageFormatFloor,
+  floorZero, blockeditorFormatFloor, pageFormatRefusal, requiredPageFormat, withPageFormatFloor,
 } from "../../../src/page/format-level.js";
 import { createFormatGate } from "../../../src/page/format-gate.js";
 
@@ -47,18 +47,18 @@ function host(overrides = {}) {
 }
 
 test("a document carries its floor in metadata outside the page value, and absence means zero", () => {
-  expect(pageFormatFloor(doc())).toBe(0);
-  expect(pageFormatFloor(doc("", 1))).toBe(1);
-  expect(pageFormatFloor(`<meta content='2' name='${PAGE_FORMAT_META}'>`)).toBe(2);
-  expect(pageFormatFloor(`<meta name="${PAGE_FORMAT_META}">`)).toBe(0);
-  expect(pageFormatFloor(`<meta name="${PAGE_FORMAT_META}" content="one">`)).toBe(0);
-  expect(pageFormatFloor("not html")).toBe(0);
+  expect(blockeditorFormatFloor(doc())).toBe(0);
+  expect(blockeditorFormatFloor(doc("", 1))).toBe(1);
+  expect(blockeditorFormatFloor(`<meta content='2' name='${PAGE_FORMAT_META}'>`)).toBe(2);
+  expect(blockeditorFormatFloor(`<meta name="${PAGE_FORMAT_META}">`)).toBe(0);
+  expect(blockeditorFormatFloor(`<meta name="${PAGE_FORMAT_META}" content="one">`)).toBe(0);
+  expect(blockeditorFormatFloor("not html")).toBe(0);
 });
 
 test("setting the floor is canonical and idempotent, and the wrapper is untouched", () => {
-  const plain = doc("<article data-page><p>x</p></article>");
+  const plain = doc("<article data-blockeditor><p>x</p></article>");
   const once = withPageFormatFloor(plain, 1);
-  expect(once).toBe(`<!doctype html><html><head><title>t</title><meta name="${PAGE_FORMAT_META}" content="1"></head><body><article data-page><p>x</p></article></body></html>`);
+  expect(once).toBe(`<!doctype html><html><head><title>t</title><meta name="${PAGE_FORMAT_META}" content="1"></head><body><article data-blockeditor><p>x</p></article></body></html>`);
   expect(withPageFormatFloor(once, 1)).toBe(once);
   // A floor only rises: asking for 0 back leaves the marker where it is.
   expect(withPageFormatFloor(once, 0)).toBe(once);
@@ -75,7 +75,7 @@ test("a capture declares its capability, and an unreadable one declares nothing"
   expect(formatCapability("one")).toBe(0);
   expect(formatCapability("-1")).toBe(0);
   expect(formatCapability(1.5)).toBe(0);
-  expect(PAGE_FORMAT_HEADER).toBe("X-Clay-Page-Format");
+  expect(PAGE_FORMAT_HEADER).toBe("X-Clay-Blockeditor-Format");
 });
 
 test("requiredPageFormat freezes the floor-0 registry: known content needs nothing, newer content needs 1", () => {
@@ -235,7 +235,7 @@ test("disposal while awaiting the save applies nothing and switches no lane", as
 test("no new format is emitted unless activation succeeds, and a refusal keeps every unsaved store", async () => {
   const adapter = host();
   adapter.state.admitted = [0];
-  const stores = new Map([["page", { value: "p" }], ["notes", { value: "n" }]]);
+  const stores = new Map([["blockeditor", { value: "p" }], ["notes", { value: "n" }]]);
   const before = new Map([...stores].map(([k, v]) => [k, v.value]));
   const gate = createFormatGate({ host: adapter, installed: () => "tab-r", revision: () => "r1" });
   const emitted = [];
@@ -253,9 +253,9 @@ test("an unsupported host keeps the newer writers off, and the save says which f
   const gate = createFormatGate({ host: adapter, supported: () => false, installed: () => "tab-r", revision: () => "r1" });
   const result = await gate.activate();
   expect(result.status).toBe("unsupported-host");
-  expect(result.extension).toBe("page-format-v1");
+  expect(result.extension).toBe("blockeditor-format-v1");
   expect(adapter.calls.activate).toBe(0);
-  expect(pageFormatFloor(doc())).toBe(0);
+  expect(blockeditorFormatFloor(doc())).toBe(0);
   notePageFormatFloor(1);
   expect(knownPageFormatFloor()).toBe(1);
   notePageFormatFloor(0);

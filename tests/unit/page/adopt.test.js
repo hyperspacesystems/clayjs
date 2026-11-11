@@ -18,7 +18,7 @@ const base = blocksOfValues([RECORD]);
 const fallbackOf = (id) => base[id]?.artifact?.fallbackHtml ?? "";
 const renderFile = (blocks) => {
   const model = project(blocks);
-  return `<!DOCTYPE html><html><body><article class="page" clay="freeze" data-page="1" data-rev="${revOf(model)}">\n${renderModel(model, { fallbackOf })}\n</article></body></html>`;
+  return `<!DOCTYPE html><html><body><article class="blockeditor" clay="freeze" data-blockeditor="1" data-rev="${revOf(model)}">\n${renderModel(model, { fallbackOf })}\n</article></body></html>`;
 };
 const stateOf = (blocks) => pmState.EditorState.create({ doc: docFromBlocks(schema, blocks), plugins: [history.history(), structurePlugin(), identityPlugin()] });
 const packed = (doc) => Object.fromEntries(Object.entries(blockMap(doc)).map(([id, b]) => [id, packMarks(b)]));

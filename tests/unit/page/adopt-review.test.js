@@ -25,7 +25,7 @@ function fileOf(record, { edit = () => {}, rev = true } = {}) {
   const model = project(blocks);
   const html = renderModel(model, { fallbackOf: fallbacks(blocks), clean: fragmentCleaner(document) });
   const revAttr = rev ? ` data-rev="${revOf(model)}"` : "";
-  const page = `<!DOCTYPE html><html><head><script type="application/json" merge="page" clay="live">${JSON.stringify(record).replace(/</g, "\\u003c")}</script></head><body><article class="page" clay="freeze" data-page="1"${revAttr}>\n${html}\n</article></body></html>`;
+  const page = `<!DOCTYPE html><html><head><script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(record).replace(/</g, "\\u003c")}</script></head><body><article class="blockeditor" clay="freeze" data-blockeditor="1"${revAttr}>\n${html}\n</article></body></html>`;
   const d = new DOMParser().parseFromString(page, "text/html");
   edit(d);
   return "<!DOCTYPE html>" + d.documentElement.outerHTML;
@@ -99,7 +99,7 @@ test("a link to a script URL is never rendered, and a hand-written one is not ad
   const article = read(fileOf(record)).article;
   expect(article.querySelector("a")).toBeNull();
   expect(article.textContent.trim()).toBe("click");
-  const hand = new DOMParser().parseFromString('<article data-page="1"><p>go <a href="JavaScript:x()">here</a></p></article>', "text/html").querySelector("article");
+  const hand = new DOMParser().parseFromString('<article data-blockeditor="1"><p>go <a href="JavaScript:x()">here</a></p></article>', "text/html").querySelector("article");
   const [item] = parseModel(hand);
   expect(JSON.stringify(item)).not.toContain("JavaScript");
 });
@@ -145,14 +145,14 @@ test("two hand edits from the same save add a new paragraph once", () => {
 });
 
 test("an image alone in a paragraph is adopted as an image", () => {
-  const article = new DOMParser().parseFromString('<article data-page="1"><p><img src="/photo.png" alt="Photo"></p></article>', "text/html").querySelector("article");
+  const article = new DOMParser().parseFromString('<article data-blockeditor="1"><p><img src="/photo.png" alt="Photo"></p></article>', "text/html").querySelector("article");
   const [item] = parseModel(article);
   expect(item.t).toBe("image");
   expect(item.src).toBe("/photo.png");
 });
 
 test("unknown elements are kept as preserved blocks, and script or style text is dropped", () => {
-  const article = new DOMParser().parseFromString('<article data-page="1"><my-chart><p>Inside</p><p>Second</p></my-chart><script>var x = 1;</script><style>p{}</style><p>Body</p></article>', "text/html").querySelector("article");
+  const article = new DOMParser().parseFromString('<article data-blockeditor="1"><my-chart><p>Inside</p><p>Second</p></my-chart><script>var x = 1;</script><style>p{}</style><p>Body</p></article>', "text/html").querySelector("article");
   const items = parseModel(article);
   expect(items.map((i) => i.t)).toEqual(["preserved", "paragraph"]);
   expect(items[0].html).toContain("<my-chart>");
@@ -160,7 +160,7 @@ test("unknown elements are kept as preserved blocks, and script or style text is
 });
 
 test("a duplicated board column becomes a second column", () => {
-  const article = new DOMParser().parseFromString('<article data-page="1"><section data-type="board"><div data-col="c"><h4>Copy</h4><ul><li>X</li></ul></div><div data-col="c"><h4>Original</h4><ul><li>Y</li></ul></div></section></article>', "text/html").querySelector("article");
+  const article = new DOMParser().parseFromString('<article data-blockeditor="1"><section data-type="board"><div data-col="c"><h4>Copy</h4><ul><li>X</li></ul></div><div data-col="c"><h4>Original</h4><ul><li>Y</li></ul></div></section></article>', "text/html").querySelector("article");
   const [board] = parseModel(article);
   expect(board.columns).toHaveLength(2);
   const [copy, original] = board.columns;

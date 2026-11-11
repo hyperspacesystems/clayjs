@@ -106,10 +106,17 @@ test("a synthetic click on the save button cannot manufacture human provenance",
 test("a failed save re-arms provenance so the retry still reports user", async () => {
   global.fetch = jest.fn(async () => { throw new Error("network down"); });
   const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+  // This test is about the retry's header, so the failure is claimed the way a page's own
+  // indicator would, and core's fallback notice stays undownloaded.
+  const claim = (event) => saveMod.claimFailure(event);
+  document.addEventListener("clay:save-error", claim);
+  document.addEventListener("clay:save-offline", claim);
 
   document.getElementById("content").textContent = "typed-then-failed";
   gestureMod.markExplicitSave();
   await saveMod.savePage();
+  document.removeEventListener("clay:save-error", claim);
+  document.removeEventListener("clay:save-offline", claim);
 
   global.fetch = jest.fn(async () => ({
     ok: true,

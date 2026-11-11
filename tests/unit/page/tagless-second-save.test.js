@@ -19,12 +19,12 @@ const BLOCKS = [
   { id: "h", t: "heading", text: "Notes" },
   { id: "p", t: "paragraph", text: "Hello" },
 ];
-const TAG_SEL = 'script[type="application/json"][merge="page"][clay~="live"]';
+const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="live"]';
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 const pageHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
-  return `<article data-page="1" data-rev="${rev}">${html}</article>`;
+  return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 
 const pageTag = () => document.querySelector(TAG_SEL);
@@ -64,7 +64,7 @@ async function load({ html = pageHtml(), head = "", answer = () => ({ status: 20
   document.body.innerHTML = html;
 
   // The host offers `page` and no `live-data`, as HTML Clay does.
-  const extensions = ["page"];
+  const extensions = ["blockeditor"];
   const saves = [];
   const sent = [];
   const handlersRef = { h: null };
@@ -152,7 +152,7 @@ test("every typed edit after the first reaches the host, with the tag and the te
     view.dispatch(view.state.tr.insertText(text, at));
     checkpointWithin(0);
     expect(await until(() => saves.length > 0)).toBe(true);
-    await until(() => storeOf("page").pending.length === 0);
+    await until(() => storeOf("blockeditor").pending.length === 0);
   };
 
   await typed(" first.");
@@ -174,7 +174,7 @@ test("every typed edit after the first reaches the host, with the tag and the te
 
   // No room on this host, and no operation is left pending behind a save.
   expect(sent).toHaveLength(0);
-  expect(storeOf("page").pending).toHaveLength(0);
+  expect(storeOf("blockeditor").pending).toHaveLength(0);
   expect(page.view.dom.textContent).toContain("Hello first. second. third.");
   // The live page never gains a tag of its own.
   expect(pageTag()).toBe(null);
@@ -182,7 +182,7 @@ test("every typed edit after the first reaches the host, with the tag and the te
 
 test("a document that already has its tag still ends with exactly one", async () => {
   const authored = JSON.stringify(seedValue(BLOCKS));
-  const tag = `<script type="application/json" merge="page" clay="live">${authored}</script>`;
+  const tag = `<script type="application/json" merge="blockeditor" clay="live">${authored}</script>`;
   const { page, storeOf, checkpointWithin, saves } = await load({ head: tag });
   const save = await import("../../../src/core/save.js");
 
@@ -197,7 +197,7 @@ test("a document that already has its tag still ends with exactly one", async ()
     const before = saves.length;
     checkpointWithin(0);
     expect(await until(() => saves.length > before)).toBe(true);
-    await until(() => storeOf("page").pending.length === 0);
+    await until(() => storeOf("blockeditor").pending.length === 0);
   }
 
   expect(saves).toHaveLength(2);
@@ -207,5 +207,5 @@ test("a document that already has its tag still ends with exactly one", async ()
   }
   expect(paragraphText(saves[1].body)).toBe("Hello first. second.");
   expect(document.querySelectorAll(TAG_SEL)).toHaveLength(1);
-  expect(storeOf("page").pending).toHaveLength(0);
+  expect(storeOf("blockeditor").pending).toHaveLength(0);
 }, 30000);

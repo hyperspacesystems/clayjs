@@ -33,8 +33,8 @@ test("menu rows show the description under the label", () => {
   view.coordsAtPos = () => COORDS;
   select(view, posOf(view, "e", true));
   typeText(view, "/");
-  const menu = view.dom.parentElement.querySelector(".page-menu");
-  const table = [...menu.querySelectorAll(".page-menu-item")].find((row) => row.querySelector(".page-menu-label").textContent === "Table");
-  expect(table.querySelector(".page-menu-text .page-menu-desc").textContent).toBe("Rows and columns, paste from a spreadsheet");
-  expect(menu.querySelectorAll(".page-menu-desc")).toHaveLength(I.MENU_ITEMS.length);
+  const menu = view.dom.parentElement.querySelector(".blockeditor-menu");
+  const table = [...menu.querySelectorAll(".blockeditor-menu-item")].find((row) => row.querySelector(".blockeditor-menu-label").textContent === "Table");
+  expect(table.querySelector(".blockeditor-menu-text .blockeditor-menu-desc").textContent).toBe("Rows and columns, paste from a spreadsheet");
+  expect(menu.querySelectorAll(".blockeditor-menu-desc")).toHaveLength(I.MENU_ITEMS.length);
 });

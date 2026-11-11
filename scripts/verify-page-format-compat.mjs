@@ -84,7 +84,7 @@ function parseArgs(argv) {
 }
 
 function fail(message, code = 1) {
-  console.error(`page-format-compat: ${message}`);
+  console.error(`blockeditor-format-compat: ${message}`);
   process.exit(code);
 }
 
@@ -346,7 +346,7 @@ function floorRefusal(version) {
   cell("floor-refusal", cohort, "the host refuses the legacy stale save before mutation", () => {
     const refusal = admitted.output.refusal;
     must(refusal, "the legacy capture was admitted into a floor-1 document");
-    must(refusal.code === "page-format-upgrade-required", `the refusal is ${JSON.stringify(refusal.code)}`);
+    must(refusal.code === "blockeditor-format-upgrade-required", `the refusal is ${JSON.stringify(refusal.code)}`);
     must(refusal.statusCode === 409, `the refusal status is ${JSON.stringify(refusal.statusCode)}`);
     must(refusal.minimum === 1, `the refusal minimum is ${JSON.stringify(refusal.minimum)}`);
     return `${refusal.code} (${refusal.statusCode}, floor ${refusal.minimum})`;
@@ -657,7 +657,7 @@ function features(artifact) {
     cell("stale-save", cohort, `${name}'s stale capture is refused before mutation and the file stays readable`, () => {
       const refusal = admitted[name].output.refusal;
       must(refusal, `${name} admitted a stale capture into a floor-1 document`);
-      must(refusal.code === "page-format-upgrade-required", `the refusal is ${JSON.stringify(refusal.code)}`);
+      must(refusal.code === "blockeditor-format-upgrade-required", `the refusal is ${JSON.stringify(refusal.code)}`);
       must(refusal.statusCode === 409, `the refusal status is ${JSON.stringify(refusal.statusCode)}`);
       must(refusal.minimum === 1, `the refusal minimum is ${JSON.stringify(refusal.minimum)}`);
       must(admitted[name].output.currentHtml === wrote.F.output.fileHtml, "the stored file changed while the capture was refused");
@@ -685,7 +685,7 @@ function features(artifact) {
 }
 
 const started = Date.now();
-console.log(`page-format-compat: phase ${phase}`);
+console.log(`blockeditor-format-compat: phase ${phase}`);
 console.log(`  cache   ${display(cache)}`);
 console.log(`  current ${display(currentRoot)}`);
 if (tolerance) {
@@ -761,7 +761,7 @@ const summary = {
 if (flags.json) console.log(`PAGE_FORMAT_COMPAT_JSON ${JSON.stringify(summary)}`);
 
 if (failed.length) {
-  console.error(`page-format-compat: ${failed.length} cell(s) failed`);
+  console.error(`blockeditor-format-compat: ${failed.length} cell(s) failed`);
   process.exit(1);
 }
-console.log(`page-format-compat: ${cohorts.size} cohorts, ${rows.length} rows, ${cells.length} cells, ${summary.cohorts.reduce((sum, entry) => sum + entry.positive, 0)} positive and ${summary.cohorts.reduce((sum, entry) => sum + entry.negative, 0)} negative cases — ok`);
+console.log(`blockeditor-format-compat: ${cohorts.size} cohorts, ${rows.length} rows, ${cells.length} cells, ${summary.cohorts.reduce((sum, entry) => sum + entry.positive, 0)} positive and ${summary.cohorts.reduce((sum, entry) => sum + entry.negative, 0)} negative cases — ok`);

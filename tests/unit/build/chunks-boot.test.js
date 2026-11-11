@@ -20,7 +20,7 @@ import { mergeManifests } from "../../../src/lib/preload.js";
  */
 
 const root = path.resolve(new URL("../../..", import.meta.url).pathname);
-const BODY = `<article class="page" clay="freeze"><p data-id="p1">Keep me</p></article>`;
+const BODY = `<article class="blockeditor" clay="freeze"><p data-id="p1">Keep me</p></article>`;
 
 let outdir;
 let copies = 0;
@@ -71,11 +71,11 @@ function freshDocument(editMode) {
 async function bootWith(boot, editMode, manifest = null, supplement = null) {
   freshDocument(editMode);
   let ready = null;
-  const plan = resolveModules(new URLSearchParams("plugins=page"), editMode, { isDraftMode: false, hasSap: false });
+  const plan = resolveModules(new URLSearchParams("plugins=blockeditor"), editMode, { isDraftMode: false, hasSap: false });
   const pendingLate = new Set(plan.late.map((path) => path.slice(path.lastIndexOf("/") + 1, -3)));
   const announced = (event) => pendingLate.delete(event.detail.plugin);
   document.addEventListener("clay:plugin-ready", announced);
-  await boot("https://clayjs.com/1.0.0", new URLSearchParams("plugins=page"), (clay) => { ready = clay; }, manifest, supplement);
+  await boot("https://clayjs.com/1.0.0", new URLSearchParams("plugins=blockeditor"), (clay) => { ready = clay; }, manifest, supplement);
   // Late plugins load after clay.ready; the assembled client is complete once each has
   // announced itself, not when boot() returns.
   for (let i = 0; i < 200 && pendingLate.size; i++) await new Promise((resolve) => setTimeout(resolve, 0));
@@ -125,7 +125,7 @@ for (const editMode of [false, true]) {
     expect(ready).toBe(window.clay);
     expect(Object.keys(window.clay).length).toBeGreaterThan(0);
 
-    const plan = resolveModules(new URLSearchParams("plugins=page"), editMode, { isDraftMode: false, hasSap: false });
+    const plan = resolveModules(new URLSearchParams("plugins=blockeditor"), editMode, { isDraftMode: false, hasSap: false });
     const boot = editMode ? [...runtime.editBootImports, ...(runtime.editorBootImports ?? [])] : [];
     expect(preloaded()).toEqual(closure(runtime, [...plan.core, ...plan.plugins, ...boot]));
   }, 60000);
@@ -144,7 +144,7 @@ for (const editMode of [false, true]) {
     expect(bare.keys).toEqual(full.keys);
     expect(bare.runtime.editBootImports).toBeUndefined();
 
-    const plan = resolveModules(new URLSearchParams("plugins=page"), editMode, { isDraftMode: false, hasSap: false });
+    const plan = resolveModules(new URLSearchParams("plugins=blockeditor"), editMode, { isDraftMode: false, hasSap: false });
     const bareHrefs = preloaded();
     expect(bareHrefs).toEqual(closure(bare.runtime, [...plan.core, ...plan.plugins]));
     expect(bareHrefs.length).toBeLessThan(fullHrefs.length);

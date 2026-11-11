@@ -14,27 +14,27 @@ import { createPageDoc } from "../../../../src/page/ybind/layout.js";
 // its lineage: a tab that typed offline while another typed into the room is still the same page.
 test("a tab on an empty page that typed offline is not taken for another page", async () => {
   const clone = (v) => JSON.parse(JSON.stringify(v));
-  const html = (value) => { const p = renderBlocks(blocksFromYValue(value)); return `<script type="application/json" merge="page" clay="live">${JSON.stringify(value)}</script><article data-page="1" data-rev="${p.rev}">${p.html}</article>`; };
+  const html = (value) => { const p = renderBlocks(blocksFromYValue(value)); return `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script><article data-blockeditor="1" data-rev="${p.rev}">${p.html}</article>`; };
   const pause = (ms = 80) => new Promise((r) => setTimeout(r, ms));
-  const article = document.createElement('article'); article.setAttribute('data-page', '1');
+  const article = document.createElement('article'); article.setAttribute('data-blockeditor', '1');
     const empty = seedPageFromArticle(article);
   const rooms = createRooms();
   const room = rooms.open('fixture', html(empty), { nodeId: 1 });
   const tabs = [];
   function tab(id) {
-    const store = createStore({ name: 'page', value: clone(empty) });
+    const store = createStore({ name: 'blockeditor', value: clone(empty) });
     const ydoc = docFromValue(store.value, { strict: true });
     const stops = [];
     let laneRef;
-    const provider = createYProvider({ store, ydoc, onStopped: (r) => { stops.push(r); if (r === 'lineage') laneRef.abandon('page'); } });
+    const provider = createYProvider({ store, ydoc, onStopped: (r) => { stops.push(r); if (r === 'lineage') laneRef.abandon('blockeditor'); } });
     let h;
-    const lane = createFastLane({ entries: new Map([['page', { store }]]), transport: {
+    const lane = createFastLane({ entries: new Map([['blockeditor', { store }]]), transport: {
       start(x) { h = x; return () => {}; },
       async fetchState(cid, since) { return clone(rooms.state(room, cid, since)); },
       async send(cid, frame) { const r = rooms.apply(room, cid, frame); if (r.seq) for (const t of tabs) t.h().frame({ ...clone(r), from: cid, n: frame.n }); return { status: r.error ? 422 : 200, body: r }; },
     } });
     laneRef = lane;
-    store.onLocal((ops) => lane.local('page', ops, store.mark));
+    store.onLocal((ops) => lane.local('blockeditor', ops, store.mark));
     lane.start();
     const t = { id, store, ydoc, provider, lane, stops, h: () => h }; tabs.push(t); h.open({ clientId: id, lane: 'live' }); return t;
   }

@@ -1,4 +1,4 @@
-// The page-tool helper over clay.wire. `clay.wire` is read when a request goes out,
+// The blockeditor-tool helper over clay.wire. `clay.wire` is read when a request goes out,
 // because the page plugin loads before the wire does: a page with exclude=wire must
 // never pull the module in.
 export class ToolTransportError extends Error {
@@ -18,7 +18,7 @@ export function createToolTransport({ getWire = () => globalThis.window?.clay?.w
       const id = payload?.requestId;
       let handle;
       try {
-        handle = wire.send(payload, { helper: "page-tool", document: "none", id, onStatus });
+        handle = wire.send(payload, { helper: "blockeditor-tool", document: "none", id, onStatus });
       } catch (error) {
         return Promise.reject(new ToolTransportError("no-wire"));
       }

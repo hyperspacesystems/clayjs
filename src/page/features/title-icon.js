@@ -11,10 +11,10 @@ import { createMentionPicker } from "../mention-picker.js";
 import { runFormatted } from "../format-command.js";
 
 const TITLE_CSS = `
-[data-page-heading]{display:block}
-[data-page-heading]>span[data-page-icon]{display:inline-block;font-size:34px;line-height:1;margin-block-end:.2em}
-[data-page-heading]>img[data-page-cover]{display:block;width:100%;height:180px;object-fit:cover;border-radius:var(--page-image-radius, 6px);margin-block-end:.6em}
-[data-page-heading]>h1{font-family:var(--page-font-display);font-size:var(--page-h1-size);font-weight:var(--page-h1-weight);letter-spacing:var(--page-h1-tracking);line-height:var(--page-h1-line);color:var(--page-ink-strong);margin-block:0 .6em}
+[data-blockeditor-heading]{display:block}
+[data-blockeditor-heading]>span[data-blockeditor-icon]{display:inline-block;font-size:34px;line-height:1;margin-block-end:.2em}
+[data-blockeditor-heading]>img[data-blockeditor-cover]{display:block;width:100%;height:180px;object-fit:cover;border-radius:var(--blockeditor-image-radius, 6px);margin-block-end:.6em}
+[data-blockeditor-heading]>h1{font-family:var(--blockeditor-font-display);font-size:var(--blockeditor-h1-size);font-weight:var(--blockeditor-h1-weight);letter-spacing:var(--blockeditor-h1-tracking);line-height:var(--blockeditor-h1-line);color:var(--blockeditor-ink-strong);margin-block:0 .6em}
 `;
 
 // The emoji feature, fetched on first use: one list of glyphs, one way of finding one and
@@ -49,7 +49,7 @@ export function titleOf(doc) {
 // part of it a person kept in view, so a reader draws it with nothing of this loaded.
 function coverImg(doc, attrs) {
   const img = doc.createElement("img");
-  img.setAttribute("data-page-cover", "");
+  img.setAttribute("data-blockeditor-cover", "");
   img.setAttribute("src", attrs.pageCoverSrc);
   img.setAttribute("alt", attrs.pageCoverAlt ?? "");
   img.setAttribute("style", `object-position:${attrs.pageCoverX}% ${attrs.pageCoverY}%`);
@@ -72,12 +72,12 @@ class TitleHeadingView {
     if (!this.decorated) return;
     const box = doc.createElement("header");
     box.setAttribute("data-id", node.attrs.id);
-    box.setAttribute("data-page-heading", "1");
+    box.setAttribute("data-blockeditor-heading", "1");
     head.removeAttribute("data-id");
     if (node.attrs.pageCoverSrc) box.append(coverImg(doc, node.attrs));
     if (node.attrs.pageIcon) {
       const mark = doc.createElement("span");
-      mark.setAttribute("data-page-icon", "");
+      mark.setAttribute("data-blockeditor-icon", "");
       mark.setAttribute("aria-hidden", "true");
       mark.textContent = node.attrs.pageIcon;
       box.append(mark);

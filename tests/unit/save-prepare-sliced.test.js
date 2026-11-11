@@ -684,7 +684,7 @@ test("a document format that rises mid-preparation re-prepares at the new floor"
   // and taken again at the new one.
   expect(captures).toBe(capturesBefore + 2);
   expect(posts.length).toBe(sentBefore + 1);
-  expect(lastPost()).toContain('<meta name="clay-page-format" content="1">');
+  expect(lastPost()).toContain('<meta name="clay-blockeditor-format" content="1">');
   expect(lastPost()).toContain("floor-rise");
 });
 

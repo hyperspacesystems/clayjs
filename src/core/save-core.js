@@ -376,7 +376,7 @@ function errorResult(err) {
     // An attempt of this save timed out, so it may have landed whatever the
     // final answer says.
     hadTimeout: timedOut || err.hadTimeout === true,
-    // The typed refusal behind `code`, kept for the caller: `page-capacity` carries
+    // The typed refusal behind `code`, kept for the caller: `blockeditor-capacity` carries
     // which limit was hit, the conversion codes carry which condition failed.
     reason: err.reason ?? null,
     // Only meaningful while a save can still retry; a caller sees how long the
@@ -445,7 +445,7 @@ function invalidHeaderResult() {
 }
 
 // How many extra sends one logical save may make while the host is still
-// converting the page. `page-converting` is a pre-commit refusal, so the same
+// converting the page. `blockeditor-converting` is a pre-commit refusal, so the same
 // body is worth offering again; anything else is surfaced on the first answer.
 const PAGE_CONVERTING_MAX_RETRIES = 3;
 const HTTP_DATE = /^(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), \d{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2} \d{2}:\d{2}:\d{2} GMT|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (?: \d|\d{2}) \d{2}:\d{2}:\d{2} \d{4})$/;
@@ -469,7 +469,7 @@ function parseRetryAfter(value) {
   return Math.max(0, Math.min(3600, Math.round((when - Date.now()) / 1000)));
 }
 
-// The host grammar for `Page-Conversion`, from `server-lib/page-conversion.js`:
+// The host grammar for `Blockeditor-Conversion`, from `server-lib/page-conversion.js`:
 // `file` takes a 64-lowercase-hex baseline and no epoch; `room` takes the same
 // baseline plus an epoch of [A-Za-z0-9-]{1,64}. Validating here means a caller
 // with bad metadata gets a typed answer instead of a wasted round trip.
@@ -535,7 +535,7 @@ function formatConversionHeader(conversion) {
  * @param {string} saveId - this attempt's §6 receipt id
  * @param {?string} etag - the stamp to send as If-Match, or null
  * @param {boolean} keepalive - whether to ask the transport to see the request through
- * @param {?string} conversionHeader - the `Page-Conversion` value for this logical save, or null
+ * @param {?string} conversionHeader - the `Blockeditor-Conversion` value for this logical save, or null
  * @param {boolean} perSaveHeaders - false for a lane that sends bytes this tab did not edit (replace), which declares nothing about them
  * @returns {{url: string, options: Object}}
  */
@@ -589,7 +589,7 @@ export function buildSaveRequest(content, userDriven, signal, saveId, etag, keep
   // The conversion request belongs to ONE logical save, and goes on every attempt
   // of it. Set after the process-global headers so the capture-bound value is the
   // one that describes these bytes.
-  if (conversionHeader) options.headers['Page-Conversion'] = conversionHeader;
+  if (conversionHeader) options.headers['Blockeditor-Conversion'] = conversionHeader;
 
   if (etag) options.headers['If-Match'] = etag;
 
@@ -906,7 +906,7 @@ async function sendSave(content, { captureId = null, conversionHeader = null, at
   // is fast and conclusive, so it gets its own turn regardless.
   let reSent = false;
   let duplicateResolved = false;
-  // `page-converting` is the one refusal that is worth offering the same bytes
+  // `blockeditor-converting` is the one refusal that is worth offering the same bytes
   // again: the host has written nothing and is telling us when it expects to be
   // ready. The capture these bytes came from is pinned here, so a capture made
   // while we wait — newer edits, a disk frame — cancels the retry instead of
@@ -946,7 +946,7 @@ async function sendSave(content, { captureId = null, conversionHeader = null, at
         continue;
       }
 
-      if (err.code === 'page-converting' && convertingRetries < PAGE_CONVERTING_MAX_RETRIES) {
+      if (err.code === 'blockeditor-converting' && convertingRetries < PAGE_CONVERTING_MAX_RETRIES) {
         if (currentCaptureId() !== retryGuard) throw err;
         convertingRetries += 1;
         // Default a missing or unparseable header to one second, so a host that
@@ -969,14 +969,14 @@ async function sendSave(content, { captureId = null, conversionHeader = null, at
 // thing whether the bytes came from a bound capture or a raw caller. `captureId`
 // is null for a raw save: it belongs to no capture and can confirm none.
 //
-// `pageFormatFloor` is internal: one save may carry a floor this tab has not
+// `blockeditorFormatFloor` is internal: one save may carry a floor this tab has not
 // noted yet, which is how the format gate's activation writes the marker. It
 // raises these bytes only, never what the tab knows the document at.
-function runSave(html, captureId, callback, conversion, capture = null, pageFormatFloor = 0, lane = null) {
+function runSave(html, captureId, callback, conversion, capture = null, blockeditorFormatFloor = 0, lane = null) {
   // A capture taken before the floor rose cannot drop the marker by omitting it:
   // the bytes that go out carry the floor this tab last saw. At floor 0 this is
   // the string itself, unchanged.
-  html = withPageFormatFloor(html, Math.max(knownPageFormatFloor(), pageFormatFloor));
+  html = withPageFormatFloor(html, Math.max(knownPageFormatFloor(), blockeditorFormatFloor));
   return new Promise((resolve) => {
     const attempts = [];
     // Read once, before the first request: the artifact belongs to the capture that
@@ -1089,8 +1089,8 @@ export function saveHtml(html, callback = () => {}) {
  * @param {Object} [options.conversion] - {source:'file', base} or {source:'room', base, epoch}
  * @returns {Promise<Object>}
  */
-export function saveCapturedHtml(html, captureId, callback = () => {}, { conversion, capture = null, pageFormatFloor, lane = null } = {}) {
-  return runSave(html, captureId, callback, conversion, capture, pageFormatFloor, lane);
+export function saveCapturedHtml(html, captureId, callback = () => {}, { conversion, capture = null, blockeditorFormatFloor, lane = null } = {}) {
+  return runSave(html, captureId, callback, conversion, capture, blockeditorFormatFloor, lane);
 }
 
 /**

@@ -178,7 +178,7 @@ const SETTLED = [
   "seo-unsent-apply-reopen",
   "seo-unsent-close-reopen",
   "ime-unsent-compose-target",
-  "page-pending-selector-target",
+  "blockeditor-pending-selector-target",
   // A bare editmode:contenteditable takes its inert form in view, the form the file saves
   // (canonicalContentEditable), so the live page matches the saved bytes, not the served ones.
   "bare-contenteditable-gains-inert",

@@ -7,7 +7,7 @@ import { bootStylePage } from "./style-adoption-helpers.js";
 
 /**
  * A Document's own editor CSS is an owned style: `createPageEditor` writes
- * `styleWithLegacyId("page-editor-style", …)` on every boot. Those bytes are only
+ * `styleWithLegacyId("blockeditor-editor-style", …)` on every boot. Those bytes are only
  * worth stripping where the file already carries that tag (an older editor saved
  * one). Everywhere else the write must not queue the stripper, so parse5 never
  * loads at boot. The split below is the two files a Document can be.
@@ -35,8 +35,8 @@ test("the page editor over a document with no saved editor style never imports t
   const editor = createPageEditor(mount());
   view.push(editor);
 
-  expect(document.getElementById("page-editor-style").textContent).toBe(PAGE_EDITOR_CSS);
-  expect(save.getLastSavedDirty()).not.toContain("page-editor-style");
+  expect(document.getElementById("blockeditor-editor-style").textContent).toBe(PAGE_EDITOR_CSS);
+  expect(save.getLastSavedDirty()).not.toContain("blockeditor-editor-style");
   expect(save.styleAdoptionPending(snapshot.captureForDirtyCheck())).toBe(false);
   await save.styleAdoptionsSettled();
   expect(requested).toEqual([]);
@@ -45,7 +45,7 @@ test("the page editor over a document with no saved editor style never imports t
 test("the page editor over a document with a saved editor style imports the stripper and strips it", async () => {
   document.head.insertAdjacentHTML(
     "beforeend",
-    '<style data-name="page-editor-style" clay="no-data">.old { color: red; }</style>'
+    '<style data-name="blockeditor-editor-style" clay="no-data">.old { color: red; }</style>'
   );
   const { forComparison, forDirty } = snapshot.captureForComparisonAndDirty();
   save.setLastSavedBaselines(forComparison, forDirty);

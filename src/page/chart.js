@@ -154,7 +154,7 @@ function option(doc, value, label, selected = false) {
 }
 
 function select(doc, field, label) {
-  const node = element(doc, "select", "page-chart-select");
+  const node = element(doc, "select", "blockeditor-chart-select");
   node.dataset.field = field;
   node.setAttribute("aria-label", label);
   return node;
@@ -173,21 +173,21 @@ export class ChartView {
     const doc = view.dom.ownerDocument;
     this.doc = doc;
     this.dom = doc.createElement("figure");
-    this.dom.className = "page-chart";
+    this.dom.className = "blockeditor-chart";
     this.dom.dataset.id = node.attrs.id ?? "";
     this.dom.dataset.type = "chart";
-    this.head = element(doc, "div", "page-chart-head");
+    this.head = element(doc, "div", "blockeditor-chart-head");
     this.head.contentEditable = "false";
-    this.title = element(doc, "span", "page-chart-title");
-    this.chip = element(doc, "button", "page-chart-source");
+    this.title = element(doc, "span", "blockeditor-chart-title");
+    this.chip = element(doc, "button", "blockeditor-chart-source");
     this.chip.type = "button";
     this.chip.contentEditable = "false";
     this.chip.setAttribute("aria-label", "Go to source table");
     this.chip.innerHTML = TABLE_ICON;
-    this.chipName = element(doc, "span", "page-chart-source-name");
+    this.chipName = element(doc, "span", "blockeditor-chart-source-name");
     this.chip.append(this.chipName);
     this.chip.addEventListener("click", () => this.goToSource());
-    this.edit = element(doc, "button", "page-chart-edit");
+    this.edit = element(doc, "button", "blockeditor-chart-edit");
     this.edit.type = "button";
     this.edit.contentEditable = "false";
     this.edit.setAttribute("aria-haspopup", "dialog");
@@ -196,14 +196,14 @@ export class ChartView {
     this.edit.append("Edit chart");
     this.edit.addEventListener("click", () => (this.panel.isConnected ? this.closePanel(true) : this.openPanel()));
     this.head.append(this.title, this.chip, this.edit);
-    this.plot = element(doc, "div", "page-chart-plot");
-    this.broken = element(doc, "div", "page-chart-broken");
+    this.plot = element(doc, "div", "blockeditor-chart-plot");
+    this.broken = element(doc, "div", "blockeditor-chart-broken");
     this.broken.hidden = true;
     this.broken.contentEditable = "false";
     this.brokenKey = null;
     this.brokenSelect = null;
     this.broken.addEventListener("click", (event) => this.brokenClick(event));
-    this.panel = element(doc, "div", "page-chart-panel");
+    this.panel = element(doc, "div", "blockeditor-chart-panel");
     this.panel.tabIndex = -1;
     this.panel.contentEditable = "false";
     this.panel.setAttribute("role", "dialog");
@@ -277,20 +277,20 @@ export class ChartView {
     const doc = this.doc;
     this.broken.textContent = "";
     this.broken.append(
-      element(doc, "div", "page-chart-broken-head", "This chart's table was deleted"),
-      element(doc, "p", "page-chart-broken-text", "Pick another table in this document, or delete the chart. Undo brings the table back."),
+      element(doc, "div", "blockeditor-chart-broken-head", "This chart's table was deleted"),
+      element(doc, "p", "blockeditor-chart-broken-text", "Pick another table in this document, or delete the chart. Undo brings the table back."),
     );
-    const actions = element(doc, "div", "page-chart-broken-actions");
+    const actions = element(doc, "div", "blockeditor-chart-broken-actions");
     if (tables.length) {
       const sources = select(doc, "rescue", "Source table");
       for (const table of tables) sources.append(option(doc, table.id, `${table.name} (${table.rows} ${table.rows === 1 ? "row" : "rows"})`));
       this.brokenSelect = sources;
-      const use = element(doc, "button", "page-chart-use", "Use this table");
+      const use = element(doc, "button", "blockeditor-chart-use", "Use this table");
       use.type = "button";
       use.dataset.action = "use";
       actions.append(sources, use);
     }
-    const remove = element(doc, "button", "page-chart-delete", "Delete chart");
+    const remove = element(doc, "button", "blockeditor-chart-delete", "Delete chart");
     remove.type = "button";
     remove.dataset.action = "delete";
     actions.append(remove);
@@ -329,8 +329,8 @@ export class ChartView {
   }
 
   row(label, ...children) {
-    const row = element(this.doc, "div", "page-chart-row");
-    if (label) row.append(element(this.doc, "span", "page-chart-label", label));
+    const row = element(this.doc, "div", "blockeditor-chart-row");
+    if (label) row.append(element(this.doc, "span", "blockeditor-chart-label", label));
     row.append(...children);
     return row;
   }
@@ -370,9 +370,9 @@ export class ChartView {
     this.titleInput = null;
     this.panel.textContent = "";
 
-    const types = element(doc, "div", "page-chart-types");
+    const types = element(doc, "div", "blockeditor-chart-types");
     for (const [kind, label] of CHART_TYPES) {
-      const button = element(doc, "button", "page-chart-type", label);
+      const button = element(doc, "button", "blockeditor-chart-type", label);
       button.type = "button";
       button.dataset.kind = kind;
       button.setAttribute("aria-pressed", String(attrs.kind === kind));
@@ -390,22 +390,22 @@ export class ChartView {
     for (const col of cols) labels.append(option(doc, col.id, col.name || col.id, col.id === attrs.x));
     this.panel.append(this.row("Labels column", labels));
 
-    const values = element(doc, "div", "page-chart-values");
+    const values = element(doc, "div", "blockeditor-chart-values");
     cols.filter((col) => col.id !== attrs.x).forEach((col, index) => {
-      const line = element(doc, "label", "page-chart-value");
+      const line = element(doc, "label", "blockeditor-chart-value");
       const check = element(doc, "input");
       check.type = "checkbox";
       check.dataset.field = "series";
       check.dataset.col = col.id;
       check.checked = attrs.series.includes(col.id);
-      const swatch = element(doc, "span", "page-chart-swatch");
+      const swatch = element(doc, "span", "blockeditor-chart-swatch");
       swatch.style.background = `var(--chart-${index % 6 + 1})`;
       swatch.setAttribute("aria-hidden", "true");
-      line.append(check, swatch, element(doc, "span", "page-chart-value-name", col.name || col.id));
+      line.append(check, swatch, element(doc, "span", "blockeditor-chart-value-name", col.name || col.id));
       values.append(line);
     });
     const valueRow = this.row(pie ? "Value column" : "Value columns", values);
-    if (pie) valueRow.append(element(doc, "span", "page-chart-hint", "Pie charts plot the first value column across rows."));
+    if (pie) valueRow.append(element(doc, "span", "blockeditor-chart-hint", "Pie charts plot the first value column across rows."));
     this.panel.append(valueRow);
 
     const highlight = select(doc, "highlight", "Highlight row");
@@ -413,7 +413,7 @@ export class ChartView {
     for (const row of rows) highlight.append(option(doc, row.id, cellText(row.cells?.[attrs.x]) || row.id, row.id === attrs.highlight));
     this.panel.append(this.row("Highlight row", highlight));
 
-    const title = element(doc, "input", "page-chart-title-input");
+    const title = element(doc, "input", "blockeditor-chart-title-input");
     title.type = "text";
     title.dataset.field = "title";
     title.setAttribute("aria-label", "Chart title");
@@ -430,13 +430,13 @@ export class ChartView {
     this.titleInput = title;
     this.panel.append(this.row("Chart title", title));
 
-    const foot = element(doc, "div", "page-chart-foot");
-    const remove = element(doc, "button", "page-chart-remove");
+    const foot = element(doc, "div", "blockeditor-chart-foot");
+    const remove = element(doc, "button", "blockeditor-chart-remove");
     remove.type = "button";
     remove.dataset.action = "remove";
     remove.innerHTML = TRASH_ICON;
     remove.append("Remove");
-    const done = element(doc, "button", "page-chart-done", "Done");
+    const done = element(doc, "button", "blockeditor-chart-done", "Done");
     done.type = "button";
     done.dataset.action = "done";
     foot.append(remove, done);
@@ -536,7 +536,7 @@ export class ChartView {
     return true;
   }
 
-  stopEvent(event) { return !!event.target.closest?.(".page-chart-head, .page-chart-panel"); }
+  stopEvent(event) { return !!event.target.closest?.(".blockeditor-chart-head, .blockeditor-chart-panel"); }
 
   destroy() {
     this.unsaved?.dispose();

@@ -61,7 +61,7 @@ test("every block type is listed before any optional feature code loads", () => 
   view.coordsAtPos = () => ({ left: 40, right: 48, top: 100, bottom: 120 });
   select(view, posOf(view, "e"));
   typeText(view, "/");
-  const labels = [...view.dom.parentElement.querySelectorAll(".page-menu-label")].map((n) => n.textContent);
+  const labels = [...view.dom.parentElement.querySelectorAll(".blockeditor-menu-label")].map((n) => n.textContent);
   expect(labels).toEqual(I.MENU_ITEMS.map((i) => i.label));
   expect(I.MENU_ITEMS.slice(0, I.BLOCK_TYPES.length)).toEqual(I.BLOCK_TYPES);
   expect(I.MENU_ITEMS.slice(I.BLOCK_TYPES.length)).toEqual(I.INSERT_ITEMS);

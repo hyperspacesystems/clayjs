@@ -15,8 +15,8 @@ const span = (node) => {
 // Offsets only, never the parsed tree, so the remembered answers stay small.
 const locate = recent(4, (html) => {
   const $ = load(html, { sourceCodeLocationInfo: true });
-  const articles = $('article[data-page]').toArray().filter((node) => !inert(node));
-  const tags = $('script[merge="page"]').toArray().filter((node) => !inert(node) &&
+  const articles = $('article[data-blockeditor]').toArray().filter((node) => !inert(node));
+  const tags = $('script[merge="blockeditor"]').toArray().filter((node) => !inert(node) &&
     ($(node).attr('clay') || '').split(/\s+/).includes('live'));
   return Object.freeze({
     articles: articles.length,
