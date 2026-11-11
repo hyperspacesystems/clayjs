@@ -6,7 +6,7 @@ let workspaceBackground = window.__clayWorkspaceBackground === true;
 document.addEventListener('clay:workspace-background', () => { workspaceBackground = true; });
 document.addEventListener('clay:workspace-foreground', () => { workspaceBackground = false; });
 
-const pageHidden = () => document.hidden || workspaceBackground;
+export const pageHidden = () => document.hidden || workspaceBackground;
 
 export class SyncStream extends EventTarget {
   constructor(url, { shared = false, sharedData = false, documentURL, lane, clientId, startupCheck = false, keepAliveWhenHidden = false, workerFeatures = ['live-data'] } = {}) {
@@ -43,7 +43,7 @@ export class SyncStream extends EventTarget {
       clearTimeout(this._hiddenTimer);
       if (pageHidden()) {
         if (this._worker) this._postWorker(this._worker, 'hidden');
-        if (!this._keepAliveWhenHidden) this._hiddenTimer = setTimeout(() => this._suspend(), HIDDEN_DELAY);
+        if (!this._keepHidden()) this._hiddenTimer = setTimeout(() => this._suspend(), HIDDEN_DELAY);
       } else {
         if (this._suspended) this._resume();
         else if (this._worker) {
@@ -52,7 +52,7 @@ export class SyncStream extends EventTarget {
       }
     };
     this._pagehide = () => this._suspend(true);
-    this._pageshow = () => { if (!pageHidden() || this._keepAliveWhenHidden) this._resume(); };
+    this._pageshow = () => { if (!pageHidden() || this._keepHidden()) this._resume(); };
     document.addEventListener('visibilitychange', this._visibility);
     document.addEventListener('clay:workspace-background', this._visibility);
     document.addEventListener('clay:workspace-foreground', this._visibility);
@@ -90,6 +90,8 @@ export class SyncStream extends EventTarget {
         this._shared = false;
         this._repair = true;
         this._reopen();
+        // Its own connection now: a page already hidden starts letting it go.
+        if (pageHidden()) this._visibility();
       };
       this._startTimer = setTimeout(worker.onerror, START_TIMEOUT);
       worker.port.onmessage = ({ data }) => {
@@ -182,6 +184,7 @@ export class SyncStream extends EventTarget {
     } catch {
       this._shared = false;
       this._reopen();
+      if (pageHidden()) this._visibility();
     }
   }
 
@@ -251,8 +254,16 @@ export class SyncStream extends EventTarget {
     }
   }
 
+  // `keepAliveWhenHidden`: true keeps the stream while hidden (a live-data room);
+  // 'shared' keeps it only while it rides the shared worker, so a page that fell
+  // back to its own connection still lets go and leaves the browser's six HTTP/1.1
+  // connections to the pages on screen.
+  _keepHidden() {
+    return this._keepAliveWhenHidden === true || (this._keepAliveWhenHidden === 'shared' && this._shared);
+  }
+
   _reopen() {
-    const notify = (this._sharedData || this._keepAliveWhenHidden) && this.readyState === 1;
+    const notify = (this._sharedData || this._keepAliveWhenHidden === true) && this.readyState === 1;
     this.readyState = 0;
     if (notify) this._emit('error');
     this._disconnect();
@@ -265,7 +276,7 @@ export class SyncStream extends EventTarget {
     this._suspended = true;
     this._repair = true;
     this.readyState = 0;
-    if (pageExit && this._keepAliveWhenHidden) this._emit('error');
+    if (pageExit && this._keepAliveWhenHidden === true) this._emit('error');
     this._disconnect();
   }
 

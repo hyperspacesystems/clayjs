@@ -221,3 +221,37 @@ test('a status frame does not consume the startup check a shared cursor carries'
     { seq: 7, resync: false, startup: true }, { seq: 8, resync: false, startup: false },
   ]);
 });
+
+// A hidden edit tab that let go of its stream missed a peer's save, and its next save
+// was refused as a conflict. On a shared stream it stays; once it falls back to its own
+// connection it lets go, so hidden tabs never hold the browser's six HTTP/1.1 connections.
+test('a stream kept while shared stays subscribed when its page is hidden', () => {
+  make(true, { keepAliveWhenHidden: 'shared' });
+  expect(workers).toHaveLength(1);
+  workers[0].send({ type: 'cursor', seq: 40, resync: false });
+  hidden(true);
+  jest.advanceTimersByTime(6000);
+  expect(workers[0].port.close).not.toHaveBeenCalled();
+  expect(workers[0].sent.at(-1).type).toBe('hidden');
+  expect(sources).toHaveLength(0);
+});
+
+test('a stream kept while shared lets go when hidden once the worker cannot start', () => {
+  global.SharedWorker = class { constructor() { throw new Error('no shared workers here'); } };
+  make(true, { keepAliveWhenHidden: 'shared' });
+  expect(sources).toHaveLength(1);
+  hidden(true);
+  jest.advanceTimersByTime(5000);
+  expect(sources[0].close).toHaveBeenCalled();
+});
+
+test('a worker that never answers a hidden page leaves a direct stream that still lets go', () => {
+  const stream = make(true, { keepAliveWhenHidden: 'shared' });
+  hidden(true);
+  jest.advanceTimersByTime(5000);
+  expect(stream._shared).toBe(false);
+  expect(sources).toHaveLength(1);
+  expect(sources[0].close).not.toHaveBeenCalled();
+  jest.advanceTimersByTime(5000);
+  expect(sources[0].close).toHaveBeenCalled();
+});

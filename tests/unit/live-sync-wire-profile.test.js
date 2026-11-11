@@ -282,3 +282,29 @@ test("send and receive never end up on different wires", async () => {
     expect(relayIsSpec).toBe(streamIsSpec);
   }
 });
+
+// A hidden edit tab that let go of its stream missed a peer's save, and its own next
+// save was refused as a conflict. It stays subscribed wherever that costs it no
+// connection of its own; a tab with its own stream on a host without live-data still
+// lets go, so hidden tabs do not use up a browser's six HTTP/1.1 connections.
+test.each([
+  [['sync', 'sync-worker'], true, true],
+  [['sync', 'sync-worker'], false, false],
+  [['sync'], true, false],
+  [['sync', 'live-data', 'sync-worker-data'], true, true],
+  [['sync', 'live-data'], false, true],
+])('host %j with SharedWorker=%s keeps a hidden edit tab subscribed: %s', async (extensions, hasWorker, keepAlive) => {
+  if (hasWorker) {
+    global.SharedWorker = class {
+      constructor(url, name) {
+        this.url = url; this.name = name;
+        this.port = { start() {}, close() {}, postMessage: jest.fn() };
+      }
+    };
+  }
+  const sync = await startedAgainst(host({ meta: { spec: 1, extensions } }));
+  try {
+    expect(sync.lane).toBe('live');
+    expect(sync.sse._keepHidden()).toBe(keepAlive);
+  } finally { sync.stop(); }
+});

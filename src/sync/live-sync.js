@@ -54,7 +54,7 @@ import { servedDocumentEtag } from '../core/host-attrs.js';
 import { recordEtag, seedEtag, lastSeenEtag, conditionalSaves, representedEtag, forgetRepresentedEtag } from '../core/etag.js';
 import { pageMaybeDirty, pauseGate, resumeGate, gateCaptureToken, gateClearIfUnchanged, gateMarkDirty } from '../lib/dirty-gate.js';
 import { gestureSeen } from '../lib/user-gesture.js';
-import { SyncStream } from './stream.js';
+import { SyncStream, pageHidden } from './stream.js';
 import { streamOpened, streamClosed, streamEvent, LIVE_EVENTS } from '../live/stream-bridge.js';
 import { conflicts, conflictLedger, loadConflicts } from './conflicts-facade.js';
 import { upgradeReplaces, stopForUpgrade } from './version-guard.js';
@@ -391,6 +391,7 @@ class LiveSync {
 
     // Store handler reference for cleanup
     this._snapshotHandler = null;
+    this._hiddenHandler = null;
 
     // High-water mark of server seqs we've seen on this channel (own echoes
     // count too). Server-broadcast payloads carry a monotonic seq
@@ -777,6 +778,12 @@ class LiveSync {
       this._settledHandler = null;
     }
 
+    if (this._hiddenHandler) {
+      document.removeEventListener('visibilitychange', this._hiddenHandler);
+      document.removeEventListener('clay:workspace-background', this._hiddenHandler);
+      this._hiddenHandler = null;
+    }
+
     this._queuedSend = null;
 
     // Cancel any pending frame and clear the queue. A morph already in
@@ -927,6 +934,18 @@ class LiveSync {
     // profile is known, so this is never null on the normal path.
     const profile = this._profile || WIRE_PROFILES.legacy;
     const path = profile.streamPath(window.location.href, this.lane, this.resumeId, this.clientId);
+    // A frame scheduled while the page showed waits for an animation frame, which a
+    // page hidden since then never runs. Move it to the hidden schedule.
+    if (!this._hiddenHandler) {
+      this._hiddenHandler = () => {
+        if (this._rafHandle == null || !pageHidden()) return;
+        this._cancelFrame(this._rafHandle);
+        this._rafHandle = null;
+        this._scheduleNextFrame();
+      };
+      document.addEventListener('visibilitychange', this._hiddenHandler);
+      document.addEventListener('clay:workspace-background', this._hiddenHandler);
+    }
     // Resolved against the real origin: a <base href> in the authored document
     // would otherwise point the sync stream at an origin the document chose.
     this.sse = new SyncStream(new URL(path, window.location.origin).href, {
@@ -936,7 +955,12 @@ class LiveSync {
       documentURL: window.location.href,
       lane: this.lane,
       clientId: this.clientId,
-      keepAliveWhenHidden: this._liveData && this.lane === 'live',
+      // A hidden edit tab stays subscribed wherever that costs no connection of its
+      // own: a live-data host keeps it for the room, and the shared worker carries it
+      // for free ('shared': the stream decides, from the connection it holds).
+      // Released, it would miss a peer's save, and its own next save would be
+      // refused as a conflict.
+      keepAliveWhenHidden: this.lane !== 'live' ? false : (this._liveData ? true : 'shared'),
       // Only a response that named its own version gives this tab anything to
       // compare against. On a host that served none there is no provenance to
       // check, and the page keeps its pre-1.9.0 startup behavior.
@@ -1922,19 +1946,35 @@ class LiveSync {
     return true;
   }
 
+  // A hidden page runs no animation frames, and Chrome slows its timers to one a
+  // second (one a minute after five minutes). A frame left waiting there kept the
+  // stamp of the version before a peer's save, so the tab's next save was refused
+  // as a conflict. A message the page posts to itself runs at once, hidden or not.
   _requestFrame(cb) {
-    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-      return window.requestAnimationFrame(cb);
+    if (pageHidden()) {
+      if (typeof MessageChannel === 'function') {
+        const channel = new MessageChannel();
+        let live = true;
+        channel.port1.onmessage = () => {
+          channel.port1.close();
+          if (live) cb();
+        };
+        channel.port2.postMessage(null);
+        return { cancel: () => { live = false; channel.port1.close(); } };
+      }
+      const timer = setTimeout(cb, 0);
+      return { cancel: () => clearTimeout(timer) };
     }
-    return setTimeout(cb, 16);
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      const frame = window.requestAnimationFrame(cb);
+      return { cancel: () => window.cancelAnimationFrame?.(frame) };
+    }
+    const timer = setTimeout(cb, 16);
+    return { cancel: () => clearTimeout(timer) };
   }
 
   _cancelFrame(handle) {
-    if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
-      window.cancelAnimationFrame(handle);
-      return;
-    }
-    clearTimeout(handle);
+    handle?.cancel?.();
   }
 
   /**
