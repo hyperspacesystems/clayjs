@@ -30,18 +30,18 @@ function articleHtml() {
 // tag, and a fetch that refuses every call so a host request cannot pass unnoticed.
 // The previous boot is disposed and settled first: its editor's work still running
 // would otherwise evaluate the mode modules for the next boot's plan.
-async function bootPage({ tagText = null } = {}) {
+async function bootPage({ tagText = null, slot: wanted = null, storage = null } = {}) {
   window.clay?.page?.dispose?.();
   await wait(400);
   jest.resetModules();
-  const slot = `page-draft-${++boots}`;
+  const slot = wanted ?? `page-draft-${++boots}`;
   delete window.clayEditMode;
   delete window.__hyperclayEditMode;
   const root = document.documentElement;
   for (const name of Array.from(root.attributes, (a) => a.name)) root.removeAttribute(name);
   root.setAttribute("visitor-drafts", slot);
   root.setAttribute("opens-in", "edit");
-  document.head.innerHTML = "";
+  document.head.innerHTML = "<title>Page</title>";
   const rules = document.createElement("script");
   rules.setAttribute("type", "application/json");
   rules.setAttribute("data-rules-name", "api");
@@ -66,6 +66,7 @@ async function bootPage({ tagText = null } = {}) {
   }
   localStorage.clear();
   sessionStorage.clear();
+  if (storage) for (const [name, value] of Object.entries(storage)) localStorage.setItem(name, value);
   window.history.replaceState({}, "", "/page.html");
   window.clay = {};
   const fetchMock = jest.fn(async () => { throw new Error("no host request is allowed in draft mode"); });
@@ -175,6 +176,31 @@ test("a return visit boots from a stored page tag", async () => {
   const second = await bootPage({ tagText });
   await second.clay.page.ready;
   expect(second.clay.page.view.state.doc.textContent).toContain("kept words");
+  expect(second.fetchMock.mock.calls.length).toBe(0);
+}, 40000);
+
+test("a reload finds the visitor's page from the record alone", async () => {
+  const slot = "page-draft-reload";
+  const first = await bootPage({ slot });
+  await first.clay.page.ready;
+  const bytes = await tapDraftTransport();
+  const view = first.clay.page.view;
+  view.dispatch(view.state.tr.insertText("record words", firstParagraph(view)));
+
+  const key = `clay:visitor-drafts:${slot}@/page.html`;
+  const recordOf = () => {
+    try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+  };
+  await waitFor(() => bytes.some((html) => html.includes("record words")) && recordOf()?.page?.html?.includes("record words"));
+  const raw = localStorage.getItem(key);
+  expect(raw).toBeTruthy();
+  const record = JSON.parse(raw);
+  expect(record.page.html).toContain("record words");
+  expect(record.live.page).toBeTruthy();
+
+  const second = await bootPage({ slot, storage: { [key]: raw } });
+  await second.clay.page.ready;
+  expect(second.clay.page.view.state.doc.textContent).toContain("record words");
   expect(second.fetchMock.mock.calls.length).toBe(0);
 }, 40000);
 

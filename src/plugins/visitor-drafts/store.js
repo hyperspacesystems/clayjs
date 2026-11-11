@@ -59,6 +59,32 @@ function same(a, b) {
   return fitsInto(a, b) && fitsInto(b, a);
 }
 
+const STORE_SEL = 'script[type="application/json"][merge][clay~="live"]';
+const ARTICLE_SEL = "article[data-page]";
+const isPagePart = (name) => name === "page" || /^page\.\d+$/.test(name);
+const canonical = (live) => JSON.stringify(Object.keys(live).sort().map((name) => [name, live[name]]));
+
+// A page document's page: every live store's value and the article the save projected
+// from them. Null for a document that is not one page, or whose store does not parse.
+function readUnit(source) {
+  const articles = source.querySelectorAll(ARTICLE_SEL);
+  if (articles.length !== 1) return null;
+  const live = {};
+  for (const tag of source.querySelectorAll(STORE_SEL)) {
+    try { live[tag.getAttribute("merge")] = JSON.parse(tag.textContent); } catch { return null; }
+  }
+  return { live, page: { rev: articles[0].getAttribute("data-rev") || "", html: articles[0].innerHTML } };
+}
+
+const sameUnit = (a, b) => (!a || !b ? a === b : a.page.rev === b.page.rev && canonical(a.live) === canonical(b.live));
+
+function unitOf(record) {
+  if (!isPlain(record?.live) || !isPlain(record?.page)) return null;
+  const { live, page } = record;
+  if (!Object.keys(live).length || typeof page.rev !== "string" || typeof page.html !== "string") return null;
+  return { live, page };
+}
+
 const hasIds = (rows) => Array.isArray(rows)
   && rows.every((row) => isPlain(row) && (typeof row.id === "string" || typeof row.id === "number"))
   && new Set(rows.map((row) => row.id)).size === rows.length;
@@ -241,6 +267,52 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
   // was built on. A read in one tab can miss a write another tab made a few milliseconds
   // earlier, so a record whose ancestry lacks this write never saw it.
   let own = null;
+  // The page as the served file states it, read once before any restore: an untouched
+  // page is never recorded, so the owner's later page reaches a visitor who never wrote in it.
+  let served;
+  // The page this tab's editor holds as its starting point, and the page in the record
+  // this tab last read or wrote. Null when no page is recorded.
+  let editorUnit = null;
+  let seenUnit = null;
+
+  const readServed = () => { if (served === undefined) served = readUnit(doc); };
+  function recordable(unit) {
+    if (!unit) return null;
+    readServed();
+    if (!served) return unit;
+    const differs = unit.page.rev !== served.page.rev ||
+      Object.keys(unit.live).some((name) => !isPagePart(name) && JSON.stringify(unit.live[name]) !== JSON.stringify(served.live[name]));
+    return differs ? unit : null;
+  }
+
+  // Runs once the article exists. The visitor-drafts module runs before the page and live
+  // plugins and registers first, so on a page still parsing this listener runs before theirs.
+  function whenArticle(fn) {
+    if (doc.querySelector(ARTICLE_SEL) || doc.readyState !== "loading") return fn();
+    doc.addEventListener("DOMContentLoaded", fn, { once: true });
+  }
+
+  // The stored values go into the store tags as JSON text with `<` escaped, so a value
+  // cannot close its tag. The article is left alone: the editor renders from the store.
+  function placeUnit(unit) {
+    readServed();
+    const article = doc.querySelector(ARTICLE_SEL);
+    if (!article) return false;
+    const tags = new Map([...doc.querySelectorAll(STORE_SEL)].map((tag) => [tag.getAttribute("merge"), tag]));
+    for (const [name, tag] of tags) if (isPagePart(name) && !(name in unit.live)) tag.remove();
+    for (const [name, value] of Object.entries(unit.live)) {
+      let tag = tags.get(name);
+      if (!tag) {
+        tag = doc.createElement("script");
+        tag.setAttribute("type", "application/json");
+        tag.setAttribute("merge", name);
+        tag.setAttribute("clay", "live");
+        article.parentNode.insertBefore(tag, article);
+      }
+      tag.textContent = JSON.stringify(value).replace(/</g, "\\u003c");
+    }
+    return true;
+  }
 
   const newId = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
 
@@ -394,12 +466,24 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     const found = read();
     if (!found) {
       base = live();
+      whenArticle(readServed);
       return { restored: false, hadDraft: false };
     }
     if (!found.record) return parkedResult(found.raw);
-    const fitted = fit(found.record.data);
-    if (!fitted || !Object.keys(fitted.data).length) return parkedResult(found.raw);
-    applyData(doc, fitted.data, rules);
+    const unit = unitOf(found.record);
+    const hasData = Object.keys(found.record.data).length > 0;
+    const fitted = hasData ? fit(found.record.data) : { data: {}, dropped: [] };
+    if (!fitted || (hasData && !Object.keys(fitted.data).length) || (!hasData && !unit)) return parkedResult(found.raw);
+    if (hasData) applyData(doc, fitted.data, rules);
+    if (unit) {
+      whenArticle(() => {
+        if (placeUnit(unit)) return;
+        console.warn("visitor-drafts: this browser's saved page has no page to go into; it was kept aside");
+        park(found.raw, { keepSlot: true });
+      });
+      editorUnit = unit;
+      seenUnit = unit;
+    }
     lastRaw = found.raw;
     base = live();
     if (fitted.dropped.length) {
@@ -413,7 +497,12 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
   // rules), so only what the page captures is compared.
   function changed() {
     if (stopped) return false;
-    try { return !fitsInto(captured(), base); } catch { return true; }
+    try {
+      const getHTML = window.clay?.getHTML;
+      if (typeof getHTML !== "function") return !fitsInto(live(), base);
+      const parsed = new DOMParser().parseFromString(getHTML.call(window.clay), "text/html");
+      return !fitsInto(extractData(parsed, rules), base) || !sameUnit(recordable(readUnit(parsed)), editorUnit);
+    } catch { return true; }
   }
 
   // One copy, the latest: a save that would replace another tab's change keeps it
@@ -459,17 +548,29 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     if (unparked != null && park(unparked, { keepSlot: true }) === null) {
       throw storageFailure(doc, new Error("an earlier saved copy could not be kept aside"));
     }
-    const mine = extractData(new DOMParser().parseFromString(html, "text/html"), rules);
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const mine = extractData(parsed, rules);
+    const mineUnit = recordable(readUnit(parsed));
+    const mineChanged = !sameUnit(mineUnit, editorUnit);
     const current = getRaw();
-    if (fitsInto(mine, base) && (current === lastRaw || current == null)) {
+    if (fitsInto(mine, base) && !mineChanged && (current === lastRaw || current == null)) {
       setDraftStoreFailed(false);
       doc.dispatchEvent(new CustomEvent("clay:drafts-saved", { detail: { data: mine, unchanged: true } }));
       return mine;
     }
     const { data, stored, ancestry, parentData } = merge(mine);
+    const record = current == null ? null : parse(current);
+    const theirs = unitOf(record);
+    // A tab whose page did not change keeps the recorded page: its editor may hold an older one.
+    // Both tabs changed it: this tab's page is written and the other is kept aside, as
+    // for any field both tabs changed.
+    const unit = mineChanged ? mineUnit : (record ? theirs : mineUnit);
+    if (mineChanged && record && !sameUnit(theirs, seenUnit)) keepConflict(current);
     const id = newId();
-    const raw = stored ?? JSON.stringify({ v: RECORD_VERSION, savedAt: now().toISOString(), id, ancestry, data });
-    if (!stored) {
+    const raw = stored && sameUnit(unit, theirs)
+      ? stored
+      : JSON.stringify({ v: RECORD_VERSION, savedAt: now().toISOString(), id, ancestry, data, ...(unit && { live: unit.live, page: unit.page }) });
+    if (raw !== stored) {
       try {
         if (!storage) throw new Error("no storage");
         storage.setItem(key, raw);
@@ -482,6 +583,8 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     if (taken.length) adopt(Object.fromEntries(taken.map((name) => [name, data[name]])));
     lastRaw = raw;
     base = data;
+    if (mineChanged) editorUnit = mineUnit;
+    seenUnit = unit;
     setDraftStoreFailed(false);
     doc.dispatchEvent(new CustomEvent("clay:drafts-saved", { detail: { data } }));
     return data;
