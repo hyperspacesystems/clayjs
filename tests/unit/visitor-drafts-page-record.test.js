@@ -213,3 +213,52 @@ test("a Journal record is unchanged", () => {
   expect(stored.v).toBe(1);
   expect(article()).toBeNull();
 });
+
+test("a page cleared back to the served text still reaches the other tab", () => {
+  setPage({ page: PAGE });
+  const storage = fakeStorage({ [KEY]: pageRecord({ id: "a", rev: "r1" }) });
+  const store = createStore({ doc: document, storage, now });
+  expect(store.restore().restored).toBe(true);
+
+  store.write(savedBytes({ rev: "r0", page: PAGE }));
+
+  const record = JSON.parse(storage.getItem(KEY));
+  expect(record.page).toBeTruthy();
+  expect(record.page.rev).toBe("r0");
+});
+
+test("a data-only save leaves the other tab's page unseen", () => {
+  setPage();
+  const storage = fakeStorage({ [KEY]: pageRecord({ id: "a", rev: "r1" }) });
+  const store = createStore({ doc: document, storage, now });
+  expect(store.restore().restored).toBe(true);
+  storage.setItem(KEY, pageRecord({ id: "b", rev: "r2" }));
+
+  store.write(savedBytes({ rev: "r1", title: "Typed" }));
+  expect(JSON.parse(storage.getItem(KEY)).page.rev).toBe("r2");
+
+  jest.spyOn(console, "warn").mockImplementation(() => {});
+  store.write(savedBytes({ rev: "r3", title: "Typed", article: "<p>mine</p>" }));
+
+  const conflict = JSON.parse(storage.getItem(KEY + ":conflict"));
+  expect(conflict.page.rev).toBe("r2");
+  expect(JSON.parse(storage.getItem(KEY)).page.rev).toBe("r3");
+});
+
+test("a page is placed even when no saved field fits the rules", () => {
+  setPage({ rules: '{"heading":"h1"}', rev: "r1", article: "<h1>served</h1>", page: PAGE });
+  const raw = pageRecord({ title: "x", rev: "r1" });
+  const storage = fakeStorage({ [KEY]: raw });
+  jest.spyOn(console, "warn").mockImplementation(() => {});
+  const store = createStore({ doc: document, storage, now });
+
+  const result = store.restore();
+
+  expect(result.restored).toBe(true);
+  expect(result.partial).toBe(true);
+  const tag = article().previousElementSibling;
+  expect(tag.getAttribute("merge")).toBe("page");
+  expect(JSON.parse(tag.textContent)).toEqual(PAGE);
+  expect(storage.getItem(KEY)).toBe(raw);
+  expect(storage.keys().filter((name) => name.startsWith(KEY + ":unreadable:"))).toEqual([KEY + ":unreadable:" + SAVED_AT]);
+});

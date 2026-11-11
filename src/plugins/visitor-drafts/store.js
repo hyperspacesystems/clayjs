@@ -282,7 +282,10 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     if (!served) return unit;
     const differs = unit.page.rev !== served.page.rev ||
       Object.keys(unit.live).some((name) => !isPagePart(name) && JSON.stringify(unit.live[name]) !== JSON.stringify(served.live[name]));
-    return differs ? unit : null;
+    // An untouched page is never recorded, so the owner's later page reaches a visitor who
+    // never wrote in it. Once this tab has held a recorded page, every page is recorded,
+    // even one returned to the served text, so a deletion reaches the other tabs too.
+    return differs || editorUnit || seenUnit ? unit : null;
   }
 
   // Runs once the article exists. The visitor-drafts module runs before the page and live
@@ -473,8 +476,12 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     const unit = unitOf(found.record);
     const hasData = Object.keys(found.record.data).length > 0;
     const fitted = hasData ? fit(found.record.data) : { data: {}, dropped: [] };
-    if (!fitted || (hasData && !Object.keys(fitted.data).length) || (!hasData && !unit)) return parkedResult(found.raw);
-    if (hasData) applyData(doc, fitted.data, rules);
+    const dataFits = Boolean(fitted) && (!hasData || Object.keys(fitted.data).length > 0);
+    // The page does not depend on the rules: a page is placed even when no saved field fits,
+    // and the whole record is kept aside as well.
+    if (!unit && !dataFits) return parkedResult(found.raw);
+    if (!unit && !hasData) return parkedResult(found.raw);
+    if (hasData && dataFits) applyData(doc, fitted.data, rules);
     if (unit) {
       whenArticle(() => {
         if (placeUnit(unit)) return;
@@ -486,9 +493,9 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     }
     lastRaw = found.raw;
     base = live();
-    if (fitted.dropped.length) {
+    if (!dataFits || fitted.dropped.length) {
       const parkedKey = park(found.raw, { keepSlot: true });
-      return { restored: true, hadDraft: true, data: fitted.data, partial: true, parked: Boolean(parkedKey), blocked: !parkedKey };
+      return { restored: true, hadDraft: true, data: dataFits ? fitted.data : {}, partial: true, parked: Boolean(parkedKey), blocked: !parkedKey };
     }
     return { restored: true, hadDraft: true, data: fitted.data };
   }
@@ -501,7 +508,9 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
       const getHTML = window.clay?.getHTML;
       if (typeof getHTML !== "function") return !fitsInto(live(), base);
       const parsed = new DOMParser().parseFromString(getHTML.call(window.clay), "text/html");
-      return !fitsInto(extractData(parsed, rules), base) || !sameUnit(recordable(readUnit(parsed)), editorUnit);
+      const unit = recordable(readUnit(parsed));
+      // A page equal to the one another tab recorded and this tab took in is not this tab's change.
+      return !fitsInto(extractData(parsed, rules), base) || (!sameUnit(unit, editorUnit) && !sameUnit(unit, seenUnit));
     } catch { return true; }
   }
 
@@ -584,7 +593,9 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     lastRaw = raw;
     base = data;
     if (mineChanged) editorUnit = mineUnit;
-    seenUnit = unit;
+    // Only a page this tab wrote, or the first record, is one this tab has seen: a page kept
+    // from another tab is not in this tab's editor yet.
+    if (mineChanged || !record) seenUnit = unit;
     setDraftStoreFailed(false);
     doc.dispatchEvent(new CustomEvent("clay:drafts-saved", { detail: { data } }));
     return data;
@@ -617,9 +628,9 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     // adopting a record that dropped its own work.
     if (forked(record) && typeof window.clay?.getHTML === "function") return writeLive();
     const adopted = record && adopt(record.data);
-    if (!adopted) return false;
+    if (!adopted && !unitOf(record)) return false;
     lastRaw = raw;
-    base = { ...base, ...adopted };
+    base = { ...base, ...(adopted || {}) };
     return true;
   }
 

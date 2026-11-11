@@ -1736,8 +1736,12 @@ if (isDraftMode) {
         merged = false;
       }
     }
+    // The provider re-offers this tab's own edits on a timer; a hide before it fires would
+    // capture the other tab's page alone. Reconcile now, so a capture holds both.
+    if (merged) active?.binding?.provider?.settle?.();
     if (merged) adopted?.();
   });
+  document.dispatchEvent(new CustomEvent("clay:drafts-page-listening"));
 }
 
 // A live entry imports this module while the committed mode is still view: the install
