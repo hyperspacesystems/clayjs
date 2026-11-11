@@ -115,6 +115,20 @@ function firstParagraph(view) {
 
 const docOf = (html) => new DOMParser().parseFromString(html, "text/html");
 
+// The slash menu, opened the way a person does: the caret in an empty line and the
+// character typed into it. jsdom has no layout, so the caret's coordinates are stubbed.
+async function openSlashMenu(view) {
+  const pm = await import("../../../src/vendor/prosemirror.vendor.js");
+  view.coordsAtPos = () => ({ left: 40, right: 48, top: 100, bottom: 120 });
+  view.focus();
+  view.dispatch(view.state.tr.setSelection(pm.state.TextSelection.create(view.state.doc, firstParagraph(view))));
+  const { from, to } = view.state.selection;
+  view.dispatch(view.state.tr.insertText("/", from, to));
+  return view.dom.parentElement.querySelector(".page-menu");
+}
+
+const menuLabels = (menu) => [...menu.querySelectorAll(".page-menu-item .page-menu-label")].map((n) => n.textContent);
+
 test("a visitor's page boots editable with no host request", async () => {
   const { clay, fetchMock } = await bootPage();
   const status = await clay.page.ready;
@@ -163,6 +177,31 @@ test("a return visit boots from a stored page tag", async () => {
   expect(second.clay.page.view.state.doc.textContent).toContain("kept words");
   expect(second.fetchMock.mock.calls.length).toBe(0);
 }, 40000);
+
+test("a visitor's slash menu has no Image or File, and shows the note", async () => {
+  const { clay } = await bootPage();
+  await clay.page.ready;
+  const menu = await openSlashMenu(clay.page.view);
+  expect(menu).toBeTruthy();
+  const labels = menuLabels(menu);
+  expect(labels).not.toContain("Image");
+  expect(labels).not.toContain("File");
+  expect(labels).toContain("Text");
+  expect(menu.querySelector(".page-menu-note").textContent).toBe("Download your copy to add pictures and files.");
+}, 30000);
+
+test("a visitor's dropped image is refused with the note, not offered as an embed", async () => {
+  const { clay } = await bootPage();
+  await clay.page.ready;
+  const view = clay.page.view;
+  const { mediaKey, insertFiles } = await import("../../../src/page/media.js");
+  const item = () => mediaKey.getState(view.state).items[0];
+  insertFiles(view, [new File(["x"], "a.png", { type: "image/png" })]);
+  await waitFor(() => item()?.state !== "uploading");
+  expect(item().state).toBe("error");
+  expect(item().state).not.toBe("embed-choice");
+  expect(item().message).toBe("Download your copy to add pictures and files.");
+}, 30000);
 
 test("no persistent storage warning appears for a visitor", async () => {
   const { clay } = await bootPage();

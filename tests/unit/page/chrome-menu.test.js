@@ -34,6 +34,7 @@ describe("the slash trigger", () => {
     expect(typeText(view, "/")).toBe(true);
     expect(isOpen(view)).toBe(true);
     expect(labels(view)).toEqual(["Text", "Heading 1", "Heading 2", "Heading 3", "Bulleted list", "Numbered list", "Checklist", "Toggle", "Toggle heading 1", "Toggle heading 2", "Toggle heading 3", "Callout", "Quote", "Code", "Divider", "Table of contents", "Image", "File", "Table", "Import CSV…", "Board", "Mention", "Date", "Emoji", "Import Markdown…"]);
+    expect(menu(view).querySelector(".page-menu-note")).toBe(null);
   });
 
   test("opens after a space in the middle of a line, and at the start of a line that has text", () => {

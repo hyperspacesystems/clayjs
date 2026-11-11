@@ -30,6 +30,8 @@ const GENERIC_ERROR = "Couldn't save";
 const GENERIC_OFFLINE = "Offline, not saved";
 const REPLACED_TEXT = "This page was changed outside the editor. Reload to see it.";
 const TOO_LARGE_TEXT = "That change is too large to share, so it was not saved. Reload the page to keep editing.";
+const VISITOR_MEDIA = "Download your copy to add pictures and files.";
+const draftUpload = (file, opts) => Promise.resolve({ ok: false, code: "draft", msg: VISITOR_MEDIA });
 const CLIENT_KEY = /^[ur][0-9a-z]+(-[0-9a-z]+){2}$/;
 export const PAGE_FULL_MESSAGE = "This document is full, though your changes are still here to download. To edit again, reload this tab after another editor, or the owner in another browser, deletes content.";
 const OVERWRITTEN_TEXT = "Some changes you made were replaced by a change made outside the editor.";
@@ -977,7 +979,7 @@ function mergeRepresentedPage(store, value) {
       install: async (id, mod) => {
         if (!editorView) await editorReady;
         if (!isCurrent(inst) || !editorView) return null;
-        const context = { view: editorView, upload: options.upload, board: binding.board, undo: binding.undo, redo: binding.redo, revise: aiRequested() ? (toolId) => { openAi({ target: { toolId } }); } : null };
+        const context = { view: editorView, upload: isDraftMode ? draftUpload : options.upload, board: binding.board, undo: binding.undo, redo: binding.redo, revise: aiRequested() ? (toolId) => { openAi({ target: { toolId } }); } : null };
         if (id === "tool") {
           context.toolHost = await openTools();
           if (!isCurrent(inst)) return null;
@@ -1197,7 +1199,9 @@ function mountAndAttach(inst, source, loaded) {
         board: binding.board,
         editable: false,
         features,
+        upload: isDraftMode ? draftUpload : options.upload,
         onAiTool: aiRequested() ? (_view, remove) => { openAi({ remove }); } : null,
+        mediaNote: isDraftMode ? VISITOR_MEDIA : null,
         reviseTool: aiRequested() ? (toolId) => { openAi({ target: { toolId } }); } : null,
         formatGate: inst.loadFormatGate,
       });

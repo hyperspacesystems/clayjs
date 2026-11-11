@@ -172,6 +172,7 @@ ${INDENTS.map((n) => `:where(article[data-page], .page-editor) .page-li[data-ind
 .page-menu-text { display: flex; flex-direction: column; min-width: 0; }
 .page-menu-desc { color: var(--page-pop-muted); font-size: 12px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-menu-empty { padding: 8px 10px; color: var(--page-pop-muted); font-size: 13px; }
+.page-menu-note { padding: 8px 10px; color: var(--page-pop-muted); font-size: 13px; }
 .page-shell.is-dragging, .page-shell.is-dragging .page-grip { cursor: grabbing; }
 .page-shell[data-drop="none"] { cursor: no-drop; }
 .page-drop { position: absolute; z-index: 3; left: var(--page-drop-x, 0px); top: var(--page-drop-y, 0px); width: var(--page-drop-w, 0px); height: 2px; margin-top: -1px; border-radius: 1px; background: var(--page-drop, var(--page-accent)); pointer-events: none; }
@@ -620,10 +621,10 @@ function toolFollowPlugin(toolHost) {
   });
 }
 
-export function pagePlugins({ upload = defaultUpload, highlight, history: useHistory = true, undo, redo, onAiTool = null, toolHost = null, features = null, commandHost = null } = {}) {
+export function pagePlugins({ upload = defaultUpload, highlight, history: useHistory = true, undo, redo, onAiTool = null, mediaNote = null, toolHost = null, features = null, commandHost = null } = {}) {
   return [
     announcementPlugin(),
-    chromePlugin({ onAiTool }),
+    chromePlugin({ onAiTool, mediaNote }),
     commandHost ? commandWatchPlugin(commandHost) : null,
     slashRangePlugin(),
     toolFollowPlugin(toolHost),
@@ -709,7 +710,7 @@ function checkboxClick(view, event) {
 // Mounts the editor in `mount`, inside a .page-shell wrapper (the surface a
 // theme styles). `onChange(record)` gets the block record (blockMap) after
 // every transaction that changed the document.
-export function createPageEditor(mount, { blocks = null, onChange = null, upload, highlight, doc: initialDoc, dispatch, history: useHistory = true, undo, redo, editable = true, toolHost = null, onAiTool = null, reviseTool = null, board = null, features: providedFeatures = null, formatGate = null } = {}) {
+export function createPageEditor(mount, { blocks = null, onChange = null, upload, highlight, doc: initialDoc, dispatch, history: useHistory = true, undo, redo, editable = true, toolHost = null, onAiTool = null, mediaNote = null, reviseTool = null, board = null, features: providedFeatures = null, formatGate = null } = {}) {
   const doc = mount.ownerDocument;
   // Editor chrome, injected on every edit-mode boot and kept out of the saved file:
   // the reader theme <link> styles the page for visitors.
@@ -740,7 +741,7 @@ export function createPageEditor(mount, { blocks = null, onChange = null, upload
     };
   }
   view = new pmView.EditorView(shell, {
-    state: pageState(blocks, { upload, highlight, doc: initialDoc, history: useHistory, undo, redo, onAiTool, toolHost, features, commandHost }),
+    state: pageState(blocks, { upload, highlight, doc: initialDoc, history: useHistory, undo, redo, onAiTool, mediaNote, toolHost, features, commandHost }),
     attributes: { class: "page-editor" },
     // The phone keeps a fixed bar and the plus and grip at the bottom: a caret scrolled into
     // view stops clear of them.

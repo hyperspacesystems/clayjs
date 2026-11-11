@@ -324,9 +324,10 @@ export function reanchorPageMenu(view, from, to) {
 }
 
 class Chrome {
-  constructor(view, onAiTool) {
+  constructor(view, onAiTool, mediaNote) {
     this.view = view;
     this.onAiTool = onAiTool;
+    this.mediaNote = mediaNote;
     this.shell = view.dom.parentElement;
     this.menu = null;
     this.priorAria = null;
@@ -751,9 +752,11 @@ class Chrome {
     if (m.mode === "external") return m.externalItems || [];
     if (m.mode === "actions") return actionsFor(this.view.state);
     if (m.mode === "more") return this.moreItems();
-    const items = m.mode === "turn" ? BLOCK_TYPES : insertItemsFor(this.view.state, this.onAiTool
+    const all = this.onAiTool
       ? [...MENU_ITEMS, { key: "ai", label: "Make a tool with AI…", icon: "✦", aliases: ["tool", "generate"], insert: "ai" }]
-      : MENU_ITEMS);
+      : MENU_ITEMS;
+    const offered = this.mediaNote ? all.filter((item) => item.key !== "image" && item.key !== "file") : all;
+    const items = m.mode === "turn" ? BLOCK_TYPES : insertItemsFor(this.view.state, offered);
     return rankItems(items, m.query);
   }
 
@@ -818,6 +821,12 @@ class Chrome {
       }
       nodes.push(row);
     });
+    // A visitor's draft keeps no pictures or files: the menu says where they go instead.
+    if (this.mediaNote && m.mode !== "turn" && m.mode !== "actions" && m.mode !== "more" && m.mode !== "external") {
+      const note = el("div", "page-menu-note", { role: "note" });
+      note.textContent = this.mediaNote;
+      nodes.push(note);
+    }
     this.menuEl.replaceChildren(...nodes);
     if (slash && m.items.length) this.view.dom.setAttribute("aria-activedescendant", `${this.menuId}-${m.active}`);
     else this.view.dom.removeAttribute("aria-activedescendant");
@@ -1107,12 +1116,12 @@ class Chrome {
   }
 }
 
-export function chromePlugin({ onAiTool = null } = {}) {
+export function chromePlugin({ onAiTool = null, mediaNote = null } = {}) {
   let chrome = null;
   return new Plugin({
     key: chromeKey,
     view(view) {
-      chrome = new Chrome(view, onAiTool);
+      chrome = new Chrome(view, onAiTool, mediaNote);
       chromeFor.set(view, chrome);
       return chrome;
     },
