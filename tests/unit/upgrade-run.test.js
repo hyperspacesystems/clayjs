@@ -153,8 +153,8 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-const PAGE_ARTICLE = '<article data-page="1"><h1 data-id="title">Mine</h1><p data-id="p1">my words</p></article>';
-const PAGE_STORE_TAG = '<script type="application/json" merge="page.tools" clay="live">{"a":1}</script>';
+const PAGE_ARTICLE = '<article data-blockeditor="1"><h1 data-id="title">Mine</h1><p data-id="p1">my words</p></article>';
+const PAGE_STORE_TAG = '<script type="application/json" merge="blockeditor.tools" clay="live">{"a":1}</script>';
 
 function pageDocument({ version, article = "", store = "", marker = "" }) {
   return `<!DOCTYPE html><html><head>
@@ -170,8 +170,8 @@ describe("a page document", () => {
     const oldHtml = pageDocument({ version: "1.0.0", article: PAGE_ARTICLE, store: PAGE_STORE_TAG });
     const newHtml = pageDocument({
       version: "1.1.0",
-      article: '<article data-page="1"><h1 data-id="title"></h1></article>',
-      store: '<script type="application/json" merge="page.tools" clay="live">{}</script>',
+      article: '<article data-blockeditor="1"><h1 data-id="title"></h1></article>',
+      store: '<script type="application/json" merge="blockeditor.tools" clay="live">{}</script>',
       marker: '<meta name="layout" content="new">',
     });
     const update = loadMini(oldHtml);
@@ -319,6 +319,39 @@ describe("the conservation check", () => {
     expect(saved(ids.labels).hasAttribute("data-labels")).toBe(false);
     expect(saved(tickedId).hasAttribute("data-done")).toBe(false);
     expect(upgrade.extractAll(savedDoc).dataByName).toEqual(before);
+  });
+
+  // A card is the owner's own, so a field the new version adds to cards starts empty in every one of
+  // them. It never starts as the value of the new version's sample card at the same place.
+  test("a field the new version adds to every card starts empty in the owner's cards", async () => {
+    loadKanban();
+    const before = upgrade.extractAll(document).dataByName.api;
+    const cardCount = before.lists.reduce((n, list) => n + list.cards.length, 0);
+    const html = newerKanban()
+      .replace('"num":"@data-num",', '"num":"@data-num","priority":"@data-priority",')
+      .replaceAll('<li class="card" item ', '<li class="card" item data-priority="high" ');
+    const sample = new DOMParser().parseFromString(html, "text/html");
+    expect(sample.querySelectorAll("#board li.card[item][data-priority='high']").length).toBe(cardCount);
+    expect(upgrade.extractAll(sample).dataByName.api.lists[0].cards[0].priority).toBe("high");
+    const clay = setupClay();
+
+    const result = await apply(updateFor(html), {
+      clay,
+      fetchFn: sourceFetcher(html),
+      reload: jest.fn(),
+      doc: document,
+      loc: location,
+    });
+
+    expect(result).toEqual(expect.objectContaining({ ok: true }));
+    const savedDoc = new DOMParser().parseFromString(clay.save.replace.mock.calls[0][0], "text/html");
+    expect(savedDoc.querySelectorAll("#board li.card[item]").length).toBe(cardCount);
+    expect(savedDoc.querySelectorAll("#board li.card[item][data-priority]").length).toBe(0);
+    const after = upgrade.extractAll(savedDoc).dataByName.api;
+    expect(after.lists.flatMap((list) => list.cards.map((card) => card.priority))).toEqual(Array(cardCount).fill(null));
+    // Everything the owner had is still theirs.
+    const withoutPriority = JSON.parse(JSON.stringify(after, (key, value) => (key === "priority" ? undefined : value)));
+    expect(withoutPriority).toEqual(before);
   });
 
   test("a transform's declared rename passes the check", async () => {
