@@ -168,10 +168,10 @@
       "eventSources": 1,
       "listeners": {
         "window": 19,
-        "document": 115,
-        "Element": 51
+        "document": 114,
+        "Element": 49
       },
-      "observers": 5,
+      "observers": 3,
       "intervals": 0,
       "clayKeys": [
         "Mutation",
@@ -277,10 +277,10 @@
       "eventSources": 1,
       "listeners": {
         "window": 9,
-        "document": 42,
-        "Element": 13
+        "document": 41,
+        "Element": 9
       },
-      "observers": 3,
+      "observers": 1,
       "intervals": 0,
       "clayKeys": [
         "Mutation",
