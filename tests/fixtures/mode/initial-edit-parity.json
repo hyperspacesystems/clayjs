@@ -169,7 +169,7 @@
       "listeners": {
         "window": 19,
         "document": 117,
-        "Element": 48
+        "Element": 50
       },
       "observers": 3,
       "intervals": 0,
@@ -278,7 +278,7 @@
       "listeners": {
         "window": 9,
         "document": 41,
-        "Element": 9
+        "Element": 11
       },
       "observers": 1,
       "intervals": 0,
@@ -354,7 +354,7 @@
       "listeners": {
         "window": 17,
         "document": 84,
-        "Element": 11
+        "Element": 13
       },
       "observers": 1,
       "intervals": 0,
@@ -452,7 +452,7 @@
       "listeners": {
         "window": 9,
         "document": 41,
-        "Element": 7
+        "Element": 9
       },
       "observers": 0,
       "intervals": 0,

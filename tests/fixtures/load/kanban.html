@@ -23,7 +23,7 @@ Kanban: a board of lists and cards, Trello style, in one file.
 <head>
 <meta charset="utf-8">
 <meta name="hyper-source" content="https://hyperclay.com/templates/kanban/hosted/latest.html">
-<meta name="hyper-version" content="1.3.0">
+<meta name="hyper-version" content="1.4.0">
 <meta name="clay-template" content="kanban hosted">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0c2635">
@@ -68,6 +68,7 @@ h1,h2,h3,h4,p{margin:0}
 /* top bar */
 .topbar{height:56px;background:var(--navy);color:var(--bar-ink);display:flex;align-items:center;padding:0 calc(20px + var(--clay-menu-width, 0px)) 0 20px;gap:14px}
 .brandmark{width:22px;height:22px;flex-shrink:0;fill:var(--bar-icon);display:block}
+.brandmark rect:nth-child(2){fill:var(--bar-icon-2)}
 .board-title{display:flex;align-items:center;gap:8px;min-width:0;padding:0 8px;margin-left:-4px;color:var(--bar-ink);font-size:17px;font-weight:600;letter-spacing:-.4px}
 .board-title span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .board-title svg{color:var(--bar-icon);width:14px;height:14px}
@@ -91,11 +92,10 @@ h1,h2,h3,h4,p{margin:0}
 .me-button[hidden]{display:none}
 .me-button .avatar{width:28px;height:28px;border:2px solid var(--focus);font-size:10px}
 .me-button:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
-.save-chip{font-size:11px;color:var(--bar-muted);white-space:nowrap;display:flex;align-items:center;gap:6px}
-.save-chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--status-idle)}
-.save-chip[data-state="saved"]::before{background:var(--status-ok)}
-.save-chip[data-state="saving"]::before{background:var(--status-busy)}
-.save-chip[data-state="error"]::before,.save-chip[data-state="conflict"]::before,.save-chip[data-state="offline"]::before{background:var(--status-error)}
+/* The chip is the board's failure message: nothing while all is well, and words when a save did not go through. */
+.save-chip{font-size:11px;color:var(--bar-muted);white-space:nowrap;display:none;align-items:center;gap:6px}
+.save-chip:is([data-state="error"],[data-state="conflict"],[data-state="offline"]){display:flex}
+.save-chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--status-error)}
 
 /* avatars: full colour, near-white initials */
 .avatar{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:26px;height:26px;border-radius:50%;font-size:10px;font-weight:600;letter-spacing:-.2px;color:var(--avatar-ink);background:var(--avatar-5);border:2px solid var(--paper);line-height:1}
@@ -123,12 +123,12 @@ html:not([editmode="true"]) .list-handle{cursor:default}
 .cards{grid-column:1/-1;align-self:stretch;list-style:none;margin:0;padding:2px 2px 4px;overflow-y:auto;min-height:6px;scrollbar-width:thin}
 .add-card{grid-column:1/-1;display:flex;gap:8px;align-items:center;width:100%;padding:0 10px;font-size:12px;color:var(--muted);text-align:left}
 .add-card svg{width:15px}
-.add-list-tile{flex:0 0 272px;display:flex;align-items:center;gap:8px;justify-content:center;border:1px dashed var(--dashed);border-radius:11px;min-height:48px;color:var(--muted);font-size:13px}
+.add-list-tile{flex:0 0 272px;display:flex;align-items:center;gap:8px;justify-content:center;border:1px solid var(--dashed);border-radius:11px;min-height:48px;color:var(--muted);font-size:13px}
 .capture-form{grid-column:1/-1;background:var(--paper);border:1px solid var(--line-2);border-radius:8px;box-shadow:var(--shadow);padding:8px;margin:0 0 6px;display:flex;flex-direction:column;gap:6px}
-.capture-form label{display:block;font-size:11px;color:var(--muted)}
-.capture-form textarea{display:block;width:100%;margin-top:4px;padding:6px 8px;min-height:46px;font:inherit;font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--field-line);border-radius:6px;resize:vertical}
+.capture-form label{display:block;position:relative}
+.capture-form textarea{display:block;width:100%;padding:6px 8px;min-height:46px;font:inherit;font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--field-line);border-radius:6px;resize:vertical}
 .capture-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.capture-actions button{font-size:12px;padding:0 10px}
+.capture-actions button{font-size:13px;padding:0 16px}
 .capture-actions button[type="submit"]{background:var(--navy);color:var(--on-primary)}
 .capture-message{font-size:11px;color:var(--muted);margin:0}
 .capture-message:empty{display:none}
@@ -149,11 +149,11 @@ html:not([editmode="true"]) .list-handle{cursor:default}
 .card:not(:has(>.card-face))>:not(.card-title){display:none}
 .card:hover{border-color:var(--card-hover-line);box-shadow:0 4px 14px var(--shade-hover)}
 .card.sortable-ghost{opacity:.4}
-.card-open{padding:12px 13px;width:100%;text-align:left;display:block;border-radius:7px;min-height:0}
+.card-open{--pad-y:12px;--pad-x:13px;padding:var(--pad-y) var(--pad-x);width:100%;text-align:left;display:block;border-radius:7px;min-height:0}
 .card-open:hover{background:transparent!important}
 .card-open:focus-visible{outline-offset:-3px}
-.cover{display:block;height:28px;margin:-12px -13px 11px;background:var(--solid,var(--field-line))}
-.cover-img{display:block;width:calc(100% + 26px);height:120px;background:var(--img) center/cover;margin:-12px -13px 11px}
+.cover{display:block;height:28px;margin:calc(-1*var(--pad-y,12px)) calc(-1*var(--pad-x,13px)) 11px;background:var(--solid,var(--field-line))}
+.cover-img{display:block;width:calc(100% + 2*var(--pad-x,13px));height:120px;background:var(--img) center/cover;margin:calc(-1*var(--pad-y,12px)) calc(-1*var(--pad-x,13px)) 11px}
 .face-title{display:block;font-size:13px;line-height:1.55;font-weight:500;letter-spacing:-.1px;overflow-wrap:anywhere;white-space:pre-line}
 .face-chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px}
 .face-bottom{display:flex;align-items:center;gap:5px;margin-top:10px}
@@ -192,7 +192,8 @@ html:not([editmode="true"]) .list-handle{cursor:default}
 .small-dialog::backdrop{background:var(--backdrop)}
 .small-dialog h2{font-size:17px;letter-spacing:-.4px;margin-bottom:12px}
 .small-dialog p{font-size:13px;color:var(--muted);margin-bottom:14px}
-.small-dialog label{display:block;font-size:12px;color:var(--muted);margin-bottom:12px}
+.small-dialog label{display:block;position:relative;font-size:12px;color:var(--muted);margin-bottom:12px}
+.small-dialog label>.sr-only+*{margin-top:0}
 .small-dialog input,.small-dialog select,.small-dialog textarea{display:block;width:100%;padding:8px 10px;margin-top:5px;min-height:38px}
 .small-dialog textarea{min-height:110px;resize:vertical}
 .help-dialog{width:430px}
@@ -213,6 +214,11 @@ html:not([editmode="true"]) .list-handle{cursor:default}
 .toast:not(:has(button)){padding:10px 16px}
 .toast .toast-text{width:240px;max-width:40vw;height:56px;padding:6px 8px;border-radius:6px;border:1px solid var(--bar-line-2);background:var(--bar-deep);color:var(--bar-ink);font:inherit}
 .history-controls{display:flex;align-items:center;gap:8px}
+/* The settings menu holds Undo and Redo, for an owner and for a visitor, so the page and the open card do not repeat them.
+   The two buttons are left for a runtime whose menu does not sit in the page's slot. */
+.board-app:has(.menu-slot > :not(template), .detail-menu > *) .history-controls{display:none}
+.detail-menu{flex:none;display:inline-flex;--gear-ink:var(--ink);--gear-line:transparent;--gear-hover:var(--hover);--gear-active:var(--hover);--gear-active-line:var(--line-2)}
+.detail-menu:empty{display:none}
 .card-detail .history-button{color:var(--ink);border-color:var(--line-2)}
 .card-detail .history-button:hover:not(:disabled){background:var(--hover)}
 .history-note{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:41;display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px);padding:6px 6px 6px 16px;background:var(--note-bg);color:var(--note-ink);border:1px solid var(--note-line);border-radius:8px;font-size:12px;box-shadow:0 8px 25px var(--shade-toast)}
@@ -349,13 +355,11 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
 }
 /* Narrower still, the save state keeps its dot and drops its words, as on a phone. */
 @media (min-width:761px) and (max-width:900px){
-  .save-chip span{display:none}
 }
 
 @media (max-width:760px){
   .topbar{height:auto;padding:10px calc(14px + var(--clay-menu-width, 0px)) 10px 14px;gap:8px 10px;flex-wrap:wrap}
   .board-title{flex:1;font-size:17px}
-  .save-chip span{display:none}
   .top-actions{order:3;width:100%;gap:8px;margin:0}
   .search{flex:1;width:auto;height:44px;min-width:72px}
   .history-what{display:none}
@@ -368,16 +372,19 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
   .me-button{min-width:44px;min-height:44px}
   .board{display:block;height:calc(100dvh - var(--clay-seo-height, 0px) - 116px - 70px);padding:12px 14px 16px;overflow-x:hidden;overflow-y:auto}
   body:has(>.clay-intro){padding-bottom:70px}
+  /* With the intro above the board, the list tabs wait until the board itself is on screen (the script marks that), so they never cover the intro or the top bar. */
+  html:not([ephemeral~="board-on-screen"]) body:has(>.clay-intro) .mobile-tabs{display:none}
   .list{width:100%;max-height:none;padding:4px 10px 8px}
   .list-handle{display:none}
   .list-title{grid-column:1/3;font-size:15px;padding:12px 4px}
   .list-menu{width:44px;height:44px}
   .card{margin-bottom:10px}
-  .card-open{padding:14px}
+  .card-open{--pad-y:14px;--pad-x:14px}
   .face-title{font-size:14px}
   .chip{font-size:11px}
   .add-card{min-height:44px;font-size:13px}
   .add-list-tile{width:100%;min-height:52px;margin-top:4px}
+  #board>.capture-form{margin:12px 0}
   .mobile-tabs{position:fixed;bottom:0;left:0;right:0;height:70px;display:flex;align-items:stretch;border-top:1px solid var(--line-2);background:var(--paper);padding:8px 8px max(8px,env(safe-area-inset-bottom));gap:3px;overflow-x:auto;z-index:15}
   .mobile-tabs button{flex:1 0 64px;min-width:64px;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:10px;gap:1px;color:var(--muted);min-height:48px;line-height:1.5;padding:0 4px}
   .mobile-tabs button b{font-size:11px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -409,7 +416,12 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
   .attachment .meta a{display:inline-block;min-height:44px;line-height:44px}
   .attachment small{align-items:center;justify-content:flex-start}
   .add-item input{min-height:44px;font-size:14px}
-  .small-button,.compose button,.row-actions button,.capture-actions button,.capture-preview button{min-height:44px}
+  /* Text buttons are drawn 40px tall. An unseen ::after, 44px tall and centred on the button, takes the tap. It is sized by its own height,
+     not by an inset, because an inset is measured from inside the button's border and would fall 2px short on a bordered button. */
+  .small-button,.compose button,.row-actions button,.capture-actions button,.capture-preview button,.form-actions button{min-height:40px;position:relative}
+  :is(.small-button,.compose button,.row-actions button,.capture-actions button,.capture-preview button,.form-actions button)::after{content:"";position:absolute;inset:auto 0;top:50%;height:44px;translate:0 -50%}
+  /* A field with no label to read above it is its own tap target. */
+  .small-dialog label>.sr-only+*{min-height:44px}
   .add-pill{width:44px;min-height:44px}
   .swatch{width:44px;height:44px}
   .dates input[type=date]{min-height:44px}
@@ -417,7 +429,6 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
   .detail-footer{padding:6px 8px max(6px,env(safe-area-inset-bottom))}
   .detail-footer .close-text{display:none}
   .comment-tools button,.attachment small button{min-height:44px;padding:0 8px}
-  .form-actions button{min-height:44px}
   .toast button{min-height:44px}
   .check-row button.check-text{min-height:44px}
   .complete{min-height:44px;padding:0 4px}
@@ -426,283 +437,14 @@ html[ephemeral~="board-editable"] .card-detail .detail-label{position:absolute;w
 :root[draftmode="true"] :is([data-act="add-file"],[data-act="panel"][data-panel="members"],[data-act="add-me"],[data-act="assign-item"],#me){display:none!important}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 html:not([ephemeral~="board-editable"]) .edit-only{display:none!important}
-[data-look-switch] {
-  flex: none;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  margin: 10px 12px 12px;
-  padding: 7px 8px 8px 10px;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  box-shadow: var(--shadow);
-  color: var(--ink);
-  font: 400 12.5px/1.2 var(--font);
-}
-
-[data-look-switch] :focus-visible {
-  outline: 2px solid var(--violet);
-  outline-offset: 2px;
-}
-
-[data-look-switch] .look-switch-lead {
-  grid-column: 1;
-  grid-row: 1;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-[data-look-switch] .look-switch-title {
-  font: 600 12.5px/1.2 var(--font);
-  color: var(--ink);
-  white-space: nowrap;
-}
-
-[data-look-switch] .look-switch-phone-label {
-  display: none;
-}
-
-[data-look-switch] .look-switch-dismiss {
-  grid-column: 2;
-  grid-row: 1;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin: -4px -5px -2px 0;
-  border-radius: 5px;
-  color: var(--muted);
-  transition: background 0.14s ease, color 0.14s ease;
-}
-
-[data-look-switch] .look-switch-dismiss:focus-visible {
-  outline-offset: 0;
-}
-
-[data-look-switch] .look-switch-dismiss:hover {
-  color: var(--ink);
-  background: var(--well);
-}
-
-[data-look-switch] .look-switch-dismiss svg {
-  width: 12px;
-  height: 12px;
-}
-
-[data-look-switch] .look-switch-controls {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-[data-look-switch] .look-switch-stepper {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  height: 30px;
-}
-
-[data-look-switch] .look-switch-step {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  color: var(--ink);
-  background: var(--page);
-  border: 1px solid var(--line);
-  transition: background 0.14s ease;
-}
-
-[data-look-switch] .look-switch-step:hover {
-  background: var(--well);
-}
-
-[data-look-switch] .look-switch-step svg {
-  width: 13px;
-  height: 13px;
-}
-
-[data-look-switch] .look-switch-status {
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 5px;
-  min-width: 0;
-  padding: 0 4px;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-[data-look-switch] .look-switch-name {
-  font: 600 12.5px/1 var(--font);
-  color: var(--ink);
-}
-
-[data-look-switch] .look-switch-count {
-  font: 400 11px/1 var(--font);
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-[data-look-switch] .look-switch-choose {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 6px;
-  background: var(--ink);
-  color: var(--paper);
-  font: 600 12.5px/1 var(--font);
-  white-space: nowrap;
-  transition: opacity 0.14s ease;
-}
-
-[data-look-switch] .look-switch-choose:hover {
-  opacity: 0.88;
-}
-
-@media (forced-colors: active) {
-  [data-look-switch] .look-switch-choose {
-    background: ButtonFace;
-    color: ButtonText;
-    border: 1px solid ButtonText;
-  }
-}
-
-@media (max-width: 760px) {
-  [data-look-switch] {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-height: 52px;
-    margin: 10px 12px;
-    padding: 3px 3px 3px 12px;
-    border-radius: 8px;
-  }
-
-  [data-look-switch] .look-switch-lead {
-    flex: none;
-    margin-right: auto;
-  }
-
-  [data-look-switch] .look-switch-title {
-    display: none;
-  }
-
-  [data-look-switch] .look-switch-phone-label {
-    display: inline;
-    font: 600 12.5px/1 var(--font);
-    color: var(--ink);
-    white-space: nowrap;
-  }
-
-  [data-look-switch] .look-switch-controls {
-    flex: none;
-    gap: 4px;
-  }
-
-  [data-look-switch] [data-look-prev],
-  [data-look-switch] .look-switch-count {
-    display: none;
-  }
-
-  [data-look-switch] .look-switch-stepper {
-    flex: none;
-    height: 44px;
-    gap: 4px;
-  }
-
-  [data-look-switch] .look-switch-status {
-    padding: 0 2px;
-  }
-
-  [data-look-switch] .look-switch-name {
-    font: 600 12.5px/1 var(--font);
-  }
-
-  [data-look-switch] [data-look-next],
-  [data-look-switch] .look-switch-dismiss {
-    width: 44px;
-    height: 44px;
-    margin: 0;
-    border-radius: 6px;
-  }
-
-  [data-look-switch] [data-look-next] svg,
-  [data-look-switch] .look-switch-dismiss svg {
-    width: 14px;
-    height: 14px;
-  }
-
-  [data-look-switch] .look-switch-choose {
-    min-width: 44px;
-    height: 44px;
-    padding: 0 14px;
-    border-radius: 6px;
-    font: 600 13px/1 var(--font);
-  }
-}
-
-
-@media (prefers-reduced-motion: reduce) {
-  [data-look-switch],
-  [data-look-switch] * {
-    transition: none !important;
-    animation: none !important;
-  }
-}
-
-@media print {
-  [data-look-switch] {
-    display: none !important;
-  }
-}
-
-/* Hidden until the script names the theme (a reader, an owner in view, a runtime with no
-   clay.variants), and for good once the picker ends. Neither changes an attribute on the root. */
-[data-look-switch]:has(.look-switch-name:empty),
-html[theme-picker="done"] [data-look-switch] {
-  display: none !important;
-}
-/* At 320px the second row of the top bar holds the search, the filter, Add list, Undo and Redo. Keyboard help has no use there and leaves, so the row fits. */
+/* At 320px the second row of the top bar holds the search, the filter and Add list, and Undo and Redo where no settings menu holds them. Keyboard help has no use there and leaves, so the row fits. */
 @media (max-width:360px){
   .top-actions,.history-controls{gap:6px}
   .history-button{padding:0 6px}
 }
-/* Kanban's board fills the screen, so the theme picker is one slim row above the board, and the board gives up that height while the row shows. */
-/* Kanban draws its own icons as lines. The picker's are filled shapes. */
-[data-look-switch] svg{fill:currentColor;stroke:none}
-@media (min-width:761px){
-  [data-look-switch]{display:flex;align-items:center;gap:10px;height:42px;margin:10px 20px 0;padding:5px 8px 5px 12px}
-  [data-look-switch] .look-switch-lead{flex:none;margin-right:auto}
-  [data-look-switch] .look-switch-controls{flex:none}
-  [data-look-switch] .look-switch-stepper{flex:none;min-width:210px}
-  [data-look-switch] .look-switch-dismiss{margin:0 0 0 2px}
-  html:not([theme-picker="done"]) body:has(.look-switch-name:not(:empty)) .board{height:calc(100dvh - var(--clay-seo-height, 0px) - 56px - 52px)}
-}
-@media (max-width:760px){
-  [data-look-switch]{margin:10px 14px 0}
-  html:not([theme-picker="done"]) body:has(.look-switch-name:not(:empty)) .board{height:calc(100dvh - var(--clay-seo-height, 0px) - 116px - 70px - 62px)}
-}
 /* With JavaScript off, or when ClayJS never arrives (a script beside the loader then marks the page no-clay), the board is a page to read: every list shows, the page scrolls, and controls that need scripts are gone. */
 @media (scripting:none){
-  .search,#filter-toggle,[data-act="show-help"],.faces,.menu-slot,.mobile-tabs,[data-look-switch]{display:none!important}
+  .search,#filter-toggle,[data-act="show-help"],.faces,.menu-slot,.mobile-tabs{display:none!important}
   .board-title,.card-open{pointer-events:none}
   html,body{height:auto}
   body{overflow:auto}
@@ -710,7 +452,7 @@ html[theme-picker="done"] [data-look-switch] {
   .list{max-height:none}
   #board>.list:not([cms-template]){display:grid!important}
 }
-html[no-clay] :is(.search,#filter-toggle,[data-act="show-help"],.faces,.menu-slot,.mobile-tabs,[data-look-switch]){display:none!important}
+html[no-clay] :is(.search,#filter-toggle,[data-act="show-help"],.faces,.menu-slot,.mobile-tabs){display:none!important}
 html[no-clay] :is(.board-title,.card-open){pointer-events:none}
 html[no-clay],html[no-clay] body{height:auto}
 html[no-clay] body{overflow:auto}
@@ -724,6 +466,7 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
   --navy: #0c2635;
   --navy-2: #183442;
   --ink: #263d4e;
+  --ink-strong: #0c2635;
   --muted: #536988;
   --subtle: #62748a;
   --page: #f8fafc;
@@ -738,6 +481,7 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
   --bar-ink: #edf3f8;
   --bar-muted: #b6c7d5;
   --bar-icon: #92aabf;
+  --bar-icon-2: #92aabf;
   --bar-line: #405869;
   --bar-line-2: #4d6574;
   --bar-hover: #274556;
@@ -750,9 +494,6 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
   --bar-deep: #0f2233;
   --bar-accent: #d9c7f6;
   --bar-focus: #ba9beb;
-  --status-idle: #7f95a8;
-  --status-busy: #d8b56c;
-  --status-ok: #6fbf9a;
   --status-error: #e48a7f;
   --on-primary: #eef3f7;
   --primary-hover: #25475b;
@@ -817,11 +558,11 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
 [data-color="slate"] { --label-bg:#e5eaf0; --label-ink:#53617a; --solid:#9aa8ba; }
 [data-color="green"] { --label-bg:#e3f0dc; --label-ink:#3d6a2c; --solid:#93bf7f; }
 [data-color="pink"] { --label-bg:#f7e3ee; --label-ink:#8f3d68; --solid:#d991b6; }
-:is(.list,.tone-swatch)[data-tone="1"] { --dot:#698ba6; }
-:is(.list,.tone-swatch)[data-tone="2"] { --dot:#8d70c8; --dot-ring:#e9e2f5; }
-:is(.list,.tone-swatch)[data-tone="3"] { --dot:#b18a48; --dot-ring:#f1e9dc; }
-:is(.list,.tone-swatch)[data-tone="4"] { --dot:#488d7d; --dot-ring:#dcece6; }
-:is(.list,.tone-swatch)[data-tone="5"] { --dot:#a8635d; --dot-ring:#f3e2df; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="1"] { --dot:#698ba6; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="2"] { --dot:#8d70c8; --dot-ring:#e9e2f5; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="3"] { --dot:#b18a48; --dot-ring:#f1e9dc; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="4"] { --dot:#488d7d; --dot-ring:#dcece6; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="5"] { --dot:#a8635d; --dot-ring:#f3e2df; }
 </style>
 <style clay-variant="look-2" clay-variant-label="Paper" media="not all">
 @import url("https://clayjs.com/v1/fonts/newsreader.css");
@@ -830,6 +571,7 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
   --navy: #ebe6dd;
   --navy-2: #f8f5ef;
   --ink: #2a2620;
+  --ink-strong: #1c1915;
   --muted: #655c4f;
   --subtle: #6d6457;
   --page: #ebe6dd;
@@ -843,7 +585,8 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
   --shadow: 0 1px 0 #dcd4c6,0 2px 5px #4a3a2209;
   --bar-ink: #2a2620;
   --bar-muted: #5f5649;
-  --bar-icon: #56709f;
+  --bar-icon: #6f6150;
+  --bar-icon-2: #b89468;
   --bar-line: #d4ccbe;
   --bar-line-2: #c9c0b0;
   --bar-hover: #e2dcd0;
@@ -856,9 +599,6 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
   --bar-deep: #fdfcf9;
   --bar-accent: #2f4d88;
   --bar-focus: #4a6db0;
-  --status-idle: #998f7e;
-  --status-busy: #c3923a;
-  --status-ok: #4f9466;
   --status-error: #c25f48;
   --on-primary: #2f4d88;
   --primary-hover: #e2dcd0;
@@ -922,11 +662,11 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
 [data-color="slate"] { --label-bg:#e9e3d8; --label-ink:#5a5144; --solid:#a99d8a; }
 [data-color="green"] { --label-bg:#e2ebd7; --label-ink:#40632e; --solid:#99bb84; }
 [data-color="pink"] { --label-bg:#f4e1e6; --label-ink:#893c5c; --solid:#d395ae; }
-:is(.list,.tone-swatch)[data-tone="1"] { --dot:#6f88a1; }
-:is(.list,.tone-swatch)[data-tone="2"] { --dot:#8670b5; --dot-ring:#e8e2ef; }
-:is(.list,.tone-swatch)[data-tone="3"] { --dot:#b08540; --dot-ring:#efe5d2; }
-:is(.list,.tone-swatch)[data-tone="4"] { --dot:#4b8a77; --dot-ring:#dae8e0; }
-:is(.list,.tone-swatch)[data-tone="5"] { --dot:#b06552; --dot-ring:#f2dfd7; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="1"] { --dot:#6f88a1; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="2"] { --dot:#8670b5; --dot-ring:#e8e2ef; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="3"] { --dot:#b08540; --dot-ring:#efe5d2; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="4"] { --dot:#4b8a77; --dot-ring:#dae8e0; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="5"] { --dot:#b06552; --dot-ring:#f2dfd7; }
 </style>
 <style clay-variant="look-3" clay-variant-label="Dusk" media="not all">
 @import url("https://clayjs.com/v1/fonts/inter.css");
@@ -936,6 +676,7 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
   --navy: #26423d;
   --navy-2: #182a27;
   --ink: #e4e9f0;
+  --ink-strong: #f3f6fa;
   --muted: #98a6b8;
   --subtle: #8897ab;
   --page: #111419;
@@ -950,6 +691,7 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
   --bar-ink: #eef6f4;
   --bar-muted: #b0c7c3;
   --bar-icon: #90b6af;
+  --bar-icon-2: #90b6af;
   --bar-line: #3d5d58;
   --bar-line-2: #486b65;
   --bar-hover: #30504a;
@@ -962,9 +704,6 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
   --bar-deep: #162623;
   --bar-accent: #96e6ce;
   --bar-focus: #75d6bb;
-  --status-idle: #849e9a;
-  --status-busy: #dfb868;
-  --status-ok: #68c99e;
   --status-error: #ea887e;
   --on-primary: #eef6f4;
   --primary-hover: #31524c;
@@ -1028,11 +767,11 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
 [data-color="slate"] { --label-bg:#262f3c; --label-ink:#c4d0e0; --solid:#5d6d82; }
 [data-color="green"] { --label-bg:#1f3423; --label-ink:#ace0b4; --solid:#4f8556; }
 [data-color="pink"] { --label-bg:#3a2132; --label-ink:#f4b8d8; --solid:#9c537b; }
-:is(.list,.tone-swatch)[data-tone="1"] { --dot:#759ab8; }
-:is(.list,.tone-swatch)[data-tone="2"] { --dot:#9d82d6; --dot-ring:#2d2542; }
-:is(.list,.tone-swatch)[data-tone="3"] { --dot:#c99c55; --dot-ring:#382d1c; }
-:is(.list,.tone-swatch)[data-tone="4"] { --dot:#5cb39e; --dot-ring:#1c342f; }
-:is(.list,.tone-swatch)[data-tone="5"] { --dot:#c4746d; --dot-ring:#3a2325; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="1"] { --dot:#759ab8; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="2"] { --dot:#9d82d6; --dot-ring:#2d2542; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="3"] { --dot:#c99c55; --dot-ring:#382d1c; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="4"] { --dot:#5cb39e; --dot-ring:#1c342f; }
+:is(.list,.tone-swatch,.kb-tone)[data-tone="5"] { --dot:#c4746d; --dot-ring:#3a2325; }
 </style>
 <script>
 (() => {
@@ -1057,13 +796,14 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
   } catch {}
 })();
 </script>
-<script type="application/json" data-rules-name="api" data-rules-version="1">{"boardName":"#board-meta > h1#board-name","nextCard":"#board-meta@data-next-card","labelDefs":["#board-meta ul.label-defs > li",{"id":"@data-id","color":"@data-color","name":"."}],"lists":["#board > section.list[item]",{"id":"@data-id","title":"h2.list-title","tone":"@data-tone","cards":["ol.cards > li.card[item]",{"id":"@data-id","num":"@data-num","title":"h3.card-title","desc":"div.card-desc","labels":"@data-labels","cover":"@data-cover","coverImage":"@data-cover-image","due":"@data-due","start":"@data-start","complete":"@data-complete","members":"@data-members","checklists":[":scope > section.checklist",{"id":"@data-id","name":"h4","items":[":scope > ul.checklist-items > li",{"id":"@data-id","text":".","done":"@data-done","member":"@data-member"}]}],"comments":["ol.comments > li",{"id":"@data-id","by":"@data-by","at":"@data-at","edited":"@data-edited","text":"."}],"attachments":["ul.attachments > li",{"id":"@data-id","name":"a","href":"a@href","kind":"a@data-kind"}]}]}],"people":["[clay-people] > data",{"id":"@value","name":"."}],"thanks":["a[clay-menu-item]",{"id":"@data-id"}],"look":"html@look","themePicker":"html@theme-picker"}</script>
+<script type="application/json" data-rules-name="api" data-rules-version="1">{"boardName":"#board-meta > h1#board-name","nextCard":"#board-meta@data-next-card","labelDefs":["#board-meta ul.label-defs > li",{"id":"@data-id","color":"@data-color","name":"."}],"lists":["#board > section.list[item]",{"id":"@data-id","title":"h2.list-title","tone":"@data-tone","cards":["ol.cards > li.card[item]",{"id":"@data-id","num":"@data-num","title":"h3.card-title","desc":"div.card-desc","labels":"@data-labels","cover":"@data-cover","coverImage":"@data-cover-image","due":"@data-due","start":"@data-start","complete":"@data-complete","members":"@data-members","checklists":[":scope > section.checklist",{"id":"@data-id","name":"h4","items":[":scope > ul.checklist-items > li",{"id":"@data-id","text":".","done":"@data-done","member":"@data-member"}]}],"comments":["ol.comments > li",{"id":"@data-id","by":"@data-by","at":"@data-at","edited":"@data-edited","text":"."}],"attachments":["ul.attachments > li",{"id":"@data-id","name":"a","href":"a@href","kind":"a@data-kind"}]}]}],"people":["[clay-people] > data",{"id":"@value","name":"."}],"thanks":["a[clay-menu-item]",{"id":"@data-id"}],"look":"html@look"}</script>
 <style>[cms-template]{display:none!important}</style>
 <style clay-menu-skin="1" media="not all">
 [part~="dock"] { --bevel-surface: var(--paper); --bevel-sunk: var(--well); --bevel-ink: var(--ink); --bevel-ink-2: var(--muted); --bevel-muted: var(--subtle); --bevel-faint: var(--subtle); --bevel-line: var(--line); --bevel-line-2: var(--line); --bevel-line-3: var(--line); --bevel-brass: var(--violet); --bevel-font-sans: var(--font); --bevel-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace; --clay-shadow: var(--shadow); }
-[part~="button"] { width: 36px; height: 36px; border: 1px solid var(--bar-line); border-radius: 7px; background: none; color: var(--bar-ink); }
-[part~="button"]:hover { background: var(--bar-hover); }
-[part~="button"][aria-expanded="true"] { background: var(--bar-active); border-color: var(--bar-active-line); }
+/* The button takes the top bar's colours, and the card's own (the --gear tokens) while it sits in an open card. */
+[part~="button"] { width: 36px; height: 36px; border: 1px solid var(--gear-line, var(--bar-line)); border-radius: 7px; background: none; color: var(--gear-ink, var(--bar-ink)); }
+[part~="button"]:hover { background: var(--gear-hover, var(--bar-hover)); }
+[part~="button"][aria-expanded="true"] { background: var(--gear-active, var(--bar-active)); border-color: var(--gear-active-line, var(--bar-active-line)); }
 [part~="button"] svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
 [part~="list"] { width: 270px; padding: 5px; background: var(--paper); border: 1px solid var(--line); border-radius: 9px; box-shadow: var(--shadow); }
 [part~="item"], [part~="dismiss"], [part~="text"] { min-height: 32px; padding: 7px 9px; border-radius: 6px; font: 400 13.5px/1.3 var(--font); color: var(--ink); }
@@ -1113,7 +853,7 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
   </div>
   <div class="faces" id="faces" role="group" aria-label="People on this board" clay="freeze" effect="Board.paintFaces(el)"></div>
   <span class="me-slot" clay="freeze" effect="Board.paintMe(el)"><button class="me-button edit-only" id="me" data-act="change-my-name" title="Change my name" aria-label="Change my name" hidden></button></span>
-  <div class="menu-slot" clay-menu-slot no-edit-switch clay-menu-label="Settings" clay="freeze"><template clay-menu-icon><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6M10 3h4l1.5 3 3.5-.5 2 4-2 2.5 2 2.5-2 4-3.5-.5-1.5 3h-4l-1.5-3-3.5.5-2-4 2-2.5-2-2.5 2-4 3.5.5Z"/></svg></template></div>
+  <div class="menu-slot" clay-menu-slot clay-menu-looks no-edit-switch clay-menu-label="Settings" clay="freeze"><template clay-menu-icon><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6M10 3h4l1.5 3 3.5-.5 2 4-2 2.5 2 2.5-2 4-3.5-.5-1.5 3h-4l-1.5-3-3.5.5-2-4 2-2.5-2-2.5 2-4 3.5.5Z"/></svg></template></div>
 </header>
 <div id="board-meta" class="board-data" data-next-card="15" merge-max="data-next-card">
 <h1 id="board-name">Launch Plan</h1>
@@ -1127,90 +867,6 @@ html[no-clay] #board>.list:not([cms-template]){display:grid!important}
 <li data-id="" data-color="" cms-template></li>
 </ul>
 </div>
-<aside class="look-switch" data-look-switch clay="freeze" aria-label="Theme picker">
-  <div class="look-switch-lead">
-    <span class="look-switch-title">Theme picker</span>
-    <span class="look-switch-phone-label">Theme</span>
-  </div>
-  <div class="look-switch-controls">
-    <div class="look-switch-stepper">
-      <button type="button" class="look-switch-step" data-look-prev aria-label="Previous theme">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"></path></svg>
-      </button>
-      <span class="look-switch-status" aria-live="polite">
-        <span class="look-switch-name"></span>
-        <span class="look-switch-count"></span>
-      </span>
-      <button type="button" class="look-switch-step" data-look-next aria-label="Next theme">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"></path></svg>
-      </button>
-    </div>
-    <button type="button" class="look-switch-choose" data-look-choose aria-label="Confirm theme">Confirm</button>
-  </div>
-  <button type="button" class="look-switch-dismiss" data-look-dismiss aria-label="Dismiss theme picker">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"></path></svg>
-  </button>
-</aside>
-<script>
-(() => {
-  const root = document.querySelector('[data-look-switch]');
-  if (!root) return;
-  const html = document.documentElement;
-  const name = root.querySelector('.look-switch-name');
-  const count = root.querySelector('.look-switch-count');
-  const variants = () => window.clay?.variants;
-  const looks = () => variants()?.list() ?? [];
-  const saves = () => window.clay?.mode === 'edit' || window.clay?.mode === 'draft';
-  const at = (list) => list.findIndex((look) => look.name === variants().shown);
-  let start = null;
-  const paint = () => {
-    const list = looks();
-    const ended = html.getAttribute('theme-picker') === 'done';
-    const index = list.length > 1 && saves() && !ended ? at(list) : -1;
-    if (index >= 0 && start === null) start = variants().active;
-    name.textContent = index < 0 ? '' : list[index].label;
-    count.textContent = index < 0 ? '' : `(${index + 1} of ${list.length})`;
-    const menu = window.clay?.menu;
-    if (list.length > 1 && saves() && ended) menu?.addItem?.({ id: 'look.picker', label: 'Change theme', run: reopen });
-    else menu?.removeItem?.('look.picker');
-  };
-  const step = (by) => {
-    const list = looks();
-    if (list.length < 2) return;
-    variants().preview(list[(at(list) + by + list.length) % list.length].name);
-  };
-  const end = () => {
-    html.setAttribute('theme-picker', 'done');
-    window.clay?.save?.soon?.();
-    paint();
-  };
-  const confirm = () => {
-    variants().choose(variants().shown);
-    html.setAttribute('look', variants().shown);
-    end();
-  };
-  const dismiss = () => {
-    const back = window.clay.mode === 'edit' ? variants().active : start;
-    if (back && back !== variants().shown) variants().preview(back);
-    end();
-  };
-  // Once ended, the gear menu's Change theme brings the picker back, starting from the theme on screen.
-  const reopen = () => {
-    html.setAttribute('theme-picker', 'open');
-    start = null;
-    window.clay?.save?.soon?.();
-    paint();
-  };
-  for (const [selector, run] of [['[data-look-prev]', () => step(-1)], ['[data-look-next]', () => step(1)], ['[data-look-choose]', confirm], ['[data-look-dismiss]', dismiss]]) {
-    const button = root.querySelector(selector);
-    button.addEventListener('mousedown', (event) => event.preventDefault());
-    button.addEventListener('click', run);
-  }
-  document.addEventListener('clay:drafts-restored', (event) => { if (event.detail?.external) start = null; });
-  for (const type of ['clay:menu-ready', 'clay:variant-change', 'clay:drafts-restored', 'clay:modechange', 'clay:sync-applied']) document.addEventListener(type, paint);
-  paint();
-})();
-</script>
 <main id="board" class="board" sortable="lists" sortable-label="Move list" items="lists" aria-label="Board" merge-tokens="data-labels data-members">
 <section class="list" item data-id="l-ideas" data-tone="0">
 <h2 class="list-title">Ideas</h2>
@@ -1292,7 +948,7 @@ Give teams a useful starting point, with less noise and a little more room to th
   <button class="add-card edit-only" data-act="add-card"><svg aria-hidden="true"><use href="#i-plus"/></svg>Add a card</button>
   <button class="add-list-tile edit-only" data-act="add-list"><svg aria-hidden="true"><use href="#i-plus"/></svg>Add another list</button>
   <form class="capture-form edit-only" id="capture-form">
-    <label>Card title<textarea name="title" unsent="card" rows="2"></textarea></label>
+    <label><span class="sr-only">Card title</span><textarea name="title" unsent="card" rows="2"></textarea></label>
     <div class="capture-actions">
       <button type="submit">Add card</button>
       <button type="button" data-act="preview-capture" hidden>Preview cards</button>
@@ -1316,7 +972,7 @@ Give teams a useful starting point, with less noise and a little more room to th
   </dialog>
 
   <dialog id="card-detail" class="card-detail" aria-labelledby="card-detail-label">
-  <div class="detail-top"><div class="detail-cover" attr:data-color="Face.cover(Detail.card())" class:has-image="!!Face.coverImage(Detail.card())"><span class="cover-img" show="Face.coverImage(Detail.card())" css:img="Face.coverImageCss(Detail.card())"></span></div><header class="detail-header"><div class="breadcrumb"><span text="Board.name()"></span><svg aria-hidden="true"><use href="#i-chevron"/></svg>in list <b text="Detail.listTitle(Detail.card())"></b><span class="num" text="'#' + Detail.num(Detail.card())"></span></div><button class="icon-button detail-close" data-act="close-detail" aria-label="Close card"><svg aria-hidden="true"><use href="#i-close"/></svg></button></header></div>
+  <div class="detail-top"><div class="detail-cover" attr:data-color="Face.cover(Detail.card())" class:has-image="!!Face.coverImage(Detail.card())"><span class="cover-img" show="Face.coverImage(Detail.card())" css:img="Face.coverImageCss(Detail.card())"></span></div><header class="detail-header"><div class="breadcrumb"><span text="Board.name()"></span><svg aria-hidden="true"><use href="#i-chevron"/></svg><b text="Detail.listTitle(Detail.card())"></b><span class="num" text="'#' + Detail.num(Detail.card())"></span></div><span class="detail-menu"></span><button class="icon-button detail-close" data-act="close-detail" aria-label="Close card"><svg aria-hidden="true"><use href="#i-close"/></svg></button></header></div>
   <h2 id="card-detail-label" class="detail-label" effect="Detail.paintLabel(el)"></h2>
   <div class="detail-title-field edit-only"><textarea class="detail-title" aria-label="Card title" unsent="title" rows="2"></textarea></div>
   <div class="detail-content">
@@ -1553,7 +1209,17 @@ Give teams a useful starting point, with less noise and a little more room to th
   // One history surface: the same two controls in the board header and inside the card, both
   // named by what they would do, and both runtime-only so a label never reaches the file.
   $('.top-actions').append(part('#history-controls'));
-  $(':scope > .detail-top .detail-header', detailEl).insertBefore(part('#history-controls'), $('.detail-close', detailEl));
+  $(':scope > .detail-top .detail-header', detailEl).insertBefore(part('#history-controls'), $('.detail-menu', detailEl));
+  // An open card is a modal dialog, so nothing outside it can be used. The settings menu comes into the
+  // card's header while a card is open and goes home to the top bar when it closes. What moves is
+  // ClayJS's own menu, which is never saved: the slot stays in the top bar, where the file has it.
+  const moveMenu = (to) => {
+    const menu = window.clay?.menu;
+    const host = menu?.embedded && menu.button?.getRootNode?.().host;
+    if (!host || !to || host.parentElement === to) return;
+    menu.close?.();
+    to.append(host);
+  };
 
   // Help is reachable in both modes, so it is a plain dialog of its own, with its own focus return.
   let helpOpener = null;
@@ -1645,6 +1311,8 @@ Give teams a useful starting point, with less noise and a little more room to th
   // which can belong to an older save: no history event, recovery flush or sync frame is
   // proof the host has this document. A draft destination writes into this browser, so an
   // accepted acknowledgement there says so instead of claiming the file.
+  // Kanban says a failed save itself, in this chip, so ClayJS is told not to add a notice of its own beside it.
+  (window.clay = window.clay || {}).saveFeedback = 'own';
   const SAVE_LABELS = { starting: 'Starting…', saving: 'Saving…', unsaved: 'Unsaved', saved: 'Saved', error: 'Couldn’t save', conflict: 'Changed elsewhere', offline: 'Offline, will retry' };
   const SAVE_CURRENT = new Set(['saving', 'error', 'conflict', 'offline']);
   const draftDestination = () => document.documentElement.getAttribute('draftmode') === 'true';
@@ -1771,6 +1439,20 @@ Give teams a useful starting point, with less noise and a little more room to th
     if (wait === 'start') (window.clay?.ready || Promise.resolve()).then(() => showList(id, 120), () => {});
     else if (wait > 0) requestAnimationFrame(() => showList(id, wait - 1));
   }
+  // On a phone the list tabs sit at the bottom of the screen. With the intro above the board they wait
+  // until the board itself has reached the screen, clear of the room the tabs take. Which side the
+  // board is on is this tab's own state, so it is never saved.
+  (window.clay?.ready || Promise.resolve()).then(() => {
+    const board = $('#board');
+    let on = null;
+    const mark = (next) => { if (next !== on) window.clay?.ephemeral?.toggle?.(document.documentElement, 'board-on-screen', on = next); };
+    // Where nothing can watch the board, the tabs are simply there.
+    if (typeof IntersectionObserver !== 'function') return mark(true);
+    new IntersectionObserver(([entry]) => mark(entry.isIntersecting), { rootMargin: '0px 0px -70px 0px' }).observe(board);
+    // The observer reports after a frame's other work. A scroll is judged at once, so what ClayJS keeps
+    // above the tabs (the owner's chip, the download dock) measures the screen with the tabs as they now are.
+    addEventListener('scroll', () => mark(board.getBoundingClientRect().top <= innerHeight - 70), { passive: true });
+  }, () => {});
   function clearFilters() {
     if (!window.Sap) return;
     const s = window.Sap(app);
@@ -1869,7 +1551,8 @@ Give teams a useful starting point, with less noise and a little more room to th
         ? `<select ${attrs}>${optionsHtml(options, f.value)}</select>`
         : f.multiline ? `<textarea ${attrs}>${esc(f.value || '')}</textarea>`
         : `<input ${attrs} type="${f.type || 'text'}" value="${esc(f.value || '')}" autocomplete="off">`;
-      return `<label>${esc(f.label)}${control}</label>`;
+      // With one field the dialog's title already says what it is, so the field's name is for screen readers only.
+      return `<label>${fields.length === 1 ? `<span class="sr-only">${esc(f.label)}</span>` : esc(f.label)}${control}</label>`;
     };
     const refresh = () => {
       const values = chosen();
@@ -2372,7 +2055,7 @@ Give teams a useful starting point, with less noise and a little more room to th
     const form = part('#capture-form');
     const area = $('textarea', form);
     form.dataset.capture = kind;
-    $('label', form).firstChild.nodeValue = isList ? 'List name' : 'Card title';
+    $('label > span', form).textContent = isList ? 'List name' : 'Card title';
     area.setAttribute('unsent', kind);
     form.setAttribute('unsent-key', CAPTURE + (isList ? 'board' : listId));
     $('button[type="submit"]', form).textContent = isList ? 'Add list' : 'Add card';
@@ -2844,6 +2527,7 @@ Give teams a useful starting point, with less noise and a little more room to th
     if (!readOnly) tuneTouch();
     if (PHONE.matches && detail.listId) showList(detail.listId);
     if (window.Sap) window.Sap.refresh();
+    moveMenu($(':scope > .detail-top .detail-menu', detailEl));
     if (!detailEl.open) detailEl.showModal();
     paintMoveControls();
     (readOnly || PHONE.matches ? $(':scope > .detail-top .detail-close', detailEl) : titleEditor())?.focus();
@@ -2854,6 +2538,7 @@ Give teams a useful starting point, with less noise and a little more room to th
     const card = detail.card;
     detail.card = null;
     if (detailEl.open) detailEl.close();
+    moveMenu($('.menu-slot'));
     for (const modal of $$(':scope > [data-clay-modal]', detailEl)) document.body.append(modal);
     placeToast();
     focusBack(card);
@@ -4135,6 +3820,9 @@ Give teams a useful starting point, with less noise and a little more room to th
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (composingKey(e)) return;
+      // A key something else has taken is not the board's: ClayJS's settings menu closes itself on Escape,
+      // and inside an open card that must not close the card as well.
+      if (e.defaultPrevented) return;
       if ($('#ask').open || $('#help').open || $('[data-clay-modal]')) return;
       if (!$('#menu').hidden) { closeMenu({ restore: true }); return; }
       if (!$('#filters').hidden) { toggleFilters(false); $('#filter-toggle').focus(); return; }
@@ -4420,20 +4108,16 @@ window.clayTheme = {
 <template visitor-intro="manual" clay="no-copy">
       <div class="strip-kanban">
         <style>
-          /* The Hide intro button sits beside the strip and takes this section's text colour. The strip keeps its own light colours in every theme, so the section keeps the strip's ink. */
-          .clay-intro { color: #263d4e; }
+          /* The strip is a small picture of the board, so it reads the theme's own tokens, label colours and list tones, and follows every theme. The Hide intro button sits beside it and takes this section's text colour. */
+          .clay-intro { color: var(--ink); }
           .strip-kanban {
             container-type: inline-size; container-name: kanban-strip;
-            --navy: #0c2635; --ink: #263d4e; --muted: #536988; --subtle: #62748a;
-            --line: #dde6ef; --well: #f2f6fa; --paper: #fefefd;
-            --todo: #698ba6; --doing: #8d70c8; --done: #488d7d; --review: #b18a48;
-            --violet: #a68bcf; --violet-soft: #eee7f9; --violet-ink: #684398;
             position: relative; overflow: hidden;
             background:
-              radial-gradient(60% 120% at 82% 40%, #ece6fa 0%, #ece6fa00 70%),
-              radial-gradient(50% 90% at 0% 0%, #e2ecf7 0%, #e2ecf700 70%),
-              linear-gradient(180deg, #f5f8fc, #edf2f8);
-            color: var(--ink); font-family: "Work Sans", system-ui, sans-serif;
+              radial-gradient(60% 120% at 82% 40%, var(--violet-soft) 0%, transparent 70%),
+              radial-gradient(50% 90% at 0% 0%, var(--chip-bg) 0%, transparent 70%),
+              linear-gradient(180deg, var(--paper-2), var(--sunken)) var(--sunken);
+            color: var(--ink); font-family: var(--font);
             -webkit-font-smoothing: antialiased;
           }
           .strip-kanban *, .strip-kanban *::before, .strip-kanban *::after { box-sizing: border-box; }
@@ -4445,16 +4129,14 @@ window.clayTheme = {
             padding: 18px 20px 24px;
           }
 
-          .strip-kanban .kb-name { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 14px; font-weight: 650; letter-spacing: 0.01em; color: var(--navy); }
+          .strip-kanban .kb-name { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 14px; font-weight: 650; letter-spacing: 0.01em; color: var(--ink-strong); }
           .strip-kanban .kb-name svg { width: 18px; height: 18px; flex: none; }
-          .strip-kanban .kb-headline { margin: 0 0 10px; font-size: clamp(26px, 2.75cqi, 36px); line-height: 1.12; font-weight: 650; letter-spacing: -0.022em; color: var(--navy); text-wrap: balance; }
+          .strip-kanban .kb-headline { margin: 0 0 10px; font-size: clamp(26px, 2.75cqi, 36px); line-height: 1.12; font-weight: 650; letter-spacing: -0.022em; color: var(--ink-strong); text-wrap: balance; }
           .strip-kanban .kb-sub { margin: 0 0 18px; max-width: 520px; font-size: 15px; line-height: 1.5; color: var(--muted); text-wrap: pretty; }
 
           .strip-kanban .kb-benefits { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 22px; }
           .strip-kanban .kb-benefits li { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 1.4; font-weight: 500; color: var(--ink); }
-          .strip-kanban .kb-benefits li::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 2px; background: var(--c); box-shadow: 0 0 0 3px var(--cbg); }
-          .strip-kanban .kb-benefits li:nth-child(1) { --c: #8d70c8; --cbg: #eee7f9; }
-          .strip-kanban .kb-benefits li:nth-child(2) { --c: #488d7d; --cbg: #dff0ea; }
+          .strip-kanban .kb-benefits li::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 2px; background: var(--dot, var(--dot-none)); box-shadow: 0 0 0 3px var(--dot-ring, var(--chip-bg)); }
 
 
           .strip-kanban .kb-right { min-width: 0; display: grid; gap: 8px; align-content: start; }
@@ -4464,14 +4146,14 @@ window.clayTheme = {
             container-type: inline-size; container-name: kb-fit;
             --view: 404; --x: 196;
             position: relative; overflow: hidden; border-radius: 12px;
-            border: 1px solid #d9e2ec; background: #f8fafc;
-            box-shadow: 0 1px 2px #30527408, 0 10px 30px #30527414;
+            border: 1px solid var(--line-2); background: var(--page);
+            box-shadow: 0 1px 2px var(--shade-hover), 0 10px 30px var(--shade-hover);
           }
           .strip-kanban .kb-stage {
             --u: calc(100cqw / var(--view));
             position: relative; width: calc(600 * var(--u)); height: calc(248 * var(--u));
             margin-left: calc(var(--x) * var(--u) * -1);
-            background: #f8fafc; font-family: "Work Sans", system-ui, sans-serif; color: var(--ink);
+            background: var(--page); font-family: var(--font); color: var(--ink);
           }
           .strip-kanban .kb-stage:not([data-uimotion]) .later { visibility: hidden; }
 
@@ -4480,76 +4162,73 @@ window.clayTheme = {
             display: flex; align-items: center; gap: calc(7 * var(--u)); padding: 0 calc(14 * var(--u));
           }
           .strip-kanban .kb-bar svg { width: calc(12 * var(--u)); height: calc(12 * var(--u)); }
-          .strip-kanban .kb-bar-title { font-size: calc(10.5 * var(--u)); font-weight: 650; color: #edf3f8; }
+          .strip-kanban .kb-bar-title { font-size: calc(10.5 * var(--u)); font-weight: 650; color: var(--bar-ink); }
           .strip-kanban .kb-bar-grow { flex: 1; }
-          .strip-kanban .kb-bar-search { width: calc(110 * var(--u)); height: calc(16 * var(--u)); border-radius: calc(4 * var(--u)); background: #183442; border: 1px solid #304a5a; }
-          .strip-kanban .kb-bar-btn { width: calc(44 * var(--u)); height: calc(16 * var(--u)); border-radius: calc(4 * var(--u)); background: #e4ebf3; }
+          .strip-kanban .kb-bar-search { width: calc(110 * var(--u)); height: calc(16 * var(--u)); border-radius: calc(4 * var(--u)); background: var(--navy-2); border: 1px solid var(--bar-line); }
+          .strip-kanban .kb-bar-btn { width: calc(44 * var(--u)); height: calc(16 * var(--u)); border-radius: calc(4 * var(--u)); background: var(--bar-primary); }
 
           .strip-kanban .kb-list {
             position: absolute; top: calc(42 * var(--u)); width: calc(180 * var(--u)); height: calc(230 * var(--u));
-            background: var(--well); border: 1px solid #e4eaf0; border-radius: calc(9 * var(--u));
+            background: var(--well); border: 1px solid var(--line); border-radius: calc(9 * var(--u));
             padding: 0 calc(8 * var(--u));
           }
           .strip-kanban .kb-list-todo { left: calc(18 * var(--u)); }
           .strip-kanban .kb-list-doing { left: calc(210 * var(--u)); }
           .strip-kanban .kb-list-done { left: calc(402 * var(--u)); }
-          .strip-kanban .kb-list-head { height: calc(28 * var(--u)); display: flex; align-items: center; gap: calc(6 * var(--u)); padding: 0 calc(2 * var(--u)); font-size: calc(10.5 * var(--u)); font-weight: 600; color: var(--navy); }
-          .strip-kanban .kb-dot { width: calc(6 * var(--u)); height: calc(6 * var(--u)); border-radius: 50%; background: var(--dc); box-shadow: 0 0 0 calc(2 * var(--u)) var(--dr); }
-          .strip-kanban .kb-list-todo .kb-dot { --dc: var(--todo); --dr: #e3ebf3; }
-          .strip-kanban .kb-list-doing .kb-dot { --dc: var(--doing); --dr: #e9e2f5; }
-          .strip-kanban .kb-list-done .kb-dot { --dc: var(--done); --dr: #dcece6; }
+          .strip-kanban .kb-list-head { height: calc(28 * var(--u)); display: flex; align-items: center; gap: calc(6 * var(--u)); padding: 0 calc(2 * var(--u)); font-size: calc(10.5 * var(--u)); font-weight: 600; color: var(--ink-strong); }
+          .strip-kanban .kb-dot { width: calc(6 * var(--u)); height: calc(6 * var(--u)); border-radius: 50%; background: var(--dot, var(--dot-none)); box-shadow: 0 0 0 calc(2 * var(--u)) var(--dot-ring, var(--chip-bg)); }
           .strip-kanban .kb-grow { flex: 1; }
-          .strip-kanban .kb-count { position: relative; min-width: calc(15 * var(--u)); height: calc(13 * var(--u)); padding: 0 calc(4 * var(--u)); border-radius: calc(3 * var(--u)); background: #e4eaf1; font-size: calc(8.5 * var(--u)); font-weight: 600; color: #53617a; display: grid; place-items: center; }
+          .strip-kanban .kb-count { position: relative; min-width: calc(15 * var(--u)); height: calc(13 * var(--u)); padding: 0 calc(4 * var(--u)); border-radius: calc(3 * var(--u)); background: var(--chip-bg); font-size: calc(8.5 * var(--u)); font-weight: 600; color: var(--chip-ink); display: grid; place-items: center; }
           .strip-kanban .kb-count > span { grid-area: 1 / 1; }
-          .strip-kanban .kb-count-next { background: #e4eaf1; border-radius: inherit; width: 100%; height: 100%; display: grid; place-items: center; }
-          .strip-kanban .kb-list-done .kb-count-next { background: #dff0ea; color: #326e61; }
+          .strip-kanban .kb-count-next { background: var(--chip-bg); border-radius: inherit; width: 100%; height: 100%; display: grid; place-items: center; }
+          .strip-kanban .kb-list-done .kb-count-next { background: var(--ok-bg); color: var(--ok-ink); }
           .strip-kanban .kb-cards { display: grid; gap: calc(8 * var(--u)); }
 
           .strip-kanban .kb-card {
-            position: relative; background: var(--paper); border: 1px solid #e3eaf0; border-radius: calc(7 * var(--u));
-            padding: calc(8 * var(--u)); box-shadow: 0 1px 2px #30527408, 0 3px 8px #30527407;
+            position: relative; background: var(--paper); border: 1px solid var(--line); border-radius: calc(7 * var(--u));
+            padding: calc(8 * var(--u)); box-shadow: var(--shadow);
           }
-          .strip-kanban .kb-ph-chip { width: calc(var(--w, 34) * var(--u)); height: calc(10 * var(--u)); border-radius: calc(3 * var(--u)); background: var(--bg, #e5eaf0); }
-          .strip-kanban .kb-ph-line { margin-top: calc(8 * var(--u)); width: calc(var(--w, 110) * var(--u)); height: calc(7 * var(--u)); border-radius: calc(3 * var(--u)); background: #dce3eb; }
-          .strip-kanban .kb-ph-meta { margin-top: calc(9 * var(--u)); width: calc(var(--w, 22) * var(--u)); height: calc(5 * var(--u)); border-radius: calc(2 * var(--u)); background: #e6ecf2; }
+          .strip-kanban .kb-ph-chip { width: calc(var(--w, 34) * var(--u)); height: calc(10 * var(--u)); border-radius: calc(3 * var(--u)); background: var(--label-bg, var(--chip-bg)); }
+          .strip-kanban .kb-ph-line { margin-top: calc(8 * var(--u)); width: calc(var(--w, 110) * var(--u)); height: calc(7 * var(--u)); border-radius: calc(3 * var(--u)); background: var(--line-2); }
+          .strip-kanban .kb-ph-meta { margin-top: calc(9 * var(--u)); width: calc(var(--w, 22) * var(--u)); height: calc(5 * var(--u)); border-radius: calc(2 * var(--u)); background: var(--chip-bg); }
 
-          .strip-kanban .kb-dash { z-index: 2; padding: calc(16 * var(--u) + 1px) calc(8 * var(--u) + 1px) calc(8 * var(--u) + 1px); overflow: hidden; border: 0; background: none; box-shadow: none; filter: drop-shadow(0 1px 1px #30527410) drop-shadow(0 4px 7px #5b3f9a17); }
-          .strip-kanban .kb-dash-head, .strip-kanban .kb-dash-tail { position: absolute; left: 0; right: 0; background: var(--paper); border: 1px solid #d9cfee; }
+          .strip-kanban .kb-dash { z-index: 2; padding: calc(16 * var(--u) + 1px) calc(8 * var(--u) + 1px) calc(8 * var(--u) + 1px); overflow: hidden; border: 0; background: none; box-shadow: none; filter: drop-shadow(0 1px 1px var(--shade-hover)) drop-shadow(0 4px 7px var(--shade-hover)); }
+          .strip-kanban .kb-dash-head, .strip-kanban .kb-dash-tail { position: absolute; left: 0; right: 0; background: var(--paper); border: 1px solid var(--focus-glow); }
           .strip-kanban .kb-dash-head { z-index: -1; top: 0; height: calc(70 * var(--u)); border-bottom: 0; border-radius: calc(7 * var(--u)) calc(7 * var(--u)) 0 0; }
           .strip-kanban .kb-dash-tail { z-index: -2; top: calc(70 * var(--u)); bottom: 0; border-top: 0; border-radius: 0 0 calc(7 * var(--u)) calc(7 * var(--u)); }
-          .strip-kanban .kb-cover { position: absolute; inset: 1px 1px auto 1px; border-radius: calc(6 * var(--u)) calc(6 * var(--u)) 0 0; height: calc(8 * var(--u)); background: var(--violet); }
-          .strip-kanban .kb-chip { display: inline-flex; align-items: center; height: calc(13 * var(--u)); padding: 0 calc(5 * var(--u)); border-radius: calc(3 * var(--u)); font-size: calc(7.5 * var(--u)); font-weight: 600; background: var(--violet-soft); color: var(--violet-ink); }
-          .strip-kanban .kb-title { margin-top: calc(5 * var(--u)); font-size: calc(10.5 * var(--u)); line-height: 1.45; font-weight: 550; color: var(--navy); white-space: nowrap; }
+          .strip-kanban .kb-cover { position: absolute; inset: 1px 1px auto 1px; border-radius: calc(6 * var(--u)) calc(6 * var(--u)) 0 0; height: calc(8 * var(--u)); background: var(--solid); }
+          .strip-kanban .kb-chip { display: inline-flex; align-items: center; height: calc(13 * var(--u)); padding: 0 calc(5 * var(--u)); border-radius: calc(3 * var(--u)); font-size: calc(7.5 * var(--u)); font-weight: 600; background: var(--label-bg); color: var(--label-ink); }
+          .strip-kanban .kb-title { margin-top: calc(5 * var(--u)); font-size: calc(10.5 * var(--u)); line-height: 1.45; font-weight: 550; color: var(--ink-strong); white-space: nowrap; }
           .strip-kanban .kb-checklist { margin-top: calc(7 * var(--u)); }
           .strip-kanban .kb-progress-row { display: flex; align-items: center; gap: calc(6 * var(--u)); height: calc(10 * var(--u)); }
-          .strip-kanban .kb-progress { position: relative; flex: 1; height: calc(4 * var(--u)); border-radius: calc(2 * var(--u)); background: #e8edf3; overflow: hidden; }
-          .strip-kanban .kb-progress-fill { display: block; transform-origin: 0 50%; width: 50%; height: 100%; border-radius: inherit; background: var(--violet); }
+          .strip-kanban .kb-progress { position: relative; flex: 1; height: calc(4 * var(--u)); border-radius: calc(2 * var(--u)); background: var(--track); overflow: hidden; }
+          .strip-kanban .kb-progress-fill { display: block; transform-origin: 0 50%; width: 50%; height: 100%; border-radius: inherit; background: var(--fill); }
           .strip-kanban .kb-progress-count { position: relative; display: grid; font-size: calc(8 * var(--u)); font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
           .strip-kanban .kb-progress-count > span { grid-area: 1 / 1; background: var(--paper); }
           .strip-kanban .kb-items { position: relative; list-style: none; margin: calc(4 * var(--u)) 0 0; padding: 0; }
           .strip-kanban .kb-item { position: relative; display: flex; align-items: center; gap: calc(6 * var(--u)); height: calc(14 * var(--u)); padding: 0 calc(2 * var(--u)); margin: 0 calc(-2 * var(--u)); border-radius: calc(3 * var(--u)); }
-          .strip-kanban .kb-box { position: relative; flex: none; width: calc(9 * var(--u)); height: calc(9 * var(--u)); border-radius: calc(2.5 * var(--u)); border: 1px solid #b7c3cf; background: #fff; }
-          .strip-kanban .kb-tick { position: absolute; inset: -1px; border-radius: inherit; background: var(--done); display: grid; place-items: center; }
+          .strip-kanban .kb-box { position: relative; flex: none; width: calc(9 * var(--u)); height: calc(9 * var(--u)); border-radius: calc(2.5 * var(--u)); border: 1px solid var(--line-strong); background: var(--paper); }
+          .strip-kanban .kb-tick { position: absolute; inset: -1px; border-radius: inherit; background: var(--dot); color: var(--paper); display: grid; place-items: center; }
           .strip-kanban .kb-tick svg { width: 76%; height: 76%; }
-          .strip-kanban .kb-item-bar { height: calc(5 * var(--u)); width: calc(var(--w) * var(--u)); border-radius: calc(2 * var(--u)); background: #d3dbe4; }
-          .strip-kanban .kb-item.is-done .kb-item-bar { background: #e6ebf0; }
-          .strip-kanban .kb-card-meta { position: absolute; left: calc(8 * var(--u) + 1px); top: calc(56 * var(--u) + 1px); display: flex; align-items: center; gap: calc(3 * var(--u)); height: calc(13 * var(--u)); padding: 0 calc(4 * var(--u)); border-radius: calc(3 * var(--u)); background: #dff0ea; color: #326e61; font-size: calc(8 * var(--u)); font-weight: 600; }
+          .strip-kanban .kb-item-bar { height: calc(5 * var(--u)); width: calc(var(--w) * var(--u)); border-radius: calc(2 * var(--u)); background: var(--line-2); }
+          .strip-kanban .kb-item.is-done .kb-item-bar { background: var(--chip-bg); }
+          .strip-kanban .kb-card-meta { position: absolute; left: calc(8 * var(--u) + 1px); top: calc(56 * var(--u) + 1px); display: flex; align-items: center; gap: calc(3 * var(--u)); height: calc(13 * var(--u)); padding: 0 calc(4 * var(--u)); border-radius: calc(3 * var(--u)); background: var(--ok-bg); color: var(--ok-ink); font-size: calc(8 * var(--u)); font-weight: 600; }
           .strip-kanban .kb-card-meta svg { width: calc(8 * var(--u)); height: calc(8 * var(--u)); }
 
-          .strip-kanban .kb-drop-slot { position: absolute; left: calc(8 * var(--u)); right: calc(8 * var(--u)); top: calc(28 * var(--u)); height: calc(77 * var(--u)); border: 1px dashed #9cc7b9; border-radius: calc(7 * var(--u)); background: #e3f1ec; }
+          .strip-kanban .kb-drop-slot { position: absolute; left: calc(8 * var(--u)); right: calc(8 * var(--u)); top: calc(28 * var(--u)); height: calc(77 * var(--u)); border: 1px dashed color-mix(in srgb, var(--dot) 50%, var(--ok-bg)); border-radius: calc(7 * var(--u)); background: var(--ok-bg); }
 
-          .strip-kanban .kb-still-cursor { position: absolute; left: calc(231 * var(--u)); top: calc(189 * var(--u)); width: calc(16 * var(--u)); height: calc(19 * var(--u)); filter: drop-shadow(0 1px 1.5px #0c263540); pointer-events: none; display: none; }
+          .strip-kanban .kb-still-cursor { position: absolute; left: calc(231 * var(--u)); top: calc(189 * var(--u)); width: calc(16 * var(--u)); height: calc(19 * var(--u)); color: var(--ink-strong); filter: drop-shadow(0 1px 1.5px var(--shade-detail)); pointer-events: none; display: none; }
           .strip-kanban .kb-stage:not([data-uimotion]) .kb-still-cursor { display: block; }
 
-          .strip-kanban .kb-progress-done { position: absolute; inset: 0; border-radius: inherit; background: var(--done); }
-          .strip-kanban .kb-row-hl { position: absolute; left: calc(-2 * var(--u)); right: calc(-2 * var(--u)); top: calc(42 * var(--u)); height: calc(14 * var(--u)); border-radius: calc(3 * var(--u)); background: #f2f6fa; }
+          .strip-kanban .kb-progress-done { position: absolute; inset: 0; border-radius: inherit; background: var(--dot); }
+          .strip-kanban .kb-row-hl { position: absolute; left: calc(-2 * var(--u)); right: calc(-2 * var(--u)); top: calc(42 * var(--u)); height: calc(14 * var(--u)); border-radius: calc(3 * var(--u)); background: var(--well); }
           .strip-kanban .kb-ghost { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
-          .strip-kanban .uimotion-cursor { color: #0c2635; filter: drop-shadow(0 1px 1.5px #0c263540); }
+          .strip-kanban .uimotion-cursor { color: var(--ink-strong); filter: drop-shadow(0 1px 1.5px var(--shade-detail)); }
 
-          .strip-kanban .kb-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding: 10px 20px; border-top: 1px solid #dce4ed; background: #fefefd8c; }
+          .strip-kanban .kb-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding: 10px 20px; border-top: 1px solid var(--line-2); background: color-mix(in srgb, var(--paper) 55%, transparent); }
           .strip-kanban .kb-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-          .strip-kanban .kb-tags li { padding: 3px 10px; border-radius: 999px; border: 1px solid #dfe6ee; background: #eef2f7; font-size: 12px; line-height: 1.4; font-weight: 500; color: #536988; }
-          .strip-kanban .kb-foot-hint { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #62748a; }
+          .strip-kanban .kb-tags li { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--sunken); font-size: 12px; line-height: 1.4; font-weight: 500; color: var(--muted); }
+          .strip-kanban .kb-foot-hint { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
           .strip-kanban .kb-foot-hint svg { width: 12px; height: 12px; }
 
           @container kanban-strip (min-width: 640px) {
@@ -4569,14 +4248,14 @@ window.clayTheme = {
         <div class="kb-inner">
           <div class="kb-copy">
             <p class="kb-name">
-              <svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="2" width="6" height="14" rx="2" fill="#0c2635"/><rect x="10" y="2" width="6" height="9" rx="2" fill="#8d70c8"/></svg>
+              <svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="2" width="6" height="14" rx="2" fill="currentColor"/><rect x="10" y="2" width="6" height="9" rx="2" style="fill:var(--fill)"/></svg>
               Kanban
             </p>
             <h2 class="kb-headline">See what's next, what's stuck, and what's done.</h2>
             <p class="kb-sub">Big projects are easy to lose track of. Split the work into steps and watch each one move from started to finished.</p>
             <ul class="kb-benefits">
-              <li>Track complex projects</li>
-              <li>Keep track of what gets done</li>
+              <li class="kb-tone" data-tone="2">Track complex projects</li>
+              <li class="kb-tone" data-tone="4">Keep track of what gets done</li>
             </ul>
           </div>
 
@@ -4584,62 +4263,62 @@ window.clayTheme = {
             <div class="kb-fit" aria-hidden="true">
               <div class="kb-stage">
                 <div class="kb-bar">
-                  <svg viewBox="0 0 18 18"><rect x="2" y="2" width="6" height="14" rx="2" fill="#dbe5ee"/><rect x="10" y="2" width="6" height="9" rx="2" fill="#a68bcf"/></svg>
+                  <svg viewBox="0 0 18 18"><rect x="2" y="2" width="6" height="14" rx="2" style="fill:var(--bar-ink)"/><rect x="10" y="2" width="6" height="9" rx="2" style="fill:var(--bar-accent)"/></svg>
                   <span class="kb-bar-title">Launch Plan</span>
                   <span class="kb-bar-grow"></span>
                   <span class="kb-bar-search"></span>
                   <span class="kb-bar-btn"></span>
                 </div>
 
-                <div class="kb-list kb-list-todo">
+                <div class="kb-list kb-list-todo kb-tone" data-tone="1">
                   <div class="kb-list-head"><i class="kb-dot"></i>To do<span class="kb-grow"></span><span class="kb-count"><span>4</span></span></div>
                   <div class="kb-cards">
-                    <div class="kb-card"><div class="kb-ph-chip" style="--w:40;--bg:#f8edda"></div><div class="kb-ph-line" style="--w:118"></div><div class="kb-ph-meta"></div></div>
-                    <div class="kb-card"><div class="kb-ph-chip" style="--w:36;--bg:#e4edf9"></div><div class="kb-ph-line" style="--w:96"></div><div class="kb-ph-meta" style="--w:30"></div></div>
-                    <div class="kb-card"><div class="kb-ph-chip" style="--w:38;--bg:#dff0ea"></div><div class="kb-ph-line" style="--w:126"></div><div class="kb-ph-meta"></div></div>
+                    <div class="kb-card"><div class="kb-ph-chip" data-color="amber" style="--w:40"></div><div class="kb-ph-line" style="--w:118"></div><div class="kb-ph-meta"></div></div>
+                    <div class="kb-card"><div class="kb-ph-chip" data-color="blue" style="--w:36"></div><div class="kb-ph-line" style="--w:96"></div><div class="kb-ph-meta" style="--w:30"></div></div>
+                    <div class="kb-card"><div class="kb-ph-chip" data-color="teal" style="--w:38"></div><div class="kb-ph-line" style="--w:126"></div><div class="kb-ph-meta"></div></div>
                   </div>
                 </div>
 
-                <div class="kb-list kb-list-doing">
+                <div class="kb-list kb-list-doing kb-tone" data-tone="2">
                   <div class="kb-list-head"><i class="kb-dot"></i>Doing<span class="kb-grow"></span><span class="kb-count kb-count-doing"><span>3</span><span class="kb-count-next kb-count-doing-next later">2</span></span></div>
                   <div class="kb-cards">
                     <div class="kb-card kb-dash">
                       <span class="kb-dash-tail"></span><span class="kb-dash-head"></span>
-                      <span class="kb-cover"></span>
-                      <span class="kb-chip">Design</span>
+                      <span class="kb-cover" data-color="violet"></span>
+                      <span class="kb-chip" data-color="violet">Design</span>
                       <div class="kb-title">Design the new dashboard</div>
                       <div class="kb-checklist">
                         <div class="kb-progress-row">
-                          <span class="kb-progress"><span class="kb-progress-fill"></span><span class="kb-progress-done later"></span></span>
+                          <span class="kb-progress"><span class="kb-progress-fill"></span><span class="kb-progress-done later kb-tone" data-tone="4"></span></span>
                           <span class="kb-progress-count"><span class="kb-n3">3/6</span><span class="kb-n4 later">4/6</span><span class="kb-n5 later">5/6</span><span class="kb-n6 later">6/6</span></span>
                         </div>
                         <ul class="kb-items">
                           <li class="kb-row-hl"></li>
-                          <li class="kb-item kb-item-1 is-done"><span class="kb-box"><span class="kb-tick"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:62"></span></li>
-                          <li class="kb-item kb-item-2 is-done"><span class="kb-box"><span class="kb-tick"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:84"></span></li>
-                          <li class="kb-item kb-item-3 is-done"><span class="kb-box"><span class="kb-tick"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:54"></span></li>
-                          <li class="kb-item kb-item-4"><span class="kb-box"><span class="kb-tick later"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:76"></span></li>
-                          <li class="kb-item kb-item-5"><span class="kb-box"><span class="kb-tick later"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:92"></span></li>
-                          <li class="kb-item kb-item-6"><span class="kb-box"><span class="kb-tick later"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:68"></span></li>
+                          <li class="kb-item kb-item-1 is-done"><span class="kb-box"><span class="kb-tick kb-tone" data-tone="4"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:62"></span></li>
+                          <li class="kb-item kb-item-2 is-done"><span class="kb-box"><span class="kb-tick kb-tone" data-tone="4"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:84"></span></li>
+                          <li class="kb-item kb-item-3 is-done"><span class="kb-box"><span class="kb-tick kb-tone" data-tone="4"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:54"></span></li>
+                          <li class="kb-item kb-item-4"><span class="kb-box"><span class="kb-tick later kb-tone" data-tone="4"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:76"></span></li>
+                          <li class="kb-item kb-item-5"><span class="kb-box"><span class="kb-tick later kb-tone" data-tone="4"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:92"></span></li>
+                          <li class="kb-item kb-item-6"><span class="kb-box"><span class="kb-tick later kb-tone" data-tone="4"><svg viewBox="0 0 10 10"><path d="M2.2 5.2l1.9 1.9 3.8-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><span class="kb-item-bar" style="--w:68"></span></li>
                         </ul>
                       </div>
-                      <span class="kb-card-meta later"><svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="2" fill="none" stroke="#326e61" stroke-width="1"/><path d="M3 5.1l1.4 1.4 2.6-2.8" fill="none" stroke="#326e61" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>6/6</span>
+                      <span class="kb-card-meta later"><svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1"/><path d="M3 5.1l1.4 1.4 2.6-2.8" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>6/6</span>
                     </div>
-                    <div class="kb-card"><div class="kb-ph-chip" style="--w:40;--bg:#e4edf9"></div><div class="kb-ph-line" style="--w:104"></div><div class="kb-ph-meta"></div></div>
+                    <div class="kb-card"><div class="kb-ph-chip" data-color="blue" style="--w:40"></div><div class="kb-ph-line" style="--w:104"></div><div class="kb-ph-meta"></div></div>
                   </div>
                 </div>
 
-                <div class="kb-list kb-list-done">
+                <div class="kb-list kb-list-done kb-tone" data-tone="4">
                   <div class="kb-list-head"><i class="kb-dot"></i>Done<span class="kb-grow"></span><span class="kb-count kb-count-done"><span>3</span><span class="kb-count-next kb-count-done-next later">4</span></span></div>
                   <span class="kb-drop-slot later"></span>
                   <div class="kb-cards kb-done-cards">
-                    <div class="kb-card kb-done-card"><div class="kb-ph-chip" style="--w:36;--bg:#e4edf9"></div><div class="kb-ph-line" style="--w:112"></div><div class="kb-ph-meta"></div></div>
-                    <div class="kb-card kb-done-card"><div class="kb-ph-chip" style="--w:34;--bg:#eee7f9"></div><div class="kb-ph-line" style="--w:72"></div><div class="kb-ph-meta"></div></div>
-                    <div class="kb-card kb-done-card"><div class="kb-ph-chip" style="--w:40;--bg:#dff0ea"></div><div class="kb-ph-line" style="--w:120"></div><div class="kb-ph-meta"></div></div>
+                    <div class="kb-card kb-done-card"><div class="kb-ph-chip" data-color="blue" style="--w:36"></div><div class="kb-ph-line" style="--w:112"></div><div class="kb-ph-meta"></div></div>
+                    <div class="kb-card kb-done-card"><div class="kb-ph-chip" data-color="violet" style="--w:34"></div><div class="kb-ph-line" style="--w:72"></div><div class="kb-ph-meta"></div></div>
+                    <div class="kb-card kb-done-card"><div class="kb-ph-chip" data-color="teal" style="--w:40"></div><div class="kb-ph-line" style="--w:120"></div><div class="kb-ph-meta"></div></div>
                   </div>
                 </div>
 
-                <svg class="kb-still-cursor" viewBox="136 60 330 400"><path d="M142 118C142 84 180 58 214 84L440 268C472 294 455 338 418 338L335 338C310 338 290 348 274 368L226 432C202 462 158 448 156 412Z" fill="#0c2635"/></svg>
+                <svg class="kb-still-cursor" viewBox="136 60 330 400"><path d="M142 118C142 84 180 58 214 84L440 268C472 294 455 338 418 338L335 338C310 338 290 348 274 368L226 432C202 462 158 448 156 412Z" fill="currentColor"/></svg>
               </div>
             </div>
           </div>

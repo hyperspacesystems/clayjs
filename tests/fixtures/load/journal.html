@@ -10,7 +10,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="hyper-source" content="https://hyperclay.com/templates/journal/hosted/latest.html">
-<meta name="hyper-version" content="1.5.0">
+<meta name="hyper-version" content="1.6.0">
 <meta name="clay-template" content="journal hosted">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Journal</title>
@@ -621,6 +621,8 @@ button.tb-value:hover { color: var(--blue); }
 .menu { position: relative; flex: none; }
 .menu-slot { flex: none; display: inline-flex; }
 .app[ephemeral~="clay-menu"] #fileMenu { display: none; }
+/* A reader in view mode gets no settings menu: every row in it edits, exports or reshapes the journal (David, Nov 11). */
+:root:not([editmode="true"]) #fileMenu { display: none; }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; color: var(--ink-2); }
 .icon-btn:hover, .icon-btn[aria-expanded="true"] { color: var(--ink); background: var(--hover); }
 .icon-btn:not(#searchBtn):not(#menuBtn) circle { fill: currentColor; stroke: none; }
@@ -746,7 +748,6 @@ button.tb-value:hover { color: var(--blue); }
   .pictures { padding-left: 44px; padding-right: 16px; }
   .image-strip { padding-left: 44px; padding-right: 16px; }
   .starters { padding-left: 44px; padding-right: 16px; }
-  .starter { min-height: 44px; }
   .otd-row { grid-template-columns: 78px minmax(0, 1fr); }
   .pick-bar { padding: 9px 12px 10px 16px; }
 }
@@ -758,7 +759,9 @@ button.tb-value:hover { color: var(--blue); }
   :root .app:has(#trashHead:not([hidden])) .index { display: flex !important; }
   :root .app:has(#trashHead:not([hidden])) .desk-scroll { display: none !important; }
   .row-acts { flex-direction: column; align-items: stretch; }
-  .row-acts button, .more-btn, .trash-empty, .toast button, .peer-bar button, .note button, .save .chip-btn { min-height: 44px; justify-content: center; }
+  /* Text buttons on a phone: drawn 40px tall, with a 44px tap area from 2px of reach above and below (David, Nov 11). */
+  .row-acts button, .more-btn, .trash-empty, .toast button, .peer-bar button, .note button, .save .chip-btn, .starter { position: relative; min-height: 40px; justify-content: center; }
+  :is(.row-acts button, .more-btn, .trash-empty, .toast button, .peer-bar button, .note button, .save .chip-btn, .starter)::after { content: ""; position: absolute; inset: auto 0; top: 50%; height: 44px; translate: 0 -50%; }
 }
 
 /* ------------------------------------------------ reading view: no edit rights, or ClayJS not loaded */
@@ -775,271 +778,6 @@ button.tb-value:hover { color: var(--blue); }
 .no-clay .entries > .entry[data-deleted-at]:not([data-deleted-at=""]) { display: none !important; }
 .no-clay :is(.reader, .tb-slot, .sheet-empty, .writer, #calBtn) { display: none !important; }
 .vh { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-
-[data-look-switch] {
-  flex: none;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  margin: 10px 12px 12px;
-  padding: 7px 8px 8px 10px;
-  background: var(--sheet);
-  border: 1px solid var(--line-2);
-  border-radius: 7px;
-  box-shadow: var(--shadow);
-  color: var(--ink);
-  font: 400 12.5px/1.2 var(--sans);
-}
-
-[data-look-switch] :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-[data-look-switch] .look-switch-lead {
-  grid-column: 1;
-  grid-row: 1;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-[data-look-switch] .look-switch-title {
-  font: 600 12.5px/1.2 var(--sans);
-  color: var(--ink);
-  white-space: nowrap;
-}
-
-[data-look-switch] .look-switch-phone-label {
-  display: none;
-}
-
-[data-look-switch] .look-switch-dismiss {
-  grid-column: 2;
-  grid-row: 1;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin: -4px -5px -2px 0;
-  border-radius: 5px;
-  color: var(--ink-2);
-  transition: background 0.14s ease, color 0.14s ease;
-}
-
-[data-look-switch] .look-switch-dismiss:focus-visible {
-  outline-offset: 0;
-}
-
-[data-look-switch] .look-switch-dismiss:hover {
-  color: var(--ink);
-  background: var(--hover);
-}
-
-[data-look-switch] .look-switch-dismiss svg {
-  width: 12px;
-  height: 12px;
-}
-
-[data-look-switch] .look-switch-controls {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-[data-look-switch] .look-switch-stepper {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  height: 30px;
-}
-
-[data-look-switch] .look-switch-step {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  color: var(--ink);
-  background: var(--paper-fill);
-  border: 1px solid var(--line);
-  transition: background 0.14s ease;
-}
-
-[data-look-switch] .look-switch-step:hover {
-  background: var(--hover);
-}
-
-[data-look-switch] .look-switch-step svg {
-  width: 13px;
-  height: 13px;
-}
-
-[data-look-switch] .look-switch-status {
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 5px;
-  min-width: 0;
-  padding: 0 4px;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-[data-look-switch] .look-switch-name {
-  font: 600 12.5px/1 var(--sans);
-  color: var(--ink);
-}
-
-[data-look-switch] .look-switch-count {
-  font: 400 11px/1 var(--mono);
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-}
-
-[data-look-switch] .look-switch-choose {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 6px;
-  background: var(--ink);
-  color: var(--sheet);
-  font: 600 12.5px/1 var(--sans);
-  white-space: nowrap;
-  transition: opacity 0.14s ease;
-}
-
-[data-look-switch] .look-switch-choose:hover {
-  opacity: 0.88;
-}
-
-@media (forced-colors: active) {
-  [data-look-switch] .look-switch-choose {
-    background: ButtonFace;
-    color: ButtonText;
-    border: 1px solid ButtonText;
-  }
-}
-
-@media (max-width: 759px) {
-  [data-look-switch] {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-height: 52px;
-    margin: 10px 12px;
-    padding: 3px 3px 3px 12px;
-    border-radius: 8px;
-  }
-
-  [data-look-switch] .look-switch-lead {
-    flex: none;
-    margin-right: auto;
-  }
-
-  [data-look-switch] .look-switch-title {
-    display: none;
-  }
-
-  [data-look-switch] .look-switch-phone-label {
-    display: inline;
-    font: 600 12.5px/1 var(--sans);
-    color: var(--ink);
-    white-space: nowrap;
-  }
-
-  [data-look-switch] .look-switch-controls {
-    flex: none;
-    gap: 4px;
-  }
-
-  [data-look-switch] [data-look-prev],
-  [data-look-switch] .look-switch-count {
-    display: none;
-  }
-
-  [data-look-switch] .look-switch-stepper {
-    flex: none;
-    height: 44px;
-    gap: 4px;
-  }
-
-  [data-look-switch] .look-switch-status {
-    padding: 0 2px;
-  }
-
-  [data-look-switch] .look-switch-name {
-    font: 600 12.5px/1 var(--sans);
-  }
-
-  [data-look-switch] [data-look-next],
-  [data-look-switch] .look-switch-dismiss {
-    width: 44px;
-    height: 44px;
-    margin: 0;
-    border-radius: 6px;
-  }
-
-  [data-look-switch] [data-look-next] svg,
-  [data-look-switch] .look-switch-dismiss svg {
-    width: 14px;
-    height: 14px;
-  }
-
-  [data-look-switch] .look-switch-choose {
-    min-width: 44px;
-    height: 44px;
-    padding: 0 14px;
-    border-radius: 6px;
-    font: 600 13px/1 var(--sans);
-  }
-}
-
-
-@media (prefers-reduced-motion: reduce) {
-  [data-look-switch],
-  [data-look-switch] * {
-    transition: none !important;
-    animation: none !important;
-  }
-}
-
-@media print {
-  [data-look-switch] {
-    display: none !important;
-  }
-}
-
-/* Hidden until the script names the theme (a reader, an owner in view, a runtime with no
-   clay.variants), and for good once the picker ends. Neither changes an attribute on the root. */
-[data-look-switch]:has(.look-switch-name:empty),
-html[theme-picker="done"] [data-look-switch] {
-  display: none !important;
-}
-/* The theme picker in the Journal: hidden while the phone keyboard is up, and in focus mode. */
-@media (max-width: 759px) {
-  .app:has(textarea:focus, input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="file"]):focus, [contenteditable]:not([contenteditable="false"]):focus) [data-look-switch] {
-    display: none !important;
-  }
-}
-
-.app[ephemeral~="focus"] [data-look-switch] {
-  display: none !important;
-}
 
 /* ------------------------------------------------ print: the canonical records and their dates, never the screen
    around them. The list projection shows one page of rows, the editor one entry and the reader one rendering, so
@@ -2547,7 +2285,7 @@ body .strip-journal .sj-line {
 @media (max-width: 759px) { [part~="button"] { width: 44px; height: 44px; } }
 </style>
 <style id="no-js">@media (scripting: none) { #entries { display: flex !important; } .entries > .entry { display: block; padding: 20px 28px; border-bottom: 1px solid var(--line); white-space: pre-wrap; font-family: var(--mono); } .entries > .entry::before { content: attr(data-date); display: block; margin-bottom: 8px; font: 500 11px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); } .entry-source { margin: 0; white-space: pre-wrap; font: inherit; } .entries > .entry[data-deleted-at]:not([data-deleted-at=""]) { display: none !important; } .desk-scroll { display: block !important; } :is(.reader, .tb-slot, .sheet-empty, .writer) { display: none !important; } }</style>
-<script type="application/json" data-rules-name="api" data-rules-version="1">{"entries":["#entries > article.entry",{"id":"@data-id","date":"@data-date","created":"@data-created","updated":"@data-updated","body":".entry-body@textContent","deletedAt":"@data-deleted-at","pinned":"@data-pinned"}],"name":"#docTitle","title":"title","look":"html@look","themePicker":"html@theme-picker","thanks":["a[clay-menu-item]",{"id":"@data-id"}]}</script>
+<script type="application/json" data-rules-name="api" data-rules-version="1">{"entries":["#entries > article.entry",{"id":"@data-id","date":"@data-date","created":"@data-created","updated":"@data-updated","body":".entry-body@textContent","deletedAt":"@data-deleted-at","pinned":"@data-pinned"}],"name":"#docTitle","title":"title","look":"html@look","thanks":["a[clay-menu-item]",{"id":"@data-id"}]}</script>
 <style>[cms-template]{display:none!important}</style>
 </head>
 <body>
@@ -2573,7 +2311,7 @@ body .strip-journal .sj-line {
       <div class="head-acts" clay="freeze">
         <button class="icon-btn new-btn" type="button" data-act="new" aria-label="New entry" title="New entry"><svg class="i" viewBox="0 0 16 16"><path d="M13.5 8.5v4a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h4M11.5 2.5l2 2L8 10l-2.5.5L6 8z"/></svg></button>
         <button class="icon-btn" id="searchBtn" type="button" aria-label="Search entries" title="Search (/)" aria-expanded="false"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg></button>
-        <div class="menu-slot" clay-menu-slot no-edit-switch clay-menu-label="Settings" clay="freeze"><template clay-menu-icon><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6M10 3h4l1.5 3 3.5-.5 2 4-2 2.5 2 2.5-2 4-3.5-.5-1.5 3h-4l-1.5-3-3.5.5-2-4 2-2.5-2-2.5 2-4 3.5.5Z"/></svg></template></div>
+        <div class="menu-slot" clay-menu-slot clay-menu-looks no-edit-switch clay-menu-label="Settings" clay="freeze"><template clay-menu-icon><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6M10 3h4l1.5 3 3.5-.5 2 4-2 2.5 2 2.5-2 4-3.5-.5-1.5 3h-4l-1.5-3-3.5.5-2-4 2-2.5-2-2.5 2-4 3.5.5Z"/></svg></template></div>
         <div class="menu" id="fileMenu" clay="freeze">
           <button class="icon-btn" id="menuBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Settings" title="Settings"><svg class="i gear" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6M10 3h4l1.5 3 3.5-.5 2 4-2 2.5 2 2.5-2 4-3.5-.5-1.5 3h-4l-1.5-3-3.5.5-2-4 2-2.5-2-2.5 2-4 3.5.5Z"/></svg></button>
           <div class="menu-pop" id="menuPop" role="menu">
@@ -2689,90 +2427,6 @@ body .strip-journal .sj-line {
       <template><div class:month="item.month" class:row="!item.month" class:trashed="item.trashed" class:picking="state.pick !== ''" role="listitem" attr:tabindex="item.month ? '-1' : '0'"><label class="pick" show="state.pick !== '' && !item.month"><input type="checkbox" attr:data-pick="item.$key" attr:aria-label="'Select ' + item.title" effect="el.checked = !!item.picked"></label><span class="caps" show="item.month" text="item.month"></span><div class="day" show="!item.month"><b text="item.day"></b><i text="item.dow"></i><em class="clock" show="item.clock" attr:title="'Created at ' + item.clock"><span class="vh">Created at </span><span text="item.clock"></span></em></div><div class="row-body" show="!item.month"><h3 class:untitled="item.untitled" text="item.title"></h3><p show="item.snippet" text="item.snippet"></p><span class="row-presence" clay="no-save no-watch" attr:data-presence-entry="item.$key" hidden></span></div><span class="pin-mark" show="item.pinned" role="img" aria-label="Pinned entry" title="Pinned entry"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2.5h4l-.6 4.2 2.1 2.3H4.5l2.1-2.3zM8 9v4.5"/></svg></span><button class="row-menu-btn icon-btn" type="button" data-act="entry-menu" show="!item.month && !item.trashed" aria-label="Entry options" aria-haspopup="menu" aria-expanded="false" title="Entry options"><svg class="i" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="12.5" cy="8" r="1.1"/></svg></button><span class="row-acts" show="item.trashed"><button class="restore" type="button" data-act="restore">Restore</button><button class="forever" type="button" data-act="purge">Delete forever</button></span></div></template>
     </div>
     <div class="list-more" clay="freeze"><button class="more-btn" id="more" type="button" data-act="more" show="state.view !== 'trash' && fmt.more(state.matches, state.shown, fmt.route('entry'))" text="fmt.more(state.matches, state.shown, fmt.route('entry'))"></button></div>
-    <aside class="look-switch" data-look-switch clay="freeze" aria-label="Theme picker">
-      <div class="look-switch-lead">
-        <span class="look-switch-title">Theme picker</span>
-        <span class="look-switch-phone-label">Theme</span>
-      </div>
-      <div class="look-switch-controls">
-        <div class="look-switch-stepper">
-          <button type="button" class="look-switch-step" data-look-prev aria-label="Previous theme">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"/></svg>
-          </button>
-          <span class="look-switch-status" aria-live="polite">
-            <span class="look-switch-name"></span>
-            <span class="look-switch-count"></span>
-          </span>
-          <button type="button" class="look-switch-step" data-look-next aria-label="Next theme">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg>
-          </button>
-        </div>
-        <button type="button" class="look-switch-choose" data-look-choose aria-label="Confirm theme">Confirm</button>
-      </div>
-      <button type="button" class="look-switch-dismiss" data-look-dismiss aria-label="Dismiss theme picker">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>
-      </button>
-    </aside>
-    <script>
-    (() => {
-      const root = document.querySelector('[data-look-switch]');
-      if (!root) return;
-      const html = document.documentElement;
-      const name = root.querySelector('.look-switch-name');
-      const count = root.querySelector('.look-switch-count');
-      const variants = () => window.clay?.variants;
-      const looks = () => variants()?.list() ?? [];
-      const saves = () => window.clay?.mode === 'edit' || window.clay?.mode === 'draft';
-      const at = (list) => list.findIndex((look) => look.name === variants().shown);
-      let start = null;
-      const paint = () => {
-        const list = looks();
-        const ended = html.getAttribute('theme-picker') === 'done';
-        const index = list.length > 1 && saves() && !ended ? at(list) : -1;
-        if (index >= 0 && start === null) start = variants().active;
-        name.textContent = index < 0 ? '' : list[index].label;
-        count.textContent = index < 0 ? '' : `(${index + 1} of ${list.length})`;
-        const menu = window.clay?.menu;
-        if (list.length > 1 && saves() && ended) menu?.addItem?.({ id: 'look.picker', label: 'Change theme', run: reopen });
-        else menu?.removeItem?.('look.picker');
-      };
-      const step = (by) => {
-        const list = looks();
-        if (list.length < 2) return;
-        variants().preview(list[(at(list) + by + list.length) % list.length].name);
-      };
-      const end = () => {
-        html.setAttribute('theme-picker', 'done');
-        window.clay?.save?.soon?.();
-        paint();
-      };
-      const confirm = () => {
-        variants().choose(variants().shown);
-        html.setAttribute('look', variants().shown);
-        end();
-      };
-      const dismiss = () => {
-        const back = window.clay.mode === 'edit' ? variants().active : start;
-        if (back && back !== variants().shown) variants().preview(back);
-        end();
-      };
-      // Once ended, the gear menu's Change theme brings the picker back, starting from the theme on screen.
-      const reopen = () => {
-        html.setAttribute('theme-picker', 'open');
-        start = null;
-        window.clay?.save?.soon?.();
-        paint();
-      };
-      for (const [selector, run] of [['[data-look-prev]', () => step(-1)], ['[data-look-next]', () => step(1)], ['[data-look-choose]', confirm], ['[data-look-dismiss]', dismiss]]) {
-        const button = root.querySelector(selector);
-        button.addEventListener('mousedown', (event) => event.preventDefault());
-        button.addEventListener('click', run);
-      }
-      document.addEventListener('clay:drafts-restored', (event) => { if (event.detail?.external) start = null; });
-      for (const type of ['clay:menu-ready', 'clay:variant-change', 'clay:drafts-restored', 'clay:modechange', 'clay:sync-applied']) document.addEventListener(type, paint);
-      paint();
-    })();
-    </script>
       </section>
 
   <main class="desk-scroll" id="deskScroll">
@@ -5002,7 +4656,8 @@ const words = text.trim().split(/\s+/).length;
           ? 'Local copy could not be updated'
           : copies === 1 ? '1 recovery copy' : `${copies} recovery copies`;
       }
-      statusEl.hidden = !failed && copies === 0;
+      // Shown only when the local copy fails: a count in normal use is a status dot by another name (David, Nov 11).
+      statusEl.hidden = !failed;
       statusEl.classList.toggle('failed', failed);
       if (copyBtn) copyBtn.hidden = !failed;
       if (downloadBtn) downloadBtn.hidden = !failed;
