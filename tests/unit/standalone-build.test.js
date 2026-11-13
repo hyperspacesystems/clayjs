@@ -78,8 +78,10 @@ test("carries the core, every plugin and every satellite", () => {
   // the checklist popovers, document settings, the chart inspector and the menu's host
   // actions (2026-10-29, 5.65 MB measured), then to 5.8 MB for the visitor menu's shell, DOM
   // items and looks (2026-11-05, 5.71 MB measured), then to 5.9 MB for the visitor settings gear,
-  // the SEO sheet's page skin and the phone menu rules among the Nov 11 changes (5.80 MB measured).
-  expect(bundle.length).toBeLessThan(5_900_000);
+  // the SEO sheet's page skin and the phone menu rules among the Nov 11 changes (5.80 MB measured),
+  // then to 6.0 MB for sapjs 0.9.0's plugin host and the visitor menu's Earlier drafts
+  // (2026-11-13, 5.92 MB measured).
+  expect(bundle.length).toBeLessThan(6_000_000);
 });
 
 // The chunk build adds a generated bootstrap per entry that has a target, plus the
