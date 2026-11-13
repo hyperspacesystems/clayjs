@@ -29,6 +29,7 @@ import Mutation from './mutation.js';
 import { isEditMode } from '../core/is-edit-mode.js';
 import { STRIP_FROM_DIRTY_CHECK, SNAPSHOT_REMOVE_SELECTOR } from './region-policy.js';
 import { PERSIST } from './attr-aliases.js';
+import { setDraftGate } from '../core/draft-mode.js';
 
 let changes = 0;
 let clearedAt = 0;
@@ -121,6 +122,7 @@ export function startDirtyGate() {
   );
   document.addEventListener('input', onUserInput, true);
   document.addEventListener('change', onUserInput, true);
+  setDraftGate({ token: gateTokenNow, unchangedSince: gateUnchangedSince });
 }
 
 /** The morph-apply window: nothing that happens inside it is a user edit. */
@@ -208,6 +210,23 @@ export function gateCaptureToken() {
     probe.push([el, controlSignature(el)]);
   }
   return { gen: changes, probe };
+}
+
+/** A token for the page as it is now: what the browser has queued is counted first. */
+export function gateTokenNow() {
+  Mutation._deliverBeforePause();
+  return gateCaptureToken();
+}
+
+/**
+ * True when nothing was recorded since the token was taken and every [persist] control
+ * still holds what it held then. Records the browser has queued are delivered first, so
+ * the answer holds in the task that made a change too.
+ */
+export function gateUnchangedSince(token) {
+  if (!token) return false;
+  Mutation._deliverBeforePause();
+  return changes === token.gen && token.probe.every(([el, sig]) => controlSignature(el) === sig);
 }
 
 /** A change nothing in the DOM recorded: the page holds text a save has not written. */

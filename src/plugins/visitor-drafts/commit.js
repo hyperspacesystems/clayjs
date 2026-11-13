@@ -76,6 +76,22 @@ export function applyKeys(data, keys, merge3) {
 export const isChain = (value) => isPlain(value) && typeof value.tab === "string" && typeof value.reset === "string" && Array.isArray(value.ops);
 export const recoveryMark = (copy) => isChain(copy) ? `op:${copy.tab}:${copy.ops.at(-1)?.seq ?? copy.acked ?? 0}` : foreignMark(copy);
 
+// Ended journals carry only the fields they changed; other fields use the served page.
+export function recoveryRecord(copy, seed) {
+  if (isPlain(copy) && copy.v === 1 && isPlain(copy.data)) return clone(copy);
+  if (!isChain(copy) || !copy.ops.length) return null;
+  const data = clone(seed);
+  let unit = null;
+  for (const op of copy.ops) {
+    for (const [name, pair] of Object.entries(op.keys ?? {})) {
+      if ("m" in pair) Object.defineProperty(data, name, { value: clone(pair.m), enumerable: true, writable: true, configurable: true });
+      else delete data[name];
+    }
+    if (op.unit !== undefined) unit = op.unit.to;
+  }
+  return { v: 1, savedAt: copy.ops.at(-1).savedAt, data, ...(unit && { live: clone(unit.live), blockeditor: clone(unit.blockeditor) }) };
+}
+
 // Cleanup needs proof for this exact chain, even when its generation has ended.
 export function settled(chain, meta) {
   if (isPlain(chain) && meta.recovery?.includes(recoveryMark(chain))) return true;
@@ -123,7 +139,7 @@ function foreignBase(line, { record, seen, direct, v1base, meta }) {
  * @param {?Object} [input.seen] - the latest cache copy the caller saw at the draft's key
  * @param {boolean} [input.direct] - a storage event says `local` replaced exactly that copy
  */
-export function commit(stored, { seed, newId, now, merge3, unitMark, marker = null, resets = [], chains = [], local = null, seen = null, direct = false }) {
+export function commit(stored, { seed, newId, now, merge3, same, unitMark, marker = null, resets = [], chains = [], local = null, seen = null, direct = false, recovery = null, copies = [] }) {
   const meta = stored.meta ? clone(stored.meta) : emptyMeta(marker);
   // A database the browser cleared counts on from this ClayJS's cache, so the cache never
   // reads as newer than the record.
@@ -260,6 +276,36 @@ export function commit(stored, { seed, newId, now, merge3, unitMark, marker = nu
     out.applied[chain.tab] = at;
   }
 
+  if (recovery) {
+    const found = copies.find(([mark]) => mark === recovery.mark);
+    if (!found) throw new Error("That draft is no longer available. Open the list again.");
+    if (recovery.type === "remove") {
+      meta.recovery = (meta.recovery ?? []).filter((mark) => mark !== recovery.mark);
+      out.dropped.push(recovery.mark);
+      out.removedMark = recovery.mark;
+      out.changed = true;
+    } else if (recovery.type === "restore" && recovery.reset === meta.reset) {
+      const chosen = recoveryRecord(found[1], seed);
+      if (!chosen) throw new Error("This draft cannot be restored by this version.");
+      if (meta.recovery?.includes(recovery.mark)) meta.recovery = [recovery.mark, ...meta.recovery.filter((mark) => mark !== recovery.mark)];
+      const alreadyKept = record && copies.some(([mark, copy]) => {
+        if (!meta.recovery?.includes(mark)) return false;
+        const kept = recoveryRecord(copy, seed);
+        return kept && same(record.data, kept.data) && same(unitOf(record), unitOf(kept));
+      });
+      if (record && !alreadyKept) recover(record);
+      record = {
+        v: 1, savedAt: new Date(now).toISOString(), id: newId(),
+        ancestry: lineage([], record, meta), data: chosen.data,
+        ...(chosen.blockeditor && { live: chosen.live, blockeditor: chosen.blockeditor }),
+      };
+      meta.unit = unitMark(unitOf(record));
+      meta.rev++;
+      out.changed = true;
+      out.restoredCopy = true;
+    }
+  }
+
   for (const [tab, entry] of Object.entries(meta.tabs)) {
     if (now - (entry.at ?? 0) > TAB_TTL_MS) {
       delete meta.tabs[tab];
@@ -285,7 +331,8 @@ export function transact(drafts, key, input, options) {
     const stored = { meta: parse(raw.meta), record: parse(raw.record), v1base: parse(raw.v1base) };
     const rows = raw.rows.map(([name, text]) => [name, parse(text)]);
     const given = input(stored);
-    const result = commit(stored, { ...given, chains: [...rows.map(([, chain]) => chain), ...(given.chains ?? [])] });
+    const copies = (raw.recovery ?? []).map(([name, text]) => [name.slice((key + ":recovery:").length), parse(text)]);
+    const result = commit(stored, { ...given, copies, chains: [...rows.map(([, chain]) => chain), ...(given.chains ?? [])] });
     const puts = [];
     const deletes = [];
     if (result.changed) {
@@ -297,7 +344,7 @@ export function transact(drafts, key, input, options) {
     if (result.conflicts.length) puts.push([conflictKey(key), JSON.stringify(result.conflicts[result.conflicts.length - 1])]);
     for (const copy of result.recovered) puts.push([recoveryKey(key, recoveryMark(copy)), JSON.stringify(copy)]);
     for (const mark of result.dropped) deletes.push(recoveryKey(key, mark));
-    for (const [name, chain] of rows) if (settled(chain, result.meta)) deletes.push(name);
+    for (const [name, chain] of rows) if (settled(chain, result.meta) || (result.removedMark && isChain(chain) && recoveryMark(chain) === result.removedMark)) deletes.push(name);
     return { puts, deletes, result };
   }, options);
 }

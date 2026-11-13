@@ -34,7 +34,7 @@ export const MUTATIONS = [
   {
     id: "route-draft-to-host",
     file: "src/core/save-core.js",
-    find: "  return (isDraftMode ? sendToDraftStore(content) : fetch(url, options))",
+    find: "  return (isDraftMode ? sendToDraftStore(content, gateToken) : fetch(url, options))",
     replace: "  return fetch(url, options)",
     why: "src/core/save-core.js:639 sends a draft save to the visitor's own store and a host save to its host, and never the other way round",
   },

@@ -1106,7 +1106,7 @@ async function settleCaptured({
       // lane busy and waits that request out, which is what its 'clean' answer describes.
       // A prepared save holds the lane itself, so its caller does the draining instead.
       if (!laneHeld) drainPendingSave();
-    }, { capture, blockeditorFormatFloor, lane });
+    }, { capture, blockeditorFormatFloor, lane, gateToken });
   });
 }
 

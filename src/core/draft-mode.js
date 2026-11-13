@@ -45,6 +45,11 @@ export function draftEligible(doc = document, loc = window.location) {
     && rulesReady(doc);
 }
 
+// The dirty gate once it counts this page's edits: `token()` for the page as it is now,
+// and `unchangedSince(token)`. Null until then, and a store that cannot ask assumes edits.
+let gate = null;
+export function setDraftGate(value) { gate = value; }
+export function draftGate() { return gate; }
 export function setDraftTransport(fn) { transport = fn; }
 export function draftTransport() { return transport; }
 let flushHook = null;

@@ -665,12 +665,12 @@ function draftResponse(status, body) {
   return { ok: status >= 200 && status < 300, status, statusText: status === 200 ? "OK" : "Insufficient Storage", text: () => Promise.resolve(text) };
 }
 
-function sendToDraftStore(content) {
+function sendToDraftStore(content, gateToken) {
   const send = draftTransport();
   if (!send) return Promise.resolve(draftResponse(503, { msg: "Saving in this browser is not ready yet", msgType: "error", code: "draft-not-ready" }));
   // The transport's promise settles once the draft database holds the save.
   return Promise.resolve()
-    .then(() => send(content))
+    .then(() => send(content, gateToken))
     .then(
       () => draftResponse(200, { msg: "Saved in this browser", msgType: "success" }),
       (error) => draftResponse(507, { msg: "Couldn't save in this browser. Storage is full or turned off.", msgType: "error", code: error?.code || "draft-storage" }),
@@ -698,7 +698,7 @@ function sendToDraftStore(content) {
  * @param {Array} [context.attempts] - collects each unique actual send
  * @returns {Promise<Object>} The server's response body
  */
-function sendOnce(content, saveId, etag, { captureId = null, conversionHeader = null, attempts = [] } = {}) {
+function sendOnce(content, saveId, etag, { captureId = null, conversionHeader = null, attempts = [], gateToken = null } = {}) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS);
 
@@ -727,7 +727,7 @@ function sendOnce(content, saveId, etag, { captureId = null, conversionHeader = 
     notifySaveAttempt({ captureId, saveId, html: content, etag: etag ?? null });
   }
 
-  return (isDraftMode ? sendToDraftStore(content) : fetch(url, options))
+  return (isDraftMode ? sendToDraftStore(content, gateToken) : fetch(url, options))
     .then(res => res.text().then(text => {
       let data = {};
       if (text) {
@@ -891,7 +891,7 @@ async function recoverUnknownSave() {
  * @param {Array} [context.attempts] - collects each unique actual send
  * @returns {Promise<Object>} The server's response body
  */
-async function sendSave(content, { captureId = null, conversionHeader = null, attempts = [] } = {}) {
+async function sendSave(content, { captureId = null, conversionHeader = null, attempts = [], gateToken = null } = {}) {
   // The re-send below is a RETRY of this attempt, so it carries this same id:
   // whichever of the two requests the host ends up storing, its receipt then
   // answers for this save. A fresh id on the re-send would leave the first
@@ -916,7 +916,7 @@ async function sendSave(content, { captureId = null, conversionHeader = null, at
   const retryGuard = captureId ?? currentCaptureId();
   for (;;) {
     try {
-      return await sendOnce(content, saveId, etag, { captureId, conversionHeader, attempts });
+      return await sendOnce(content, saveId, etag, { captureId, conversionHeader, attempts, gateToken });
     } catch (err) {
       if (reSent) err.hadTimeout = true;
       if (err.name === 'AbortError') {
@@ -971,7 +971,7 @@ async function sendSave(content, { captureId = null, conversionHeader = null, at
 // `blockeditorFormatFloor` is internal: one save may carry a floor this tab has not
 // noted yet, which is how the format gate's activation writes the marker. It
 // raises these bytes only, never what the tab knows the document at.
-function runSave(html, captureId, callback, conversion, capture = null, blockeditorFormatFloor = 0, lane = null) {
+function runSave(html, captureId, callback, conversion, capture = null, blockeditorFormatFloor = 0, lane = null, gateToken = null) {
   // A capture taken before the floor rose cannot drop the marker by omitting it:
   // the bytes that go out carry the floor this tab last saw. At floor 0 this is
   // the string itself, unchanged.
@@ -1039,7 +1039,7 @@ function runSave(html, captureId, callback, conversion, capture = null, blockedi
       return finished(tooLargeResult(size));
     }
 
-    sendSave(html, { captureId, conversionHeader: formatted.header, attempts })
+    sendSave(html, { captureId, conversionHeader: formatted.header, attempts, gateToken })
       .then(successResult, errorResult)
       // Clear the flag BEFORE handing the result back, so a caller that queues a
       // follow-up save can start it immediately rather than being told the lane
@@ -1088,8 +1088,8 @@ export function saveHtml(html, callback = () => {}) {
  * @param {Object} [options.conversion] - {source:'file', base} or {source:'room', base, epoch}
  * @returns {Promise<Object>}
  */
-export function saveCapturedHtml(html, captureId, callback = () => {}, { conversion, capture = null, blockeditorFormatFloor, lane = null } = {}) {
-  return runSave(html, captureId, callback, conversion, capture, blockeditorFormatFloor, lane);
+export function saveCapturedHtml(html, captureId, callback = () => {}, { conversion, capture = null, blockeditorFormatFloor, lane = null, gateToken = null } = {}) {
+  return runSave(html, captureId, callback, conversion, capture, blockeditorFormatFloor, lane, gateToken);
 }
 
 /**

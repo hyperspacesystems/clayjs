@@ -49,7 +49,8 @@ export function page(w, { rules = w.rules, article = false } = {}) {
 // leaves the page as served, for a test that restores by hand.
 export async function openTab(w, { rules = w.rules, restore = true, database = true, article = false, ...options } = {}) {
   const doc = page(w, { rules, article });
-  const store = createStore({ doc, storage: localStorage, path: w.path, now: () => new Date(w.clock), ...options });
+  let edits = 0;
+  const store = createStore({ doc, storage: localStorage, path: w.path, now: () => new Date(w.clock), gate: () => ({ token: () => edits, unchangedSince: (at) => at === edits }), ...options });
   const restored = restore ? store.restore() : null;
   const tab = {
     doc,
@@ -58,14 +59,24 @@ export async function openTab(w, { rules = w.rules, restore = true, database = t
     session: null,
     events: [],
     reloaded: 0,
-    title: (text) => { doc.getElementById("title").textContent = text; },
+    title: (text) => {
+      doc.getElementById("title").textContent = text;
+      edits++;
+    },
     note: (text) => {
       const input = doc.getElementById("note");
       input.value = text;
       input.setAttribute("value", text);
+      edits++;
     },
-    addRow: (id, name) => { doc.getElementById("rows").insertAdjacentHTML("beforeend", row(id, name)); },
-    removeRow: (id) => { doc.querySelector(`#rows > li[data-id="${id}"]`).remove(); },
+    addRow: (id, name) => {
+      doc.getElementById("rows").insertAdjacentHTML("beforeend", row(id, name));
+      edits++;
+    },
+    removeRow: (id) => {
+      doc.querySelector(`#rows > li[data-id="${id}"]`).remove();
+      edits++;
+    },
     // What the page editor leaves in the document at a save: the store's value and the article.
     writePage(rev, value) {
       const el = doc.querySelector("article[data-blockeditor]");
@@ -87,9 +98,9 @@ export async function openTab(w, { rules = w.rules, restore = true, database = t
       return doc.documentElement.outerHTML;
     },
     // The synchronous half of a save, then its transaction.
-    capture: () => store.capture(tab.html()),
+    capture: () => store.capture(tab.html(), { at: edits }),
     save() {
-      store.capture(tab.html());
+      store.capture(tab.html(), { at: edits });
       return tab.session.sync();
     },
     sync: () => tab.session.sync(),

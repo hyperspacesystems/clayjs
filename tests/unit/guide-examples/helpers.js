@@ -85,6 +85,8 @@ export async function loadExample(file, { editMode = true, draft = false } = {})
   new Function("clay", bootstrap.match(/if \(!clay\.start\) \{[\s\S]*?\n {4}\};\n {2}\}/)[0])(window.clay);
   const settled = new Promise((r) => document.addEventListener("clay:baseline-settled", r, { once: true }));
 
+  // Link the shared hub before Jest starts parallel satellite imports.
+  await import("../../../src/lib/mutation.js");
   for (const name of satellites) {
     if (SATELLITES[name]) window.clay.loaded[SATELLITE_KEYS[name]] = SATELLITES[name]();
     else if (BUNDLES[name]) new Function(readFileSync(path.join(process.cwd(), BUNDLES[name]), "utf8"))();

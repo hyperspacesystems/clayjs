@@ -1,6 +1,6 @@
 import { isDraftMode, isEditMode, isOwner } from "../core/is-edit-mode.js";
 import { hasSaveToken } from "../core/host-attrs.js";
-import { draftSlot, draftStoreFailed, setDraftTransport, setDraftFlush, setDraftUnconfirmed } from "../core/draft-mode.js";
+import { draftGate, draftSlot, draftStoreFailed, setDraftTransport, setDraftFlush, setDraftUnconfirmed } from "../core/draft-mode.js";
 import { reloadAfterDiscard } from "../core/unsaved-warning.js";
 import { createStore, adoptLegacy, draftPath, legacyKey, safeStorage, storageFailure } from "./visitor-drafts/store.js";
 import { createUiMemory } from "./visitor-drafts/ui-memory.js";
@@ -72,13 +72,13 @@ if (isDraftMode && slot && rulesTag) {
     .then((m) => m.openSession({ store, storage: local, reload: () => reloadAfterDiscard({ isCurrent: () => true, reload: () => window.location.reload() }) }))
     .then((opened) => { session = opened; }, () => { direct = true; });
 
-  setDraftTransport((html) => {
+  setDraftTransport((html, at = null) => {
     const recapture = !restoredDetail;
     return restoring.then(() => {
       if (refused) throw storageFailure(document, new Error("the draft database did not open"));
-      if (recapture) html = window.clay.getHTML();
+      if (recapture) [at, html] = [draftGate()?.token() ?? null, window.clay.getHTML()];
       if (direct) return void store.write(html);
-      store.capture(html);
+      store.capture(html, { at });
       return opening.then(() => {
         if (session) return session.sync().then(() => {});
         store.write(html);
@@ -197,7 +197,7 @@ export const visitorDrafts = store ? {
   saveNow() {
     if (refused || !restoredDetail) return false;
     if (direct) return store.writeLive();
-    try { store.capture(window.clay.getHTML()); } catch { return false; }
+    try { store.captureNow(); } catch { return false; }
     session?.sync().catch(() => {});
     return !store.unsafe();
   },
@@ -232,3 +232,12 @@ export const visitorDrafts = store ? {
   }),
   source,
 } : inertVisitorDrafts();
+
+// Internal to the visitor menu; owner saving and the public visitorDrafts API stay separate.
+export async function recoveryDrafts() {
+  await restoring;
+  await opening;
+  if (!store || !session || refused) return null;
+  const { createRecovery } = await import("./visitor-drafts/recovery.js");
+  return createRecovery({ store, session });
+}

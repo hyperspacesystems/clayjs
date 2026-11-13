@@ -1,5 +1,5 @@
 import { extractData, applyData, engine } from "../../vendor/hyper-html-api-data.vendor.js";
-import { draftSlot, setDraftStoreFailed } from "../../core/draft-mode.js";
+import { draftGate, draftSlot, setDraftStoreFailed } from "../../core/draft-mode.js";
 
 export const KEY_PREFIX = "clay:visitor-drafts:";
 export const RECORD_VERSION = 1;
@@ -73,6 +73,7 @@ export function same(a, b) {
 
 const STORE_SEL = 'script[type="application/json"][merge][clay~="live"]';
 const ARTICLE_SEL = "article[data-blockeditor]";
+const HANDLER_SEL = "[onbeforesave], [onbeforesnapshot]";
 const isPagePart = (name) => name === "blockeditor" || /^blockeditor\.\d+$/.test(name);
 const canonical = (live) => JSON.stringify(Object.keys(live).sort().map((name) => [name, live[name]]));
 
@@ -269,7 +270,7 @@ function withoutSiteKey(value) {
   return rest;
 }
 
-export function createStore({ doc = document, storage = safeStorage(), now = () => new Date(), path = draftPath(), fallback = null, slotLimit = SLOT_LIMIT, pendingLimit = PENDING_LIMIT } = {}) {
+export function createStore({ doc = document, storage = safeStorage(), gate = draftGate, now = () => new Date(), path = draftPath(), fallback = null, slotLimit = SLOT_LIMIT, pendingLimit = PENDING_LIMIT } = {}) {
   const slot = draftSlot(doc);
   const key = draftKey(slot, path);
   const rules = withoutSiteKey(engine.findRulesIn(doc, "api").rules);
@@ -610,16 +611,46 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
   // to `localStorage` after it made some.
   let before = null;
 
-  function capture(html) {
+  // The dirty gate's token for the snapshot `base` was last compared with: taken before
+  // that snapshot, in its task. Null while that is not known.
+  let capturedAt = null;
+
+  const pageOf = (html) => (html === undefined ? doc : new DOMParser().parseFromString(html, "text/html"));
+
+  // `at` is the gate token of the snapshot `html` was serialized from.
+  function capture(html, { reset = tab.reset, at = null } = {}) {
     if (stopped) return null;
+    const parsed = pageOf(html);
+    const op = captureData(extractData(parsed, rules), recordable(readUnit(parsed)), reset);
+    capturedAt = at;
+    return op;
+  }
+
+  // The page as it is now.
+  function captureNow(reset = tab.reset) {
+    if (stopped) return null;
+    const at = gate()?.token() ?? null;
+    return capture(window.clay.getHTML(), { reset, at });
+  }
+
+  // The last capture of a generation that has ended. A capture runs the page's save
+  // handlers, and a handler that writes a changing value makes a field differ with no
+  // edit behind it. So on a page with a save handler that has recorded no edit since
+  // `base` was captured, the fields are what `base` holds, and only the page editor's
+  // part, which no handler writes, is compared.
+  function captureLate(reset = tab.reset) {
+    if (stopped) return null;
+    const settled = capturedAt !== null && doc.querySelector(HANDLER_SEL) !== null && gate()?.unchangedSince(capturedAt) === true;
+    const parsed = pageOf(window.clay?.getHTML?.());
+    return captureData(settled ? base : extractData(parsed, rules), recordable(readUnit(parsed)), reset);
+  }
+
+  function captureData(mine, mineUnit, reset = tab.reset) {
     if (unparked != null && park(unparked, { keepSlot: true }) === null) {
       throw storageFailure(doc, new Error("an earlier saved copy could not be kept aside"));
     }
     // Too much is waiting: nothing more is taken until it drains, and the page keeps it.
     if (tab.sizes.reduce((sum, size) => sum + size, 0) >= pendingLimit) throw storageFailure(doc, new Error("too many changes are waiting to be saved"));
-    const parsed = new DOMParser().parseFromString(html, "text/html");
-    const mine = extractData(parsed, rules);
-    const mineUnit = recordable(readUnit(parsed));
     const unitChanged = !sameUnit(mineUnit, editorUnit);
     const keys = {};
     for (const name of Object.keys(mine)) {
@@ -644,6 +675,7 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     }
     if (unitChanged) editorUnit = seenUnit = mineUnit;
     fresh = false;
+    tab.reset = reset;
     tab.ops.push(op);
     tab.sizes.push(JSON.stringify(op).length);
     journal();
@@ -655,7 +687,7 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
   function keep() {
     if (stopped) return true;
     try {
-      if (changed()) capture(window.clay.getHTML());
+      if (changed()) captureNow();
     } catch { return false; }
     return tab.journaled === tab.seq;
   }
@@ -680,6 +712,7 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
   // unsaved changes, for `write` to save.
   function release() {
     if (tab.ops.length) ({ base, editorUnit, seenUnit } = before);
+    capturedAt = null;
     drop();
   }
 
@@ -815,8 +848,11 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
 
   return {
     slot, key, rules, read, restore, write, writeLive, flush, changed, adoptExternal, externalUnit, adoptedUnit, park, clear, snapshot,
-    tab: tab.id, slotKey, chain, capture, keep, acknowledge, release, take, stop, journalSlots,
+    tab: tab.id, slotKey, chain, capture, captureNow, captureLate, keep, acknowledge, release, take, stop, journalSlots,
     seed: seedData,
+    servedUnit: () => { readServed(); return served; },
+    fitsInto,
+    same,
     // For the session, which is fetched after the boot and imports nothing from here.
     merge3,
     unitMark,

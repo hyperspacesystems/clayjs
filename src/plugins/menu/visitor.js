@@ -92,12 +92,24 @@ function attachBar({ addItem, removeItem }) {
 
 // A visitor's menu holds exactly Undo, Redo, Download copy and Make your own copy (David, Nov 11):
 // no theme row, no page items, no Start over. While Hyperclay's trial bar is closed it also holds
-// Host and share online and Show draft bar (David, Nov 11, sheet hosts review).
+// Host and share online and Show draft bar (David, Nov 11, sheet hosts review), and Earlier
+// drafts when this page has recovery copies (David, Nov 13).
 export function start() {
   if (document.querySelector('clay-editor-ui[data-clay-ui="menu"]')) return;
   const shell = createShell({ sections: [["clay.undo"], null], icon: GEAR, label: "Settings" });
   const { embedded, skin, addItem, removeItem, open, close, note, goo, beforeOpen } = shell;
   shell.mount(embedded ? [MENU_SAFETY, SHELL_BASE, skin ?? MENU_SKIN, MENU_TOUCH] : [MENU_SAFETY, SHELL_BASE, SHELL_FLOATING, MENU_SKIN, MENU_TOUCH]);
+  let recoveryMenu;
+  beforeOpen.push(() => {
+    if (typeof globalThis.indexedDB?.open !== "function" || !globalThis.IDBKeyRange) return;
+    recoveryMenu ??= import("../visitor-drafts/recovery-menu.js").then(async ({ attachRecoveryMenu }) => {
+      const { recoveryDrafts } = await import("../visitor-drafts.js");
+      attachRecoveryMenu(shell, recoveryDrafts);
+    }).catch((error) => {
+      recoveryMenu = null;
+      console.warn("visitor-menu: earlier drafts did not load", error);
+    });
+  });
   publishLooks();
   attachUndo({ addItem, beforeOpen });
   addItem({ id: "clay.download", label: "Download copy", run: () => window.clay.visitorDrafts.download() });

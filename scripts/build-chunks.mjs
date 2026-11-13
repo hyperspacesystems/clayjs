@@ -67,7 +67,7 @@ export async function emitChunks({ root, outdir, plugins = [] }) {
     metafile: true,
     logLevel: "warning",
     logOverride: { "commonjs-variable-in-esm": "silent" },
-    plugins: [readerCorePlugin(coreExports), ...plugins],
+    plugins: [readerCorePlugin(coreExports), recoveryControlsPlugin(), ...plugins],
   });
   const rel = (p) => path.relative(outdir, path.resolve(root, p)).split(path.sep).join("/");
   const entries = {};
@@ -162,6 +162,23 @@ function readerCorePlugin(coreExports) {
         }
         return { contents: source, loader: "js" };
       });
+    },
+  };
+}
+
+// Inline the stateless serializer in recovery so its lazy consumer cannot split
+// the existing persist chunk and add a request to every edit or draft boot.
+function recoveryControlsPlugin() {
+  return {
+    name: "recovery-controls",
+    setup(build) {
+      build.onResolve({ filter: /control-serialize\.vendor\.js$/ }, (args) => {
+        if (!/[\\/]plugins[\\/]visitor-drafts[\\/]recovery\.js$/.test(args.importer)) return;
+        return { path: path.resolve(args.resolveDir, args.path), namespace: "recovery-controls" };
+      });
+      build.onLoad({ filter: /.*/, namespace: "recovery-controls" }, async (args) => ({
+        contents: await readFile(args.path, "utf8"), loader: "js",
+      }));
     },
   };
 }

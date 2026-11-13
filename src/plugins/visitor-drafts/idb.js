@@ -138,7 +138,7 @@ function wrap(db, keyRange) {
   // `key`, hands them to `build` inside the transaction, and writes the `puts` and
   // `deletes` it returns before the transaction can complete. A `build` or a write that
   // throws aborts it, so nothing lands. Resolves with `build`'s `result` on `complete`.
-  function change(key, build, { timeout = 0 } = {}) {
+  function change(key, build, { timeout = 0, recovery = false } = {}) {
     return new Promise((resolve, reject) => {
       let tx;
       try {
@@ -167,9 +167,14 @@ function wrap(db, keyRange) {
         const store = tx.objectStore(RECORDS);
         const rows = keyRange.bound(key + ":op:", key + ":op:\uffff");
         const reads = { record: store.get(key), meta: store.get(key + ":meta"), v1base: store.get(key + ":v1base"), names: store.getAllKeys(rows), values: store.getAll(rows) };
+        const copies = recovery ? keyRange.bound(key + ":recovery:", key + ":recovery:\uffff") : null;
+        if (copies) {
+          reads.copyNames = store.getAllKeys(copies);
+          reads.copyValues = store.getAll(copies);
+        }
         // Requests in one transaction answer in the order they were made: the last one in
         // means every read is.
-        reads.values.onsuccess = () => {
+        (reads.copyValues ?? reads.values).onsuccess = () => {
           if (settled) return;
           try {
             const raw = {
@@ -177,6 +182,7 @@ function wrap(db, keyRange) {
               meta: reads.meta.result ?? null,
               v1base: reads.v1base.result ?? null,
               rows: reads.names.result.map((name, i) => [name, reads.values.result[i]]),
+              ...(copies && { recovery: reads.copyNames.result.map((name, i) => [name, reads.copyValues.result[i]]) }),
             };
             const planned = build(raw);
             for (const [name, value] of planned.puts) store.put(value, name);

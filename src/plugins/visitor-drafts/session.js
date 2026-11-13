@@ -20,7 +20,7 @@
  */
 
 import { openDrafts } from "./idb.js";
-import { emptyMeta, foreignMark, isForeign, markerFor, markerGen, recoveryKey, recoveryMark, rowKey, settled, transact } from "./commit.js";
+import { emptyMeta, foreignMark, isChain, isForeign, markerFor, markerGen, recoveryKey, recoveryMark, recoveryRecord, rowKey, settled, transact } from "./commit.js";
 import { setDraftStoreFailed } from "../../core/draft-mode.js";
 
 export const FULL_COPY_LIMIT = 256 * 1024;
@@ -91,6 +91,7 @@ export async function openSession({ store, storage, doc = document, now = () => 
   let sent = null;
   let carried = 0;
   let retiring = false;
+  let restoringCopy = false;
   let shownId = store.held()?.id;
   // The latest full cache copy this tab saw at the key, and the text of another writer's
   // record a storage event says replaced it: such a record merges from that copy.
@@ -127,6 +128,7 @@ export async function openSession({ store, storage, doc = document, now = () => 
       seed: store.seed(),
       newId: store.newId,
       merge3: store.merge3,
+      same: store.same,
       unitMark: store.unitMark,
       now: now(),
       marker: held,
@@ -139,12 +141,12 @@ export async function openSession({ store, storage, doc = document, now = () => 
   }
 
   // Another tab's slot is removed once nothing more can come of it and its tab has gone quiet.
-  function sweep(meta) {
+  function sweep(meta, removedMark) {
     const at = now();
     for (const name of store.journalSlots()) {
       if (name === store.slotKey) continue;
       const chain = parse(read(name));
-      if (settled(chain, meta) && at - (chain?.at ?? 0) > SLOT_AGE_MS) remove(name);
+      if ((removedMark && isChain(chain) && recoveryMark(chain) === removedMark) || (settled(chain, meta) && at - (chain?.at ?? 0) > SLOT_AGE_MS)) remove(name);
     }
   }
 
@@ -169,20 +171,26 @@ export async function openSession({ store, storage, doc = document, now = () => 
     try { storage.setItem(key, headOf(record, w)); } catch {}
   }
 
-  // Operations captured after the transaction read stay journaled for the next load.
-  async function ended(result) {
-    retiring = true;
-    const chain = store.chain();
-    const mark = recoveryMark(chain);
-    const kept = chain.ops.some((op) => op.seq > carried) || result.meta.recovery?.includes(mark)
-      ? mark : result.meta.recovery?.includes(shownId) ? shownId : null;
-    store.acknowledge(carried);
+  async function stopWithPending() {
     store.stop({ keepPending: true });
     if (store.unsafe()) {
       try { await drafts.putRow(rowKey(key, store.tab), JSON.stringify(store.chain())); }
       catch (error) { throw store.failed(error); }
       store.acknowledge(store.chain().ops.at(-1)?.seq ?? 0);
     }
+  }
+
+  // Operations captured after the transaction read stay journaled for the next load.
+  async function ended(result) {
+    try { store.captureLate(); }
+    catch (error) { throw store.failed(error); }
+    retiring = true;
+    const chain = store.chain();
+    const mark = recoveryMark(chain);
+    const kept = chain.ops.some((op) => op.seq > carried) || result.meta.recovery?.includes(mark)
+      ? mark : result.meta.recovery?.includes(shownId) ? shownId : null;
+    store.acknowledge(carried);
+    await stopWithPending();
     cache(result);
     if (kept) rememberRecovery(kept);
     const held = store.held();
@@ -277,13 +285,14 @@ export async function openSession({ store, storage, doc = document, now = () => 
     gen = meta.gen;
     rememberGeneration(meta.reset);
     const saved = store.acknowledge(meta.tabs[store.tab]?.seq ?? 0);
-    sweep(meta);
+    sweep(meta, result.removedMark);
     cache(result);
     if (store.pending()) return result;
     if (saved) {
       setDraftStoreFailed(false);
       doc.dispatchEvent(new CustomEvent("clay:drafts-saved", { detail: { data: record.data } }));
     }
+    if (restoringCopy) return result;
     if (!store.shown()) {
       rev = meta.rev;
       return result;
@@ -303,8 +312,15 @@ export async function openSession({ store, storage, doc = document, now = () => 
   // so it carries every operation made before then.
   let active = null;
   let waiting = null;
-  function run(options) {
-    active = transact(drafts, key, input, options).then(took, (error) => {
+  function run(options, recovery = null) {
+    const given = () => {
+      if (recovery?.type === "restore") {
+        if (store.stopped()) throw new Error("This page has started over. Reload it before restoring a draft.");
+        store.captureNow();
+      }
+      return { ...input(), recovery };
+    };
+    active = transact(drafts, key, given, options).then(took, (error) => {
       throw store.pending() ? store.failed(error) : error;
     }).finally(() => { active = null; });
     return active;
@@ -318,6 +334,38 @@ export async function openSession({ store, storage, doc = document, now = () => 
     });
     return waiting;
   }
+  async function changeRecovery(recovery) {
+    while (active || waiting) await (waiting ?? active).catch(() => {});
+    return run({ recovery: true }, recovery);
+  }
+
+  async function restoreRecovery(mark) {
+    if (restoringCopy) throw new Error("A draft is already being restored.");
+    restoringCopy = true;
+    try {
+      if (store.stopped()) throw new Error("This page has started over. Reload it before restoring a draft.");
+      store.captureNow();
+      let result;
+      do {
+        result = await changeRecovery({ type: "restore", mark, reset: store.generation() });
+        if (!result.restoredCopy || store.stopped()) throw new Error("This page has started over. Reload it before restoring a draft.");
+      } while (store.pending());
+      // This tab's pre-restore page is retired without ending the other tabs' generation.
+      try { store.captureLate("restored:" + store.tab); }
+      catch (error) { throw store.failed(error); }
+      await stopWithPending();
+      reload();
+      return result;
+    } finally { restoringCopy = false; }
+  }
+
+  async function listRecovery() {
+    await first.catch(() => {});
+    const prefix = key + ":recovery:";
+    const rows = await drafts.readAll(key);
+    return [...rows].filter(([name]) => name.startsWith(prefix)).map(([name, raw]) => ({ mark: name.slice(prefix.length), copy: parse(raw) }));
+  }
+
   const quietly = () => { sync().catch(() => {}); };
 
   // At a hide, an operation too large for the journal slot goes into the database blind, with
@@ -341,5 +389,5 @@ export async function openSession({ store, storage, doc = document, now = () => 
 
   const first = run({ timeout: FIRST_TRANSACTION_TIMEOUT_MS });
   first.catch(() => {});
-  return { first, sync, hide, startOver };
+  return { first, sync, hide, startOver, listRecovery, restoreRecovery, recoveryRecord: (copy) => recoveryRecord(copy, store.seed()), removeRecovery: (mark) => changeRecovery({ type: "remove", mark }) };
 }
