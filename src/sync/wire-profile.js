@@ -24,6 +24,7 @@
  */
 
 import { hostMeta } from '../core/host-meta.js';
+import { PAGE_FORMAT } from '../core/page-format-wire.js';
 
 export const WIRE_PROFILES = {
   spec: {
@@ -32,7 +33,7 @@ export const WIRE_PROFILES = {
     documentHeader: 'Document-URL',
     snapshotKey: 'snapshot',
     streamPath: (href, lane, resumeId, clientId) =>
-      `/_/sync?document-url=${encodeURIComponent(href)}&lane=${lane}&resume-id=${resumeId}&client-id=${encodeURIComponent(clientId)}`,
+      `/_/sync?document-url=${encodeURIComponent(href)}&lane=${lane}&resume-id=${resumeId}&client-id=${encodeURIComponent(clientId)}&blockeditor-format=${PAGE_FORMAT}`,
   },
   // What every published clayjs speaks, and what hyperclayjs and the inline script in
   // every Collection dashboard hardcode. Hosts keep these addresses permanently.
@@ -42,7 +43,7 @@ export const WIRE_PROFILES = {
     documentHeader: 'Page-URL',
     snapshotKey: 'html',
     streamPath: (href, lane, resumeId, clientId) =>
-      `/_/live-sync/stream?page-url=${encodeURIComponent(href)}&lane=${lane}&resume-id=${resumeId}&client-id=${encodeURIComponent(clientId)}`,
+      `/_/live-sync/stream?page-url=${encodeURIComponent(href)}&lane=${lane}&resume-id=${resumeId}&client-id=${encodeURIComponent(clientId)}&blockeditor-format=${PAGE_FORMAT}`,
   },
 };
 

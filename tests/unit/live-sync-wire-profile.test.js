@@ -1,5 +1,6 @@
 import { jest } from "@jest/globals";
 import { onStream } from '../../src/live/stream-bridge.js';
+import { PAGE_FORMAT } from '../../src/core/page-format-wire.js';
 
 /**
  * Which live-sync wire the client speaks, and how it decides.
@@ -203,6 +204,22 @@ test("a host that does not announce sync gets the legacy wire on both halves", a
   expect(String(url)).toContain("/_/live-sync/save");
   expect(init.headers["Page-URL"]).toBeTruthy();
   expect(JSON.parse(init.body).html).toBe("<html>x</html>");
+});
+
+// A page whose store boots staged never opens its live room, so unless the stream
+// subscription itself declares the format this page can read, the host refuses every
+// save that raises the page floor. The declaration rides both wires.
+test("both wires declare the page format on the stream subscription", async () => {
+  for (const [extensions, wire] of [[["sync"], "spec"], [["upload"], "legacy"]]) {
+    resetHostMeta();
+    const sync = await startedAgainst(host({ meta: { spec: 1, extensions } }));
+    try {
+      expect(sync._profile.name).toBe(wire);
+      const declared = new URL(sync.sse.url).searchParams.get("blockeditor-format");
+      expect(declared).toBe("1");
+      expect(declared).toBe(String(PAGE_FORMAT));
+    } finally { sync.stop(); }
+  }
 });
 
 // A bare core host with no discovery at all. Absence selects legacy rather than
