@@ -24,7 +24,11 @@
  */
 
 import { hostMeta } from '../core/host-meta.js';
-import { PAGE_FORMAT } from '../core/page-format-wire.js';
+
+// A live tab declares the page format it can read on its own stream, because a tab whose
+// store boots staged never sends /_/sync/data, and the host would otherwise count it as an
+// older editor and refuse every save that raises the page floor.
+const formatParam = (format) => (format == null ? '' : `&blockeditor-format=${format}`);
 
 export const WIRE_PROFILES = {
   spec: {
@@ -32,8 +36,8 @@ export const WIRE_PROFILES = {
     relayPath: '/_/sync',
     documentHeader: 'Document-URL',
     snapshotKey: 'snapshot',
-    streamPath: (href, lane, resumeId, clientId) =>
-      `/_/sync?document-url=${encodeURIComponent(href)}&lane=${lane}&resume-id=${resumeId}&client-id=${encodeURIComponent(clientId)}&blockeditor-format=${PAGE_FORMAT}`,
+    streamPath: (href, lane, resumeId, clientId, format) =>
+      `/_/sync?document-url=${encodeURIComponent(href)}&lane=${lane}&resume-id=${resumeId}&client-id=${encodeURIComponent(clientId)}${formatParam(format)}`,
   },
   // What every published clayjs speaks, and what hyperclayjs and the inline script in
   // every Collection dashboard hardcode. Hosts keep these addresses permanently.
@@ -42,8 +46,8 @@ export const WIRE_PROFILES = {
     relayPath: '/_/live-sync/save',
     documentHeader: 'Page-URL',
     snapshotKey: 'html',
-    streamPath: (href, lane, resumeId, clientId) =>
-      `/_/live-sync/stream?page-url=${encodeURIComponent(href)}&lane=${lane}&resume-id=${resumeId}&client-id=${encodeURIComponent(clientId)}&blockeditor-format=${PAGE_FORMAT}`,
+    streamPath: (href, lane, resumeId, clientId, format) =>
+      `/_/live-sync/stream?page-url=${encodeURIComponent(href)}&lane=${lane}&resume-id=${resumeId}&client-id=${encodeURIComponent(clientId)}${formatParam(format)}`,
   },
 };
 

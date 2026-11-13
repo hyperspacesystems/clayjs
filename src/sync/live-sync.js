@@ -933,7 +933,7 @@ class LiveSync {
     // Whichever wire discovery selected. start() does not call connect() until the
     // profile is known, so this is never null on the normal path.
     const profile = this._profile || WIRE_PROFILES.legacy;
-    const path = profile.streamPath(window.location.href, this.lane, this.resumeId, this.clientId);
+    const path = profile.streamPath(window.location.href, this.lane, this.resumeId, this.clientId, PAGE_FORMAT);
     // A frame scheduled while the page showed waits for an animation frame, which a
     // page hidden since then never runs. Move it to the hidden schedule.
     if (!this._hiddenHandler) {
