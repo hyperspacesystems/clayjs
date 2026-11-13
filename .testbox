@@ -1,4 +1,4 @@
-# Runs the release suite (jest, conformance, standalone) on a throwaway Hetzner box: `testbox run`.
+# Runs the release suite (jest, conformance, standalone) on a throwaway cloud box (Ubicloud by default): `testbox run`.
 # See ~/Documents/GitHub/bash_commands/testbox/README.md.
 TESTBOX_REPO=clayjs
 # npmrelease runs this box instead of the local suite, and publishes with --ignore-scripts.
