@@ -131,6 +131,26 @@ if (isDraftMode && slot && rulesTag) {
   };
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") keep(); });
   window.addEventListener("pagehide", keep);
+  // A link marked clay-wait-drafts (the host's download and host actions) waits for this
+  // page's last changes to reach the download page before it navigates, like the prompt's
+  // Download button. A new tab or a modified click leaves this page open, so it does not wait.
+  let leaving = false;
+  document.addEventListener("click", async (event) => {
+    // composedPath reaches into open shadow roots such as Hyperclay's trial bar.
+    const link = event.composedPath().find((node) => node instanceof Element && node.matches("a[clay-wait-drafts][href]"));
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (link.target && link.target !== "_self") return;
+    if (leaving) { event.preventDefault(); return; }
+    const waiting = settle();
+    if (!waiting) return;
+    event.preventDefault();
+    leaving = true;
+    let timer;
+    await Promise.race([waiting, new Promise((resolve) => { timer = setTimeout(resolve, DOWNLOAD_WAIT_MS); })]);
+    clearTimeout(timer);
+    leaving = false;
+    window.location.assign(link.href);
+  }, true);
 
   // Another tab's save reaches a page on the database through its session. With
   // `localStorage` as the record it arrives as that key's storage event, once the page
