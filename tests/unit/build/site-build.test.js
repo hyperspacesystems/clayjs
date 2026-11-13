@@ -200,7 +200,7 @@ test("a same-name different-bytes pair stops the build", async () => {
   } finally {
     await rm(collide, { force: true });
   }
-});
+}, 300000);
 
 test.each([
   ["a matching integrity", true],

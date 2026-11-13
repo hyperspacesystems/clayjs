@@ -55,3 +55,9 @@ export function flushDraft() {
 }
 export function setDraftStoreFailed(value) { storeFailed = Boolean(value); }
 export function draftStoreFailed() { return storeFailed; }
+// True while an operation of this tab is neither stored nor in its journal slot.
+let unconfirmed = null;
+export function setDraftUnconfirmed(fn) { unconfirmed = fn; }
+export function draftUnconfirmed() {
+  try { return Boolean(unconfirmed?.()); } catch { return true; }
+}

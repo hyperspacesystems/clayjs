@@ -4,6 +4,18 @@ import { draftSlot, setDraftStoreFailed } from "../../core/draft-mode.js";
 export const KEY_PREFIX = "clay:visitor-drafts:";
 export const RECORD_VERSION = 1;
 const LINEAGE = 32;
+// What one tab's journal slot in `localStorage` may hold, and what its unconfirmed
+// operations may hold in memory, in characters of JSON.
+export const SLOT_LIMIT = 512 * 1024;
+export const PENDING_LIMIT = 16 * 1024 * 1024;
+
+export const newRecordId = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+
+function textMark(text) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+  return (hash >>> 0).toString(36) + "." + text.length.toString(36);
+}
 
 // The document a pathname names, spelled the way the hosts resolve it: the path up to
 // and including the first segment that ends in .html or .htmlclay (anything after it is
@@ -55,7 +67,7 @@ export function fitsInto(wanted, got) {
   return wanted === got;
 }
 
-function same(a, b) {
+export function same(a, b) {
   return fitsInto(a, b) && fitsInto(b, a);
 }
 
@@ -77,6 +89,9 @@ function readUnit(source) {
 }
 
 const sameUnit = (a, b) => (!a || !b ? a === b : a.blockeditor.rev === b.blockeditor.rev && canonical(a.live) === canonical(b.live));
+
+// One page content, one mark: two pages `sameUnit` calls the same carry the same one.
+export const unitMark = (unit) => (isPlain(unit?.live) && isPlain(unit?.blockeditor) ? `${unit.blockeditor.rev}:${textMark(canonical(unit.live))}` : null);
 
 function unitOf(record) {
   if (!isPlain(record?.live) || !isPlain(record?.blockeditor)) return null;
@@ -189,7 +204,7 @@ export function merge3(base, mine, theirs) {
   return merged;
 }
 
-function storageFailure(doc, error) {
+export function storageFailure(doc, error) {
   setDraftStoreFailed(true);
   doc.dispatchEvent(new CustomEvent("clay:drafts-store-failed", { detail: { error } }));
   const failure = new Error("Couldn't save in this browser. Storage is full or turned off.");
@@ -254,13 +269,20 @@ function withoutSiteKey(value) {
   return rest;
 }
 
-export function createStore({ doc = document, storage = safeStorage(), now = () => new Date(), path = draftPath(), fallback = null } = {}) {
+export function createStore({ doc = document, storage = safeStorage(), now = () => new Date(), path = draftPath(), fallback = null, slotLimit = SLOT_LIMIT, pendingLimit = PENDING_LIMIT } = {}) {
   const slot = draftSlot(doc);
   const key = draftKey(slot, path);
   const rules = withoutSiteKey(engine.findRulesIn(doc, "api").rules);
 
   let lastRaw = null;
   let base = null;
+  // The served page's data, read before any restore, and the stored data this tab's next
+  // operation is built on: the record it restored or last took in with its own operations
+  // laid over, or the served page's while nothing is stored.
+  let seed = null;
+  let tip = null;
+  // Nothing of a draft is on this page yet: no restore, no operation, nothing taken in.
+  let fresh = true;
   let unparked = null;
   let stopped = false;
   // This tab's own last write: its record id, its ancestry, and the data of the record it
@@ -317,7 +339,7 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     return true;
   }
 
-  const newId = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+  const newId = newRecordId;
 
   // A record's ancestry is the ids it descends from, nearest first, ending at the empty
   // slot it grew from, or at a record from a runtime that kept no ids, named by its bytes.
@@ -328,11 +350,7 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     try { return "root:" + (storage?.getItem(resetKey) ?? ""); } catch { return "root:"; }
   }
 
-  function legacyId(raw) {
-    let hash = 0x811c9dc5;
-    for (let i = 0; i < raw.length; i++) hash = Math.imul(hash ^ raw.charCodeAt(i), 0x01000193);
-    return "legacy:" + (hash >>> 0).toString(36) + "." + raw.length.toString(36);
-  }
+  const legacyId = (raw) => "legacy:" + textMark(raw);
 
   function lineageOf(record, raw) {
     if (!record) return null;
@@ -456,31 +474,37 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     return null;
   }
 
-  function parkedResult(raw) {
+  function parkedResult({ raw, record }) {
     const parkedKey = park(raw);
     if (!parkedKey) lastRaw = raw;
     base = live();
+    tip = record?.data ?? base;
     return parkedKey
       ? { restored: false, hadDraft: true, parked: true }
       : { restored: false, hadDraft: true, parked: false, blocked: true };
   }
 
-  function restore() {
-    const found = read();
+  const seedData = () => (seed ??= live());
+
+  // `found` is the record to put on the page: the one `localStorage` holds, or the
+  // database's when the page waited for it (null: it holds none).
+  function restore(found = read()) {
+    seedData();
     if (!found) {
-      base = live();
+      base = tip = seed;
       whenArticle(readServed);
       return { restored: false, hadDraft: false };
     }
-    if (!found.record) return parkedResult(found.raw);
+    fresh = false;
+    if (!found.record) return parkedResult(found);
     const unit = unitOf(found.record);
     const hasData = Object.keys(found.record.data).length > 0;
     const fitted = hasData ? fit(found.record.data) : { data: {}, dropped: [] };
     const dataFits = Boolean(fitted) && (!hasData || Object.keys(fitted.data).length > 0);
     // The page does not depend on the rules: a page is placed even when no saved field fits,
     // and the whole record is kept aside as well.
-    if (!unit && !dataFits) return parkedResult(found.raw);
-    if (!unit && !hasData) return parkedResult(found.raw);
+    if (!unit && !dataFits) return parkedResult(found);
+    if (!unit && !hasData) return parkedResult(found);
     if (hasData && dataFits) applyData(doc, fitted.data, rules);
     if (unit) {
       whenArticle(() => {
@@ -493,6 +517,7 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     }
     lastRaw = found.raw;
     base = live();
+    tip = found.record.data;
     if (!dataFits || fitted.dropped.length) {
       const parkedKey = park(found.raw, { keepSlot: true });
       return { restored: true, hadDraft: true, data: dataFits ? fitted.data : {}, partial: true, parked: Boolean(parkedKey), blocked: !parkedKey };
@@ -552,6 +577,133 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     return fitted.data;
   }
 
+  // With the database as the record, a save is an operation: for each key the page changed,
+  // the stored value it was built on (`b`, absent when nothing was) and the value now (`m`).
+  // `tab.ops` are the ones the database has not confirmed, oldest first, under the Start
+  // over marker this page booted on; `sizes` runs beside them. A copy that fits goes into
+  // this tab's journal slot at once, so closing the tab loses nothing: `journaled` is the
+  // last sequence number the slot holds.
+  const tab = { id: newId(), reset: "", acked: 0, seq: 0, journaled: 0, ops: [], sizes: [] };
+  try { tab.reset = storage?.getItem(resetKey) ?? ""; } catch {}
+  try {
+    const known = JSON.parse(window.sessionStorage.getItem(key + ":generation"));
+    if (known?.marker === tab.reset && typeof known.reset === "string") tab.reset = known.reset;
+  } catch {}
+  const slotKey = `${key}:op:${tab.id}`;
+  const chain = () => ({ tab: tab.id, reset: tab.reset, acked: tab.acked, at: now().getTime(), ops: tab.ops });
+
+  function journal() {
+    try {
+      if (!tab.ops.length) {
+        tab.journaled = tab.seq;
+        storage.removeItem(slotKey);
+        return;
+      }
+      const text = JSON.stringify(chain());
+      if (text.length > slotLimit) return;
+      storage.setItem(slotKey, text);
+      tab.journaled = tab.seq;
+    } catch {}
+  }
+
+  // What the page held before its unconfirmed operations, for a page load that falls back
+  // to `localStorage` after it made some.
+  let before = null;
+
+  function capture(html) {
+    if (stopped) return null;
+    if (unparked != null && park(unparked, { keepSlot: true }) === null) {
+      throw storageFailure(doc, new Error("an earlier saved copy could not be kept aside"));
+    }
+    // Too much is waiting: nothing more is taken until it drains, and the page keeps it.
+    if (tab.sizes.reduce((sum, size) => sum + size, 0) >= pendingLimit) throw storageFailure(doc, new Error("too many changes are waiting to be saved"));
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const mine = extractData(parsed, rules);
+    const mineUnit = recordable(readUnit(parsed));
+    const unitChanged = !sameUnit(mineUnit, editorUnit);
+    const keys = {};
+    for (const name of Object.keys(mine)) {
+      if (name in base && fitsInto(mine[name], base[name])) continue;
+      // Fields the stored value has and this page's rules lack are carried through.
+      keys[name] = name in tip ? { b: tip[name], m: complete(mine[name], tip[name]) } : { m: mine[name] };
+    }
+    if (!Object.keys(keys).length && !unitChanged) {
+      if (!tab.ops.length) {
+        setDraftStoreFailed(false);
+        doc.dispatchEvent(new CustomEvent("clay:drafts-saved", { detail: { data: mine, unchanged: true } }));
+      }
+      return null;
+    }
+    if (!tab.ops.length) before = { base, editorUnit, seenUnit };
+    const op = { seq: ++tab.seq, savedAt: now().toISOString(), keys, ...(unitChanged && { unit: { seen: unitMark(seenUnit), to: mineUnit } }) };
+    base = { ...base };
+    tip = { ...tip };
+    for (const name of Object.keys(keys)) {
+      base[name] = mine[name];
+      tip[name] = keys[name].m;
+    }
+    if (unitChanged) editorUnit = seenUnit = mineUnit;
+    fresh = false;
+    tab.ops.push(op);
+    tab.sizes.push(JSON.stringify(op).length);
+    journal();
+    return op;
+  }
+
+  // A hide's synchronous half of a save. False while an operation is neither in the
+  // journal slot nor confirmed: closing the tab now could lose it.
+  function keep() {
+    if (stopped) return true;
+    try {
+      if (changed()) capture(window.clay.getHTML());
+    } catch { return false; }
+    return tab.journaled === tab.seq;
+  }
+
+  function acknowledge(seq) {
+    if (seq <= tab.acked) return false;
+    tab.acked = seq;
+    const done = tab.ops.filter((op) => op.seq <= seq).length;
+    tab.ops.splice(0, done);
+    tab.sizes.splice(0, done);
+    journal();
+    return done > 0;
+  }
+
+  function drop() {
+    tab.ops.length = 0;
+    tab.sizes.length = 0;
+    journal();
+  }
+
+  // The database did not open: what the journal holds goes back to being this page's
+  // unsaved changes, for `write` to save.
+  function release() {
+    if (tab.ops.length) ({ base, editorUnit, seenUnit } = before);
+    drop();
+  }
+
+  // A page with nothing unsaved takes in what the database holds: the keys whose stored
+  // value is no longer the one this tab was built on.
+  function take(data) {
+    const moved = Object.fromEntries(Object.entries(data).filter(([name, value]) => !same(value, tip[name])));
+    if (!Object.keys(moved).length) return false;
+    const shown = adopt(moved);
+    tip = { ...tip, ...moved };
+    if (shown) base = { ...base, ...shown };
+    fresh = false;
+    return true;
+  }
+
+  // The generation this page shows has ended, by this tab's Start over or another tab's:
+  // nothing more is saved from it.
+  function stop({ keepPending = false } = {}) {
+    stopped = true;
+    if (!keepPending) drop();
+  }
+
+  const journalSlots = () => storedKeys().filter((name) => name.startsWith(key + ":op:"));
+
   function write(html) {
     if (stopped) return null;
     if (unparked != null && park(unparked, { keepSlot: true }) === null) {
@@ -578,7 +730,7 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     const id = newId();
     const raw = stored && sameUnit(unit, theirs)
       ? stored
-      : JSON.stringify({ v: RECORD_VERSION, savedAt: now().toISOString(), id, ancestry, data, ...(unit && { live: unit.live, blockeditor: unit.blockeditor }) });
+      : JSON.stringify({ v: RECORD_VERSION, savedAt: now().toISOString(), id, ancestry, reset: tab.reset, data, ...(unit && { live: unit.live, blockeditor: unit.blockeditor }) });
     if (raw !== stored) {
       try {
         if (!storage) throw new Error("no storage");
@@ -634,11 +786,15 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
     return true;
   }
 
-  // The page another tab recorded since this tab last read or wrote one, or null.
-  function externalUnit() {
+  // The page another tab recorded since this tab last read or wrote one, or null. `record`
+  // is the database's; without one the copy in `localStorage` is read.
+  function externalUnit(record) {
     if (stopped) return null;
-    const raw = getRaw();
-    const theirs = raw == null ? null : unitOf(parse(raw));
+    if (record === undefined) {
+      const raw = getRaw();
+      record = raw == null ? null : parse(raw);
+    }
+    const theirs = unitOf(record);
     return theirs && !sameUnit(theirs, seenUnit) ? theirs : null;
   }
 
@@ -648,12 +804,40 @@ export function createStore({ doc = document, storage = safeStorage(), now = () 
   }
 
   function clear() {
-    stopped = true;
+    stop();
     unparked = null;
     setDraftStoreFailed(false);
     try { storage.removeItem(key); } catch {}
-    try { storage.setItem(resetKey, newId()); } catch {}
+    const match = /^(\d+)~/.exec(tab.reset);
+    const gen = match ? Number(match[1]) : tab.reset === "" ? 1 : null;
+    try { storage.setItem(resetKey, gen === null ? newId() : `${gen + 1}~${newId()}`); } catch {}
   }
 
-  return { slot, key, rules, read, restore, write, writeLive, flush, changed, adoptExternal, externalUnit, adoptedUnit, park, clear, snapshot };
+  return {
+    slot, key, rules, read, restore, write, writeLive, flush, changed, adoptExternal, externalUnit, adoptedUnit, park, clear, snapshot,
+    tab: tab.id, slotKey, chain, capture, keep, acknowledge, release, take, stop, journalSlots,
+    seed: seedData,
+    // For the session, which is fetched after the boot and imports nothing from here.
+    merge3,
+    unitMark,
+    newId,
+    failed: (error) => storageFailure(doc, error),
+    generation: () => tab.reset,
+    enter: (reset) => { tab.reset = reset; },
+    fresh: () => fresh,
+    shown: () => base !== null,
+    pending: () => tab.ops.length,
+    unsafe: () => tab.journaled < tab.seq,
+    stopped: () => stopped,
+    // What `localStorage` holds at the draft's key, whatever wrote it: a record, the head of
+    // a draft whose full record is only in the database (`idb`), or nothing readable.
+    held() {
+      try {
+        const held = JSON.parse(getRaw());
+        return isPlain(held) ? held : null;
+      } catch { return null; }
+    },
+    // A draft is kept when `localStorage` holds its copy or head, or any tab's journal.
+    kept: () => Boolean(read()) || tab.ops.length > 0 || journalSlots().length > 0,
+  };
 }

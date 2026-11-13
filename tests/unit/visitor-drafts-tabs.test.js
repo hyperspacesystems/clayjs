@@ -50,7 +50,7 @@ test("a save arriving from another tab as a storage event is applied when this t
   expect(visibleRows()).toEqual([["r2", "Second"]]);
 });
 
-test("an untouched tab's save does not bring back a draft another tab reset", async () => {
+test("without IndexedDB, an untouched tab's save does not bring back a draft another tab reset by removing the key", async () => {
   const { clay, key } = await bootDraftTab({ slot: "tabs-reset-save-1", draft: DRAFT });
   localStorage.removeItem(key);
   window.dispatchEvent(new StorageEvent("storage", { key, newValue: null }));

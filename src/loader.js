@@ -174,6 +174,8 @@ export async function boot(base, params, readyResolve, manifest = null, suppleme
       continue;
     }
     loaded[path] = mod;
+    // A draft held only in the database goes onto the page before a plugin that reads the page loads.
+    if (path === "plugins/visitor-drafts.js") await mod.restoring;
     if (path === "plugins/page-view.js") mod.start(readerOptions);
     attachPluginMember(path, mod, loaded); // immediately, not after the loop: hypercms's ?cms=true
                                      // auto-open runs as a microtask queued during ITS evaluation

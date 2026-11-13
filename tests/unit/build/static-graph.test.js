@@ -518,7 +518,18 @@ test("kanban edit and draft: the undo driver is one dynamic import of the undo p
     expect(graph.size).toBeGreaterThanOrEqual(40);
     expect(graph.has("src/recovery/undo.js")).toBe(false);
     expect([...graph].filter((file) => RECOVERY_STORE.test(file))).toEqual([]);
-    // The facade takes a factory as an injected option; it never opens one itself.
-    expect(mentionsDatabase([...graph])).toEqual(["src/core/recovery.js"]);
+    // The facade takes a factory as an injected option; it never opens one itself. A draft
+    // boot keeps the visitor's draft in a database of its own: the plugin only asks whether
+    // the browser has one, and the modules that open it are one dynamic import away.
+    expect(mentionsDatabase([...graph]).sort()).toEqual(isDraftMode ? ["src/core/recovery.js", "src/plugins/visitor-drafts.js"] : ["src/core/recovery.js"]);
+    const DRAFT_DATABASE = ["src/plugins/visitor-drafts/session.js", "src/plugins/visitor-drafts/idb.js", "src/plugins/visitor-drafts/commit.js"];
+    expect(DRAFT_DATABASE.filter((file) => graph.has(file))).toEqual([]);
+    if (isDraftMode) {
+      expect(dynamicDeps(inputs, "src/plugins/visitor-drafts.js")).toContain("src/plugins/visitor-drafts/session.js");
+      const openers = Object.entries(inputs)
+        .filter(([, input]) => (input.imports || []).some((imported) => imported.path === "src/plugins/visitor-drafts/idb.js"))
+        .map(([file]) => file);
+      expect(openers).toEqual(["src/plugins/visitor-drafts/session.js"]);
+    }
   }
 });

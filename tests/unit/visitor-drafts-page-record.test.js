@@ -199,7 +199,7 @@ test("externalUnit names a page another tab recorded, and adoptedUnit makes it t
   expect(storage.getItem(KEY + ":conflict")).toBeNull();
 });
 
-test("a Journal record is unchanged", () => {
+test("a Journal record keeps its data and names its reset", () => {
   setPage({ withArticle: false });
   const storage = fakeStorage();
   const store = createStore({ doc: document, storage, now });
@@ -208,7 +208,8 @@ test("a Journal record is unchanged", () => {
   store.write(savedBytes({ withArticle: false, title: "Typed" }));
 
   const stored = JSON.parse(storage.getItem(KEY));
-  expect(Object.keys(stored).sort()).toEqual(["ancestry", "data", "id", "savedAt", "v"]);
+  expect(Object.keys(stored).sort()).toEqual(["ancestry", "data", "id", "reset", "savedAt", "v"]);
+  expect(stored.reset).toBe("");
   expect(stored.data).toEqual({ title: "Typed" });
   expect(stored.v).toBe(1);
   expect(article()).toBeNull();

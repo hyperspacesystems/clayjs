@@ -21,7 +21,9 @@ const ASIDE = `<aside class="hcp" id="hcp" hidden aria-label="Download this app"
   </div>
 </aside>`;
 
-export async function mountPrompt({ memory, appName, link }) {
+// `settle` returns a promise while the page's last changes are not yet where the download
+// page reads them, and null once they are. False requests a download from this page.
+export async function mountPrompt({ memory, appName, link, settle, canDownloadCurrent = () => true }) {
   const { PROMPT_CSS } = await import("./prompt-style.js");
   const existing = document.querySelector('clay-editor-ui[data-clay-ui="download-prompt"]');
   let root = existing?.shadowRoot.getElementById("hcp");
@@ -118,6 +120,7 @@ export async function mountPrompt({ memory, appName, link }) {
     }
   }
 
+  let rescueRequested = false;
   root.addEventListener("click", async (e) => {
     const t = e.target.closest("[data-hcp]");
     if (t) {
@@ -131,9 +134,23 @@ export async function mountPrompt({ memory, appName, link }) {
       return;
     }
     if (e.target.closest("[data-hcp-link]")) {
-      if (root.getAttribute("data-hcp-reason") === "error") {
+      if (!canDownloadCurrent()) return;
+      let rescue = rescueRequested || root.getAttribute("data-hcp-reason") === "error";
+      if (!rescue) {
+        const waiting = settle?.();
+        if (waiting) {
+          e.preventDefault();
+          if (await waiting !== false) {
+            linkEl.click();
+            return;
+          }
+          rescue = true;
+        }
+      }
+      if (rescue) {
         e.preventDefault();
         if (!(await downloadCurrent())) {
+          showError();
           root.querySelector(".hcp-body [data-hcp-for='error']").textContent = "The download could not be made. Keep this page open and try Download free again.";
           return;
         }
@@ -152,7 +169,10 @@ export async function mountPrompt({ memory, appName, link }) {
   function clearError() {
     if (root.getAttribute("data-hcp-reason") === "error") root.setAttribute("data-hcp-reason", "use");
   }
-  const api = { set, root, showError, clearError, download: () => linkEl.click() };
+  const api = { set, root, showError, clearError, download: (rescue = false) => {
+    rescueRequested = rescue;
+    try { linkEl.click(); } finally { rescueRequested = false; }
+  } };
 
   document.addEventListener("input", onUse, true);
   document.addEventListener("change", onUse, true);

@@ -668,14 +668,13 @@ function draftResponse(status, body) {
 function sendToDraftStore(content) {
   const send = draftTransport();
   if (!send) return Promise.resolve(draftResponse(503, { msg: "Saving in this browser is not ready yet", msgType: "error", code: "draft-not-ready" }));
-  return Promise.resolve().then(() => {
-    try {
-      send(content);
-      return draftResponse(200, { msg: "Saved in this browser", msgType: "success" });
-    } catch (error) {
-      return draftResponse(507, { msg: "Couldn't save in this browser. Storage is full or turned off.", msgType: "error", code: error.code || "draft-storage" });
-    }
-  });
+  // The transport's promise settles once the draft database holds the save.
+  return Promise.resolve()
+    .then(() => send(content))
+    .then(
+      () => draftResponse(200, { msg: "Saved in this browser", msgType: "success" }),
+      (error) => draftResponse(507, { msg: "Couldn't save in this browser. Storage is full or turned off.", msgType: "error", code: error?.code || "draft-storage" }),
+    );
 }
 
 /**
