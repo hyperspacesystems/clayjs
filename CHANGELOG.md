@@ -136,6 +136,17 @@
 
 ## [Unreleased]
 
+## [1.24.1] - 2026-11-13
+
+### Added
+- Unsent typing is kept in the browser's IndexedDB, one record per page, so a visitor's draft is still there after a reload.
+- Work a tab had not sent when another tab ran Start over is kept aside as a recovery copy, with a notice, and typing from then on still saves.
+
+### Fixed
+- A saved document with a table of contents stays saved when the editor arrives after the page has settled.
+- Reordering items by dragging no longer copies their text into the place they are dropped.
+- The editor's shell moving into place as it boots is not recorded as a change to the document.
+
 ## [1.23.0] - 2026-11-07
 
 ### Added
