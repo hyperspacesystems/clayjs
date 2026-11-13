@@ -1,6 +1,7 @@
 import { FEATURES, featureForNode, featureForType } from "../page/features/registry.js";
 import { mergeEngine } from "../sync/merge-engine.js";
 import { registerUnsavedState } from "../lib/unsaved-state.js";
+import Mutation from "../lib/mutation.js";
 import { hostMeta } from "../core/host-meta.js";
 import { savePageForce, holdAllSaves, releaseAllSaves, suspendAutosave, resumeAutosave, getLastSavedBytes, savesAdmitted, claimFailure } from "../core/save.js";
 import { setSaveHeader, onSaveAccepted } from "../core/save-core.js";
@@ -1250,9 +1251,16 @@ function mountAndAttach(inst, source, loaded) {
     if (shell) shell.inert = true;
     if (loaded.featureIds.length && shell) shell.style.visibility = "hidden";
     // One synchronous move: the finished shell replaces the saved surface as a
-    // single change, and the article element itself stays where it is.
-    if (!loaded.featureIds.length) for (const node of savedContent) node.remove();
-    if (shell) article.appendChild(shell);
+    // single change, and the article element itself stays where it is. The editor
+    // chunk can land after the boot settle, so the move is paused: it is the editor
+    // presenting the saved surface, never an edit to save.
+    Mutation.pause();
+    try {
+      if (!loaded.featureIds.length) for (const node of savedContent) node.remove();
+      if (shell) article.appendChild(shell);
+    } finally {
+      Mutation.resume();
+    }
     loaded.refreshView?.(view);
     binding.attach(view);
     // The page's history tells whoever presents it once it exists (a menu opened before the
