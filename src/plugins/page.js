@@ -1470,9 +1470,15 @@ function mountAndAttach(inst, source, loaded) {
   // the commit that enters edit cannot fail here.
   function openInput(inst, mounted) {
     const shell = mounted.view.dom.closest(".blockeditor-shell");
+    // Like the boot move, revealing the editor over the saved surface is presentation, not an edit.
     const showEditor = () => {
-      for (const node of savedContent) node.remove();
-      if (shell) shell.style.visibility = "";
+      Mutation.pause();
+      try {
+        for (const node of savedContent) node.remove();
+        if (shell) shell.style.visibility = "";
+      } finally {
+        Mutation.resume();
+      }
     };
     // A replacement that landed during the feature wait keeps the editor read-only,
     // exactly as one that landed before it does.

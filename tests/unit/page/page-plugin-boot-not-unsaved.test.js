@@ -16,7 +16,12 @@ import { renderFromTags } from "../../../src/page/save-projection.js";
  * falls on.
  */
 
-const BLOCKS = [{ id: "p", t: "paragraph", text: "Hello" }];
+// A paragraph boots with no optional blocks; a table of contents is an optional block, which
+// reveals the editor later, in openInput, after its feature loads.
+const DOCUMENTS = [
+  ["only plain blocks", [{ id: "p", t: "paragraph", text: "Hello" }]],
+  ["an optional block", [{ id: "h", t: "heading", level: 1, text: "Hello" }, { id: "toc", t: "toc", maxLevel: 3 }]],
+];
 const TAG_SEL = 'script[type="application/json"][merge="blockeditor"]';
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const flushAsync = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
@@ -27,7 +32,7 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 
-const pageHtml = (value = seedValue(BLOCKS)) => {
+const pageHtml = (value) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
   return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
@@ -42,7 +47,7 @@ const roomState = (room) => ({
   stores: clone(room.stores),
 });
 
-async function load({ html = pageHtml(), editorGate = null } = {}) {
+async function load({ html, editorGate = null } = {}) {
   jest.resetModules();
   window.clayEditMode = true;
   document.documentElement.removeAttribute("documentetag");
@@ -117,9 +122,9 @@ afterEach(async () => {
   delete global.fetch;
 });
 
-test("a saved Block editor document is not unsaved after load, when the editor loads after the boot settle", async () => {
+test.each(DOCUMENTS)("a saved Block editor document with %s is not unsaved after load, when the editor loads after the boot settle", async (_, blocks) => {
   const editorGate = deferred();
-  const { page } = await load({ editorGate });
+  const { page } = await load({ html: pageHtml(seedValue(blocks)), editorGate });
   const save = await import("../../../src/core/save.js");
 
   // The boot settles with the editor's download still outstanding, exactly as it can
@@ -137,8 +142,8 @@ test("a saved Block editor document is not unsaved after load, when the editor l
   expect(document.documentElement.hasAttribute("unsaved")).toBe(false);
 });
 
-test("a saved Block editor document is not unsaved after load, when the editor loads before the boot settle", async () => {
-  const { page } = await load();
+test.each(DOCUMENTS)("a saved Block editor document with %s is not unsaved after load, when the editor loads before the boot settle", async (_, blocks) => {
+  const { page } = await load({ html: pageHtml(seedValue(blocks)) });
   const save = await import("../../../src/core/save.js");
 
   await page.ready;
