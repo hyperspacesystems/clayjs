@@ -1,4 +1,4 @@
-import { jest } from "@jest/globals";
+import { afterEach, jest } from "@jest/globals";
 import { hostOf, $, $$ } from "./helpers/editor-ui.js";
 
 // Scenario: a draft visitor with no account gets a settings gear, not the Claygoo, in the
@@ -239,4 +239,61 @@ test("with storage refusing, the download flushes first and gives a file with th
     URL.createObjectURL = realCreate;
     URL.revokeObjectURL = realRevoke;
   }
+});
+
+const trialBar = (dismissed) => ({
+  kind: "trial",
+  dismissed,
+  actions: [
+    { id: "download", label: "Download your copy", href: "/_/download/notes.html" },
+    { id: "host", label: "Host and share online", href: "/_/download/notes.html?next=host" },
+  ],
+  show: jest.fn(),
+});
+
+afterEach(() => {
+  delete window.hyperclayBar;
+});
+
+test("a trial bar closed before the menu loads leaves its Host action and a way back on the menu", async () => {
+  window.hyperclayBar = trialBar(true);
+  await boot();
+
+  click(gooOf());
+  expect(listOf().hidden).toBe(false);
+  expect(itemIds()).toEqual(["clay.download", "clay.copy", "clay.bar.host", "clay.bar.show"]);
+
+  const host = listOf().querySelector('[data-menu-id="clay.bar.host"]');
+  expect(host.textContent.trim()).toBe("Host and share online");
+  expect(host.closest("a, [href]")?.getAttribute("href") ?? host.getAttribute("href")).toBe("/_/download/notes.html?next=host");
+
+  click(listOf().querySelector('[data-menu-id="clay.bar.show"]'));
+  await flush();
+  expect(window.hyperclayBar.show).toHaveBeenCalledTimes(1);
+});
+
+test("a trial bar closed and reopened after the menu loads adds and removes its rows", async () => {
+  window.hyperclayBar = trialBar(false);
+  await boot();
+  click(gooOf());
+  expect(itemIds()).toEqual(["clay.download", "clay.copy"]);
+
+  window.hyperclayBar.dismissed = true;
+  document.dispatchEvent(new CustomEvent("hyperclay:bar", { detail: window.hyperclayBar }));
+  await flush();
+  expect(itemIds()).toContain("clay.bar.host");
+  expect(itemIds()).toContain("clay.bar.show");
+
+  window.hyperclayBar.dismissed = false;
+  document.dispatchEvent(new CustomEvent("hyperclay:bar", { detail: window.hyperclayBar }));
+  await flush();
+  expect(itemIds()).toEqual(["clay.download", "clay.copy"]);
+});
+
+test("another kind of bar adds nothing to the menu", async () => {
+  window.hyperclayBar = { ...trialBar(true), kind: "temp" };
+  await boot();
+
+  click(gooOf());
+  expect(itemIds()).toEqual(["clay.download", "clay.copy"]);
 });

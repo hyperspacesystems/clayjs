@@ -72,8 +72,27 @@ function copyUrl(loc = window.location) {
   return `/_/copy${path === "/" ? "" : path}`;
 }
 
+// Hyperclay's trial bar, once the visitor closes it, leaves its Host action and a way back to the
+// page (hyperclay server-lib/drop/trial-bar.js): `window.hyperclayBar` holds its state, set before
+// this menu loads, and `hyperclay:bar` reports each change. Download copy is already in the menu.
+function attachBar({ addItem, removeItem }) {
+  const draw = (bar) => {
+    if (bar?.kind !== "trial" || !bar.dismissed) {
+      removeItem("clay.bar.host");
+      removeItem("clay.bar.show");
+      return;
+    }
+    const host = Array.isArray(bar.actions) ? bar.actions.find((action) => action?.id === "host") : null;
+    if (typeof host?.href === "string") addItem({ id: "clay.bar.host", label: "Host and share online", href: host.href });
+    if (typeof bar.show === "function") addItem({ id: "clay.bar.show", label: "Show draft bar", run: () => bar.show() });
+  };
+  document.addEventListener("hyperclay:bar", (event) => draw(event.detail));
+  draw(window.hyperclayBar);
+}
+
 // A visitor's menu holds exactly Undo, Redo, Download copy and Make your own copy (David, Nov 11):
-// no theme row, no page items, no Start over.
+// no theme row, no page items, no Start over. While Hyperclay's trial bar is closed it also holds
+// Host and share online and Show draft bar (David, Nov 11, sheet hosts review).
 export function start() {
   if (document.querySelector('clay-editor-ui[data-clay-ui="menu"]')) return;
   const shell = createShell({ sections: [["clay.undo"], null], icon: GEAR, label: "Settings" });
@@ -83,6 +102,7 @@ export function start() {
   attachUndo({ addItem, beforeOpen });
   addItem({ id: "clay.download", label: "Download copy", run: () => window.clay.visitorDrafts.download() });
   addItem({ id: "clay.copy", label: "Make your own copy", href: copyUrl() });
+  attachBar({ addItem, removeItem });
   window.clay.menu = { addItem, removeItem, open, close, note, embedded, button: goo };
   document.dispatchEvent(new CustomEvent("clay:menu-ready"));
 }
