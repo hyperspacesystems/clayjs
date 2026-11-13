@@ -188,6 +188,13 @@ function makeSortable(sortableElem, Sortable, record = loose) {
   let options = {};
   options.draggable = draggableSelector(sortableElem);
 
+  // A reorder is not a text drag. SortableJS writes the item's text onto the drag by
+  // default, and a rich text field under the drop pastes it in, duplicating the text.
+  options.setData = (dataTransfer) => {
+    dataTransfer.clearData();
+    dataTransfer.setData('application/x-clay-sortable', '');
+  };
+
   // Check if Sortable instance already exists
   if (Sortable.get(sortableElem)) return;
 
