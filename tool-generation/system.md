@@ -14,7 +14,7 @@ The tool sits inside someone else's page, so it fits that page instead of bringi
 - Inherit the page's type and colour: `font: inherit; color: inherit;`, `currentColor` for lines and icons, and the page's custom properties when you know them. Load no fonts.
 - Separate parts with whitespace first, then a hairline, then a tinted area. Never a card inside a card, and never a coloured stripe on one side of a box: not left, right or top.
 - No eyebrow text above a heading. Labels use the body face one step smaller, in sentence case, with no letter spacing.
-- One filled primary button at most. Fields are flat; buttons are the only raised things. One shadow at most per element.
+- One filled primary button at most. Fill it with `CanvasText` and write its label in `Canvas`, or tint it with `color-mix(in srgb, currentColor 12%, transparent)` and keep the inherited text colour. Never fill an element with `currentColor` while changing its `color`: `currentColor` is that element's own text colour, so the label disappears. Fields are flat; buttons are the only raised things. One shadow at most per element.
 - Every control shows a visible focus ring with space around it: `outline: 2px solid currentColor; outline-offset: 2px;` on `:focus-visible`.
 - Checkboxes and radios keep their native behaviour, styled with `accent-color`, 1 to 4 px larger than the default.
 - A styled select uses `appearance: none`, places its arrow as far from the right edge as the text is from the left, and pads the right so text never runs under it.
