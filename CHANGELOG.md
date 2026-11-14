@@ -136,6 +136,16 @@
 
 ## [Unreleased]
 
+## [1.26.0] - 2026-11-14
+
+### Changed
+- Undo and Redo now share one history for the whole page, across plain fields, rich text fields and the article. A step someone else changed is skipped with a notice.
+- Undoing a block move brings words another tab typed into the moved block back to the block's original place, attributed to the person who typed them. Where that cannot be made safe, the words are set aside with a notice.
+
+### Fixed
+- Undo in a rich text field, including `clay-editable` and RichClay fields, no longer restores text a collaborator just changed.
+- ClayJS's own panels use their own text-selection colours, so a page's `::selection` style cannot make their text unreadable.
+
 ## [1.25.1] - 2026-11-14
 
 ### Added
