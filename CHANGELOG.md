@@ -136,6 +136,11 @@
 
 ## [Unreleased]
 
+## [1.26.1] - 2026-11-14
+
+### Changed
+- No user-facing changes.
+
 ## [1.26.0] - 2026-11-14
 
 ### Changed
