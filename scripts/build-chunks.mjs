@@ -174,10 +174,13 @@ function recoveryControlsPlugin() {
     setup(build) {
       build.onResolve({ filter: /control-serialize\.vendor\.js$/ }, (args) => {
         if (!/[\\/]plugins[\\/]visitor-drafts[\\/]recovery\.js$/.test(args.importer)) return;
-        return { path: path.resolve(args.resolveDir, args.path), namespace: "recovery-controls" };
+        // esbuild hashes a plugin namespace's path as given, so an absolute path would make
+        // every chunk name depend on the folder the build runs in. Keep it root-relative.
+        const root = build.initialOptions.absWorkingDir;
+        return { path: path.relative(root, path.resolve(args.resolveDir, args.path)).split(path.sep).join("/"), namespace: "recovery-controls" };
       });
       build.onLoad({ filter: /.*/, namespace: "recovery-controls" }, async (args) => ({
-        contents: await readFile(args.path, "utf8"), loader: "js",
+        contents: await readFile(path.resolve(build.initialOptions.absWorkingDir, args.path), "utf8"), loader: "js",
       }));
     },
   };
