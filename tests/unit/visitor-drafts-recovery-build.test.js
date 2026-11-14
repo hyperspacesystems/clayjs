@@ -33,9 +33,10 @@ test("the recovery serializer resolver recognizes Windows and POSIX importer pat
   const body = source.slice(source.indexOf("function recoveryControlsPlugin()"), source.indexOf("function replaceOnce("));
   const plugin = new Function("path", "readFile", body + "return recoveryControlsPlugin();")(path, readFile);
   let resolve;
-  plugin.setup({ onResolve: (_options, callback) => { resolve = callback; }, onLoad() {} });
+  plugin.setup({ initialOptions: { absWorkingDir: root }, onResolve: (_options, callback) => { resolve = callback; }, onLoad() {} });
   for (const importer of ["/app/src/plugins/visitor-drafts/recovery.js", String.raw`C:\app\src\plugins\visitor-drafts\recovery.js`]) {
-    expect(resolve({ importer, resolveDir: root, path: "../../vendor/control-serialize.vendor.js" })).toEqual(expect.objectContaining({ namespace: "recovery-controls" }));
+    const resolved = resolve({ importer, resolveDir: path.join(root, "src/plugins/visitor-drafts"), path: "../../vendor/control-serialize.vendor.js" });
+    expect(resolved).toEqual({ namespace: "recovery-controls", path: "src/vendor/control-serialize.vendor.js" });
   }
   expect(resolve({ importer: "/app/src/core/persist.js", resolveDir: root, path: "../vendor/control-serialize.vendor.js" })).toBeUndefined();
 });
