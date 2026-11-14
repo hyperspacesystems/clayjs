@@ -79,8 +79,18 @@ test("a link to another local file is kept as text, never turned into a web addr
   expect(html).not.toContain("https://other.md");
   expect(html).not.toContain("notes/a.html\"");
   expect(html).toContain("other");
-  expect(html).toContain('href="https://example.com"');
-  expect(refused.map((entry) => entry.href)).toEqual(["other.md", "notes/a.html"]);
+  expect(html).not.toContain("https://example.com");
+  expect(refused.map((entry) => entry.href)).toEqual(["other.md", "notes/a.html", "example.com"]);
+});
+
+test("a relative path to any file never becomes a web address, for links and images", () => {
+  const { html, refused } = markdownArticle("Run [setup](setup.sh), get [zip](export.zip), keep [web](https://example.com/a).\n\n![demo](demo.mov)", { document: createDocument() });
+  expect(html).not.toContain("https://setup.sh");
+  expect(html).not.toContain("https://export.zip");
+  expect(html).not.toContain("https://demo.mov");
+  expect(html).not.toContain("<img");
+  expect(html).toContain('href="https://example.com/a"');
+  expect(refused.map((entry) => entry.href)).toEqual(["setup.sh", "export.zip", "demo.mov"]);
 });
 
 test("resolveLink maps a local link to the page the host imported", () => {

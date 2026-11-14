@@ -88,7 +88,7 @@ function typedWhen(event) {
   const ago = Date.now() - at;
   if (ago < 0 || ago >= HOUR_MS) return "";
   const minutes = Math.max(1, Math.floor(ago / 60000));
-  return `You typed ${typed(event).length === 1 ? "it" : "them"} ${minutes} minutes ago.`;
+  return `You typed ${typed(event).length === 1 ? "it" : "them"} ${plural(minutes, "minute")} ago.`;
 }
 
 function detailFor(current, event) {

@@ -57,15 +57,16 @@ function added(marks, name, attrs) {
 // One text block's inline content as the record keeps it: c, and m as runs (one
 // key per UTF-16 unit, packed), exactly as flatten and runsOf write it; `parts`
 // splits around an image, which the schema only carries as a block of its own.
-// A link written as a path to another file (`other.md`, `docs/a.html`) points inside the
-// folder it came from. It never becomes a web address: `other.md` read as a host name is
-// someone else's site. The host may map it to the page it imported (`resolveLink`).
-const LOCAL_FILE = /^(?![a-z][a-z0-9+.-]*:|\/)[^?#\s]*\.(md|markdown|html?|htmlclay)([?#]\S*)?$/i;
+// A link or image written as a relative path (`other.md`, `setup.sh`, `shot.png`) names a
+// file beside the Markdown it came from. It never becomes a web address: `setup.sh` read
+// as a host name is someone else's site, and an image there would make every reader's
+// browser ask that site for it. The host may map it (`resolveLink`, `resolveImage`).
+const RELATIVE = /^(?![a-z][a-z0-9+.-]*:|[/#?])\S/i;
 
 function linkHref(raw, resolveLink) {
   const resolved = typeof resolveLink === "function" ? resolveLink(raw) : null;
   if (typeof resolved === "string" && resolved) return safeHref(resolved);
-  return LOCAL_FILE.test(raw.trim()) ? null : safeHref(raw);
+  return RELATIVE.test(raw.trim()) ? null : safeHref(raw);
 }
 
 function inlineOf(tokens, { images = true, refused = [], unsupported = [], resolveLink = null } = {}) {
@@ -167,7 +168,8 @@ export function importMarkdownTokens(tokens, { document: doc = globalThis.docume
   };
   const imageOf = (image) => {
     const resolved = typeof resolveImage === "function" ? resolveImage(image.src) : null;
-    const src = safeSrc(typeof resolved === "string" && resolved ? resolved : image.src);
+    const mapped = typeof resolved === "string" && resolved ? resolved : null;
+    const src = mapped ? safeSrc(mapped) : RELATIVE.test(String(image.src).trim()) ? null : safeSrc(image.src);
     if (src) return { t: "image", src, ...(image.alt ? { alt: image.alt } : {}), ...(image.title ? { caption: image.title } : {}) };
     refused.push({ type: "image", href: image.src });
     return image.alt ? block("paragraph", {}, { c: image.alt, m: [] }) : null;
