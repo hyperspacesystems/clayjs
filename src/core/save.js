@@ -63,7 +63,7 @@ import { beginRecoveryCapture, finishRecoveryCapture, noteRecoveryCapture, noteR
 // content. Both clones get this, so the dirty comparison sees no difference.
 addDocumentTransform(clone => {
   for (const name of ROOT_LIBRARY_ATTRS) clone.removeAttribute(name);
-});
+}, { required: true });
 
 // Keep the host's save token out of the saved bytes, both spellings, and the response
 // metadata with it.
@@ -83,7 +83,7 @@ addDocumentTransform(clone => {
 // delete page content.
 addDocumentTransform(clone => {
   for (const name of [...SAVE_TOKEN_ATTRS, ...LEGACY_SAVE_TOKEN_ATTRS, ...HOST_RESPONSE_ATTRS]) clone.removeAttribute(name);
-});
+}, { required: true });
 
 // ============================================
 // SAVE STATE MANAGEMENT
@@ -826,9 +826,9 @@ function applySaveResult(result, forComparison, forDirty, label, gateToken, forS
       captureId,
     };
     if (!navigator.onLine) {
-      setSaveState('offline', result.msg, '', extra);
+      setSaveState('offline', result.msg, result.msgType || 'error', extra);
     } else {
-      setSaveState('error', result.msg, '', extra);
+      setSaveState('error', result.msg, result.msgType || 'error', extra);
     }
   }
 }
@@ -1432,11 +1432,11 @@ function attemptSaveNow({ kind, permit = null }, callback = () => {}) {
       console.error(`${explicit ? 'savePage' : 'savePageThrottled'}: captureForSaveAndComparison failed`, err);
       if (explicit) {
         clearExplicitSave();
-        setSaveState('error', err.message, '', { sent: false, code: err.code ?? null });
+        setSaveState('error', err.message, 'error', { sent: false, code: err.code ?? null });
       } else {
-        setSaveState('error', err.message);
+        setSaveState('error', err.message, 'error');
       }
-      const result = { msg: err.message, msgType: 'error', code: explicit ? (err.code ?? null) : null, etag: null };
+      const result = { ok: false, msg: err.message, msgType: 'error', code: explicit ? (err.code ?? null) : null, etag: null };
       if (typeof callback === 'function') {
         callback(result);
       }
@@ -1590,8 +1590,8 @@ export function savePageForce(callback = () => {}, { quietConflict = false, bloc
       ({ forSave, forComparison, forDirty, captureId } = capture);
     } catch (err) {
       console.error('savePageForce: captureForSaveAndComparison failed', err);
-      setSaveState('error', err.message, '', { sent: false, code: err.code ?? null });
-      const result = { msg: err.message, msgType: 'error', code: err.code ?? null, etag: null };
+      setSaveState('error', err.message, 'error', { sent: false, code: err.code ?? null });
+      const result = { ok: false, msg: err.message, msgType: 'error', code: err.code ?? null, etag: null };
       if (typeof callback === 'function') {
         callback(result);
       }

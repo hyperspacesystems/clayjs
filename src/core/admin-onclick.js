@@ -18,7 +18,7 @@ export function disableOnClickBeforeSave () {
       resource.removeAttribute("onclick");
       restoreAuthoredOrder(resource, originalSnapshotNode(resource) ?? resource);
     });
-  });
+  }, { required: true });
 }
 
 export function enableOnClickForAdminOnPageLoad () {

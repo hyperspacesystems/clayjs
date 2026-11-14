@@ -21,8 +21,10 @@ jest.setTimeout(120000);
 
 const BIG = 320 * 1024;
 
-let save, saveCore, unsaved, transition, editMode, snapshot;
+let save, saveCore, unsaved, transition, editMode;
 let posts = [];
+
+const captureFailure = { on: false, message: "fixture capture failure" };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const setText = (text) => { document.getElementById("c").textContent = text; };
@@ -105,12 +107,19 @@ beforeAll(async () => {
   window.clay = {};
   document.body.innerHTML = `<article id="filler">${"x".repeat(BIG)}</article><article id="c">initial</article>`;
   installRouter();
+  const realContentDom = await import("../../src/lib/content-dom.js");
+  jest.unstable_mockModule("../../src/lib/content-dom.js", () => ({
+    cleanContentClone: realContentDom.cleanContentClone,
+    createContentView: (...args) => {
+      if (captureFailure.on) throw new Error(captureFailure.message);
+      return realContentDom.createContentView(...args);
+    },
+  }));
   save = await import("../../src/core/save.js");
   saveCore = await import("../../src/core/save-core.js");
   unsaved = await import("../../src/lib/unsaved-state.js");
   transition = await import("../../src/core/mode-transition.js");
   editMode = await import("../../src/core/is-edit-mode.js");
-  snapshot = await import("../../src/core/snapshot.js");
   for (let i = 0; i < 100 && !save.baselineSettled(); i++) await sleep(50);
   expect(save.baselineSettled()).toBe(true);
   // The page's first save: no last saved size to judge yet, so it prepares in one task and
@@ -546,10 +555,6 @@ test("a soon() caller hears the error of a forced save whose capture fails", asy
   const restoreClock = stepClock();
   const realError = console.error;
   console.error = () => {};
-  let throwing = false;
-  snapshot.addDocumentTransform(() => {
-    if (throwing) throw new Error("capture exploded");
-  });
   let restoreHidden = null;
   try {
     const queued = await queuedBehindSaved(gate);
@@ -557,16 +562,17 @@ test("a soon() caller hears the error of a forced save whose capture fails", asy
     await keptWhenFateUnknown(gate, queued);
 
     restoreHidden = wholeCapturePage();
-    throwing = true;
+    captureFailure.message = "capture exploded";
+    captureFailure.on = true;
     const failed = await save.savePageForce();
-    throwing = false;
+    captureFailure.on = false;
     expect(failed).toMatchObject({ msgType: "error", msg: "capture exploded", code: null });
 
     await sleep(100);
     expect(answers).toHaveLength(1);
     expect(answers[0]).toBe(failed);
   } finally {
-    throwing = false;
+    captureFailure.on = false;
     restoreHidden?.();
     console.error = realError;
     gate.restore();

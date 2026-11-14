@@ -196,6 +196,45 @@ function runAuthoredHandlers(clone, attr) {
   }
 }
 
+// A registered callback that throws is skipped, so one broken hook cannot stop every
+// save. It is reported once per hook, not on every autosave. Two kinds still stop the
+// save: ClayJS's own required steps (skipping one, such as making admin-only scripts
+// inert, would write the wrong bytes), and an error with a `code`, which is a hook
+// refusing the capture on purpose (clay.live does this).
+const reportedHooks = new WeakSet();
+const requiredHooks = new WeakSet();
+function reportHookError(kind, hook, err) {
+  if (requiredHooks.has(hook) || typeof err?.code === "string") throw err;
+  if (reportedHooks.has(hook)) return;
+  reportedHooks.add(hook);
+  console.error(`clayjs: a ${kind} callback threw; the save goes on without it`, err);
+}
+
+// Skipping a callback that threw is only safe when it left the clone as it found it.
+// One that changed the clone first stops the capture, because its half-done changes
+// (rows removed but not yet rebuilt) would otherwise be saved.
+function runHook(kind, hook, clone, call) {
+  const watch = typeof MutationObserver === 'function' ? new MutationObserver(() => {}) : null;
+  watch?.observe(clone, { subtree: true, childList: true, attributes: true, characterData: true });
+  try {
+    call();
+  } catch (err) {
+    if (!watch || watch.takeRecords().length > 0) throw err;
+    reportHookError(kind, hook, err);
+  } finally {
+    watch?.disconnect();
+  }
+}
+
+// Every registered transform, each on a clone with the strip-on-save regions removed.
+// One that throws is skipped and reported once.
+function runDocumentTransforms(clone) {
+  for (const hook of documentTransforms) {
+    stripSnapshotRegions(clone);
+    runHook('addDocumentTransform', hook, clone, () => hook(clone));
+  }
+}
+
 let cloneCanonicalizer = null;
 
 export function setCloneCanonicalizer(canonicalize) {
@@ -214,9 +253,11 @@ export function canonicalizeReceived(doc) {
  * Use for: syncing form values to the clone.
  *
  * @param {Function} callback - Receives the cloned document element
+ * @param {{required?: boolean}} [options] - required: a throw stops the save instead of being skipped
  */
-export function onSnapshot(callback) {
+export function onSnapshot(callback, { required = false } = {}) {
   snapshotHooks.push(callback);
+  if (required) requiredHooks.add(callback);
 }
 
 /**
@@ -381,9 +422,11 @@ function serializeSaveClone(clone, context = null) {
  * different visibility rules, which is why neither run can be skipped.
  *
  * @param {Function} callback - Receives the cloned document element
+ * @param {{required?: boolean}} [options] - required: a throw stops the save instead of being skipped
  */
-export function addDocumentTransform(callback) {
+export function addDocumentTransform(callback, { required = false } = {}) {
   documentTransforms.push(callback);
+  if (required) requiredHooks.add(callback);
 }
 
 // =============================================================================
@@ -439,7 +482,7 @@ export function captureSnapshot({ flushUndo = true, authored = true, forSave = f
 
   for (const hook of snapshotHooks) {
     stripSnapshotRegions(clone);
-    hook(clone, { original: originalSnapshotNode, forSave, requestRefresh });
+    runHook('onSnapshot', hook, clone, () => hook(clone, { original: originalSnapshotNode, forSave, requestRefresh }));
   }
 
   // Put back any URL clay rewrote at runtime (cache-bust, refetch-on-save) so
@@ -489,10 +532,7 @@ function prepareCloneForSave(clone, { authored = true } = {}) {
   if (authored) runAuthoredHandlers(clone, 'onbeforesave');
 
   // Run registered prepare hooks ([freeze]/[save-freeze] innerHTML restore lives here)
-  for (const hook of documentTransforms) {
-    stripSnapshotRegions(clone);
-    hook(clone);
-  }
+  runDocumentTransforms(clone);
 
   stripSnapshotRegions(clone);
 
@@ -575,10 +615,7 @@ export function captureForComparison({ flushUndo = true } = {}) {
   }
 
   // Run registered prepare hooks
-  for (const hook of documentTransforms) {
-    stripSnapshotRegions(clone);
-    hook(clone);
-  }
+  runDocumentTransforms(clone);
 
   stripSnapshotRegions(clone);
 
@@ -608,10 +645,7 @@ export function captureForDirtyCheck({ flushUndo = true } = {}) {
     el.remove();
   }
 
-  for (const hook of documentTransforms) {
-    stripSnapshotRegions(clone);
-    hook(clone);
-  }
+  runDocumentTransforms(clone);
 
   stripSnapshotRegions(clone);
 
@@ -642,10 +676,7 @@ export function captureForComparisonAndDirty({ flushUndo = true } = {}) {
   for (const el of clone.querySelectorAll(STRIP_FROM_COMPARISON)) {
     el.remove();
   }
-  for (const hook of documentTransforms) {
-    stripSnapshotRegions(clone);
-    hook(clone);
-  }
+  runDocumentTransforms(clone);
   stripSnapshotRegions(clone);
   const forComparison = serializeForCompare(clone);
 
@@ -654,10 +685,7 @@ export function captureForComparisonAndDirty({ flushUndo = true } = {}) {
     for (const el of dirtyClone.querySelectorAll(STRIP_FROM_DIRTY_CHECK)) {
       el.remove();
     }
-    for (const hook of documentTransforms) {
-      stripSnapshotRegions(dirtyClone);
-      hook(dirtyClone);
-    }
+    runDocumentTransforms(dirtyClone);
     stripSnapshotRegions(dirtyClone);
     forDirty = serializeForCompare(dirtyClone);
   }
@@ -726,10 +754,7 @@ export function prepareSaveCapture({ emitForSync = true, flushUndo = true, reque
 
   // Save clone: run hooks (freeze restore lives here), THEN strip [no-save]/[save-remove]
   // LAST (snapshot-algorithm step 7) so freeze-restored [no-save] content can't leak to disk.
-  for (const hook of documentTransforms) {
-    stripSnapshotRegions(clone);
-    hook(clone);
-  }
+  runDocumentTransforms(clone);
   stripSnapshotRegions(clone);
   for (const el of clone.querySelectorAll(STRIP_FROM_SAVE)) {
     el.remove();
@@ -740,10 +765,7 @@ export function prepareSaveCapture({ emitForSync = true, flushUndo = true, reque
   for (const el of compareClone.querySelectorAll(STRIP_FROM_COMPARISON)) {
     el.remove();
   }
-  for (const hook of documentTransforms) {
-    stripSnapshotRegions(compareClone);
-    hook(compareClone);
-  }
+  runDocumentTransforms(compareClone);
   stripSnapshotRegions(compareClone);
 
   // Dirty clone: same shape as the compare clone, one selector weaker.
@@ -751,10 +773,7 @@ export function prepareSaveCapture({ emitForSync = true, flushUndo = true, reque
     for (const el of dirtyClone.querySelectorAll(STRIP_FROM_DIRTY_CHECK)) {
       el.remove();
     }
-    for (const hook of documentTransforms) {
-      stripSnapshotRegions(dirtyClone);
-      hook(dirtyClone);
-    }
+    runDocumentTransforms(dirtyClone);
     stripSnapshotRegions(dirtyClone);
   }
 
@@ -882,10 +901,7 @@ export function captureForMerge() {
     }
   })(compareClone, clone);
 
-  for (const hook of documentTransforms) {
-    stripSnapshotRegions(clone);
-    hook(clone);
-  }
+  runDocumentTransforms(clone);
   stripSnapshotRegions(clone);
   for (const el of clone.querySelectorAll(STRIP_FROM_SAVE)) {
     el.remove();
@@ -895,10 +911,7 @@ export function captureForMerge() {
   for (const el of compareClone.querySelectorAll(STRIP_FROM_DIRTY_CHECK)) {
     el.remove();
   }
-  for (const hook of documentTransforms) {
-    stripSnapshotRegions(compareClone);
-    hook(compareClone);
-  }
+  runDocumentTransforms(compareClone);
   stripSnapshotRegions(compareClone);
 
   return { saveClone: clone, compareClone, pairMap };

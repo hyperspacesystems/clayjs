@@ -143,3 +143,24 @@ test("the page's own feedback still opts out after the fallback has shown a toas
   delete window.clay.saveFeedback;
   expect(texts()).toEqual([]);
 });
+
+test("a failed save and an offline save both report msgType error", async () => {
+  const seen = [];
+  const onError = (event) => seen.push(["error", event.detail.msgType]);
+  const onOffline = (event) => seen.push(["offline", event.detail.msgType]);
+  document.addEventListener("clay:save-error", onError);
+  document.addEventListener("clay:save-offline", onOffline);
+
+  try {
+    await failSave();
+    online = false;
+    await failSave();
+    online = true;
+  } finally {
+    document.removeEventListener("clay:save-error", onError);
+    document.removeEventListener("clay:save-offline", onOffline);
+    online = true;
+  }
+
+  expect(seen).toEqual([["error", "error"], ["offline", "error"]]);
+});

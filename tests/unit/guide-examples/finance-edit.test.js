@@ -31,7 +31,7 @@ test("opening the page writes nothing", () => {
 
 test("totals and per-category values", () => {
   expect(text('[calc\\:totalspent]')).toBe("$1,384.40");
-  expect(text('#cat-food [calc\\:left]')).toBe("$-162.40");
+  expect(text('#cat-food [calc\\:left]')).toBe("-$162.40");
   expect($("#cat-food").classList.contains("over")).toBe(true);
 });
 

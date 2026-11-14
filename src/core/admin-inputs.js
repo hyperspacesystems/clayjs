@@ -19,7 +19,7 @@ export function disableAdminInputsBeforeSave() {
         restoreAuthoredOrder(input, live ?? input);
       });
     }
-  });
+  }, { required: true });
 }
 
 export function enableAdminInputsOnPageLoad() {

@@ -217,15 +217,31 @@ function makeSortable(sortableElem, Sortable, record = loose) {
   // Add onsorting callback if attribute exists (fires during drag)
   const onsortingCode = sortableElem.getAttribute('onsorting');
   if (onsortingCode) {
-    options.onMove = function(evt) {
-      if (!record.admitted) return;
-      try {
-        const asyncFn = new Function(`return (async function(evt) { ${onsortingCode} })`)();
-        asyncFn.call(sortableElem, evt);
-      } catch (error) {
-        console.error('Error in onsorting execution:', error);
-      }
-    };
+    // Sortable reads onMove's return value (false cancels the move, 1 or -1 picks a
+    // side), so the handler runs synchronously and its value goes back. A handler that
+    // awaits cannot answer in time; it still runs, as an async function, and Sortable
+    // gets no answer from it.
+    // Code that awaits compiles as async: a plain function would read `await (x)` as a
+    // call to a function named await and throw on every move.
+    let onsorting = null;
+    try {
+      onsorting = /\bawait\b/.test(onsortingCode)
+        ? new Function(`return (async function(evt) { ${onsortingCode} })`)()
+        : new Function('evt', onsortingCode);
+    } catch (error) {
+      console.error('Error in onsorting compilation:', error);
+    }
+    if (onsorting) {
+      options.onMove = function(evt) {
+        if (!record.admitted) return;
+        try {
+          const answer = onsorting.call(sortableElem, evt);
+          return answer instanceof Promise ? undefined : answer;
+        } catch (error) {
+          console.error('Error in onsorting execution:', error);
+        }
+      };
+    }
   }
 
   // After a drop, run any author onsorted code, then notify reactive libraries.

@@ -6,7 +6,7 @@
       "listeners": {
         "window": 14,
         "document": 84,
-        "Element": 38
+        "Element": 40
       },
       "observers": 3,
       "intervals": 0,

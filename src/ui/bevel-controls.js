@@ -186,10 +186,13 @@ export function bevelButton(label, { variant = 'default', small = false, onClick
   return b;
 }
 
-export function bevelIconButton(svg, { label, onClick = null }) {
+export function bevelIconButton(svg, { label, onClick = null, theme = null, parts = [], labelParts = [] }) {
   const b = bevelButton('', {
     small: true,
     onClick,
+    theme,
+    parts,
+    labelParts,
     extra: ['width:26px', 'height:26px', 'padding:0', 'display:inline-grid', 'place-items:center'],
     labelExtra: ['display:inline-grid', 'width:12px', 'height:12px'],
   });

@@ -14,6 +14,7 @@
     "@panphora/clayjs/clay.standalone.js",
     "@panphora/clayjs/server/rooms",
     "@panphora/clayjs/server/checkpoint",
+    "@panphora/clayjs/server/markdown",
     "@panphora/clayjs/offline-runtime",
     "@panphora/clayjs/page/yjs"
   ],
@@ -24,6 +25,8 @@
     "dist/server/rooms.mjs",
     "dist/server/checkpoint.cjs",
     "dist/server/checkpoint.mjs",
+    "dist/server/markdown.cjs",
+    "dist/server/markdown.mjs",
     "docs/guide.md"
   ],
   "families": [

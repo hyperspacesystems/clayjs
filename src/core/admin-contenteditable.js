@@ -11,7 +11,7 @@ export function disableContentEditableBeforeSave () {
       canonicalContentEditable(el);
       restoreAuthoredOrder(el, originalSnapshotNode(el) ?? el);
     });
-  });
+  }, { required: true });
 }
 
 export function enableContentEditableForAdminOnPageLoad () {

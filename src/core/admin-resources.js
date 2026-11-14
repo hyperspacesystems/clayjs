@@ -17,16 +17,19 @@ function makeInert(resource) {
   return true;
 }
 
+// `javascript` alone is not a type a browser runs, so a resource written as
+// `inert/javascript` comes back as text/javascript.
 function makeActive(resource) {
   const original = resource.getAttribute('type').slice(INERT_PREFIX.length);
-  if (original) resource.setAttribute('type', original);
+  if (original === 'javascript') resource.setAttribute('type', 'text/javascript');
+  else if (original) resource.setAttribute('type', original);
   else resource.removeAttribute('type');
 }
 
 export function disableAdminResourcesBeforeSave () {
   addDocumentTransform(docElem => {
     docElem.querySelectorAll(SELECTOR).forEach(makeInert);
-  });
+  }, { required: true });
 }
 
 export function enableAdminResourcesOnPageLoad () {

@@ -9,13 +9,14 @@ import { jest } from "@jest/globals";
  * and every test stops what it started.
  */
 
-const TITLE = "Saved data was overwritten";
+const TITLE = "Some saved data was removed";
 const DONE_KEY = "clay:doc:/:data-guard-done";
 const UNREACHED = "Could not reach the server. Try again.";
 
+const liveToasts = new Map();
 const toast = jest.fn();
-const toastPersistent = jest.fn();
-const dismissPersistent = jest.fn();
+const toastPersistent = jest.fn((message) => { liveToasts.set(message, true); });
+const dismissPersistent = jest.fn((message) => { liveToasts.delete(message); });
 
 await jest.unstable_mockModule("../../src/ui/toast.js", () => ({
   default: toast,
@@ -54,6 +55,14 @@ const event = (over = {}) => ({
 const notification = (action, data) =>
   new CustomEvent("clay:notification", { detail: { msgType: "data-loss", action, data } });
 
+// What live-sync dispatches when it applies a change written outside this page, and what
+// save.js dispatches once the merge that follows one has reached the host.
+const outsideApplied = () =>
+  document.dispatchEvent(new CustomEvent("clay:sync-applied", {
+    detail: { seq: 1, source: "disk", lane: "saved", by: null, html: "", report: {}, conflictIds: [] },
+  }));
+const saved = () => document.dispatchEvent(new CustomEvent("clay:save-saved"));
+
 const serverBar = () => {
   const bar = document.createElement("div");
   bar.setAttribute("data-htmlclay-guard", "");
@@ -89,6 +98,7 @@ beforeEach(() => {
   document.documentElement.removeAttribute("htmlclaytoken");
   sessionStorage.clear();
   delete window.clay;
+  liveToasts.clear();
   toast.mockClear();
   toastPersistent.mockClear();
   dismissPersistent.mockClear();
@@ -152,6 +162,97 @@ test("a raised notice draws, and raising the same event again draws nothing more
   document.dispatchEvent(notification("raised", event()));
   await flush();
   expect(toastPersistent).toHaveBeenCalledTimes(1);
+});
+
+test("a raise right after an outside change waits, and draws nothing when the merge keeps it", async () => {
+  fakeTimers = true;
+  jest.useFakeTimers();
+  await boot({ entries: [answer(200, { event: null }), answer(200, { event: null })] });
+
+  await jest.advanceTimersByTimeAsync(200);
+  outsideApplied();
+  document.dispatchEvent(notification("raised", event()));
+  await flush();
+  expect(toastPersistent).not.toHaveBeenCalled();
+
+  await jest.advanceTimersByTimeAsync(400);
+  saved();
+  await jest.advanceTimersByTimeAsync(7000);
+
+  expect(toastPersistent).not.toHaveBeenCalled();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+test("a raise right after an outside change draws once when the re-read still holds the event", async () => {
+  fakeTimers = true;
+  jest.useFakeTimers();
+  await boot({ entries: [answer(200, { event: null }), answer(200, { event: event() })] });
+
+  await jest.advanceTimersByTimeAsync(200);
+  outsideApplied();
+  document.dispatchEvent(notification("raised", event()));
+  await flush();
+  expect(toastPersistent).not.toHaveBeenCalled();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+
+  await jest.advanceTimersByTimeAsync(400);
+  saved();
+  await flush();
+  expect(toastPersistent).not.toHaveBeenCalled();
+
+  await jest.advanceTimersByTimeAsync(5000);
+  expect(toastPersistent).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+test("a raise with no outside change to wait for draws at once", async () => {
+  fakeTimers = true;
+  jest.useFakeTimers();
+  await boot({ entries: [answer(200, { event: null })] });
+
+  await jest.advanceTimersByTimeAsync(200);
+  outsideApplied();
+  await jest.advanceTimersByTimeAsync(10000);
+  document.dispatchEvent(notification("raised", event()));
+  await flush();
+
+  expect(toastPersistent).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("a resolved push during the wait cancels it, and nothing is drawn", async () => {
+  fakeTimers = true;
+  jest.useFakeTimers();
+  await boot({ entries: [answer(200, { event: null })] });
+
+  await jest.advanceTimersByTimeAsync(200);
+  outsideApplied();
+  document.dispatchEvent(notification("raised", event()));
+  await flush();
+  expect(toastPersistent).not.toHaveBeenCalled();
+
+  await jest.advanceTimersByTimeAsync(100);
+  document.dispatchEvent(notification("resolved", { id: "e1" }));
+  await jest.advanceTimersByTimeAsync(10000);
+
+  expect(toastPersistent).not.toHaveBeenCalled();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("a wait with no save behind it reads and draws once the cap passes", async () => {
+  fakeTimers = true;
+  jest.useFakeTimers();
+  await boot({ entries: [answer(200, { event: null }), answer(200, { event: event() })] });
+
+  await jest.advanceTimersByTimeAsync(200);
+  outsideApplied();
+  document.dispatchEvent(notification("raised", event()));
+  await jest.advanceTimersByTimeAsync(5999);
+  expect(toastPersistent).not.toHaveBeenCalled();
+
+  await jest.advanceTimersByTimeAsync(1);
+  expect(toastPersistent).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
 test("resolved for the shown event takes the notice down", async () => {
@@ -583,4 +684,92 @@ test("a notice that can be undone says the undo takes later edits with it", asyn
   await boot({ entries: [answer(200, { event: event({ restorable: false, canRevert: true }) })] });
 
   expect(toastPersistent.mock.calls[0][2].detail.endsWith("Undo the change also removes edits made since.")).toBe(true);
+});
+
+test("each reason says what happened, and the tone stays calm for what you typed", async () => {
+  const cases = [
+    ["recent", "A change from outside this page removed something you typed", "info"],
+    ["all-typed", "A change from outside this page removed everything you typed", "info"],
+    ["emptied", "A change from outside this page emptied this page's data", "warning"],
+    ["unreadable", "A change from outside this page left its data unreadable", "warning"],
+  ];
+  for (const [reason, title, tone] of cases) {
+    liveToasts.clear();
+    toastPersistent.mockClear();
+    await boot({ entries: [answer(200, { event: event({ id: reason, reason, typed: [], canPutBack: true }) })] });
+    expect(liveToasts.size).toBe(1);
+    expect([toastPersistent.mock.calls[0][0], toastPersistent.mock.calls[0][1]]).toEqual([title, tone]);
+    notice.stop();
+  }
+});
+
+test("a recent loss names what you typed and how long ago, with Put it back", async () => {
+  await boot({ entries: [answer(200, { event: event({
+    reason: "recent",
+    canPutBack: true,
+    typed: [{ path: "items[id:5].note", yours: "mine", at: Date.now() - 3 * 60000 - 500 }],
+  }) })] });
+
+  expect(liveToasts.size).toBe(1);
+  const [title, tone, { detail }] = toastPersistent.mock.calls[0];
+  expect(title).toBe("A change from outside this page removed something you typed");
+  expect(tone).toBe("info");
+  expect(detail).toContain('note: "mine"');
+  expect(detail).toContain("You typed it 3 minutes ago.");
+  expect(lastActions().map((entry) => entry.label)).toEqual(["Put it back", "Undo the change", "Keep the change"]);
+});
+
+test("an all-typed loss shows three rows and counts the rest, with no minute line", async () => {
+  const typed = [1, 2, 3, 4, 5].map((n) => ({ path: `item_${n}.body-text`, yours: `mine ${n}`, at: Date.now() - 120000 }));
+  await boot({ entries: [answer(200, { event: event({ reason: "all-typed", typed, canPutBack: true }) })] });
+
+  expect(liveToasts.size).toBe(1);
+  const { detail } = toastPersistent.mock.calls[0][2];
+  expect(detail).toContain('body text: "mine 1"; body text: "mine 2"; body text: "mine 3" and 2 more.');
+  expect(detail).not.toContain("You typed");
+});
+
+test("Put it back posts the choice, reloads, and says so on the next start", async () => {
+  await boot({ entries: [answer(200, { event: event({ reason: "recent", canPutBack: true, typed: [{ path: "note", yours: "mine", at: Date.now() }] }) })] });
+
+  queue.push(answer(200, { ok: true }));
+  action("Put it back").onClick();
+  await flush();
+
+  const [, init] = fetchMock.mock.calls[1];
+  expect(init.method).toBe("POST");
+  expect(JSON.parse(init.body)).toEqual({ id: "e1", choice: "put-back" });
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(sessionStorage.getItem(DONE_KEY))).toBe("put-back");
+});
+
+test("an event that cannot be put back offers no Put it back", async () => {
+  await boot({ entries: [answer(200, { event: event({ reason: "recent", canPutBack: false, typed: [{ path: "note", yours: "mine", at: Date.now() }] }) })] });
+
+  expect(liveToasts.size).toBe(1);
+  expect(lastActions().map((entry) => entry.label)).toEqual(["Undo the change", "Keep the change"]);
+  expect(action("Put it back")).toBeUndefined();
+});
+
+test("an event with no reason keeps Restore and Keep as is", async () => {
+  await boot({ entries: [answer(200, { event: event({ canPutBack: true }) })] });
+
+  expect(liveToasts.size).toBe(1);
+  expect(toastPersistent.mock.calls[0][0]).toBe(TITLE);
+  expect(lastActions().map((entry) => entry.label)).toEqual(["Restore", "Undo the change", "Keep as is"]);
+});
+
+test("a second event with another reason leaves exactly one notice", async () => {
+  await boot({ entries: [answer(200, { event: null })] });
+
+  document.dispatchEvent(notification("raised", event({ reason: "recent", canPutBack: true, typed: [{ path: "note", yours: "mine", at: Date.now() }] })));
+  await flush();
+  expect(liveToasts.size).toBe(1);
+
+  document.dispatchEvent(notification("raised", event({ id: "e2", reason: "emptied", typed: [], restorable: false })));
+  await flush();
+
+  expect(liveToasts.size).toBe(1);
+  expect(liveToasts.has("A change from outside this page emptied this page's data")).toBe(true);
+  expect(liveToasts.has("A change from outside this page removed something you typed")).toBe(false);
 });

@@ -120,4 +120,4 @@ export function acceptedPageState(html) {
   }
 }
 
-addDocumentTransform(projectInto);
+addDocumentTransform(projectInto, { required: true });

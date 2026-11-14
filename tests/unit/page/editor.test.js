@@ -140,3 +140,14 @@ describe("F24 fixture teardown", () => {
     expect(previous.isDestroyed).toBe(true);
   });
 });
+
+test("a caret scrolled into view stops below the page's scroll-padding-top, never closer than 16px", () => {
+  const view = createPageEditor(mount());
+  const margin = () => [view.someProp("scrollMargin").top, view.someProp("scrollThreshold").top];
+  expect(margin()).toEqual([16, 16]);
+  document.documentElement.style.scrollPaddingTop = "52px";
+  expect(margin()).toEqual([52, 52]);
+  document.documentElement.style.scrollPaddingTop = "8px";
+  expect(margin()).toEqual([16, 16]);
+  document.documentElement.style.scrollPaddingTop = "";
+});

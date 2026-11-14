@@ -138,9 +138,13 @@ test("a dialog keeps the theme it opened with", () => {
 
 test("caller markup goes in untouched and takes no theme declarations", () => {
   theme(KANBAN);
-  tell("T", '<span class="mine" style="color: red">x</span>').catch(() => {});
+  const mine = document.createElement("span");
+  mine.className = "mine";
+  mine.setAttribute("style", "color: red");
+  mine.textContent = "x";
+  tell("T", mine).catch(() => {});
 
-  const mine = dialog().querySelector("span.mine");
+  expect(dialog().contains(mine)).toBe(true);
   expect(mine.getAttribute("style")).toBe("color: red");
   expect(mine.hasAttribute("data-clay-part")).toBe(false);
   expect(mine.parentElement.getAttribute("data-clay-part")).toBe("text");

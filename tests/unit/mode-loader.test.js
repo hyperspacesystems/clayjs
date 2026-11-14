@@ -184,3 +184,18 @@ test("the resource adapter refuses a script document and flips a reversible one 
   lease.dispose();
   expect(document.querySelector("style").getAttribute("type")).toBe("inert/");
 });
+
+test("a resource written inert/javascript activates as a script a browser runs", async () => {
+  const { enableAdminResources } = await import("../../src/core/admin-resources.js");
+
+  document.body.innerHTML = `
+    <script id="bare" editmode:resource type="inert/javascript"></script>
+    <script id="typed" editmode:resource type="inert/text/javascript"></script>
+    <script id="absent" editmode:resource type="inert/"></script>
+  `;
+  enableAdminResources();
+
+  expect(document.getElementById("bare").getAttribute("type")).toBe("text/javascript");
+  expect(document.getElementById("typed").getAttribute("type")).toBe("text/javascript");
+  expect(document.getElementById("absent").hasAttribute("type")).toBe(false);
+});

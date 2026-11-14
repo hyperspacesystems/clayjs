@@ -707,6 +707,11 @@ function checkboxClick(view, event) {
   return true;
 }
 
+function pageTopInset(doc, least) {
+  const padding = parseFloat(doc.defaultView?.getComputedStyle(doc.documentElement).scrollPaddingTop);
+  return Number.isFinite(padding) ? Math.max(least, padding) : least;
+}
+
 // Mounts the editor in `mount`, inside a .blockeditor-shell wrapper (the surface a
 // theme styles). `onChange(record)` gets the block record (blockMap) after
 // every transaction that changed the document.
@@ -743,10 +748,11 @@ export function createPageEditor(mount, { blocks = null, onChange = null, upload
   view = new pmView.EditorView(shell, {
     state: blockeditorState(blocks, { upload, highlight, doc: initialDoc, history: useHistory, undo, redo, onAiTool, mediaNote, toolHost, features, commandHost }),
     attributes: { class: "blockeditor-editor" },
-    // The phone keeps a fixed bar and the plus and grip at the bottom: a caret scrolled into
-    // view stops clear of them.
-    scrollMargin: { top: 16, bottom: 96, left: 5, right: 5 },
-    scrollThreshold: { top: 16, bottom: 96, left: 0, right: 0 },
+    // The phone keeps a fixed bar and the plus and grip at the bottom, and a page with a
+    // sticky header declares its height as scroll-padding-top: a caret scrolled into view
+    // stops clear of both.
+    scrollMargin: { get top() { return pageTopInset(doc, 16); }, bottom: 96, left: 5, right: 5 },
+    scrollThreshold: { get top() { return pageTopInset(doc, 16); }, bottom: 96, left: 0, right: 0 },
     editable: () => editable,
     nodeViews,
     handleDOMEvents: {

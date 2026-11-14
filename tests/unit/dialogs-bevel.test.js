@@ -16,13 +16,19 @@ afterEach(() => {
   if (themodal.isShowing) themodal.close();
 });
 
-test("ask: title, Bevel input and the close are hostile-proof; the prompt markup is the caller's", () => {
+test("ask: title, Bevel input and the close are hostile-proof; the caller's prompt node is placed as it is", () => {
+  const prompt = document.createElement("span");
+  prompt.append("Rename ");
+  const caller = document.createElement("b");
+  caller.dataset.caller = "1";
+  caller.textContent = "this";
+  prompt.append(caller, "?");
   let result;
-  const calls = capture(() => { result = ask('Rename <b data-caller="1">this</b>?', null, "old"); });
+  const calls = capture(() => { result = ask(prompt, null, "old"); });
   result.catch(() => {});
   const root = document.querySelector("[data-clay-modal]");
-  const caller = dialog().querySelector('[data-caller="1"]');
-  expect(expectHostileProof(root, { skip: (el) => el === caller })).toBeGreaterThanOrEqual(12);
+  expect(dialog().contains(caller)).toBe(true);
+  expect(expectHostileProof(root, { skip: (el) => prompt.contains(el) })).toBeGreaterThanOrEqual(12);
   expectCallsResolved(calls, root);
   expect(caller.hasAttribute("style")).toBe(false);
   const input = dialog().querySelector("input");
@@ -35,6 +41,11 @@ test("ask: title, Bevel input and the close are hostile-proof; the prompt markup
   expect(x.getAttribute("class")).toBeNull();
   expect(x.querySelector("path").style.getPropertyPriority("fill")).toBe("important");
   expect(document.querySelector('[class*="micromodal"]')).toBeNull();
+
+  themodal.close();
+  ask('Rename <b>x</b>?', null, "old").catch(() => {});
+  expect(dialog().textContent).toContain('Rename <b>x</b>?');
+  expect(dialog().querySelector("b")).toBeNull();
 });
 
 test("consent: extra content inherits Bevel body type, not the reset font", () => {
@@ -59,14 +70,25 @@ test("coarse pointer dialogs use touch sized inputs and footer buttons", () => {
   }
 });
 
-test("tell: the title and each paragraph in Bevel type, paragraphs as caller markup", () => {
-  const calls = capture(() => { tell("Heads up", 'first <i data-caller="p">one</i>', "second").catch(() => {}); });
+test("tell: the title and each paragraph in Bevel type, caller paragraph nodes placed as they are", () => {
+  const paragraph = document.createElement("span");
+  paragraph.append("first ");
+  const caller = document.createElement("i");
+  caller.dataset.caller = "p";
+  caller.textContent = "one";
+  paragraph.append(caller);
+  const calls = capture(() => { tell("Heads up", paragraph, "second").catch(() => {}); });
   const root = document.querySelector("[data-clay-modal]");
-  const caller = dialog().querySelector('[data-caller="p"]');
-  expect(expectHostileProof(root, { skip: (el) => el === caller })).toBeGreaterThanOrEqual(10);
+  expect(dialog().contains(caller)).toBe(true);
+  expect(expectHostileProof(root, { skip: (el) => paragraph.contains(el) })).toBeGreaterThanOrEqual(10);
   expectCallsResolved(calls, root);
   expect(dialog().textContent).toContain("Heads up");
   expect(caller.outerHTML).toBe('<i data-caller="p">one</i>');
+
+  themodal.close();
+  tell("Heads up", "<i data-caller='q'>two</i>").catch(() => {});
+  expect(dialog().textContent).toContain("<i data-caller='q'>two</i>");
+  expect(dialog().querySelector("i")).toBeNull();
 });
 
 test("snippet: the code sits in a mono well, copy is a Bevel button, no confirm button", () => {
@@ -78,6 +100,13 @@ test("snippet: the code sits in a mono well, copy is a Bevel button, no confirm 
   expect(pre.textContent).toBe("the code");
   expect(pre.style.getPropertyValue("font")).toContain(FONT_MONO);
   expect(submit().hidden).toBe(true);
+});
+
+test("snippet: code is shown as written, never parsed", () => {
+  snippet("Embed", "<div>hi</div>");
+  const pre = dialog().querySelector("pre");
+  expect(pre.textContent).toBe("<div>hi</div>");
+  expect(pre.querySelector("div")).toBeNull();
 });
 
 test("confirm opens with the primary button focused, so Enter confirms", () => {

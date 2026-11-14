@@ -12,6 +12,7 @@ let save, snapshot;
 let posts = [];
 let latency = 0;
 let failNext = 0;
+let captureFailure = null;
 
 beforeAll(async () => {
   window.clayEditMode = true;
@@ -28,6 +29,14 @@ beforeAll(async () => {
     }
     return { ok: true, status: 200, statusText: "OK", headers: { get: () => null }, text: async () => JSON.stringify({ msg: "Saved" }) };
   });
+  const realContentDom = await import("../../src/lib/content-dom.js");
+  jest.unstable_mockModule("../../src/lib/content-dom.js", () => ({
+    cleanContentClone: realContentDom.cleanContentClone,
+    createContentView: (...args) => {
+      if (captureFailure?.on) throw new Error("fixture capture failure");
+      return realContentDom.createContentView(...args);
+    },
+  }));
   save = await import("../../src/core/save.js");
   snapshot = await import("../../src/core/snapshot.js");
   document.body.appendChild(document.createElement("span"));
@@ -176,18 +185,17 @@ test("an explicit save skipped by the hold still replays as an explicit save", a
   expect(posts[posts.length - 1]).toContain("explicit-held");
 }, 20000);
 
-test("a snapshot hook that throws makes a replayed autosave report an error, not throw out of the release", async () => {
-  let failSnapshot = false;
-  snapshot.onSnapshot(() => {
-    if (failSnapshot) throw new Error("hook failed");
-  });
+test("a capture that throws makes a replayed autosave report an error, not throw out of the release", async () => {
+  const failure = { on: false };
+  captureFailure = failure;
   document.getElementById("c").textContent = "hook-held";
   await sleep(0);
   save.holdAllSaves();
   expect((await save.savePageThrottled()).msgType).toBe("skipped");
-  failSnapshot = true;
+  failure.on = true;
   expect(() => save.releaseAllSaves()).not.toThrow();
   await sleep(1500);
   expect(document.documentElement.getAttribute("savestatus")).toBe("error");
-  failSnapshot = false;
+  failure.on = false;
+  captureFailure = null;
 }, 20000);

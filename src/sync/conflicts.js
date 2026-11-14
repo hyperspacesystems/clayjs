@@ -62,8 +62,10 @@ function changed(detail) {
 // A report is a loss unless the engine says this tab's operation survived, or a
 // hook kept the incoming change off the page. One the engine could not map to the
 // live page ("missing-output") still replaced this tab's work: it shows, without
-// a place to point at.
+// a place to point at. A region whose incoming version always wins (no-dirty,
+// no-watch) held nothing to keep, so replacing it is never a loss.
 function isLoss(c) {
+  if (c.kind === 'structure' && c.detail === 'remote-wins') return false;
   const r = c.recovery;
   if (!r) return true;
   if (r.applied === false && r.unavailable === 'hook-veto') return false;

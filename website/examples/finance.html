@@ -52,7 +52,7 @@
   <section class="summary">
     <div><small>Budgeted</small><output clay="no-dirty" calc:totalbudget="sum(state.categories, 'budget')" text:usd2="state.totalbudget">$1,250.00</output></div>
     <div><small>Spent</small><output clay="no-dirty" calc:totalspent="sum(state.txns, 'amount')" text:usd2="state.totalspent">$1,384.40</output></div>
-    <div><small>Left</small><output clay="no-dirty" calc:totalleft="state.totalbudget - state.totalspent" text:usd2="state.totalleft" class:over="state.totalleft < 0" class="over">$-134.40</output></div>
+    <div><small>Left</small><output clay="no-dirty" calc:totalleft="state.totalbudget - state.totalspent" text:usd2="state.totalleft" class:over="state.totalleft < 0" class="over">-$134.40</output></div>
   </section>
 
   <h2>Categories</h2>
@@ -72,7 +72,7 @@
           <div class="bar" clay="no-dirty" css:used="Math.min(100, item.budget ? item.spent / item.budget * 100 : 0) + '%'" style="--used: 100%;"><span></span></div></td>
         <td class="num"><input type="number" step="1" min="0" bind="budget" persist viewmode:readonly readonly value="250"></td>
         <td class="num" clay="no-dirty" calc:spent="sum(root.txns.filter(t => t.cat === item.name), 'amount')" text:usd2="item.spent">$412.40</td>
-        <td class="num" clay="no-dirty" calc:left="item.budget - item.spent" text:usd2="item.left">$-162.40</td>
+        <td class="num" clay="no-dirty" calc:left="item.budget - item.spent" text:usd2="item.left">-$162.40</td>
         <td class="actions"><button type="button" show-when:editmode="true" trigger-remove confirm="Delete this category?" aria-label="Delete category">×</button></td>
       </tr>
       <tr item id="cat-fun" class:over="item.left < 0">

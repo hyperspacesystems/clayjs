@@ -17,8 +17,8 @@ import { safeHref, safeSrc } from "./address.js";
 const EMBEDS = "iframe, frame, frameset, object, embed, applet, meta, base, link, form, style, animate, set, animateMotion, animateTransform, portal";
 const LOADERS = /^(srcdoc|data|formaction|codebase|archive|ping|background|poster|lowsrc|dynsrc)$/i;
 const SCRIPTED = /^\s*(javascript|vbscript|data):/i;
-function cleanImported(html) {
-  const t = document.createElement("template");
+function cleanImported(html, doc) {
+  const t = doc.createElement("template");
   t.innerHTML = html;
   for (const el of t.content.querySelectorAll(EMBEDS)) el.remove();
   for (const el of t.content.querySelectorAll("*")) {
@@ -57,7 +57,18 @@ function added(marks, name, attrs) {
 // One text block's inline content as the record keeps it: c, and m as runs (one
 // key per UTF-16 unit, packed), exactly as flatten and runsOf write it; `parts`
 // splits around an image, which the schema only carries as a block of its own.
-function inlineOf(tokens, { images = true, refused = [], unsupported = [] } = {}) {
+// A link written as a path to another file (`other.md`, `docs/a.html`) points inside the
+// folder it came from. It never becomes a web address: `other.md` read as a host name is
+// someone else's site. The host may map it to the page it imported (`resolveLink`).
+const LOCAL_FILE = /^(?![a-z][a-z0-9+.-]*:|\/)[^?#\s]*\.(md|markdown|html?|htmlclay)([?#]\S*)?$/i;
+
+function linkHref(raw, resolveLink) {
+  const resolved = typeof resolveLink === "function" ? resolveLink(raw) : null;
+  if (typeof resolved === "string" && resolved) return safeHref(resolved);
+  return LOCAL_FILE.test(raw.trim()) ? null : safeHref(raw);
+}
+
+function inlineOf(tokens, { images = true, refused = [], unsupported = [], resolveLink = null } = {}) {
   const parts = [];
   let c = "";
   let m = [];
@@ -91,7 +102,7 @@ function inlineOf(tokens, { images = true, refused = [], unsupported = [] } = {}
         case "codespan": text(token.text, added(marks, "code")); break;
         case "br": atom(BREAK); break;
         case "link": {
-          const href = safeHref(token.href);
+          const href = linkHref(String(token.href ?? ""), resolveLink);
           if (href) walk(token.tokens, added(marks, "link", { href }));
           else {
             refused.push({ type: "link", href: String(token.href ?? "") });
@@ -121,7 +132,7 @@ function inlineOf(tokens, { images = true, refused = [], unsupported = [] } = {}
   return { parts };
 }
 
-export function importMarkdownTokens(tokens) {
+export function importMarkdownTokens(tokens, { document: doc = globalThis.document, resolveImage = null, resolveLink = null } = {}) {
   if (!Array.isArray(tokens)) throw new MarkdownImportError("malformed-input", "Markdown import needs the lexer's token list.");
   let size = 0;
   for (const token of tokens) {
@@ -155,7 +166,8 @@ export function importMarkdownTokens(tokens) {
     return value;
   };
   const imageOf = (image) => {
-    const src = safeSrc(image.src);
+    const resolved = typeof resolveImage === "function" ? resolveImage(image.src) : null;
+    const src = safeSrc(typeof resolved === "string" && resolved ? resolved : image.src);
     if (src) return { t: "image", src, ...(image.alt ? { alt: image.alt } : {}), ...(image.title ? { caption: image.title } : {}) };
     refused.push({ type: "image", href: image.src });
     return image.alt ? block("paragraph", {}, { c: image.alt, m: [] }) : null;
@@ -168,7 +180,7 @@ export function importMarkdownTokens(tokens) {
     }
   };
   const paragraph = (inline, ctx) => textBlocks(ctx.quote ? "quote" : "paragraph", {}, inline);
-  const inline = (tokens, options = {}) => inlineOf(tokens, { refused, unsupported, ...options });
+  const inline = (tokens, options = {}) => inlineOf(tokens, { refused, unsupported, resolveLink, ...options });
   const literal = (token) => {
     const raw = String(token.raw ?? token.text ?? "");
     unsupported.push({ type: token.type, text: raw });
@@ -193,7 +205,7 @@ export function importMarkdownTokens(tokens) {
         case "html": {
           const raw = String(token.text ?? token.raw ?? "");
           unsupported.push({ type: "HTML block cleaned", text: raw });
-          push({ t: "preserved", html: cleanImported(fragmentCleaner(document).fallback(raw)) });
+          push({ t: "preserved", html: cleanImported(fragmentCleaner(doc).fallback(raw), doc) });
           break;
         }
         case "blockquote": {

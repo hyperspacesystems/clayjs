@@ -190,6 +190,51 @@ test("dispose removes the listeners a press started, and the restore it schedule
   expect(item.getAttribute("style")).toBe("color: blue;");
 });
 
+const withSorting = async (code) => {
+  document.body.innerHTML = `<ul id="list" sortable onsorting="${code}"><li>A</li><li>B</li></ul>`;
+  await enter();
+  return window.Sortable.get(listOf()).options.onMove;
+};
+
+test("onsorting's return value reaches onMove, so it can veto a move", async () => {
+  const onMove = await withSorting("return false");
+
+  expect(onMove({})).toBe(false);
+});
+
+test("onsorting decides by the element it would move beside", async () => {
+  const onMove = await withSorting("return evt.related.id !== 'locked'");
+
+  expect(onMove({ related: { id: "locked" } })).toBe(false);
+  expect(onMove({ related: { id: "open" } })).toBe(true);
+});
+
+test("an onsorting that awaits still runs, and onMove answers nothing for it", async () => {
+  delete window.__ran;
+  const onMove = await withSorting("await Promise.resolve(); window.__ran = true");
+
+  expect(onMove({})).toBeUndefined();
+  await wait(0);
+  expect(window.__ran).toBe(true);
+});
+
+test("an onsorting that awaits a parenthesized value runs as async, not as a call to await", async () => {
+  delete window.__ran;
+  const onMove = await withSorting("await (Promise.resolve()); window.__ran = true");
+
+  expect(onMove({})).toBeUndefined();
+  await wait(0);
+  expect(window.__ran).toBe(true);
+});
+
+test("this inside onsorting is the sortable element", async () => {
+  delete window.__self;
+  const onMove = await withSorting("window.__self = this");
+
+  onMove({});
+  expect(window.__self).toBe(listOf());
+});
+
 test("an explicit edit boot\u0027s session is adopted, and its dispose leaves the next entry nothing", async () => {
   // The import road: this tab booted in edit, so the module\u0027s own init() enabled a session
   // before any mode lease existed.

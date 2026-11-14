@@ -82,7 +82,7 @@ function init() {
   // Phase 3a: Freeze again in prepare, for anything changed between the phases
   // (e.g. onbeforesave handlers). Pairs by the WeakMap phase 2 filled, because by
   // now the clone has lost its [no-snapshot] subtrees and position means nothing.
-  addDocumentTransform(freezePrepare);
+  addDocumentTransform(freezePrepare, { required: true });
 }
 
 init();

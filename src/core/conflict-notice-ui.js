@@ -2,12 +2,14 @@ import { isEditMode } from "./is-edit-mode.js";
 import { rowOf, plain } from "./conflict-presentation.js";
 import { downloadRecovery, downloadStored } from "./conflict-download.js";
 import { pendingConflicts, listConflicts, dismissConflicts } from "../recovery/conflicts.js";
-import { set, make } from "../lib/hostile-css.js";
+import { set, make, style } from "../lib/hostile-css.js";
 import { isSaveConflicted } from "./save.js";
 import { gateCaptureToken } from "../lib/dirty-gate.js";
 import { reloadAfterDiscard } from "./unsaved-warning.js";
 import { bevelButton, bevelIconButton, bevelSurface, bevelWell, bevelText, protectIcon, paintLook, RUNTIME_ONLY } from "../ui/bevel-controls.js";
 import { TOKENS, FONT_SANS, FONT_MONO, GLYPHS } from "../ui/bevel.js";
+import { resolveTheme } from "../ui/theme.js";
+import { themed, partRules, markParts } from "../ui/theme-parts.js";
 
 // One notice for everything this tab holds that the page no longer shows: edits
 // another save replaced (the ledger, clay.conflicts) and a save the host refused.
@@ -72,6 +74,9 @@ let copiedId = null;
 let copiedTimer = null;
 
 let root = null;
+// The theme every surface is drawn with: captured once, when the notice draws, and
+// carried into each control it builds.
+let theme = null;
 let wellEl = null;
 let keyed = new Map();
 
@@ -114,6 +119,15 @@ function key(node, name) {
   return node;
 }
 
+// An element built with el() carries no part machinery of its own: mark it, and let the
+// page's explicit declarations land after everything it was drawn with.
+function part(node, names) {
+  if (!themed(theme)) return node;
+  markParts(node, theme, names);
+  style(node, partRules(theme, names, {}));
+  return node;
+}
+
 // A phone keyboard shrinks the visual viewport but leaves fixed elements pinned to
 // the layout viewport, which parks a bottom-anchored bar behind the keyboard at the
 // exact moment somebody is typing. Lift it by the difference instead.
@@ -147,6 +161,7 @@ export function schedule() {
 }
 
 function render() {
+  theme = resolveTheme();
   if (checkRefusal) {
     checkRefusal = false;
     if (refused && !isSaveConflicted()) refused = null;
@@ -196,11 +211,18 @@ function render() {
   // A request for a control the toast is standing in for waits until the toast goes.
   if (!toastText) pendingFocus = null;
   place();
-  paintLook(root);
+  if (themed(theme)) {
+    markParts(root, theme, ["conflict.root"]);
+    style(root, partRules(theme, ["conflict.root"], {}));
+    set(root, "color-scheme", theme.scheme === "light dark" ? "light" : theme.scheme);
+  } else {
+    root.removeAttribute("data-clay-part");
+    paintLook(root);
+  }
 }
 
 function dot() {
-  return el("span", ["all:initial", "display:inline-block", "flex:none", "width:8px", "height:8px", "border-radius:50%", `background:${WARN}`]);
+  return part(el("span", ["all:initial", "display:inline-block", "flex:none", "width:8px", "height:8px", "border-radius:50%", `background:${WARN}`]), ["conflict.dot"]);
 }
 
 function refusedSource() {
@@ -230,7 +252,8 @@ function titleOf(m, n) {
 }
 
 function drawToast(text) {
-  const t = bevelSurface("div", ["display:block", `border-left:3px solid ${TOKENS.teal}`, "padding:10px 14px", "width:max-content", "max-width:calc(100vw - 24px)"]);
+  const t = bevelSurface("div", ["display:block", `background:${TOKENS["teal-soft"]}`, "padding:10px 14px", "width:max-content", "max-width:calc(100vw - 24px)"], { theme, parts: ["conflict.panel"] });
+  if (themed(theme)) style(t, [`background:${TOKENS["teal-soft"]}`]);
   t.setAttribute("role", "status");
   t.textContent = text;
   return t;
@@ -238,19 +261,19 @@ function drawToast(text) {
 
 function drawBar(m) {
   const n = m === "failed" ? failures().length : m === "recovered" ? storedCount() : losses().length;
-  const bar = bevelSurface("div", ["display:flex", "flex-wrap:wrap", "align-items:center", "gap:10px 12px", "padding:8px 8px 8px 14px", "width:max-content", "max-width:calc(100vw - 24px)"]);
+  const bar = bevelSurface("div", ["display:flex", "flex-wrap:wrap", "align-items:center", "gap:10px 12px", "padding:8px 8px 8px 14px", "width:max-content", "max-width:calc(100vw - 24px)"], { theme, parts: ["conflict.panel"] });
   // A redraw rebuilds the bar; only a new message is announced again.
   const message = barMessage(m, n);
   if (message !== lastAnnounced) {
     bar.setAttribute("role", m === "refused" ? "alert" : "status");
     lastAnnounced = message;
   }
-  bar.append(dot(), bevelText("span", [], message));
+  bar.append(dot(), bevelText("span", [], message, { theme, parts: ["conflict.text"] }));
   if (m === "upgraded") {
-    bar.append(key(bevelButton("Reload", { variant: "primary", onClick: () => window.location.reload() }), "reload"));
+    bar.append(key(bevelButton("Reload", { variant: "primary", onClick: () => window.location.reload(), theme, parts: ["conflict.button"], labelParts: ["conflict.buttonLabel"] }), "reload"));
     return bar;
   }
-  bar.append(key(bevelButton("Review", { onClick: openPanel }), "review"));
+  bar.append(key(bevelButton("Review", { onClick: openPanel, theme, parts: ["conflict.button"], labelParts: ["conflict.buttonLabel"] }), "review"));
   return bar;
 }
 
@@ -259,11 +282,11 @@ function action(label, name, { variant = "default", onClick, push = false } = {}
   const extra = phone
     ? ["flex:1 1 100%", ...(variant === "primary" ? ["order:-1"] : [])]
     : (push ? ["margin-left:auto"] : []);
-  return key(bevelButton(label, { variant, onClick, extra }), name);
+  return key(bevelButton(label, { variant, onClick, extra, theme, parts: ["conflict.button"], labelParts: ["conflict.buttonLabel"] }), name);
 }
 
 function lede(text) {
-  return bevelText("div", ["display:block", "padding:0 16px 12px", `color:${TOKENS["ink-2"]}`, "font-size:13.5px"], text);
+  return bevelText("div", ["display:block", "padding:0 16px 12px", `color:${TOKENS["ink-2"]}`, "font-size:13.5px"], text, { theme, parts: ["conflict.text"] });
 }
 
 function drawPanel(m) {
@@ -275,13 +298,13 @@ function drawPanel(m) {
 
   const title = titleOf(m, count);
   const maxHeight = Math.max(160, (window.visualViewport?.height || window.innerHeight) - 32);
-  const panel = bevelSurface("div", ["display:flex", "flex-direction:column", "width:520px", "max-width:calc(100vw - 24px)", `max-height:${maxHeight}px`]);
+  const panel = bevelSurface("div", ["display:flex", "flex-direction:column", "width:520px", "max-width:calc(100vw - 24px)", `max-height:${maxHeight}px`], { theme, parts: ["conflict.panel"] });
   panelEl = panel;
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", title);
 
-  const head = el("div", ["all:initial", "display:flex", "align-items:center", "gap:8px", "padding:12px 12px 8px 16px", `font:14px/1.5 ${FONT_SANS}`, `color:${TOKENS.ink}`]);
-  const t = key(bevelText("b", ["font-weight:600", "font-size:14.5px", "outline:none"], title), "title");
+  const head = part(el("div", ["all:initial", "display:flex", "align-items:center", "gap:8px", "padding:12px 12px 8px 16px", `font:14px/1.5 ${FONT_SANS}`, `color:${TOKENS.ink}`]), ["conflict.header"]);
+  const t = key(bevelText("b", ["font-weight:600", "font-size:14.5px", "outline:none"], title, { theme, parts: ["conflict.title"] }), "title");
   t.setAttribute("tabindex", "-1");
   head.append(dot(), t);
   if (m === "replaced" && freshIds.size) {
@@ -291,7 +314,7 @@ function drawPanel(m) {
     ], `${freshIds.size} new`));
   }
   const minimizeWrap = el("span", ["all:initial", "display:inline-flex", "margin-left:auto"]);
-  const minimize = key(bevelIconButton(MINIMIZE_SVG, { label: "Minimize", onClick: minimizePanel }), "minimize");
+  const minimize = key(bevelIconButton(MINIMIZE_SVG, { label: "Minimize", onClick: minimizePanel, theme, parts: ["close", "conflict.close"] }), "minimize");
   minimize.title = "Minimize to the bar. Nothing is accepted until you choose.";
   minimizeWrap.append(minimize);
   head.append(minimizeWrap);
@@ -310,11 +333,11 @@ function drawPanel(m) {
     if (keepFailed) panel.append(lede("That did not save either. Your edits here are still here."));
     if (armLost) panel.append(lede("Something changed on the page after your first press, so nothing was dropped. Press Accept theirs again if you still want their version."));
     if (armed) {
-      const warn = el("div", [
+      const warn = part(el("div", [
         "all:initial", "display:block", "margin:0 16px 12px", "padding:8px 10px",
-        `border-left:3px solid ${WARN}`, `background:color-mix(in srgb, ${WARN} 14%, transparent)`,
+        `background:color-mix(in srgb, ${WARN} 14%, transparent)`,
         `color:${TOKENS.ink}`, `font:13px/1.5 ${FONT_SANS}`,
-      ]);
+      ]), ["conflict.warning"]);
       warn.append(el("b", ["all:initial", "font:inherit", "font-weight:700", "color:inherit"], "This drops your unsaved edits."), document.createTextNode(" Download your copy first if you might want them. Press again to confirm."));
       panel.append(warn);
     }
@@ -326,7 +349,7 @@ function drawPanel(m) {
     panel.append(lede("The page is showing the other edit. This stays until you choose. You can also save a copy of the page as you had it."));
   }
 
-  const actions = el("div", ["all:initial", "display:flex", "flex-wrap:wrap", "gap:8px", "padding:0 16px 14px"]);
+  const actions = part(el("div", ["all:initial", "display:flex", "flex-wrap:wrap", "gap:8px", "padding:0 16px 14px"]), ["conflict.actions"]);
   if (m === "upgraded") {
     actions.append(action("Reload", "reload", { variant: "primary", onClick: () => window.location.reload(), push: true }));
     panel.append(actions);
@@ -354,7 +377,7 @@ function drawPanel(m) {
     if (!listOpen) {
       const more = el("div", ["all:initial", "display:flex", "align-items:center", "gap:8px", `border-top:1px solid ${TOKENS.line}`, "padding:8px 10px 8px 16px", `color:${TOKENS.muted}`, `font:13px/1.5 ${FONT_SANS}`]);
       const seeWrap = el("span", ["all:initial", "display:inline-flex", "margin-left:auto"]);
-      seeWrap.append(key(bevelButton("See the edits", { small: true, onClick: toggleList }), "list"));
+      seeWrap.append(key(bevelButton("See the edits", { small: true, onClick: toggleList, theme, parts: ["conflict.button"], labelParts: ["conflict.buttonLabel"] }), "list"));
       more.append(el("span", ["all:initial", "font:inherit", "color:inherit"], plural(rows.length, "edit")), seeWrap);
       panel.append(more);
     } else {
@@ -369,10 +392,10 @@ function drawPanel(m) {
 
 function drawWell(rows) {
   // The sunk ground, not the recess: the recess's lighter blue glares against the panel in dark mode.
-  const well = bevelWell(["flex:1 1 auto", "margin:0 16px 12px", "min-height:0", "overflow:auto", `background:${TOKENS.sunk}`, `border:1px solid ${TOKENS["line-2"]}`]);
+  const well = bevelWell(["flex:1 1 auto", "margin:0 16px 12px", "min-height:0", "overflow:auto", `background:${TOKENS.sunk}`, `border:1px solid ${TOKENS["line-2"]}`], { theme, parts: ["conflict.well", "conflict.list"] });
   const head = el("div", ["all:initial", "position:sticky", "top:0", "z-index:1", "display:flex", "align-items:center", "gap:8px", "padding:8px 12px", `background:${TOKENS.sunk}`, `border-bottom:1px solid ${TOKENS["line-2"]}`, `color:${TOKENS.muted}`, `font:600 10.5px/1 ${FONT_MONO}`, "letter-spacing:.12em", "text-transform:uppercase"]);
   const hideWrap = el("span", ["all:initial", "display:inline-flex", "margin-left:auto"]);
-  hideWrap.append(key(bevelButton("Hide", { small: true, variant: "quiet", onClick: toggleList }), "list"));
+  hideWrap.append(key(bevelButton("Hide", { small: true, variant: "quiet", onClick: toggleList, theme, parts: ["conflict.button"], labelParts: ["conflict.buttonLabel"] }), "list"));
   head.append(el("span", ["all:initial", "font:inherit", "color:inherit", "letter-spacing:inherit", "text-transform:inherit"], "Replaced edits"), hideWrap);
   well.append(head);
   rows.forEach((r, i) => well.append(buildRow(r, i)));
@@ -483,8 +506,8 @@ function undoActionsOf(entry) {
 const storedSide = (text) => ({ before: "", hit: text, after: "", cutBefore: false, cutAfter: false });
 
 function storedRow(entry) {
-  const box = bevelText("div", ["display:block", "padding:8px 12px 10px"]);
-  const where = bevelText("div", ["display:flex", "align-items:center", "gap:8px", "font-size:12.5px", "font-weight:600", `color:${TOKENS["ink-2"]}`, "margin-bottom:4px"]);
+  const box = bevelText("div", ["display:block", "padding:8px 12px 10px"], undefined, { theme, parts: ["conflict.row"], role: null });
+  const where = bevelText("div", ["display:flex", "align-items:center", "gap:8px", "font-size:12.5px", "font-weight:600", `color:${TOKENS["ink-2"]}`, "margin-bottom:4px"], undefined, { theme, parts: ["conflict.location"], role: null });
   // No eye: there is no live element to ring, and an old recovery path may name a
   // place today's page no longer has.
   where.append(bevelText("span", [], storedName(entry)));
@@ -514,44 +537,44 @@ function drawRecovered(panel) {
     ? "These copies were replaced before this page loaded. The page never puts them back on its own. Copy or download the ones you want; dismiss one when you no longer need it."
     : "These copies were kept because an undo could not be put back or the page set them aside. The page never puts them back on its own. Copy or download the ones you want; dismiss one when you no longer need it."));
   if (actionFailed) panel.append(lede("That action did not run. The copy is still here."));
-  const well = bevelWell(["flex:1 1 auto", "margin:0 16px 12px", "min-height:0", "overflow:auto", `background:${TOKENS.sunk}`, `border:1px solid ${TOKENS["line-2"]}`]);
+  const well = bevelWell(["flex:1 1 auto", "margin:0 16px 12px", "min-height:0", "overflow:auto", `background:${TOKENS.sunk}`, `border:1px solid ${TOKENS["line-2"]}`], { theme, parts: ["conflict.well", "conflict.list"] });
   for (const record of recovered) for (const entry of record.conflicts) well.append(storedRow(entry));
   for (const entry of recoveredUndo) well.append(storedRow(entry));
   wellEl = well;
   panel.append(well);
-  const actions = el("div", ["all:initial", "display:flex", "flex-wrap:wrap", "gap:8px", "padding:0 16px 14px"]);
+  const actions = part(el("div", ["all:initial", "display:flex", "flex-wrap:wrap", "gap:8px", "padding:0 16px 14px"]), ["conflict.actions"]);
   if (recovered.some((record) => record.root) || recoveredUndo.length) actions.append(action(downloaded ? "Downloaded" : "Download my copy", "download", { onClick: onDownloadRecovered }));
   panel.append(actions);
   renderedIds = [];
 }
 
 function valueLine(label, value, { mine }) {
-  const cells = [bevelText("span", [`color:${TOKENS.faint}`, `font-family:${FONT_SANS}`], label)];
+  const cells = [bevelText("span", [`color:${TOKENS.faint}`, `font-family:${FONT_SANS}`], label, { theme, parts: ["conflict.valueLabel"], role: null })];
   const box = bevelText("span", [
     "display:-webkit-box", "-webkit-line-clamp:2", "-webkit-box-orient:vertical", "overflow:hidden",
     "overflow-wrap:anywhere",
     ...(mine
       ? [`color:${TOKENS.ink}`]
       : [`color:${TOKENS.muted}`]),
-  ]);
+  ], undefined, { theme, parts: [mine ? "conflict.mine" : "conflict.theirs", "conflict.value"], role: null });
   const full = (value.cutBefore ? "…" : "") + value.before + value.hit + value.after + (value.cutAfter ? "…" : "");
   box.title = full;
-  if (value.before) box.append(bevelText("span", [`color:${TOKENS.faint}`], (value.cutBefore ? "…" : "") + value.before));
+  if (value.before) box.append(bevelText("span", [`color:${TOKENS.faint}`], (value.cutBefore ? "…" : "") + value.before, { theme, parts: ["conflict.before"], role: null }));
   const hit = bevelText("span", mine
     ? [`background:color-mix(in srgb, ${WARN} 18%, transparent)`, "padding:0 4px"]
     : (value.before || value.after
       ? ["text-decoration:underline", `text-decoration-color:color-mix(in srgb, ${WARN} 70%, transparent)`, "text-underline-offset:3px"]
-      : []), value.hit || "(empty)");
+      : []), value.hit || "(empty)", { theme, parts: ["conflict.value"], role: null });
   box.append(hit);
-  if (value.after) box.append(bevelText("span", [`color:${TOKENS.faint}`], value.after + (value.cutAfter ? "…" : "")));
+  if (value.after) box.append(bevelText("span", [`color:${TOKENS.faint}`], value.after + (value.cutAfter ? "…" : ""), { theme, parts: ["conflict.after"], role: null }));
   cells.push(box);
   return cells;
 }
 
 function buildRow(record, index) {
   const row = rowOf(record);
-  const box = bevelText("div", ["display:block", "padding:8px 12px 10px", ...(index ? [`border-top:1px solid ${TOKENS.line}`] : [])]);
-  const where = bevelText("div", ["display:flex", "align-items:center", "gap:4px", "font-size:12.5px", "font-weight:600", `color:${TOKENS["ink-2"]}`, "margin-bottom:4px"]);
+  const box = bevelText("div", ["display:block", "padding:8px 12px 10px", ...(index ? [`border-top:1px solid ${TOKENS.line}`] : [])], undefined, { theme, parts: ["conflict.row"], role: null });
+  const where = bevelText("div", ["display:flex", "align-items:center", "gap:4px", "font-size:12.5px", "font-weight:600", `color:${TOKENS["ink-2"]}`, "margin-bottom:4px"], undefined, { theme, parts: ["conflict.location"], role: null });
   where.append(bevelText("span", [], row.name));
   if (row.target && row.target.isConnected) where.append(key(eyeButton(row), `eye:${record.id}`));
   box.append(where);
@@ -574,7 +597,9 @@ function eyeButton(row) {
   protectIcon(b.firstElementChild, 16);
   b.setAttribute("aria-label", `Show ${row.name} on page`);
   b.title = "Show on page";
-  const paint = (extra) => { b.style.cssText = ""; for (const r of [...base, ...extra]) { const i = r.indexOf(":"); b.style.setProperty(r.slice(0, i), r.slice(i + 1), "important"); } };
+  const names = ["button", "conflict.button"];
+  markParts(b, theme, names);
+  const paint = (extra) => { b.style.cssText = ""; const rules = themed(theme) ? [...base, ...partRules(theme, names, {}), ...extra] : [...base, ...extra]; for (const r of rules) { const i = r.indexOf(":"); b.style.setProperty(r.slice(0, i), r.slice(i + 1), "important"); } };
   b.addEventListener("pointerenter", () => paint([`background:color-mix(in srgb, ${WARN} 16%, transparent)`]));
   b.addEventListener("pointerleave", () => paint([]));
   b.addEventListener("focus", () => paint([`outline:2px solid ${TOKENS.brass}`, "outline-offset:1px"]));
@@ -630,7 +655,7 @@ function ring(target) {
     window.scrollBy?.({ top: shift, behavior });
   }
   ringTarget = target;
-  ringEl = el("div", ["all:initial", "color-scheme:inherit", "position:fixed", "pointer-events:none", "z-index:2147483001", `outline:2px solid ${WARN}`, "outline-offset:3px", `background:color-mix(in srgb, ${WARN} 14%, transparent)`]);
+  ringEl = part(el("div", ["all:initial", "color-scheme:inherit", "position:fixed", "pointer-events:none", "z-index:2147483001", `outline:2px solid ${WARN}`, "outline-offset:3px", `background:color-mix(in srgb, ${WARN} 14%, transparent)`]), ["conflict.previewRing"]);
   document.body.appendChild(ringEl);
   placeRing();
   window.addEventListener("scroll", placeRing, true);

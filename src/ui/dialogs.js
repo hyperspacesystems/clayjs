@@ -6,9 +6,10 @@ import { bevelBox, bevelButton, bevelInput, bevelText } from "./bevel-controls.j
 import { TOKENS, FONT_SANS, FONT_MONO } from "./bevel.js";
 import { resolveTheme } from "./theme.js";
 
-// Caller markup (promptText, extraContent, tell's paragraphs) goes in as it is: those
-// are markup by design, and callers pass elements through them. Only the frame around
-// it is ClayJS's to style. The prompt is the dialog's title, as in the dashboard.
+// Prompts, titles, paragraphs and labels are text (or a node placed as it is), so a
+// record or a visitor cannot run markup. extraContent is markup (or a node). Only the
+// frame around it is ClayJS's to style. The prompt is the dialog's title, as in the
+// dashboard.
 function createModal(promptText, yesCallback, extraContent = "", includeInput = false, defaultValue = "", yesLabel = "OK") {
   const theme = resolveTheme();
   const content = bevelBox("div", ["display:flex", "flex-direction:column", "gap:14px", `font:14.5px/1.55 ${FONT_SANS}`, `color:${TOKENS["ink-2"]}`], { theme, parts: ["dialog.content"], role: "text" });
@@ -19,7 +20,8 @@ function createModal(promptText, yesCallback, extraContent = "", includeInput = 
     input.required = true;
     content.append(input);
   }
-  content.insertAdjacentHTML("beforeend", extraContent);
+  if (extraContent instanceof Node) content.append(extraContent);
+  else if (extraContent) content.insertAdjacentHTML("beforeend", extraContent);
 
   themodal.title = promptText;
   themodal.html = includeInput || extraContent ? content : "";
@@ -102,7 +104,8 @@ export function tell(promptText, ...content) {
   const box = bevelBox("div", ["display:flex", "flex-direction:column", "gap:12px"], { theme, parts: ["dialog.content"] });
   for (const c of content) {
     const paragraph = bevelText("div", [`font:14.5px/1.55 ${FONT_SANS}`, `color:${TOKENS["ink-2"]}`, "overflow-wrap:anywhere"], undefined, { theme });
-    paragraph.innerHTML = c;
+    if (c instanceof Node) paragraph.append(c);
+    else paragraph.textContent = c;
     box.append(paragraph);
   }
 
@@ -148,7 +151,7 @@ export function snippet(title, content, extraContent = '') {
     `background:${TOKENS.sunk}`, `border:1px solid ${TOKENS["line-2"]}`,
   ], { theme, parts: ["dialog.well"], role: "well" });
   const pre = bevelText("pre", ["display:block", "margin:0", "white-space:nowrap", `font:13px/1.6 ${FONT_MONO}`], undefined, { theme, parts: ["dialog.code"], role: "code" });
-  pre.innerHTML = content;
+  pre.textContent = content;
   well.append(pre);
   const copy = bevelButton("Copy", {
     small: true,
@@ -160,7 +163,8 @@ export function snippet(title, content, extraContent = '') {
     },
   });
   box.append(well, copy);
-  box.insertAdjacentHTML("beforeend", extraContent || "");
+  if (extraContent instanceof Node) box.append(extraContent);
+  else if (extraContent) box.insertAdjacentHTML("beforeend", extraContent);
 
   themodal.title = title;
   themodal.html = box;

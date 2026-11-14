@@ -105,6 +105,22 @@ test("a conflict that lost nothing of this tab's is not recorded, and leaves no 
   expect(ledger.conflicts.size).toBe(0);
 });
 
+test("a peer frame replacing a remote-wins region is not a loss", () => {
+  const applyId = ledger.beginApply({
+    source: "peer", seq: 4, etag: "E3", domain: "sync", root: document.createElement("html"),
+  });
+  const remoteWins = { kind: "structure", detail: "remote-wins", recovery: { localLost: true, applied: true } };
+  const lost = engineConflict();
+
+  const ids = ledger.completeApply(applyId, [remoteWins, lost], { ticket: 41 });
+
+  expect(ids).toHaveLength(1);
+  expect(ledger.conflicts.size).toBe(1);
+  const list = ledger.conflicts.list();
+  expect(list).toEqual([lost]);
+  expect(list[0]).not.toBe(remoteWins);
+});
+
 test("a report the engine could not map to the live page is still a loss", () => {
   const applyId = ledger.beginApply({
     source: "peer", seq: 3, etag: "E9", domain: "sync", root: document.createElement("html"),

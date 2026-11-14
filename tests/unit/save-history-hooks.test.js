@@ -14,6 +14,8 @@ let calls;
 let responses;
 let unsubs;
 
+const captureFailure = { on: false, message: "fixture capture failure" };
+
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function installRouter() {
@@ -54,6 +56,14 @@ const headerOf = (index, name) => calls.save[index].options.headers[name];
 beforeAll(async () => {
   window.clayEditMode = true;
   document.body.innerHTML = '<div id="c">start</div>';
+  const realContentDom = await import("../../src/lib/content-dom.js");
+  jest.unstable_mockModule("../../src/lib/content-dom.js", () => ({
+    cleanContentClone: realContentDom.cleanContentClone,
+    createContentView: (...args) => {
+      if (captureFailure.on) throw new Error(captureFailure.message);
+      return realContentDom.createContentView(...args);
+    },
+  }));
   coreMod = await import("../../src/core/save-core.js");
   saveMod = await import("../../src/core/save.js");
   metaMod = await import("../../src/core/host-meta.js");
@@ -247,4 +257,99 @@ describe("capture-bound save hooks", () => {
     expect(attempts).toBe(1);
     expect(outcomes).toBe(1);
   });
+});
+
+// A capture that throws has no bytes to send, and the caller has to hear that as a
+// failure: `ok` is what a caller branches on, so an error answer without it read as a
+// save that had happened.
+test("a capture that throws answers ok:false on the plain and the forced save", async () => {
+  const snapshot = await import("../../src/core/snapshot.js");
+  const error = jest.spyOn(console, "error").mockImplementation(() => {});
+  // The failure notice is a plugin fetched on the first unclaimed failure; these
+  // saves are expected to fail, so they are claimed rather than downloaded.
+  const claim = (event) => saveMod.claimFailure(event);
+  document.addEventListener("clay:save-error", claim);
+  try {
+    document.getElementById("c").textContent = "capture-fails";
+    captureFailure.message = "capture exploded";
+    captureFailure.on = true;
+    const plain = await saveMod.savePage();
+    const forced = await saveMod.savePageForce();
+    captureFailure.on = false;
+
+    expect(plain).toMatchObject({ ok: false, msgType: "error", msg: "capture exploded" });
+    expect(forced).toMatchObject({ ok: false, msgType: "error", msg: "capture exploded" });
+  } finally {
+    captureFailure.on = false;
+    document.removeEventListener("clay:save-error", claim);
+    error.mockRestore();
+  }
+});
+
+// A transform that throws is skipped on every clone a save runs it on, and reported
+// once: the page still reaches the host, and a broken callback cannot spam the console.
+test("a throwing document transform cannot stop a real save and is reported once", async () => {
+  const snapshotMod = await import("../../src/core/snapshot.js");
+  const error = jest.spyOn(console, "error").mockImplementation(() => {});
+  const region = document.createElement("div");
+  region.setAttribute("no-trigger-autosave", "");
+  region.textContent = "batched";
+  document.body.appendChild(region);
+  try {
+    snapshotMod.addDocumentTransform(() => { throw new Error("transform boom"); });
+    document.getElementById("c").textContent = "transform-fails";
+    const result = await saveMod.savePage();
+    captureFailure.on = false;
+
+    expect(result.ok).toBe(true);
+    expect(calls.save).toHaveLength(1);
+    expect(error.mock.calls.filter((args) => args[0] === "clayjs: a addDocumentTransform callback threw; the save goes on without it")).toHaveLength(1);
+  } finally {
+    region.remove();
+    error.mockRestore();
+  }
+});
+
+// An error with a code is a hook refusing the capture on purpose (clay.live does this
+// while a save's answer is unknown), so it still stops the save instead of being skipped.
+test("a snapshot hook that refuses with a code still stops the save", async () => {
+  const snapshotMod = await import("../../src/core/snapshot.js");
+  const error = jest.spyOn(console, "error").mockImplementation(() => {});
+  const claim = (event) => saveMod.claimFailure(event);
+  document.addEventListener("clay:save-error", claim);
+  let refuse = true;
+  snapshotMod.onSnapshot(() => {
+    if (refuse) throw Object.assign(new Error("save refused on purpose"), { code: "save-history-pending" });
+  });
+  try {
+    document.getElementById("c").textContent = "hook-refuses";
+    const result = await saveMod.savePage();
+    expect(result).toMatchObject({ ok: false, msg: "save refused on purpose" });
+    expect(error.mock.calls.some((args) => String(args[0]).includes("the save goes on without it"))).toBe(false);
+  } finally {
+    refuse = false;
+    document.removeEventListener("clay:save-error", claim);
+    error.mockRestore();
+  }
+});
+
+// ClayJS's own transforms (making admin-only scripts inert, stripping the save token)
+// register as required: skipping one would write the wrong bytes, so a throw stops the
+// save instead of being skipped.
+test("a required document transform that throws stops the save", async () => {
+  const snapshotMod = await import("../../src/core/snapshot.js");
+  const error = jest.spyOn(console, "error").mockImplementation(() => {});
+  const claim = (event) => saveMod.claimFailure(event);
+  document.addEventListener("clay:save-error", claim);
+  let broken = true;
+  snapshotMod.addDocumentTransform(() => { if (broken) throw new Error("required step broke"); }, { required: true });
+  try {
+    document.getElementById("c").textContent = "required-fails";
+    const result = await saveMod.savePage();
+    expect(result).toMatchObject({ ok: false, msg: "required step broke" });
+  } finally {
+    broken = false;
+    document.removeEventListener("clay:save-error", claim);
+    error.mockRestore();
+  }
 });

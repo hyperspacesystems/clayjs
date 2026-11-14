@@ -19,7 +19,13 @@ test("framing: auto, an absent modal and a themodal-shaped object all get the Be
   await quickcrop(file);
   await quickcrop(file, { modal: "auto" });
   await quickcrop(file, { modal: themodal });
-  expect(vendor.mock.calls.map(([, opts]) => opts.modal)).toEqual([bevelCropAdapter, bevelCropAdapter, bevelCropAdapter]);
+  const mods = vendor.mock.calls.map(([, opts]) => opts.modal);
+  for (const m of mods) {
+    expect(typeof m).toBe("object");
+    expect(typeof m.fit).toBe("function");
+    expect(typeof m.open).toBe("function");
+  }
+  expect(new Set(mods).size).toBe(3);
 });
 
 test("framing: 'builtin' and a caller's own adapter pass through, every other option untouched", async () => {
@@ -31,7 +37,10 @@ test("framing: 'builtin' and a caller's own adapter pass through, every other op
   const [a, b, c] = vendor.mock.calls.map(([f, opts]) => [f, opts]);
   expect(a).toEqual([file, { ...cms, modal: "builtin" }]);
   expect(b[1].modal).toBe(mine);
-  expect(c[1]).toEqual({ ...cms, modal: bevelCropAdapter });
+  expect({ ...c[1], modal: undefined }).toEqual({ ...cms, modal: undefined });
+  expect(typeof c[1].modal).toBe("object");
+  expect(typeof c[1].modal.fit).toBe("function");
+  expect(typeof c[1].modal.open).toBe("function");
 });
 
 function openAdapter() {

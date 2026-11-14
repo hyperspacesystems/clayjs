@@ -13,6 +13,7 @@ export const CORE = 'core.cjs';
 const ENTRIES = {
   rooms: resolve(ROOT, 'src/server/rooms/index.js'),
   checkpoint: resolve(ROOT, 'src/server/checkpoint/index.js'),
+  markdown: resolve(ROOT, 'src/server/markdown/index.js'),
 };
 
 // The compactor hands a job to a worker_threads worker, so that worker is its own

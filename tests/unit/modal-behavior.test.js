@@ -117,6 +117,17 @@ test("reset: every setter returns to its default after a close", () => {
   expect([themodal.disableScroll, themodal.disableFocus]).toEqual([true, false]);
 });
 
+test("title and labels are text, never markup", () => {
+  themodal.title = '<img src=x onerror=alert(1)>';
+  open({ html: "", yesLabel: "<b>Go</b>" });
+
+  const heading = dialog().querySelector('[role="heading"]');
+  expect(heading.textContent).toBe('<img src=x onerror=alert(1)>');
+  expect(heading.querySelector("img")).toBeNull();
+  expect(yes().textContent).toBe("<b>Go</b>");
+  expect(yes().querySelector("b")).toBeNull();
+});
+
 test("scroll: the body stops scrolling while open and scrolls again after", () => {
   open();
   expect(document.body.style.overflow).toBe("hidden");

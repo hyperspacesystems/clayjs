@@ -18,12 +18,12 @@ export const SURFACE_THEME = Symbol("clay.surfaceTheme");
   - user confirms
   - everything about the modal resets
 
-  themodal.html = content;   // html, yes and no each take markup, or a node placed as it is
-  themodal.yes = content;
+  themodal.html = content;   // the body: markup, or a node placed as it is
+  themodal.yes = content;    // text, or a node placed as it is
   themodal.no = content;
 
   themodal.closeHtml = "x";  // any non-empty value shows the corner close
-  themodal.title = content;  // markup or a node: a header with the title (optional)
+  themodal.title = content;  // text or a node: a header with the title (optional)
   themodal.width = "440px";  // the panel's width (default 600px)
 
   themodal.disableFocus = true;
@@ -367,12 +367,14 @@ const themodal = (() => {
       modalYesElem.type = 'submit';
       modalButtonsElem.append(modalNoElem, modalYesElem);
 
-      // Markup is parsed in; a node is placed as it is, listeners and all.
-      const place = (target, value) => {
+      // A node is placed as it is. A string is text, except in the body, which is
+      // the one slot that takes markup.
+      const place = (target, value, markup = false) => {
         if (value instanceof Node) target.append(value);
-        else target.innerHTML = value;
+        else if (markup) target.innerHTML = value;
+        else target.textContent = value;
       };
-      place(modalContentElem, html);
+      place(modalContentElem, html, true);
       place(modalYesElem.firstChild, yes);
       place(modalNoElem.firstChild, no);
       if (title) place(shell.heading, title);

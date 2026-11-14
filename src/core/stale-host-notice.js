@@ -1,7 +1,7 @@
 import { servedStaleToken } from "./host-attrs.js";
 import { isEditMode } from "./is-edit-mode.js";
 import onDomReady from "../lib/dom-ready.js";
-import { set, make } from "../lib/hostile-css.js";
+import { set, style, make } from "../lib/hostile-css.js";
 
 // The page's only visible word on a host too old to save to.
 //
@@ -47,12 +47,13 @@ function dismiss() {
 }
 
 function build() {
+  const theme = ui.resolveTheme();
   root = ui.bevelSurface("div", [
     "position:fixed", "left:50%", "transform:translateX(-50%)",
     "z-index:2147483001", "display:flex", "align-items:center", "gap:10px 12px",
     "width:max-content", "max-width:calc(100vw - 24px)", "flex-wrap:wrap",
     "padding:8px 8px 8px 14px", "text-align:left", `color-scheme:${ui.pageScheme()}`,
-  ]);
+  ], { theme, parts: ["notice.root", "notice.panel", "staleHost.root", "staleHost.panel"] });
   // Three markers, and each is load-bearing on a page that CAN save: this element is
   // injected, so it is in no document on disk and must never reach one, never wake the
   // watcher, and never ride out in a snapshot to somebody else's browser.
@@ -62,13 +63,23 @@ function build() {
 
   const dot = make("span", ["all:initial", "color-scheme:inherit", "display:inline-block", "flex:none", "width:8px", "height:8px", "border-radius:50%", `background:${ui.TOKENS.ox}`]);
   dot.setAttribute("clay", ui.RUNTIME_ONLY);
-  const close = ui.bevelButton("Dismiss", { small: true, variant: "quiet", onClick: dismiss });
+  const dotNames = ["notice.dot", "staleHost.dot"];
+  if (ui.themed(theme)) {
+    ui.markParts(dot, theme, dotNames);
+    style(dot, ui.partRules(theme, dotNames, {}));
+  }
+  const close = ui.bevelButton("Dismiss", {
+    small: true, variant: "quiet", onClick: dismiss, theme,
+    parts: ["notice.button", "staleHost.button"],
+    labelParts: ["notice.buttonLabel", "staleHost.buttonLabel"],
+  });
   close.setAttribute("aria-label", "Dismiss this message");
-  root.append(dot, ui.bevelText("span", [], MESSAGE), close);
+  root.append(dot, ui.bevelText("span", [], MESSAGE, { theme, parts: ["notice.text", "staleHost.text"] }), close);
 
   document.body.appendChild(root);
   place();
-  ui.paintLook(root, { background: ui.TOKENS.surface });
+  if (ui.themed(theme)) set(root, "color-scheme", theme.scheme === "light dark" ? "light" : theme.scheme);
+  else ui.paintLook(root, { background: ui.TOKENS.surface });
   window.visualViewport?.addEventListener("resize", place);
   window.visualViewport?.addEventListener("scroll", place);
 }
@@ -81,8 +92,10 @@ async function init() {
   // told its reader the opposite. The message is only true while editing is actually
   // off, so it is shown only then.
   if (isEditMode) return;
-  const [controls, bevel] = await Promise.all([import("../ui/bevel-controls.js"), import("../ui/bevel.js")]);
-  ui = { ...controls, TOKENS: bevel.TOKENS };
+  const [controls, bevel, themeConfig, parts] = await Promise.all([
+    import("../ui/bevel-controls.js"), import("../ui/bevel.js"), import("../ui/theme.js"), import("../ui/theme-parts.js"),
+  ]);
+  ui = { ...controls, ...parts, TOKENS: bevel.TOKENS, resolveTheme: themeConfig.resolveTheme };
   build();
 }
 

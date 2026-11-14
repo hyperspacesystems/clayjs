@@ -8,11 +8,21 @@ import { jest } from "@jest/globals";
  * a hand-built window.clay would keep this green with the attachment gone.
  */
 
+const captureFailure = { on: false };
+
 beforeAll(async () => {
   window.clayEditMode = true;
   window.clay = {};
   window.fetch = async () => new Response("", { status: 404 });
   document.body.innerHTML = '<div id="content">start</div>';
+  const realContentDom = await import("../../src/lib/content-dom.js");
+  jest.unstable_mockModule("../../src/lib/content-dom.js", () => ({
+    cleanContentClone: realContentDom.cleanContentClone,
+    createContentView: (...args) => {
+      if (captureFailure.on) throw new Error("fixture capture failure");
+      return realContentDom.createContentView(...args);
+    },
+  }));
   // These tests fail saves on purpose; they are about the close warning, so the failures
   // are claimed the way a page's own indicator would, and core's fallback notice stays
   // undownloaded (its import would otherwise land after this file is torn down).
@@ -49,11 +59,8 @@ test("an edit is unsaved until a save writes it", async () => {
 
 // The warning decides first and explains afterwards: a capture that throws is a broken
 // page, and a broken page is exactly the one whose work must not be dropped on close.
-test("a pending registered state still warns when a document transform throws", async () => {
-  const snapshot = await import("../../src/core/snapshot.js");
+test("a pending registered state still warns when a capture throws", async () => {
   const { registerUnsavedState } = await import("../../src/lib/unsaved-state.js");
-  let broken = false;
-  snapshot.addDocumentTransform(() => { if (broken) throw new Error("page transform bug"); });
   const handle = registerUnsavedState({ id: "editor-model", isPending: () => true });
 
   const listenerErrors = [];
@@ -63,7 +70,7 @@ test("a pending registered state still warns when a document transform throws", 
   };
   window.addEventListener("error", onError);
   try {
-    broken = true;
+    captureFailure.on = true;
     const beforeUnload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(beforeUnload);
 
@@ -74,22 +81,19 @@ test("a pending registered state still warns when a document transform throws", 
   } finally {
     window.removeEventListener("error", onError);
     handle.dispose();
-    broken = false;
+    captureFailure.on = false;
   }
 });
 
 // A capture that throws means unknown, and unknown is not clean. The close warning says
 // so, and a flush reports it as a save that did not happen rather than as an answer.
 test("a capture that throws reads as unsaved, and flush reports 'failed'", async () => {
-  const snapshot = await import("../../src/core/snapshot.js");
-  let broken = false;
-  snapshot.addDocumentTransform(() => { if (broken) throw new Error("page transform bug"); });
   try {
-    broken = true;
+    captureFailure.on = true;
     expect(window.clay.hasUnsavedChanges()).toBe(true);
     await expect(window.clay.save.flush()).rejects.toMatchObject({ state: "failed" });
   } finally {
-    broken = false;
+    captureFailure.on = false;
   }
 }, 20000);
 

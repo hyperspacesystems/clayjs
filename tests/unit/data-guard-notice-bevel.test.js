@@ -6,7 +6,7 @@ import { jest } from "@jest/globals";
  * page offers them. How it looks is the browser pass's question.
  */
 
-const TITLE = "Saved data was overwritten";
+const TITLE = "Some saved data was removed";
 
 let fakeTimers = false;
 const flush = async () => {
@@ -96,4 +96,29 @@ test("a read that says more items were added since rewrites the one notice", asy
   const notices = [...toasts()].filter((el) => el.querySelector("button:not([aria-label])"));
   expect(notices).toHaveLength(1);
   expect(notices[0].textContent).toContain("Restoring removes 3 items added or changed since.");
+});
+
+test("a second event with another reason replaces the one notice", async () => {
+  await boot([answer(200, { event: {
+    ...event,
+    reason: "recent",
+    canPutBack: true,
+    typed: [{ path: "items[id:5].note", yours: "Mine", at: Date.now() }],
+  } })]);
+
+  const notices = () => [...toasts()].filter((el) => el.querySelector("button:not([aria-label])"));
+  expect(notices()).toHaveLength(1);
+  expect(notices()[0].textContent).toContain("A change from outside this page removed something you typed");
+  expect(notices()[0].textContent).toContain('note: "Mine"');
+  expect(labels()).toEqual(["Put it back", "Undo the change", "Keep the change"]);
+
+  document.dispatchEvent(new CustomEvent("clay:notification", {
+    detail: { msgType: "data-loss", action: "raised", data: { ...event, id: "e2", reason: "emptied", typed: [], canPutBack: false } },
+  }));
+  await flush();
+
+  expect([...toasts()].filter((el) => el.textContent.includes("removed something you typed"))).toHaveLength(0);
+  expect(notices()).toHaveLength(1);
+  expect(notices()[0].textContent).toContain("emptied this page's data");
+  expect(labels()).toEqual(["Undo the change", "Keep the change"]);
 });

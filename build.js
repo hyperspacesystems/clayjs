@@ -48,6 +48,7 @@ import { emitBootstraps, emitChunks } from './scripts/build-chunks.mjs';
 import { compileTheme } from './scripts/build-themes.mjs';
 import { buildServerRooms } from './scripts/build-server-rooms.mjs';
 import { buildServerCheckpoint } from './scripts/build-server-checkpoint.mjs';
+import { buildServerMarkdown } from './scripts/build-server-markdown.mjs';
 import { buildServerOfflineRuntime } from './scripts/build-server-offline-runtime.mjs';
 import { buildOfflineManifest, releaseFiles, walk } from './scripts/build-offline-manifest.mjs';
 
@@ -488,6 +489,7 @@ if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) {
 const standaloneMeta = await emitStandalone();
 await buildServerRooms(join(DIST, 'server'));
 await buildServerCheckpoint(join(DIST, 'server'));
+await buildServerMarkdown(join(DIST, 'server'));
 await buildServerOfflineRuntime(join(DIST, 'server'));
 for (const file of Object.keys(standaloneMeta.inputs)) {
   if (file.includes('src/server/rooms/') || file.includes('src/server/checkpoint/') ||

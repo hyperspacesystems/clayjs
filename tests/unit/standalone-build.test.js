@@ -99,5 +99,5 @@ test("writes exactly the files the unversioned-URL guard pins", () => {
     expect(readFileSync(join(DIST, name), "utf8")).toContain('"dir":"m/"');
   }
   expect(readdirSync(join(DIST, "m"))).toContain("manifest.json");
-  expect(readdirSync(join(DIST, "server")).sort()).toEqual(["checkpoint.cjs", "checkpoint.mjs", "core.cjs", "offline-runtime.cjs", "offline-runtime.mjs", "page-compaction-worker.cjs", "rooms.cjs", "rooms.mjs"]);
+  expect(readdirSync(join(DIST, "server")).sort()).toEqual(["checkpoint.cjs", "checkpoint.mjs", "core.cjs", "markdown.cjs", "markdown.mjs", "offline-runtime.cjs", "offline-runtime.mjs", "page-compaction-worker.cjs", "rooms.cjs", "rooms.mjs"]);
 });
