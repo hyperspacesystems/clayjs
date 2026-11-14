@@ -136,6 +136,18 @@
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-11-13
+
+### Added
+- Visitors get Host and share online and Show draft bar in their menu while the trial bar is closed.
+- The visitor menu lists earlier drafts, and restoring one keeps your current typing.
+- A link marked with `clay-wait-drafts` waits up to 3 seconds for a visitor's last change to be stored before it navigates.
+
+### Fixed
+- A block-editor page with no live store tag can now save.
+- A save hook that changes a field no longer creates an extra recovery copy when nothing else changed since the last save.
+- A filled button in a generated tool keeps its label visible.
+
 ## [1.24.1] - 2026-11-13
 
 ### Added
