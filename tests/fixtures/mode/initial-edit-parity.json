@@ -167,7 +167,7 @@
       "posts": 0,
       "eventSources": 1,
       "listeners": {
-        "window": 19,
+        "window": 20,
         "document": 117,
         "Element": 56
       },

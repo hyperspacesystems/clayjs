@@ -1,0 +1,75 @@
+{
+  "seed": 5,
+  "mode": "page",
+  "invariant": "replay",
+  "ops": [
+    {
+      "kind": "ownerSentence",
+      "id": "p"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "r"
+    },
+    {
+      "kind": "ownerWords",
+      "id": "q"
+    },
+    {
+      "kind": "pageUndo"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "p"
+    },
+    {
+      "kind": "ownerWords",
+      "id": "p"
+    },
+    {
+      "kind": "ownerWords",
+      "id": "r"
+    },
+    {
+      "kind": "peerDeletes",
+      "blockId": "p",
+      "from": 4,
+      "to": 10
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "r"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "r"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "q"
+    },
+    {
+      "kind": "ownerWords",
+      "id": "p"
+    },
+    {
+      "kind": "ownerWords",
+      "id": "r"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "p"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "r"
+    },
+    {
+      "kind": "peerDeletes",
+      "blockId": "r",
+      "from": 91,
+      "to": 103
+    }
+  ],
+  "failure": "seed 5 [page]: replaying the history lost owner text the peer still has: O23, O24, O26\n(invariant 4: replaying the history loses no owner text)\noperations:\n  owner types the sentence \"O1 O2. \" at the end of p\n  owner types the sentence \"O3 O4. \" at the end of r\n  owner types the words \"O5 O6\" at the end of q\n  page undo\n  owner types the sentence \"O7 O8. \" at the end of p\n  owner types the words \"O9 O10\" at the end of p\n  owner types the words \"O11 O12\" at the end of r\n  peer deletes \"neO1 O\" from p\n  owner types the sentence \"O13 O14. \" at the end of r\n  owner types the sentence \"O15 O16. \" at the end of r\n  owner types the sentence \"O17 O18. \" at the end of q\n  owner types the words \"O19 O20\" at the end of p\n  owner types the words \"O21 O22\" at the end of r\n  owner types the sentence \"O23 O24. \" at the end of p\n  owner types the sentence \"O25 O26. \" at the end of r\n  peer deletes \". O21 O22O25\" from r\narticle before: \"p o2. O7 O8. O9 O10O19 O20O23 O24. q twoO17 O18. r threeO3 O4. O11 O12O13 O14. O15 O16 O26. \"\narticle after: \"p o2. O7 O8. O9 O10O19 O20q twoO17 O18. r threeO3 O4. O11 O12O13 O14. O15 O16\"\nundoStack before: 12 [1gfjky:1, 1gfjky:2, 1gfjky:4, 1gfjky:5, 1gfjky:6, 1gfjky:7, 1gfjky:8, 1gfjky:9, 1gfjky:10, 1gfjky:11, 1gfjky:12, 1gfjky:13]\nredoStack before: 0 []\nundoStack after: 9 [?, ?, ?, ?, ?, ?, ?, ?, ?]\nredoStack after: 2 [?, ?]\npage history during the replay:\nundo {\"entryId\":\"uwuziun-13\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 1 undo: undoStack 12 [1gfjky:1, 1gfjky:2, 1gfjky:4, 1gfjky:5, 1gfjky:6, 1gfjky:7, 1gfjky:8, 1gfjky:9, 1gfjky:10, 1gfjky:11, 1gfjky:12, 1gfjky:13] -> 11, redoStack 0 -> 1\nundo {\"entryId\":\"uwuziun-12\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 2 undo: undoStack 11 [1gfjky:1, 1gfjky:2, 1gfjky:4, 1gfjky:5, 1gfjky:6, 1gfjky:7, 1gfjky:8, 1gfjky:9, 1gfjky:10, 1gfjky:11, 1gfjky:12] -> 10, redoStack 1 -> 2\nundo {\"entryId\":\"uwuziun-11\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 3 undo: undoStack 10 [1gfjky:1, 1gfjky:2, 1gfjky:4, 1gfjky:5, 1gfjky:6, 1gfjky:7, 1gfjky:8, 1gfjky:9, 1gfjky:10, 1gfjky:11] -> 9, redoStack 2 -> 2\nundo {\"entryId\":\"uwuziun-10\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 4 undo: undoStack 9 [1gfjky:1, 1gfjky:2, 1gfjky:4, 1gfjky:5, 1gfjky:6, 1gfjky:7, 1gfjky:8, 1gfjky:9, ?] -> 8, redoStack 2 -> 3\nundo {\"entryId\":\"uwuziun-9\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 5 undo: undoStack 8 [1gfjky:1, 1gfjky:2, 1gfjky:4, 1gfjky:5, 1gfjky:6, 1gfjky:7, 1gfjky:8, 1gfjky:9] -> 7, redoStack 3 -> 4\nundo {\"entryId\":\"uwuziun-8\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 6 undo: undoStack 7 [1gfjky:1, 1gfjky:2, 1gfjky:4, 1gfjky:5, 1gfjky:6, 1gfjky:7, 1gfjky:8] -> 6, redoStack 4 -> 5\nundo {\"entryId\":\"uwuziun-7\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 7 undo: undoStack 6 [1gfjky:1, 1gfjky:2, 1gfjky:4, 1gfjky:5, 1gfjky:6, 1gfjky:7] -> 5, redoStack 5 -> 6\nundo {\"entryId\":\"uwuziun-6\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 8 undo: undoStack 5 [1gfjky:1, 1gfjky:2, 1gfjky:4, 1gfjky:5, 1gfjky:6] -> 4, redoStack 6 -> 7\nundo {\"entryId\":\"uwuziun-5\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 9 undo: undoStack 4 [1gfjky:1, 1gfjky:2, 1gfjky:4, 1gfjky:5] -> 3, redoStack 7 -> 8\nundo {\"entryId\":\"uwuziun-4\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 10 undo: undoStack 3 [1gfjky:1, 1gfjky:2, 1gfjky:4] -> 2, redoStack 8 -> 9\nundo {\"entryId\":\"uwuziun-2\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 11 undo: undoStack 2 [1gfjky:1, 1gfjky:2] -> 1, redoStack 9 -> 10\nundo {\"entryId\":\"uwuziun-1\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 12 undo: undoStack 1 [1gfjky:1] -> 0, redoStack 10 -> 11\nredo {\"entryId\":\"uwuziun-1\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 1 redo: undoStack 0 -> 1, redoStack 11 [?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?] -> 10\nredo {\"entryId\":\"uwuziun-2\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 2 redo: undoStack 1 -> 2, redoStack 10 [?, ?, ?, ?, ?, ?, ?, ?, ?, ?] -> 9\nredo {\"entryId\":\"uwuziun-4\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 3 redo: undoStack 2 -> 3, redoStack 9 [?, ?, ?, ?, ?, ?, ?, ?, ?] -> 8\nredo {\"entryId\":\"uwuziun-5\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 4 redo: undoStack 3 -> 4, redoStack 8 [?, ?, ?, ?, ?, ?, ?, ?] -> 7\nredo {\"entryId\":\"uwuziun-6\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 5 redo: undoStack 4 -> 5, redoStack 7 [?, ?, ?, ?, ?, ?, ?] -> 6\nredo {\"entryId\":\"uwuziun-7\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 6 redo: undoStack 5 -> 6, redoStack 6 [?, ?, ?, ?, ?, ?] -> 5\nredo {\"entryId\":\"uwuziun-8\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 7 redo: undoStack 6 -> 7, redoStack 5 [?, ?, ?, ?, ?] -> 4\nredo {\"entryId\":\"uwuziun-9\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 8 redo: undoStack 7 -> 8, redoStack 4 [?, ?, ?, ?] -> 3\nredo {\"entryId\":\"uwuziun-10\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 9 redo: undoStack 8 -> 9, redoStack 3 [?, ?, ?] -> 2\nredo {\"entryId\":\"uwuziun-11\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 10 redo: undoStack 9 -> 9, redoStack 2 [?, ?] -> 2\nskipped {\"entryId\":\"uwuziun-12\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"uwuziun-13\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\npress 11 redo: undoStack 9 -> 9, redoStack 2 [?, ?] -> 2"
+}

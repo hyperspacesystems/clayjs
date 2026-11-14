@@ -8,10 +8,12 @@
  * ClayJS asks the engine for a whole-entry replay, so the plugin's own state has
  * to follow the engine's answer:
  *
- *   - a refused undo or redo is announced as one `clay:undo-refused` event with
- *     the engine's receipt, and neither the page nor the stack moves;
+ *   - a step the engine can no longer replay is announced as one
+ *     `clay:undo-skipped` event, leaves the history and the press goes on to the
+ *     next older step; an explicit `entryId` still refuses as one
+ *     `clay:undo-refused` event;
  *   - persist controls take their attributes back only after a successful
- *     replay, never after a refusal;
+ *     replay, never after a skip or a refusal;
  *   - ClayJS's derived, tab-local and route state is not page content, so a
  *     change to it cannot make the recorded edit unsafe.
  */
@@ -34,8 +36,10 @@ let plugin;
 let undo;
 const leases = [];
 const refusals = [];
+const skips = [];
 
 const onRefused = (event) => refusals.push(event.detail);
+const onSkipped = (event) => skips.push(event.detail);
 
 const enter = async () => {
   const lease = await plugin.undoParticipant().prepare({ generation: 1, isCurrent: () => true });
@@ -69,16 +73,19 @@ beforeAll(async () => {
 
 beforeEach(() => {
   refusals.length = 0;
+  skips.length = 0;
   // A new page starts in the default mode; a mode a case picked is that page's own.
   undo.setRecording("automatic");
   window.clay = {};
   document.documentElement.removeAttribute("route-tab");
   document.body.innerHTML = FIXTURE;
   document.addEventListener("clay:undo-refused", onRefused);
+  document.addEventListener("clay:undo-skipped", onSkipped);
 });
 
 afterEach(() => {
   document.removeEventListener("clay:undo-refused", onRefused);
+  document.removeEventListener("clay:undo-skipped", onSkipped);
   while (leases.length) leases.pop().dispose();
   window.clay = undefined;
 });
@@ -100,37 +107,29 @@ test("a derived, tab-local or route attribute change after an edit does not refu
   expect(text().textContent).toBe("authored");
 });
 
-test("a peer's change to the edited text refuses the undo, announced once", async () => {
+test("a peer's change to the edited text skips the undo, announced once", async () => {
   await enter();
   await edit("typed");
+  const { id } = undo.history[0];
   peerWrite(() => setText(text(), "peer"));
   await settle();
   undo.flush();
 
   const receipt = undo.undo();
 
-  expect(receipt).toEqual({
-    ok: false,
-    code: "content-changed",
-    entryId: undo.history[0].id,
-    label: "Edit",
-    direction: "undo",
-  });
-  expect(refusals).toHaveLength(1);
-  expect(refusals[0]).toEqual({
-    ok: false,
-    code: "content-changed",
-    entryId: undo.history[0].id,
-    label: "Edit",
-    direction: "undo",
-  });
+  expect(receipt).toMatchObject({ ok: false, code: "empty", direction: "undo" });
+  expect(receipt.skipped).toEqual([
+    expect.objectContaining({ entryId: id, label: "Edit", direction: "undo", code: "content-changed" }),
+  ]);
+  expect(skips).toEqual([{ entryId: id, label: "Edit", direction: "undo", code: "content-changed" }]);
+  expect(refusals).toHaveLength(0);
   expect(text().textContent).toBe("peer");
-  expect(undo.history).toHaveLength(1);
-  expect(undo.canUndo).toBe(true);
+  expect(undo.history).toHaveLength(0);
+  expect(undo.canUndo).toBe(false);
   expect(undo.canRedo).toBe(false);
 });
 
-test("a refused redo is announced once and leaves the page and the stack as they were", async () => {
+test("a skipped redo is announced once, leaves the page as it was and the entry gone", async () => {
   await enter();
   await edit("typed");
   const { id } = undo.history[0];
@@ -143,27 +142,18 @@ test("a refused redo is announced once and leaves the page and the stack as they
 
   const receipt = undo.redo();
 
-  expect(receipt).toEqual({
-    ok: false,
-    code: "content-changed",
-    entryId: id,
-    label: "Edit",
-    direction: "redo",
-  });
-  expect(refusals).toHaveLength(1);
-  expect(refusals[0]).toEqual({
-    ok: false,
-    code: "content-changed",
-    entryId: id,
-    label: "Edit",
-    direction: "redo",
-  });
+  expect(receipt).toMatchObject({ ok: false, code: "empty", direction: "redo" });
+  expect(receipt.skipped).toEqual([
+    expect.objectContaining({ entryId: id, label: "Edit", direction: "redo", code: "content-changed" }),
+  ]);
+  expect(skips).toEqual([{ entryId: id, label: "Edit", direction: "redo", code: "content-changed" }]);
+  expect(refusals).toHaveLength(0);
   expect(text().textContent).toBe("peer redo");
-  expect(undo.canRedo).toBe(true);
+  expect(undo.canRedo).toBe(false);
   expect(undo.canUndo).toBe(false);
 });
 
-test("persist controls are not restored after a refusal and are after a success", async () => {
+test("persist controls are not restored after a skip and are after a success", async () => {
   await enter();
   await edit("typed");
   field().value = "live";
@@ -171,14 +161,14 @@ test("persist controls are not restored after a refusal and are after a success"
   peerWrite(() => setText(text(), "peer"));
   await settle();
   undo.flush();
-  expect(undo.undo().ok).toBe(false);
-  expect(refusals).toHaveLength(1);
+  expect(undo.undo()).toMatchObject({ ok: false, code: "empty" });
+  expect(skips).toHaveLength(1);
+  expect(refusals).toHaveLength(0);
   expect(field().value).toBe("live");
 
-  peerWrite(() => setText(text(), "typed"));
-  await settle();
-  undo.flush();
-  expect(undo.undo().ok).toBe(true);
+  await edit("typed again");
+  expect(undo.undo()).toMatchObject({ ok: true, direction: "undo" });
+  expect(text().textContent).toBe("peer");
   expect(field().value).toBe("attr");
 });
 
@@ -250,19 +240,21 @@ describe("added subtrees", () => {
     expect(refusals).toHaveLength(0);
   });
 
-  test("saved content with its own history inside an added card refuses undoing the add", async () => {
+  test("saved content with its own history inside an added card skips undoing the add", async () => {
     window.clay = { region: { resolveRegionPolicy } };
     await enter();
     await addCard('<div id="own" clay="no-undo"><p>kept</p></div>');
 
+    const { id } = undo.history.at(-1);
     const kept = new Promise((resolve) => document.addEventListener("clay:undo-kept", resolve, { once: true }));
     const receipt = undo.undo();
 
-    expect(receipt).toMatchObject({ ok: false, code: "protected", direction: "undo" });
-    expect(refusals).toEqual([receipt]);
+    expect(receipt).toMatchObject({ ok: false, code: "empty", direction: "undo" });
+    expect(skips).toEqual([{ entryId: id, label: expect.any(String), direction: "undo", code: "protected" }]);
+    expect(refusals).toHaveLength(0);
     expect(document.getElementById("own").textContent).toBe("kept");
-    expect(undo.history).toHaveLength(1);
-    // The recovery copy is made behind the receipt, so a case that ends on a refusal
+    expect(undo.history).toHaveLength(0);
+    // The recovery copy is made behind the receipt, so a case that ends on a skip
     // waits for the announcement or the page is gone while it is still in flight.
     await kept;
   });
@@ -294,7 +286,7 @@ describe("clay:undo-change", () => {
   });
   afterEach(() => document.removeEventListener("clay:undo-change", onChange));
 
-  test("names the entries the next Undo and Redo would replay, through a refusal and its dismissal", async () => {
+  test("names the entries the next Undo and Redo would replay, through a skip", async () => {
     await enter();
     undo.setRecording("commands");
     expect(summary(changes.at(-1))).toEqual({ canUndo: false, canRedo: false, undo: null, redo: null, refused: null });
@@ -305,16 +297,50 @@ describe("clay:undo-change", () => {
     undo.undo();
     expect(summary(changes.at(-1))).toEqual({ canUndo: false, canRedo: true, undo: null, redo: "Rename", refused: null });
 
+    const { id } = undo.future[0];
     peerWrite(() => setText(text(), "peer"));
-    const refused = undo.redo();
-    expect(refused.ok).toBe(false);
-    expect(summary(changes.at(-1))).toMatchObject({ canRedo: true, redo: "Rename", refused: refused.code });
-
-    undo.discard(refused.entryId);
+    const skipped = undo.redo();
+    expect(skipped).toMatchObject({ ok: false, code: "empty", direction: "redo" });
+    expect(skips).toEqual([{ entryId: id, label: "Rename", direction: "redo", code: "content-changed" }]);
+    // The skipped entry leaves the stack, so no dismissal is needed to stop offering it,
+    // and the press announces that Redo has nothing left.
+    expect(undo.canRedo).toBe(false);
     expect(summary(changes.at(-1))).toEqual({ canUndo: false, canRedo: false, undo: null, redo: null, refused: null });
     expect(text().textContent).toBe("peer");
+
+    undo.command("Note", () => setText(text(), "noted"));
+    expect(summary(changes.at(-1))).toEqual({ canUndo: true, canRedo: false, undo: "Note", redo: null, refused: null });
+    expect(text().textContent).toBe("noted");
 
     leases.pop().dispose();
     expect(summary(changes.at(-1))).toEqual({ canUndo: false, canRedo: false, undo: null, redo: null, refused: null });
   });
+});
+
+test("an explicit undo({ entryId }) on a stale entry still refuses and is announced once", async () => {
+  await enter();
+  await edit("typed");
+  await edit("typed again");
+  const [older] = undo.history;
+
+  const receipt = undo.undo({ entryId: older.id });
+
+  expect(receipt).toEqual({
+    ok: false,
+    code: "stale-entry",
+    entryId: older.id,
+    label: "Edit",
+    direction: "undo",
+  });
+  expect(refusals).toEqual([{
+    ok: false,
+    code: "stale-entry",
+    entryId: older.id,
+    label: "Edit",
+    direction: "undo",
+  }]);
+  expect(skips).toHaveLength(0);
+  expect(text().textContent).toBe("typed again");
+  expect(undo.history).toHaveLength(2);
+  expect(undo.canUndo).toBe(true);
 });

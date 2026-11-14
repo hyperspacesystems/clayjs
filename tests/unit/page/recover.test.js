@@ -136,7 +136,7 @@ test("destroy unsubscribes and removes the button and panel", () => {
   expect(mount.querySelector('clay-editor-ui[data-clay-ui="blockeditor-recover"]')).toBeNull();
 });
 
-test("with a real binding, a peer's text kept aside by an Undo is listed and Restore brings it back", () => {
+test("with a real binding, a peer's text kept aside by a Move is listed and Restore brings it back", () => {
   const seed = createPageDoc(new Y.Doc());
   seed.ydoc.clientID = 1;
   seedFrom(seed, [{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
@@ -163,11 +163,10 @@ test("with a real binding, a peer's text kept aside by an Undo is listed and Res
   };
   caretIn(a, "q", 0);
   moveBlock(1)(a.view.state, a.view.dispatch);
-  Y.applyUpdateV2(b.pd.ydoc, Y.encodeStateAsUpdateV2(a.pd.ydoc), NET);
   caretIn(b, "q", 2);
   b.view.dispatch(b.view.state.tr.insertText("Z"));
   Y.applyUpdateV2(a.pd.ydoc, Y.encodeStateAsUpdateV2(b.pd.ydoc), NET);
-  a.bridge.undo();
+  Y.applyUpdateV2(b.pd.ydoc, Y.encodeStateAsUpdateV2(a.pd.ydoc), NET);
 
   const restored = [];
   const { button, panel } = mountList({ binding: a.bridge, ownTokens: ["tok-a"], onRestored: (id) => restored.push(id) });

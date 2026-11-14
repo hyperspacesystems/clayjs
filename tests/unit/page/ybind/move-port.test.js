@@ -338,7 +338,7 @@ test("moveBlocks refuses attribute changes it does not own", () => {
   settled(a);
 });
 
-test("Undo of a dragged block keeps a peer's text in the moved copy recoverable, and Redo puts it back", () => {
+test("Undo of a dragged block carries a peer's text in the moved copy back into the original, and Redo puts it back", () => {
   const a = open(page(PQR));
   const b = open(clone(a.pd, 200));
   b.pd.origins.set(authorKey(200), "B");
@@ -351,11 +351,11 @@ test("Undo of a dragged block keeps a peer's text in the moved copy recoverable,
   merge(a.pd, b.pd);
   expect(a.bridge.undo()).toBe(true);
   merge(b.pd, a.pd);
-  expect(blocks(a)).toEqual([["p", "ALPHA"], ["q", "bravo"], ["r", "OMEGA"]]);
+  expect(blocks(a)).toEqual([["p", "ALPHA"], ["q", "brZavo"], ["r", "OMEGA"]]);
   expect(blocks(b)).toEqual(blocks(a));
   let snapshot = null;
   a.bridge.subscribeRecovery((next) => { snapshot = next; });
-  expect(snapshot.recoverable.length).toBe(1);
+  expect(snapshot.recoverable.length).toBe(0);
   expect(a.bridge.redo()).toBe(true);
   merge(b.pd, a.pd);
   expect(blocks(a)).toEqual([["p", "ALPHA"], ["r", "OMEGA"], ["q", "brZavo"]]);

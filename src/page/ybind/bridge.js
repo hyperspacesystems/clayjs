@@ -10,7 +10,7 @@ import { state as pmState } from "../../vendor/prosemirror.vendor.js";
 import { repairSiblings, isKey } from "../model.js";
 import { createOriginIndex, installUndoOrigins } from "./origins.js";
 import { reduceRecovery, reduceRecoverable, canonicalRevision, restoreKey, physicalKeyOf, authorKey, RECOVERED_PREFIX, parsePhysicalKey, parseGoneIntents } from "./recovery.js";
-import { moveBlocks } from "./moves.js";
+import { moveBlocks, createMoveCarry } from "./moves.js";
 import { createBoardCommands } from "./board-commands.js";
 import { continuesGroup, intentOf } from "../history-intent.js";
 import { MOVE, BlockSelection } from "../blocks.js";
@@ -320,7 +320,9 @@ export function createBridge({ pd, onNotice = () => {}, ownedTokens = [], author
     if (!d) { adopt(view.state.doc); return; }
     const tr = view.state.tr.replace(d.start, d.endA, derived.slice(d.start, d.endB)).setMeta(REMOTE_META, true).setMeta("addToHistory", false);
     if (own) tr.setMeta("yundo", true);
-    if (keep) {
+    if (own && view.state.doc.textContent !== derived.textContent && document.activeElement?.closest?.('[contenteditable]:not([contenteditable="false"])')) {
+      tr.setSelection(pmState.Selection.near(tr.doc.resolve(Math.min(d.endB, tr.doc.content.size)), -1));
+    } else if (keep) {
       const hiddenUnit = (y) => y >= 0 && w.holes.some((hole) => y >= yBefore(w.holes, hole.at) && y < yAfter(w.holes, hole.at));
       const placeIn = (id, offset) => {
         let found = null;
@@ -359,12 +361,14 @@ export function createBridge({ pd, onNotice = () => {}, ownedTokens = [], author
     return true;
   };
   const stale = (t) => { began.set(t, docVersion); docVersion++; };
+  const carry = createMoveCarry({ pd, origins, um, walked: () => currentWalk() ?? walk(pd, origins) });
   const onTransaction = (t) => {
     if (unchanged(t)) {
       idle.add(t);
       if (walkedAt === began.get(t) && docVersion === walkedAt + 1) walkedAt = docVersion;
       return;
     }
+    if (t.origin === um) carry.note(t);
     deltas++;
     delta = deltas === 1 ? captureDelta(pd, t, w) : null;
   };
@@ -385,7 +389,9 @@ export function createBridge({ pd, onNotice = () => {}, ownedTokens = [], author
     saved = { anchor: end(sel.$anchor), head: end(sel.$head) };
   };
   const onAfter = (t) => {
-    if (t.origin !== LOCAL) { lastIntent = null; groupOpen = false; }
+    // A transaction that wrote nothing (Yjs's cleanup after an undo) is no peer's edit, so
+    // it leaves an open typing run open.
+    if (t.origin !== LOCAL && !unchanged(t)) { lastIntent = null; groupOpen = false; }
   };
   // One render per batch Yjs settles (a transaction and those its observers queued), after
   // its garbage collection and merges, so the walk it leaves is current for the next keystroke.
@@ -398,9 +404,10 @@ export function createBridge({ pd, onNotice = () => {}, ownedTokens = [], author
       else if (t.origin === um) own = true;
     }
     if (!changed) { saved = null; return; }
-    if (!view) { bumpRecovery(); return; }
+    if (!view) { bumpRecovery(); carry.received(transactions); return; }
     if (local) { saved = null; return; }
     render(own);
+    carry.received(transactions);
   };
   const portMove = (tr, move) => {
     const result = moveBlocks({ pd, view, um, origins, render, walked: currentWalk() }, move);
@@ -486,7 +493,7 @@ export function createBridge({ pd, onNotice = () => {}, ownedTokens = [], author
       registerAuthor = null;
       const intent = history ? intentOf(local, view) : null;
       const join = groupOpen && continuesGroup(lastIntent, intent);
-      lastIntent = intent;
+      lastIntent = !join && intent?.breakAfter && !intent.text.trim() ? { ...intent, breakAfter: false } : intent;
       joining = join;
       try {
         localGroup(pd, local, w, stats, um, history, register, { join, open: intent !== null });
@@ -546,7 +553,7 @@ export function createBridge({ pd, onNotice = () => {}, ownedTokens = [], author
     moveBlocks(args) {
       return moveBlocks({ pd, view, um, origins, render, walked: currentWalk() }, args);
     },
-    undo() { return um.undo() !== null; },
-    redo() { return um.redo() !== null; },
+    undo() { return carry.replay("undo"); },
+    redo() { return carry.replay("redo"); },
   };
 }

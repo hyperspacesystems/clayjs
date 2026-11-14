@@ -97,16 +97,54 @@ const forwardDelete = (tab) => {
   tab.view.dispatch(tab.view.state.tr.delete(at, at + 1));
 };
 
-test("typing a sentence undoes by word", () => {
+test("typing undoes by sentence: a space after a sentence end closes the step", () => {
   const tab = open(seedValue([{ id: "p", text: "abc" }]), typing);
   caret(tab, 4);
-  type(tab, "hello world");
-  expect(text(tab)).toBe("abchello world");
+  type(tab, "Hi there. Next one");
+  expect(text(tab)).toBe("abcHi there. Next one");
   expect(tab.binding.undo()).toBe(true);
-  expect(text(tab)).toBe("abchello ");
+  expect(text(tab)).toBe("abcHi there. ");
   expect(tab.binding.undo()).toBe(true);
   expect(text(tab)).toBe("abc");
   expect(tab.binding.undo()).toBe(false);
+  agree(tab);
+});
+
+test("words with no sentence end between them undo together", () => {
+  const tab = open(seedValue([{ id: "p", text: "abc" }]), typing);
+  caret(tab, 4);
+  type(tab, "hello world again");
+  expect(tab.binding.undo()).toBe(true);
+  expect(text(tab)).toBe("abc");
+  expect(tab.binding.undo()).toBe(false);
+  agree(tab);
+});
+
+test("a question, an exclamation and a closing quote end a sentence; a second space does not", () => {
+  const tab = open(seedValue([{ id: "p", text: "" }]), typing);
+  caret(tab, 1);
+  type(tab, "Why? Yes! \u201CSo.\u201D  End");
+  expect(tab.binding.undo()).toBe(true);
+  expect(text(tab)).toBe("Why? Yes! \u201CSo.\u201D ");
+  expect(tab.binding.undo()).toBe(true);
+  expect(text(tab)).toBe("Why? Yes! ");
+  expect(tab.binding.undo()).toBe(true);
+  expect(text(tab)).toBe("Why? ");
+  expect(tab.binding.undo()).toBe(true);
+  expect(text(tab)).toBe("");
+  agree(tab);
+});
+
+test("a word typed right after an undo is one step with its first letter", () => {
+  const tab = open(seedValue([{ id: "p", text: "abc" }]), typing);
+  caret(tab, 4);
+  type(tab, "One. Two");
+  expect(tab.binding.undo()).toBe(true);
+  expect(text(tab)).toBe("abcOne. ");
+  type(tab, "three");
+  expect(text(tab)).toBe("abcOne. three");
+  expect(tab.binding.undo()).toBe(true);
+  expect(text(tab)).toBe("abcOne. ");
   agree(tab);
 });
 

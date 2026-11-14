@@ -542,14 +542,13 @@ describe("a Document's plugin plan", () => {
     expect(resolveModules(params({ plugins: "sync" }), false).late).toEqual([]);
   });
 
-  // hyper-undo takes Cmd+Z for the whole window, so it would fight the history the
-  // document's own editor keeps. This is the one name that loses even when the page
-  // asks for it by hand.
-  test("plugins=blockeditor,undo: undo is left out though it was named, and says so", () => {
+  // A Document's editor hands its steps to the page's one history, so the two load together.
+  test("plugins=blockeditor,undo loads both, and says nothing", () => {
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
     const plan = resolveModules(params({ plugins: "blockeditor,undo" }), true);
-    expect(everywhere(plan)).not.toContain("plugins/undo.js");
-    expect(warn).toHaveBeenCalledWith('clayjs: plugin "undo" cannot run with "blockeditor" and was left out');
+    expect(everywhere(plan)).toContain("plugins/undo.js");
+    expect(everywhere(plan)).toContain("plugins/page.js");
+    expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
 

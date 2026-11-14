@@ -1,0 +1,64 @@
+{
+  "seed": 1,
+  "mode": "page",
+  "invariant": "replay",
+  "ops": [
+    {
+      "kind": "ownerSentence",
+      "id": "r"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "p"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "p"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "q"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "q"
+    },
+    {
+      "kind": "peerTypes",
+      "id": "p"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "q"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "q"
+    },
+    {
+      "kind": "peerDeletes",
+      "blockId": "p",
+      "from": 11,
+      "to": 15
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "q"
+    },
+    {
+      "kind": "peerTypes",
+      "id": "r"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "p"
+    },
+    {
+      "kind": "peerDeletes",
+      "blockId": "r",
+      "from": 84,
+      "to": 96
+    }
+  ],
+  "failure": "seed 1 [page]: replaying the history lost owner text the peer still has: O3, O4, O6, O7, O8, O9, O10, O11, O12, O13, O14, O15, O16, O17, O18\n(invariant 4: replaying the history loses no owner text)\noperations:\n  owner types the sentence \"O1 O2. \" at the end of r\n  owner types the sentence \"O3 O4. \" at the end of p\n  owner types the sentence \"O5 O6. \" at the end of p\n  owner types the sentence \"O7 O8. \" at the end of q\n  owner types the sentence \"O9 O10. \" at the end of q\n  peer types \"P1\" at the end of p\n  owner types the sentence \"O11 O12. \" at the end of q\n  owner types the sentence \"O13 O14. \" at the end of q\n  peer deletes \". O5\" from p\n  owner types the sentence \"O15 O16. \" at the end of q\n  peer types \"P2\" at the end of r\n  owner types the sentence \"O17 O18. \" at the end of p\n  peer deletes \"eeO1 O2. P2 \" from r\narticle before: \"p oneO3 O4 O6. P1 O17 O18. q twoO7 O8. O9 O10. O11 O12. O13 O14. O15 O16. r thr\"\narticle after: \"p oneP1 q twor thr\"\nundoStack before: 9 [tqjsui:1, tqjsui:2, tqjsui:3, tqjsui:4, tqjsui:5, tqjsui:6, tqjsui:7, tqjsui:8, tqjsui:9]\nredoStack before: 0 []\nundoStack after: 0 []\nredoStack after: 8 [?, ?, ?, ?, ?, ?, ?, ?]\npage history during the replay:\nundo {\"entryId\":\"uvai2mi-9\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 1 undo: undoStack 9 [tqjsui:1, tqjsui:2, tqjsui:3, tqjsui:4, tqjsui:5, tqjsui:6, tqjsui:7, tqjsui:8, tqjsui:9] -> 8, redoStack 0 -> 1\nundo {\"entryId\":\"uvai2mi-8\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 2 undo: undoStack 8 [tqjsui:1, tqjsui:2, tqjsui:3, tqjsui:4, tqjsui:5, tqjsui:6, tqjsui:7, tqjsui:8] -> 7, redoStack 1 -> 2\nundo {\"entryId\":\"uvai2mi-7\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 3 undo: undoStack 7 [tqjsui:1, tqjsui:2, tqjsui:3, tqjsui:4, tqjsui:5, tqjsui:6, tqjsui:7] -> 6, redoStack 2 -> 3\nundo {\"entryId\":\"uvai2mi-6\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 4 undo: undoStack 6 [tqjsui:1, tqjsui:2, tqjsui:3, tqjsui:4, tqjsui:5, tqjsui:6] -> 5, redoStack 3 -> 4\nundo {\"entryId\":\"uvai2mi-5\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 5 undo: undoStack 5 [tqjsui:1, tqjsui:2, tqjsui:3, tqjsui:4, tqjsui:5] -> 4, redoStack 4 -> 5\nundo {\"entryId\":\"uvai2mi-4\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 6 undo: undoStack 4 [tqjsui:1, tqjsui:2, tqjsui:3, tqjsui:4] -> 3, redoStack 5 -> 6\nundo {\"entryId\":\"uvai2mi-3\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 7 undo: undoStack 3 [tqjsui:1, tqjsui:2, tqjsui:3] -> 2, redoStack 6 -> 7\nundo {\"entryId\":\"uvai2mi-2\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 8 undo: undoStack 2 [tqjsui:1, tqjsui:2] -> 1, redoStack 7 -> 8\nundo {\"entryId\":\"uvai2mi-1\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 9 undo: undoStack 1 [tqjsui:1] -> 0, redoStack 8 -> 8\nredo {\"entryId\":\"uvai2mi-1\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 1 redo: undoStack 0 -> 0, redoStack 8 [?, ?, ?, ?, ?, ?, ?, ?] -> 8\nskipped {\"entryId\":\"uvai2mi-2\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"uvai2mi-3\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"uvai2mi-4\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"uvai2mi-5\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"uvai2mi-6\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"uvai2mi-7\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"uvai2mi-8\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"uvai2mi-9\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\npress 2 redo: undoStack 0 -> 0, redoStack 8 [?, ?, ?, ?, ?, ?, ?, ?] -> 8"
+}

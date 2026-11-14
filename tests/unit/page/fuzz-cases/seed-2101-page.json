@@ -1,0 +1,20 @@
+{
+  "seed": 2101,
+  "mode": "page",
+  "invariant": "peer",
+  "ops": [
+    {
+      "kind": "moveBlock",
+      "id": "q",
+      "afterId": "r"
+    },
+    {
+      "kind": "peerTypes",
+      "id": "q"
+    },
+    {
+      "kind": "pageUndo"
+    }
+  ],
+  "failure": "seed 2101 [page]: a page undo removed another person's text: P1\n(invariant 2: a page undo never removes another person's text)\noperations:\n  owner moves q after r\n  peer types \"P1\" at the end of q\n  page undo\narticle before: \"p oner threeq twoP1 \"\narticle after: \"p oneq twor three\"\nundoStack before: 1 [0obu8swzuvz:1:applied]\nredoStack before: 0 []\nundoStack after: 0 []\nredoStack after: 1 [?]"
+}

@@ -195,10 +195,6 @@ const IMPLIES = { cms: ["quickcrop", "upload", "menu"], "ai-edit": ["wire"], blo
 // A Document's editor owns its article's rich text, so richclay (for [editable]) has
 // nothing to do there; plugins=blockeditor,richclay still loads it.
 const DISPLACES = { blockeditor: ["richclay"] };
-// A Document's editor keeps its own history, the same one Cmd+Z in the editor uses, and
-// hyper-undo takes Cmd+Z for the whole window: loaded together the two would fight over
-// every press. This is the one pair where a name the page asked for by hand still loses.
-const CANNOT_RUN_WITH = { blockeditor: ["undo"] };
 // No first paint or keystroke waits for these. source keeps the file's bytes outside
 // the edited parts stable; a save before it installs is the ordinary full serialization.
 // upgrade only asks the host for a newer version once `clay.ready` resolves.
@@ -294,15 +290,6 @@ export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap
 
   for (const [owner, names] of Object.entries(DISPLACES)) {
     if (enabled.has(owner)) for (const name of names) if (!explicit.has(name)) enabled.delete(name);
-  }
-
-  for (const [owner, names] of Object.entries(CANNOT_RUN_WITH)) {
-    if (!enabled.has(owner)) continue;
-    for (const name of names) {
-      if (!enabled.has(name)) continue;
-      enabled.delete(name);
-      console.warn(`clayjs: plugin "${name}" cannot run with "${owner}" and was left out`);
-    }
   }
 
   const plugins = [];

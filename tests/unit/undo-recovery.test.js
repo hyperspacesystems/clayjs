@@ -3,10 +3,10 @@
  */
 
 /**
- * A refused undo step survives the reload.
+ * A skipped undo step survives the reload.
  *
  * The history is this tab's and this session's: a reload starts with nothing to replay.
- * What it does not take away is the step a person tried to take back, so a refusal is
+ * What it does not take away is the step a person tried to take back, so a skip is
  * staged on the internal `clay.undo` channel of the shared recovery service as plain
  * data — the label, the direction, why it was refused, the targets with the page's own
  * names, and every step's endpoints. Nothing here is a save: a normal page save covers
@@ -112,10 +112,12 @@ let plugin;
 let undo;
 let kept = [];
 let refused = [];
+let skipped = [];
 const leases = [];
 
 const onKept = (event) => kept.push(event.detail);
 const onRefused = (event) => refused.push(event.detail);
+const onSkipped = (event) => skipped.push(event.detail);
 
 // A fresh page load over the same store: new modules, a new page-load writer and the
 // same document scope.
@@ -151,17 +153,20 @@ const peerWrite = (write) => {
   }
 };
 
-// One recorded edit, then a peer write over it, then the refusal itself.
-async function refuse() {
+// One recorded edit, then a peer write over it, then the press that skips it.
+async function skipStep() {
   await enter();
   await edit("typed");
+  const { id } = undo.history.at(-1);
   peerWrite(() => setText(text(), "peer"));
   await settle();
   undo.flush();
   const receipt = undo.undo();
-  expect(receipt.ok).toBe(false);
+  expect(receipt).toMatchObject({ ok: false, code: "empty", direction: "undo" });
+  expect(skipped).toEqual([{ entryId: id, label: "Edit", direction: "undo", code: "content-changed" }]);
+  expect(refused).toEqual([]);
   await until(() => kept.length > 0);
-  return receipt;
+  return { entryId: id };
 }
 
 const nextKept = async () => {
@@ -179,12 +184,14 @@ beforeEach(async () => {
   factory = new IDBFactory();
   kept = [];
   refused = [];
+  skipped = [];
   document.body.innerHTML = FIXTURE;
   document.documentElement.removeAttribute("documentid");
   window.clayEditMode = true;
   localStorage.clear();
   document.addEventListener("clay:undo-kept", onKept);
   document.addEventListener("clay:undo-refused", onRefused);
+  document.addEventListener("clay:undo-skipped", onSkipped);
   await boot();
   await enter();
 });
@@ -192,11 +199,12 @@ beforeEach(async () => {
 afterEach(() => {
   document.removeEventListener("clay:undo-kept", onKept);
   document.removeEventListener("clay:undo-refused", onRefused);
+  document.removeEventListener("clay:undo-skipped", onSkipped);
   while (leases.length) leases.pop().dispose();
   window.clay = undefined;
 });
 
-test("a refusal keeps one record with the steps and the page's own context", async () => {
+test("a skip keeps one record with the steps and the page's own context", async () => {
   // The page's own resolver, registered once for both records: it names a refused
   // step's target from the element that id finds today.
   const ledger = await import("../../src/sync/conflicts.js");
@@ -207,15 +215,15 @@ test("a refusal keeps one record with the steps and the page's own context", asy
       : null
   );
 
-  const receipt = await refuse();
+  const { entryId } = await skipStep();
   const detail = await nextKept();
 
-  expect(detail).toEqual({ ok: true, entryId: receipt.entryId, direction: "undo" });
+  expect(detail).toEqual({ ok: true, entryId, direction: "undo" });
   const [record] = await records();
   expect(record.channel).toBe("clay.undo");
   expect(record.version).toBe(1);
   expect(record.kind).toBe("conflict");
-  expect(record.key).toBe(`refused:${receipt.entryId}:undo`);
+  expect(record.key).toBe(`refused:${entryId}:undo`);
   expect(record.payload.label).toBe("Edit");
   expect(record.payload.direction).toBe("undo");
   expect(record.payload.code).toBe("content-changed");
@@ -229,68 +237,73 @@ test("a refusal keeps one record with the steps and the page's own context", asy
   expect(JSON.stringify(record)).not.toContain("save-token");
 });
 
-test("refusing the same step twice keeps one record", async () => {
-  const receipt = await refuse();
+test("a skipped step is kept once, and a later press does not meet it again", async () => {
+  const { entryId } = await skipStep();
   expect(await records()).toHaveLength(1);
 
   const again = undo.undo();
-  expect(again.code).toBe("content-changed");
-  await until(() => kept.length > 1);
+  expect(again).toMatchObject({ ok: false, code: "empty" });
+  expect(skipped).toHaveLength(1);
   await settle();
   await undo.kept();
 
+  expect(kept).toHaveLength(1);
   const listed = await records();
   expect(listed).toHaveLength(1);
-  expect(listed[0].key).toBe(`refused:${receipt.entryId}:undo`);
+  expect(listed[0].key).toBe(`refused:${entryId}:undo`);
 });
 
-test("two rapid refusals keep one recovery copy", async () => {
+test("two rapid presses skip one step once and keep one recovery copy", async () => {
   await edit("typed");
+  const { id } = undo.history.at(-1);
   peerWrite(() => setText(text(), "peer"));
   await settle();
   undo.flush();
 
   const first = undo.undo();
   const second = undo.undo();
-  expect(first.ok).toBe(false);
-  expect(second.ok).toBe(false);
-  expect(first.code).toBe("content-changed");
-  expect(second.code).toBe("content-changed");
+  expect(first).toMatchObject({ ok: false, code: "empty" });
+  expect(second).toMatchObject({ ok: false, code: "empty" });
+  expect(skipped).toEqual([{ entryId: id, label: "Edit", direction: "undo", code: "content-changed" }]);
 
-  expect(await until(() => kept.length === 2)).toBe(true);
-  expect(kept).toEqual([
-    { ok: true, entryId: first.entryId, direction: "undo" },
-    { ok: true, entryId: second.entryId, direction: "undo" },
-  ]);
+  expect(await until(() => kept.length === 1)).toBe(true);
+  expect(kept).toEqual([{ ok: true, entryId: id, direction: "undo" }]);
 
   const listed = await records();
   expect(listed).toHaveLength(1);
-  expect(listed[0].key).toBe(`refused:${first.entryId}:undo`);
+  expect(listed[0].key).toBe(`refused:${id}:undo`);
 });
 
-test("a store that refuses the write keeps the durable copy and the in-memory one", async () => {
+test("a store that refuses the write keeps the in-memory copy and the earlier durable one", async () => {
   let failures = 0;
   const flaky = guardedFactory(factory, () => (failures-- > 0 ? new DOMException("full", "QuotaExceededError") : null));
   await boot({ indexedDB: flaky });
   await enter();
 
-  await refuse();
+  const { entryId: firstId } = await skipStep();
   expect(await records()).toHaveLength(1);
 
   const counts = [];
   window.clay.recovery.subscribe((detail) => counts.push(detail.count));
 
+  await edit("typed again");
+  const { id } = undo.history.at(-1);
+  peerWrite(() => setText(text(), "peer again"));
+  await settle();
+  undo.flush();
+
   failures = 1;
   const receipt = undo.undo();
-  expect(receipt.code).toBe("content-changed");
+  expect(receipt).toMatchObject({ ok: false, code: "empty" });
   await until(() => kept.length > 1);
   const detail = kept.at(-1);
 
-  expect(detail).toEqual({ ok: false, code: "quota", entryId: receipt.entryId, direction: "undo" });
+  expect(detail).toEqual({ ok: false, code: "quota", entryId: id, direction: "undo" });
   expect(counts).toContain(1);
   const listed = await records();
   expect(listed).toHaveLength(1);
   expect(listed[0].payload.label).toBe("Edit");
+  expect(listed[0].key).toBe(`refused:${firstId}:undo`);
 });
 
 test("a store that cannot be opened reports ok:false", async () => {
@@ -303,7 +316,8 @@ test("a store that cannot be opened reports ok:false", async () => {
   peerWrite(() => setText(text(), "peer"));
   await settle();
   undo.flush();
-  expect(undo.undo().code).toBe("content-changed");
+  expect(undo.undo()).toMatchObject({ ok: false, code: "empty" });
+  expect(refused).toEqual([]);
   await until(() => kept.length > 0);
 
   expect(kept.at(-1)).toMatchObject({ ok: false, code: "unavailable", direction: "undo" });
@@ -311,7 +325,7 @@ test("a store that cannot be opened reports ok:false", async () => {
 });
 
 test("a normal save dismisses nothing on this channel", async () => {
-  await refuse();
+  await skipStep();
   await undo.keep({ key: "note", label: "Unsent note", payload: { text: "kept by the app" } });
   const before = await records();
   expect(before).toHaveLength(2);
@@ -326,7 +340,7 @@ test("a normal save dismisses nothing on this channel", async () => {
 });
 
 test("a kept record outlives the tab and lists on the next edit session", async () => {
-  const receipt = await refuse();
+  const { entryId } = await skipStep();
   const [stored] = await records();
 
   await boot({ indexedDB: factory });
@@ -335,12 +349,12 @@ test("a kept record outlives the tab and lists on the next edit session", async 
   const listed = await records();
   expect(listed).toHaveLength(1);
   expect(listed[0].id).toEqual(stored.id);
-  expect(listed[0].key).toBe(`refused:${receipt.entryId}:undo`);
+  expect(listed[0].key).toBe(`refused:${entryId}:undo`);
   expect(listed[0].payload.direction).toBe("undo");
 });
 
 test("dismissing at a stale revision refuses and leaves the record", async () => {
-  await refuse();
+  await skipStep();
   const [stored] = await records();
 
   const stale = await undo.dismissKept(stored.id, { revision: stored.revision - 1 });
@@ -367,8 +381,8 @@ test("keeping app text makes no host write", async () => {
   expect(record.payload).toEqual({ text: "kept by the app", label: "Unsent note", context: null });
 });
 
-test("a refused step with no registered resolver keeps only the target's own id", async () => {
-  await refuse();
+test("a skipped step with no registered resolver keeps only the target's own id", async () => {
+  await skipStep();
   const [record] = await records();
 
   // The fallback context is the generic shape, and the store's sanitizer drops the

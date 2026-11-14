@@ -1,0 +1,26 @@
+{
+  "seed": 3513,
+  "mode": "page",
+  "invariant": "peer",
+  "ops": [
+    {
+      "kind": "moveBlock",
+      "id": "r",
+      "afterId": null
+    },
+    {
+      "kind": "sideCommit"
+    },
+    {
+      "kind": "pageUndo"
+    },
+    {
+      "kind": "peerTypes",
+      "id": "r"
+    },
+    {
+      "kind": "pageUndo"
+    }
+  ],
+  "failure": "seed 3513 [page]: a page undo removed another person's text: P1\n(invariant 2: a page undo never removes another person's text)\noperations:\n  owner moves r after the top\n  owner sets the side field to \"side 1\" and commits it\n  page undo\n  peer types \"P1\" at the end of r\n  page undo\narticle before: \"r threeP1 p oneq two\"\narticle after: \"p oneq twor three\"\nundoStack before: 1 [5uyi4n6ofx3:1:applied]\nredoStack before: 0 []\nundoStack after: 0 []\nredoStack after: 1 [?]"
+}

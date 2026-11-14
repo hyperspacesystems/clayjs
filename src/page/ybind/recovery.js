@@ -345,7 +345,7 @@ const holdsClock = (spans, clock) => {
   return false;
 };
 
-const visibleOriginIndex = (flow, walked, index) => {
+export const visibleOriginIndex = (flow, walked, index) => {
   const ranges = createProjectionMap(walked, flow.length).physicalRanges(0, walked.tokens);
   const clocks = new Map();
   const collect = (item, from, to) => {

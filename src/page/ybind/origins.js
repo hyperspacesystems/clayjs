@@ -288,7 +288,7 @@ export function unitIds(flow, from, to) {
   return out;
 }
 
-const coversOriginal = (records, self, id) => records.some((record) => {
+export const coversOriginal = (records, self, id) => records.some((record) => {
   if (record.actor === self || record.client !== id.client) return false;
   if (id.clock < record.clock || id.clock >= record.clock + record.length) return false;
   return record.sv.some(([client, clock]) => client === id.client && clock > id.clock);

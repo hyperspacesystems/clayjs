@@ -1,0 +1,45 @@
+{
+  "seed": 4,
+  "mode": "page",
+  "invariant": "replay",
+  "ops": [
+    {
+      "kind": "moveBlock",
+      "id": "r",
+      "afterId": null
+    },
+    {
+      "kind": "ownerWords",
+      "id": "p"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "p"
+    },
+    {
+      "kind": "moveBlock",
+      "id": "q",
+      "afterId": "r"
+    },
+    {
+      "kind": "ownerWords",
+      "id": "q"
+    },
+    {
+      "kind": "peerDeletes",
+      "blockId": "r",
+      "from": 4,
+      "to": 8
+    },
+    {
+      "kind": "pageUndo"
+    },
+    {
+      "kind": "peerDeletes",
+      "blockId": "p",
+      "from": 16,
+      "to": 26
+    }
+  ],
+  "failure": "seed 4 [page]: replaying the history lost owner text the peer still has: O4\n(invariant 4: replaying the history loses no owner text)\noperations:\n  owner moves r after the top\n  owner types the words \"O1 O2\" at the end of p\n  owner types the sentence \"O3 O4. \" at the end of p\n  owner moves q after r\n  owner types the words \"O5 O6\" at the end of q\n  peer deletes \"hree\" from r\n  page undo\n  peer deletes \"neO1 O2O3 \" from p\narticle before: \"r tq twop oO4. \"\narticle after: \"r tp oq two\"\nundoStack before: 4 [3da689:1, 3da689:2, 3da689:3, 3da689:4]\nredoStack before: 1 [?]\nundoStack after: 1 [?]\nredoStack after: 3 [?, ?, ?]\npage history during the replay:\nundo {\"entryId\":\"ufrlyss-4\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 1 undo: undoStack 4 [3da689:1, 3da689:2, 3da689:3, 3da689:4] -> 3, redoStack 1 -> 2\nundo {\"entryId\":\"ufrlyss-3\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 2 undo: undoStack 3 [3da689:1, 3da689:2, 3da689:3] -> 2, redoStack 2 -> 3\nundo {\"entryId\":\"ufrlyss-2\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 3 undo: undoStack 2 [3da689:1, 3da689:2] -> 1, redoStack 3 -> 3\nundo {\"entryId\":\"ufrlyss-1\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 4 undo: undoStack 1 [?] -> 0, redoStack 3 -> 4\nredo {\"entryId\":\"ufrlyss-1\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 1 redo: undoStack 0 -> 1, redoStack 4 [?, ?, ?, ?] -> 3\nredo {\"entryId\":\"ufrlyss-2\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 2 redo: undoStack 1 -> 1, redoStack 3 [?, ?, ?] -> 3\nskipped {\"entryId\":\"ufrlyss-3\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"ufrlyss-4\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"ufrlyss-5\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\npress 3 redo: undoStack 1 -> 1, redoStack 3 [?, ?, ?] -> 3"
+}

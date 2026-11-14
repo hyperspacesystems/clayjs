@@ -78,7 +78,7 @@ const itemKey = (pd, client, str) => { for (let it = pd.flow._start; it; it = it
 const P = ["p", "paragraph", "ALPHA"];
 
 for (const order of ["after the peer edit", "concurrently with the peer edit"]) {
-  test(`Undo of a moved copy ${order} keeps the peer text recoverable, and Restore, Redo and a second Undo agree everywhere`, () => {
+  test(`Undo of a moved copy ${order} carries the peer text back into the original, and Redo and a second Undo agree everywhere`, () => {
     const update = seed([{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
     const a = open(update, A), b = open(update, B), c = open(update, C);
     const tabs = [a, b, c];
@@ -89,49 +89,79 @@ for (const order of ["after the peer edit", "concurrently with the peer edit"]) 
     agreed(tabs, [P, ["r", "paragraph", "OMEGA"], ["q", "paragraph", "bravo"]], []);
 
     type(b, "q", 2, "Y");
-    const peerY = itemKey(b.pd, B, "Y");
     if (order === "after the peer edit") exchange([b, a]);
     expect(a.bridge.undo()).toBe(true);
     exchange(tabs);
-    const displacedY = [[M, "q", "paragraph", [["Y", peerY, `T${B}`]]]];
-    agreed(tabs, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA"]], displacedY);
+    exchange(tabs);
+    agreed(tabs, [P, ["q", "paragraph", "brYavo"], ["r", "paragraph", "OMEGA"]], []);
     expect(parseGoneIntents(a.pd.gone).copyActive.has(M)).toBe(false);
     expect(walk(a.pd).removals.filter((removal) => removal.sourceKey === M).map((removal) => removal.key)).toEqual([copyActiveKey(M)]);
-    expect(b.bridge.notices.map((notice) => [notice.source, notice.authors])).toEqual([[M, [`T${B}`]]]);
+    expect(b.bridge.notices).toEqual([]);
     expect(a.bridge.notices).toEqual([]);
 
     type(c, "r", 5, "!");
     exchange(tabs);
-    agreed(tabs, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA!"]], displacedY);
-
-    const revision = c.bridge.recoverable[0].revision;
-    expect(c.bridge.restore(M, revision)).toEqual({ status: "restored", id: `recovered:${M}` });
-    exchange(tabs);
-    agreed(tabs, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA!"], [`recovered:${M}`, "paragraph", "Y"]], []);
-    expect(b.bridge.restore(M, revision)).toEqual({ status: "resolved", id: `recovered:${M}` });
+    agreed(tabs, [P, ["q", "paragraph", "brYavo"], ["r", "paragraph", "OMEGA!"]], []);
 
     expect(a.bridge.redo()).toBe(true);
     exchange(tabs);
     agreed(tabs, [P, ["r", "paragraph", "OMEGA!"], ["q", "paragraph", "brYavo"]], []);
-    expect(c.bridge.restore(M, revision)).toEqual({ status: "resolved", id: "q" });
 
     expect(a.bridge.undo()).toBe(true);
     exchange(tabs);
-    agreed(tabs, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA!"], [`recovered:${M}`, "paragraph", "Y"]], []);
+    agreed(tabs, [P, ["q", "paragraph", "brYavo"], ["r", "paragraph", "OMEGA!"]], []);
 
     expect(c.bridge.undo()).toBe(true);
     exchange(tabs);
-    agreed(tabs, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA!"]], displacedY);
-
-    const again = b.bridge.recoverable[0].revision;
-    expect(b.bridge.restore(M, again)).toEqual({ status: "restored", id: `recovered:${M}` });
-    expect(c.bridge.restore(M, again)).toEqual({ status: "restored", id: `recovered:${M}` });
-    exchange(tabs);
-    agreed(tabs, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA!"], [`recovered:${M}`, "paragraph", "Y"]], []);
+    agreed(tabs, [P, ["q", "paragraph", "brYavo"], ["r", "paragraph", "OMEGA"]], []);
   });
 }
 
-test("Undo of a moved recovered block keeps the peer text recoverable under the moved copy and Redo puts it back", () => {
+test("peer text that never reaches the tab that undid the move stays recoverable, and Restore and its Undo agree everywhere", () => {
+  const update = seed([{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
+  const a = open(update, A), b = open(update, B), c = open(update, C);
+  const rest = [b, c];
+
+  expect(a.bridge.moveBlocks({ ids: ["q"], afterId: "r" })).toEqual({ status: "moved", ids: ["q"] });
+  exchange([a, b, c]);
+  const M = copyMarker(a.pd, "q");
+
+  type(b, "q", 2, "Y");
+  const peerY = itemKey(b.pd, B, "Y");
+  expect(a.bridge.undo()).toBe(true);
+  for (const tab of rest) Y.applyUpdateV2(tab.pd.ydoc, Y.encodeStateAsUpdateV2(a.pd.ydoc), NET);
+  exchange(rest);
+  const displacedY = [[M, "q", "paragraph", [["Y", peerY, `T${B}`]]]];
+  agreed(rest, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA"]], displacedY);
+  expect(b.bridge.notices.map((notice) => [notice.source, notice.authors])).toEqual([[M, [`T${B}`]]]);
+
+  type(c, "r", 5, "!");
+  exchange(rest);
+  agreed(rest, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA!"]], displacedY);
+
+  const revision = c.bridge.recoverable[0].revision;
+  expect(c.bridge.restore(M, revision)).toEqual({ status: "restored", id: `recovered:${M}` });
+  exchange(rest);
+  agreed(rest, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA!"], [`recovered:${M}`, "paragraph", "Y"]], []);
+  expect(b.bridge.restore(M, revision)).toEqual({ status: "resolved", id: `recovered:${M}` });
+
+  expect(c.bridge.undo()).toBe(true);
+  exchange(rest);
+  agreed(rest, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA!"]], displacedY);
+
+  const again = b.bridge.recoverable[0].revision;
+  expect(b.bridge.restore(M, again)).toEqual({ status: "restored", id: `recovered:${M}` });
+  expect(c.bridge.restore(M, again)).toEqual({ status: "restored", id: `recovered:${M}` });
+  exchange(rest);
+  agreed(rest, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA!"], [`recovered:${M}`, "paragraph", "Y"]], []);
+
+  const tabs = [a, b, c];
+  exchange(tabs);
+  exchange(tabs);
+  agreed(tabs, [P, ["q", "paragraph", "bravo"], ["r", "paragraph", "OMEGA!"], [`recovered:${M}`, "paragraph", "Y"]], []);
+});
+
+test("Undo of a moved recovered block carries the peer text back into the recovered block and Redo puts it in the moved place", () => {
   const update = seed([{ id: "p", text: "ALPHA" }, { id: "q", t: "heading", attrs: { level: 2 }, text: "bravo" }, { id: "r", text: "OMEGA" }]);
   const a = open(update, A), b = open(update, B), c = open(update, C);
   const tabs = [a, b, c];
@@ -144,26 +174,20 @@ test("Undo of a moved recovered block keeps the peer text recoverable under the 
 
   expect(a.bridge.moveBlocks({ ids: [target], afterId: "r" })).toEqual({ status: "moved", ids: [target] });
   exchange(tabs);
-  const M = copyMarker(a.pd, target);
   agreed(tabs, [P, ["r", "paragraph", "OMEGA"], [target, "heading", "bravo"]], []);
 
   type(b, target, 2, "Z");
-  const peerZ = itemKey(b.pd, B, "Z");
   exchange([b, a]);
   expect(a.bridge.undo()).toBe(true);
   exchange(tabs);
-  agreed(tabs, [P, [target, "heading", "bravo"], ["r", "paragraph", "OMEGA"]], [[M, target, "heading", [["Z", peerZ, `T${B}`]]]]);
-
-  expect(c.bridge.restore(M, c.bridge.recoverable[0].revision)).toEqual({ status: "restored", id: `recovered:${M}` });
-  exchange(tabs);
-  agreed(tabs, [P, [target, "heading", "bravo"], ["r", "paragraph", "OMEGA"], [`recovered:${M}`, "heading", "Z"]], []);
+  agreed(tabs, [P, [target, "heading", "brZavo"], ["r", "paragraph", "OMEGA"]], []);
 
   expect(a.bridge.redo()).toBe(true);
   exchange(tabs);
   agreed(tabs, [P, ["r", "paragraph", "OMEGA"], [target, "heading", "brZavo"]], []);
 });
 
-test("a retired copy ends at a concurrent copy of the same block", () => {
+test("a retired copy ends at a concurrent copy of the same block, which receives the peer text", () => {
   const update = seed([{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
   const a = open(update, A), b = open(update, B), c = open(update, 400);
   const tabs = [a, b, c];
@@ -173,10 +197,9 @@ test("a retired copy ends at a concurrent copy of the same block", () => {
   type(b, "q", 5, "Y");
   exchange(tabs);
   agreed(tabs, [P, ["r", "paragraph", "OMEGA"], ["q", "paragraph", "bravoY"]], []);
-  const M = copyMarker(a.pd, "q");
   expect(a.bridge.undo()).toBe(true);
   exchange(tabs);
-  agreed(tabs, [P, ["r", "paragraph", "OMEGA"], ["q", "paragraph", "bravo"]], [[M, "q", "paragraph", [["Y", itemKey(b.pd, B, "Y"), `T${B}`]]]]);
+  agreed(tabs, [P, ["r", "paragraph", "OMEGA"], ["q", "paragraph", "bravoY"]], []);
 });
 
 test("a peer join of the moved copy keeps its text in the receiving block after Undo", () => {

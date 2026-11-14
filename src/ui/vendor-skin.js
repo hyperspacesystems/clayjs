@@ -26,9 +26,14 @@ const installed = new Map();
 // A vendor that sets no color-scheme of its own inherits the page's, and a page that
 // declares none computes `normal`, which resolves every light-dark() pin to light.
 // ClayJS's own surfaces follow the reader's preference there (pageScheme), so a skin
-// installed with its roots gives them the same scheme.
-function schemeRule(roots) {
-  return `\n@layer clay-skin{:is(${roots.join(', ')}){color-scheme:${pageScheme()} !important}}`;
+// installed with its roots gives them the same scheme. The roots sit in the page's DOM,
+// so the page's ::selection would paint its text colour over a field the skin coloured;
+// the roots get a fixed highlight pair that follows their scheme instead (system
+// Highlight/HighlightText can pair dark text with a dark highlight on a dark Mac).
+function rootRules(roots) {
+  const scope = `:is(${roots.join(', ')})`;
+  return `\n@layer clay-skin{${scope}{color-scheme:${pageScheme()} !important}` +
+    `${scope}::selection,${scope} ::selection{background-color:light-dark(#B4D5FE, #2F5A8C) !important;color:light-dark(#1A1C24, #F2F4F8) !important}}`;
 }
 
 /**
@@ -50,7 +55,7 @@ export function installSkin(name, css, { roots } = {}) {
     el.setAttribute('clay', RUNTIME_ONLY);
     el.setAttribute('data-clay-skin', name);
   }
-  const text = roots ? css + schemeRule(roots) : css;
+  const text = roots ? css + rootRules(roots) : css;
   if (el.textContent !== text) el.textContent = text;
   if (!placed(head, el)) head.insertBefore(el, firstNonSkin(head));
   return el;

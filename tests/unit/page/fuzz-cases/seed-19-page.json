@@ -1,0 +1,27 @@
+{
+  "seed": 19,
+  "mode": "page",
+  "invariant": "replay",
+  "ops": [
+    {
+      "kind": "ownerSentence",
+      "id": "r"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "r"
+    },
+    {
+      "kind": "moveBlock",
+      "id": "q",
+      "afterId": "r"
+    },
+    {
+      "kind": "peerDeletes",
+      "blockId": "r",
+      "from": 10,
+      "to": 23
+    }
+  ],
+  "failure": "seed 19 [page]: replaying the history lost owner text the peer still has: O4\n(invariant 4: replaying the history loses no owner text)\noperations:\n  owner types the sentence \"O1 O2. \" at the end of r\n  owner types the sentence \"O3 O4. \" at the end of r\n  owner moves q after r\n  peer deletes \"threeO1 O2. O\" from r\narticle before: \"p oner 3 O4. q two\"\narticle after: \"p oneq twor \"\nundoStack before: 3 [p5hz4s:1, p5hz4s:2, p5hz4s:3]\nredoStack before: 0 []\nundoStack after: 0 []\nredoStack after: 2 [?, ?]\npage history during the replay:\nundo {\"entryId\":\"uymww6k-3\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 1 undo: undoStack 3 [p5hz4s:1, p5hz4s:2, p5hz4s:3] -> 2, redoStack 0 -> 1\nundo {\"entryId\":\"uymww6k-2\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 2 undo: undoStack 2 [p5hz4s:1, p5hz4s:2] -> 1, redoStack 1 -> 2\nundo {\"entryId\":\"uymww6k-1\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 3 undo: undoStack 1 [p5hz4s:1] -> 0, redoStack 2 -> 2\nredo {\"entryId\":\"uymww6k-1\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 1 redo: undoStack 0 -> 0, redoStack 2 [?, ?] -> 2\nskipped {\"entryId\":\"uymww6k-2\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"uymww6k-3\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\npress 2 redo: undoStack 0 -> 0, redoStack 2 [?, ?] -> 2"
+}

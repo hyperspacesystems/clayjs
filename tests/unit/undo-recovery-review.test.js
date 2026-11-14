@@ -5,7 +5,7 @@
 /**
  * The recovery panel shows the step an undo could not take back.
  *
- * A refused step is kept as plain data on the internal `clay.undo` channel, and this is
+ * A skipped step is kept as plain data on the internal `clay.undo` channel, and this is
  * what a person sees: the same panel the conflicts notice already draws, with the step's
  * name, why it was not applied, what it would have written and what the page says there
  * now. Copy and Download take the copy away, Dismiss removes it at the revision the row
@@ -49,6 +49,7 @@ let ledger;
 let storage;
 let kept = [];
 let refused = [];
+let skipped = [];
 let leases = [];
 // Everything this test started that listens on the document: a notice draws on a
 // frame, and an armed shell outlives the test that made it unless it is taken back.
@@ -56,6 +57,7 @@ let open = [];
 
 const onKept = (event) => kept.push(event.detail);
 const onRefused = (event) => refused.push(event.detail);
+const onSkipped = (event) => skipped.push(event.detail);
 
 // One page load over the given store: new modules, a new page-load writer and the same
 // document scope. The page's own resolver names a refused step's target the way a
@@ -103,14 +105,17 @@ const peerWrite = (write) => {
   }
 };
 
-// One recorded edit, then a peer write over it, then the refusal itself.
-async function refuseStep() {
+// One recorded edit, then a peer write over it, then the press that skips it.
+async function skipStep() {
   await edit("typed");
+  const { id } = undo.history.at(-1);
   peerWrite(() => setText(text(), "peer"));
   await settle();
   undo.flush();
   const receipt = undo.undo();
-  expect(receipt.code).toBe("content-changed");
+  expect(receipt).toMatchObject({ ok: false, code: "empty", direction: "undo" });
+  expect(skipped).toEqual([{ entryId: id, label: "Edit", direction: "undo", code: "content-changed" }]);
+  expect(refused).toEqual([]);
   expect(await until(() => kept.length > 0)).toBe(true);
   return receipt;
 }
@@ -174,6 +179,7 @@ beforeEach(async () => {
   factory = new IDBFactory();
   kept = [];
   refused = [];
+  skipped = [];
   open = [];
   document.body.innerHTML = FIXTURE;
   document.documentElement.removeAttribute("documentid");
@@ -181,6 +187,7 @@ beforeEach(async () => {
   localStorage.clear();
   document.addEventListener("clay:undo-kept", onKept);
   document.addEventListener("clay:undo-refused", onRefused);
+  document.addEventListener("clay:undo-skipped", onSkipped);
   await boot();
   await enter();
 });
@@ -193,12 +200,13 @@ afterEach(() => {
   }
   document.removeEventListener("clay:undo-kept", onKept);
   document.removeEventListener("clay:undo-refused", onRefused);
+  document.removeEventListener("clay:undo-skipped", onSkipped);
   while (leases.length) leases.pop().dispose();
   window.clay = undefined;
 });
 
-test("a refused step is a row naming the spot, why it was refused, and both sides", async () => {
-  await refuseStep();
+test("a skipped step is a row naming the spot, why it was skipped, and both sides", async () => {
+  await skipStep();
   await openNotice();
   await review();
 
@@ -211,7 +219,7 @@ test("a refused step is a row naming the spot, why it was refused, and both side
 });
 
 test("copy takes the person's writing out as plain text", async () => {
-  await refuseStep();
+  await skipStep();
   await openNotice();
   await review();
 
@@ -224,7 +232,7 @@ test("copy takes the person's writing out as plain text", async () => {
 });
 
 test("download my copy carries the kept step as JSON", async () => {
-  await refuseStep();
+  await skipStep();
   await openNotice();
   await review();
 
@@ -251,7 +259,7 @@ test("download my copy carries the kept step as JSON", async () => {
 });
 
 test("dismiss removes the kept step", async () => {
-  await refuseStep();
+  await skipStep();
   await openNotice();
   await review();
 
@@ -381,11 +389,11 @@ test("an action that clears its own copy answers ok without dismiss, and the pan
   expect(panelText()).not.toContain("That action did not run.");
 });
 
-test("a kept refusal offers review the moment it is kept", async () => {
+test("a kept skip offers review the moment it is kept", async () => {
   // The shell, as the loader arms it on an edit boot with nothing stored yet.
   await openShell();
 
-  await refuseStep();
+  await skipStep();
 
   expect(await until(() => buttonSaying(/^Review$/) !== undefined)).toBe(true);
   await review();
@@ -393,7 +401,7 @@ test("a kept refusal offers review the moment it is kept", async () => {
 });
 
 test("a reload lists the kept step on the next edit session, and a view boot opens no database", async () => {
-  await refuseStep();
+  await skipStep();
   expect(storage.local.get("undo")?.count).toBe(1);
   while (leases.length) leases.pop().dispose();
 

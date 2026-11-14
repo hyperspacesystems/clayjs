@@ -1,0 +1,26 @@
+{
+  "seed": 15,
+  "mode": "page",
+  "invariant": "replay",
+  "ops": [
+    {
+      "kind": "ownerSentence",
+      "id": "q"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "p"
+    },
+    {
+      "kind": "ownerWords",
+      "id": "q"
+    },
+    {
+      "kind": "peerDeletes",
+      "blockId": "q",
+      "from": 17,
+      "to": 28
+    }
+  ],
+  "failure": "seed 15 [page]: replaying the history lost owner text the peer still has: O3, O4, O6\n(invariant 4: replaying the history loses no owner text)\noperations:\n  owner types the sentence \"O1 O2. \" at the end of q\n  owner types the sentence \"O3 O4. \" at the end of p\n  owner types the words \"O5 O6\" at the end of q\n  peer deletes \"twoO1 O2. O\" from q\narticle before: \"p oneO3 O4. q 5 O6r three\"\narticle after: \"p oneq r three\"\nundoStack before: 3 [1lhpki:1, 1lhpki:2, 1lhpki:3]\nredoStack before: 0 []\nundoStack after: 0 []\nredoStack after: 2 [?, ?]\npage history during the replay:\nundo {\"entryId\":\"uw36ad4-3\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 1 undo: undoStack 3 [1lhpki:1, 1lhpki:2, 1lhpki:3] -> 2, redoStack 0 -> 1\nundo {\"entryId\":\"uw36ad4-2\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 2 undo: undoStack 2 [1lhpki:1, 1lhpki:2] -> 1, redoStack 1 -> 2\nundo {\"entryId\":\"uw36ad4-1\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 3 undo: undoStack 1 [1lhpki:1] -> 0, redoStack 2 -> 2\nredo {\"entryId\":\"uw36ad4-1\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 1 redo: undoStack 0 -> 0, redoStack 2 [?, ?] -> 2\nskipped {\"entryId\":\"uw36ad4-2\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\nskipped {\"entryId\":\"uw36ad4-3\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\npress 2 redo: undoStack 0 -> 0, redoStack 2 [?, ?] -> 2"
+}

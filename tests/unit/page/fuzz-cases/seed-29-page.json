@@ -1,0 +1,28 @@
+{
+  "seed": 29,
+  "mode": "page",
+  "invariant": "replay",
+  "ops": [
+    {
+      "kind": "ownerSentence",
+      "id": "r"
+    },
+    {
+      "kind": "ownerSentence",
+      "id": "q"
+    },
+    {
+      "kind": "peerDeletes",
+      "blockId": "r",
+      "from": 29,
+      "to": 35
+    },
+    {
+      "kind": "peerDeletes",
+      "blockId": "r",
+      "from": 25,
+      "to": 30
+    }
+  ],
+  "failure": "seed 29 [page]: replaying the history lost owner text the peer still has: O3, O4\n(invariant 4: replaying the history loses no owner text)\noperations:\n  owner types the sentence \"O1 O2. \" at the end of r\n  owner types the sentence \"O3 O4. \" at the end of q\n  peer deletes \"O1 O2.\" from r\n  peer deletes \"hree \" from r\narticle before: \"p oneq twoO3 O4. r t\"\narticle after: \"p oneq twor t\"\nundoStack before: 2 [zwtgfo:1, zwtgfo:2]\nredoStack before: 0 []\nundoStack after: 0 []\nredoStack after: 1 [?]\npage history during the replay:\nundo {\"entryId\":\"u5vdx7x-2\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 1 undo: undoStack 2 [zwtgfo:1, zwtgfo:2] -> 1, redoStack 0 -> 1\nundo {\"entryId\":\"u5vdx7x-1\",\"label\":\"Edit\",\"direction\":\"undo\",\"code\":null}\npress 2 undo: undoStack 1 [zwtgfo:1] -> 0, redoStack 1 -> 1\nredo {\"entryId\":\"u5vdx7x-1\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":null}\npress 1 redo: undoStack 0 -> 0, redoStack 1 [?] -> 1\nskipped {\"entryId\":\"u5vdx7x-2\",\"label\":\"Edit\",\"direction\":\"redo\",\"code\":\"content-changed\"}\npress 2 redo: undoStack 0 -> 0, redoStack 1 [?] -> 1"
+}

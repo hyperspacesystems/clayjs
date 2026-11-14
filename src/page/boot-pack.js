@@ -20,6 +20,7 @@ export { createYPageBinding } from "./ybind/binding.js";
 export { yValueOf } from "./ybind/provider.js";
 export { seedPageFromArticle } from "./ybind/migrate.js";
 export { holdSlashRange, heldSlashRange } from "./chrome.js";
+export { createHistoryBridge } from "./history-intent.js";
 export { createRecoverList, focusBlock } from "./recover.js";
 export { observeDocumentTitle } from "./document-title-runtime.js";
 export { createFeatureLoader } from "./feature-loader.js";

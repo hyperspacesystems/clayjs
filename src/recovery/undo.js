@@ -148,7 +148,9 @@ let keeping = Promise.resolve();
  * keeps it — and answers with the failure.
  *
  * @param {Object} engine - the started undo scope (`clay.undo`)
- * @param {{entryId: string, direction: string, code?: string}} receipt
+ * @param {{entryId: string, direction: string, code?: string, description?: ?Object}} receipt
+ *   `description` is the engine's own `describe(entryId)` answer where the caller already has
+ *   it, as a skipped step does: that entry is out of the history by the time it is kept.
  * @returns {Promise<{ok: boolean, code?: string}>}
  */
 export function keepRefusal(engine, receipt) {
@@ -160,11 +162,13 @@ export function keepRefusal(engine, receipt) {
 async function keepRefusalNow(engine, receipt) {
   const ch = channel();
   if (!ch) return { ok: false, code: 'unavailable' };
-  let described = null;
-  try {
-    described = engine?.describe?.(receipt?.entryId) ?? null;
-  } catch (_) {
-    described = null;
+  let described = receipt?.description ?? null;
+  if (!described) {
+    try {
+      described = engine?.describe?.(receipt?.entryId) ?? null;
+    } catch (_) {
+      described = null;
+    }
   }
   if (!described) return { ok: false, code: 'unknown-entry' };
   const refused = described.refused && typeof described.refused === 'object' ? described.refused : {};
@@ -186,7 +190,10 @@ async function keepRefusalNow(engine, receipt) {
   try {
     staged = ch.stage({ key, kind: UNDO_KIND, baseEtag: representedEtag() ?? null, base: null, payload });
   } catch (err) {
-    console.error('clayjs: the refused step could not be kept for a later reload; it is still in this tab\'s history', err);
+    const message = receipt?.description
+      ? 'clayjs: the skipped step could not be kept for a later reload; its text is lost when this tab does'
+      : 'clayjs: the refused step could not be kept for a later reload; it is still in this tab\'s history'
+    console.error(message, err)
     return { ok: false, code: 'error' };
   }
   const written = await ch.flush();

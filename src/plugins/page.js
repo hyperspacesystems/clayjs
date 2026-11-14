@@ -296,10 +296,23 @@ function listen(inst, type, handler) {
   inst.listeners.push([type, handler]);
 }
 
+// On a page that loads `undo` there is one history and it is the page's: every route the
+// editor offers walks it, and the editor's own stack only says where its steps sit on it.
+const paged = () => window.clay?.undo?.pageHistory === true;
+
 // The page's own history, the one the editor's Cmd+Z already uses: nothing is undoable
 // while a proposal is only a preview, because Discard is the whole of that change and
 // Keep is the one step worth undoing.
 function pageHistory(inst) {
+  if (paged()) {
+    const history = window.clay.undo;
+    return {
+      undo: () => history.undo(),
+      redo: () => history.redo(),
+      get canUndo() { return !!history.canUndo; },
+      get canRedo() { return !!history.canRedo; },
+    };
+  }
   const binding = inst?.binding;
   const um = binding?.bridge?.um;
   if (!binding || !um) return null;
@@ -327,6 +340,9 @@ function pageHistory(inst) {
 // One event for whatever presents the history, the same one plugins/undo.js emits: after
 // every entry the page's stack takes or replays, and whenever a preview comes up or goes.
 function notifyHistory(inst) {
+  // The undo plugin announces the one page history itself; a second event from here would
+  // say the editor's own stack decides what is undoable.
+  if (paged()) return;
   const history = pageHistory(inst);
   document.dispatchEvent(new CustomEvent("clay:undo-change", {
     detail: { canUndo: !!history?.canUndo, canRedo: !!history?.canRedo },
@@ -985,7 +1001,9 @@ export function createSteps(inst, options) {
       install: async (id, mod) => {
         if (!editorView) await editorReady;
         if (!isCurrent(inst) || !editorView) return null;
-        const context = { view: editorView, upload: isDraftMode ? draftUpload : options.upload, board: binding.board, undo: binding.undo, redo: binding.redo, revise: aiRequested() ? (toolId) => { openAi({ target: { toolId } }); } : null };
+        const undo = () => (paged() ? window.clay.undo.undo() : binding.undo());
+        const redo = () => (paged() ? window.clay.undo.redo() : binding.redo());
+        const context = { view: editorView, upload: isDraftMode ? draftUpload : options.upload, board: binding.board, undo, redo, revise: aiRequested() ? (toolId) => { openAi({ target: { toolId } }); } : null };
         if (id === "tool") {
           context.toolHost = await openTools();
           if (!isCurrent(inst)) return null;
@@ -1200,8 +1218,8 @@ function mountAndAttach(inst, source, loaded) {
         doc: binding.doc(),
         dispatch: binding.dispatch,
         history: false,
-        undo: binding.undo,
-        redo: binding.redo,
+        undo: () => (paged() ? window.clay.undo.undo() : binding.undo()),
+        redo: () => (paged() ? window.clay.undo.redo() : binding.redo()),
         board: binding.board,
         editable: false,
         features,
@@ -1263,10 +1281,23 @@ function mountAndAttach(inst, source, loaded) {
     }
     loaded.refreshView?.(view);
     binding.attach(view);
+    // Every mounted editor hands its own steps to the page's history through this adapter,
+    // made here whether or not a session is live yet: the adapter reads the history per
+    // step and follows the session as it starts, stops and starts again.
+    const um = binding.bridge?.um;
+    if (um) {
+      const bridge = pageCode.createHistoryBridge({
+        um,
+        undo: () => binding.undo(),
+        redo: () => binding.redo(),
+        article,
+        focus: () => inst.view?.focus?.(),
+      });
+      addDisposer(inst, bridge.dispose);
+    }
     // The page's history tells whoever presents it once it exists (a menu opened before the
     // editor came up gets its Undo row then), and once per entry it takes or replays. A
     // peer's typing takes none of them: their work is not this tab's to undo.
-    const um = binding.bridge?.um;
     if (um) {
       const notify = () => notifyHistory(inst);
       um.on("stack-item-added", notify);
@@ -1287,9 +1318,22 @@ function mountAndAttach(inst, source, loaded) {
         const previewIs = previewShown(next.state);
         if (previewIs === previewWas) return;
         previewWas = previewIs;
+        // A proposal on screen owns the moment: the page's history is held, so Cmd+Z can
+        // undo nothing behind it, and released when the proposal goes.
+        if (paged()) {
+          if (previewIs) inst.releaseHold = window.clay.undo.hold();
+          else {
+            inst.releaseHold?.();
+            inst.releaseHold = null;
+          }
+        }
         notifyHistory(inst);
       },
     }));
+    addDisposer(inst, () => {
+      inst.releaseHold?.();
+      inst.releaseHold = null;
+    });
     installAwareness(inst, view);
     editorReadyResolve();
     // The parts the saved article demands install onto the mounted view now, whether
