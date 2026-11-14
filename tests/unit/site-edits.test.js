@@ -95,7 +95,7 @@ test("a key the host refused stays declared on the next save", async () => {
 test("values the host reports as current replace untouched ones and are not declared back", async () => {
   document.querySelector(".own").textContent = "another page edit";
   const brandField = document.querySelector(".brand-name");
-  brandField.setAttribute("editable", "single-line");
+  brandField.setAttribute("clay-editable", "");
   const rewritten = [];
   brandField.addEventListener("clay:external-write", () => rewritten.push(brandField.textContent));
   const sent = answerSavesWith({ written: [], refused: [], current: { name: "Store name", nav: [{ label: "Start", href: "index.html" }, { label: "CV", href: "cv.html" }] } });

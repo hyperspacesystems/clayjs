@@ -142,3 +142,134 @@ test("after a peer frame every RichClay editor can still be typed into (with a p
 test("after a peer frame every RichClay editor can still be typed into (with no peer base, when every editor is merged)", async () => {
   await applyPeerEdit(true);
 });
+
+// A field's editor keeps its own undo history as copies of the field's markup. A frame
+// that rewrites the field has to restart that history, in the same tick as the write,
+// or the person's next undo puts the older copy back over the collaborator's text.
+
+const attached = () => document.querySelector('[data-richclay][aria-label="Attached editor"]');
+const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+
+/** The person's own typing, as one undo step of the field's editor. */
+async function typeInto(el, text) {
+  const editor = RichClay.init([el])[0];
+  editor.squire.saveUndoState();
+  el.querySelector("p").textContent += text;
+  await settle();
+  return editor;
+}
+
+const priceRaised = (html) => {
+  expect(html).toContain("Business: $24");
+  return html.replace("Business: $24", "Business: $99");
+};
+
+test("undo after a peer frame rewrote the field keeps the collaborator's text", async () => {
+  const el = attached();
+  const editor = await typeInto(el, " local");
+  const sync = await cleanTab();
+  const [frame, map] = peerFrame(sync, priceRaised);
+
+  await sync._doApplyUpdate(frame, 1, map, null);
+  await settle();
+  expect(el.textContent).toContain("Business: $99");
+
+  editor.squire.undo();
+  await settle();
+  sync.stop();
+  expect(el.textContent).toContain("Business: $99");
+});
+
+test("undo pressed before the frame is announced keeps the collaborator's text", async () => {
+  const el = attached();
+  const editor = await typeInto(el, " local");
+  const sync = await cleanTab();
+  const [frame, map] = peerFrame(sync, priceRaised);
+  let announced = false;
+  document.addEventListener("clay:sync-applied", () => { announced = true; }, { once: true });
+  // The first moment anything can run after the merge: an observer callback, in the
+  // same checkpoint as the editor's own observer and before the resource wait ends.
+  let pressed = null;
+  const observer = new MutationObserver(() => {
+    if (pressed || !el.textContent.includes("$99")) return;
+    pressed = { announced };
+    editor.squire.undo();
+  });
+  observer.observe(el, { childList: true, characterData: true, subtree: true });
+
+  await sync._doApplyUpdate(frame, 1, map, null);
+  await settle();
+  observer.disconnect();
+  sync.stop();
+
+  expect(pressed).toEqual({ announced: false });
+  expect(announced).toBe(true);
+  expect(el.textContent).toContain("Business: $99");
+});
+
+test("undo after a disk frame rewrote the field keeps the other writer's text", async () => {
+  const el = attached();
+  const editor = await typeInto(el, " local");
+  const sync = await cleanTab();
+  const disk = snapshot.captureForSaveAndComparison({ emitForSync: false }).forSave;
+  sync._diskBase = disk;
+
+  await sync._doApplyExternal(priceRaised(disk), 40);
+  await settle();
+  expect(el.textContent).toContain("Business: $99");
+
+  editor.squire.undo();
+  await settle();
+  sync.stop();
+  expect(el.textContent).toContain("Business: $99");
+});
+
+test.each([
+  ["with a peer base", false],
+  ["with no peer base", true],
+])("a frame that leaves a field alone keeps the person's own undo there (%s)", async (_name, noBase) => {
+  const el = attached();
+  const editor = await typeInto(el, " local");
+  const told = [];
+  for (const field of editors()) field.addEventListener("clay:external-write", () => told.push(field));
+  const sync = await cleanTab();
+  const [frame, map] = peerFrame(sync, (h) => h.replace("Starter: free", "Starter: FREE"));
+  if (noBase) {
+    sync.lastHtml = null;
+    sync._lastIdentityMap = null;
+  }
+
+  await sync._doApplyUpdate(frame, 1, map, null);
+  await settle();
+  expect(document.body.textContent).toContain("Starter: FREE");
+  expect(told).toEqual([document.querySelector('[editable="toolbar-on-select"]')]);
+  expect(el.textContent).toContain("per month. local");
+
+  editor.squire.undo();
+  await settle();
+  sync.stop();
+  expect(el.textContent).not.toContain("local");
+  expect(el.textContent).toContain("Business: $24");
+  expect(document.body.textContent).toContain("Starter: FREE");
+});
+
+test("a frame tells a field under every attribute RichClay mounts on", async () => {
+  const names = RichClay.selector.split(",").map((part) => part.trim().replace(/^\[|\]$/g, ""));
+  expect(names.length).toBeGreaterThan(1);
+  document.body.innerHTML = `<main>${names.map((name) => `<div id="by-${name}" ${name}><p>${name}: old</p></div>`).join("")}</main>`;
+  RichClay.init();
+  await settle();
+  const told = [];
+  for (const name of names) {
+    document.getElementById(`by-${name}`).addEventListener("clay:external-write", () => told.push(name));
+  }
+  const sync = await cleanTab();
+  const [frame, map] = peerFrame(sync, (h) => h.replaceAll(": old", ": new"));
+
+  await sync._doApplyUpdate(frame, 1, map, null);
+  await settle();
+  sync.stop();
+
+  expect(document.body.textContent).not.toContain(": old");
+  expect(told).toEqual(names);
+});

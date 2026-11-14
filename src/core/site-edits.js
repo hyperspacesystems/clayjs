@@ -104,7 +104,7 @@ function takeCurrent(current, sent, refused) {
     if (refused.has(key) || !rule || !Object.hasOwn(rule, key) || live[key] !== sent[key]) continue;
     // Outside undo history and the edit observers, the way a sync frame lands: an undo
     // must not bring back the value this tab was behind on, and then declare it.
-    const fields = new Map([...root.querySelectorAll("[editable]")].map((field) => [field, field.innerHTML]));
+    const fields = new Map([...root.querySelectorAll("[data-richclay], [richclay], [editable], [clay-editable]")].map((field) => [field, field.innerHTML]));
     Mutation.pause();
     try {
       engine.applyData(root, { site: { [key]: value } }, { site: { [key]: rule[key] } });

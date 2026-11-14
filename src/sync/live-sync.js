@@ -199,6 +199,27 @@ const REMOTE_WINS_SELECTOR = [
   '[clay~="no-watch"]', '[no-watch]', '[mutations-ignore]',
 ].join(',');
 
+// Fields whose editor keeps its own undo history: every attribute RichClay mounts
+// on (the vendor's RichClay.selector). That history is copies of the field's markup,
+// and the editor's observer takes any change to the field for the person's typing,
+// so a frame that rewrites a field has to say so before that observer runs, or the
+// next undo there puts the older copy back over the collaborator's text.
+const EDITOR_FIELD_SELECTOR = '[data-richclay], [richclay], [editable], [clay-editable]';
+
+// Called right before a frame applies; what it returns is called right after, in
+// the same tick, so no observer callback and no keystroke lands in between. Each
+// field the frame changed is told with `clay:external-write`, the event a refreshed
+// shared value sends (core/site-edits.js), and starts its history from the merged
+// content. A field the frame left alone keeps its history.
+function editorFieldsBeforeApply() {
+  const fields = Array.from(document.querySelectorAll(EDITOR_FIELD_SELECTOR), (field) => [field, field.innerHTML]);
+  return () => {
+    for (const [field, before] of fields) {
+      if (field.isConnected && field.innerHTML !== before) field.dispatchEvent(new CustomEvent('clay:external-write'));
+    }
+  };
+}
+
 // Host tokens, library state, router state and ephemeral state, on every side
 // of a merge: the live root, a snapshot clone's root, a parsed frame's root.
 // Extension marker attributes too: snapshots and frames never carry them, so a
@@ -2011,6 +2032,7 @@ class LiveSync {
     let lineageCapture;
     const mergeDocument = (options) => {
       lineageCapture = beginLineageCapture(conflicts.list());
+      const tellRewrittenFields = editorFieldsBeforeApply();
       try {
         const pending = loadedEngine().HyperMorph.mergeDocument({ ...options, lineage: lineageCapture.lineage });
         lineageCapture.returned();
@@ -2019,6 +2041,8 @@ class LiveSync {
         lineageCapture.invalidate(conflicts.list());
         lineageCapture.finish(conflicts.list());
         throw error;
+      } finally {
+        tellRewrittenFields();
       }
     };
     const store = this.identity;
