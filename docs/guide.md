@@ -781,7 +781,7 @@ Four attributes make an element behave differently by mode. A **save transform**
 |---|---|---|
 | `editmode:contenteditable` | `contenteditable` renamed to `inert-contenteditable` (value kept) | `contenteditable` restored |
 | `editmode:onclick` | `onclick` renamed to `inert-onclick` | `onclick` restored |
-| `editmode:resource` on `<script>`, `<style>`, `<link>` | `type` prefixed `inert/` | `inert/` prefix stripped and element re-inserted so it runs |
+| `editmode:resource` on `<script>`, `<style>`, `<link>` | `type` prefixed `inert/` | `inert/` prefix stripped (`inert/javascript` becomes `text/javascript`) and element re-inserted so it runs |
 | `viewmode:disabled`, `viewmode:readonly` on controls | `disabled` / `readonly` added | removed |
 
 There is no general `editmode:<anything>`. Only these four attributes exist.
@@ -1148,7 +1148,7 @@ To batch saves in part of an autosaving page, wrap that region in `clay="no-trig
 
 ### 5.7 The save API
 
-`clay.save()` returns `Promise<{ ok, msg, msgType, code, etag }>` and never rejects. One exception in 1.8.2: when capturing the page fails because a registered hook threw ([Hooks](https://clayjs.com/docs/guide/saving/#hooks)), the result has `msgType: "error"` and no `ok` field.
+`clay.save()` returns `Promise<{ ok, msg, msgType, code, etag }>` and never rejects.
 
 | Result | Meaning |
 |---|---|
@@ -1223,8 +1223,8 @@ Hooks shape the saved bytes without touching the live page. Except for `onafters
 |---|---|---|
 | `onbeforesnapshot="code"` attribute | The clone, for every snapshot: save, change check, sync broadcast | Normalizing tab-local state out of anything that leaves the tab |
 | `onbeforesave="code"` attribute | The save clone and change-check clones (not sync broadcasts) | Cleaning a subtree before it is written |
-| `clay.onSnapshot(fn)` | Every snapshot; `fn(clone, { original })` | Stripping library residue everywhere |
-| `clay.addDocumentTransform(fn)` | The save clone and every change check | Writing derived values into the saved copy only |
+| `clay.onSnapshot(fn, { required })` | Every snapshot; `fn(clone, { original })` | Stripping library residue everywhere |
+| `clay.addDocumentTransform(fn, { required })` | The save clone and every change check | Writing derived values into the saved copy only |
 | `onaftersave="code"` attribute | The **live** element after each accepted save | Post-save live DOM updates (rarely) |
 
 In attribute hooks, `this` is the cloned element (or the live element in `onaftersave`). Here, the finance tracker keeps sap's search filter (rows hidden with `hidden`) out of the file and out of peers' copies:
@@ -1236,7 +1236,7 @@ In attribute hooks, `this` is the cloned element (or the live element in `onafte
 Rules:
 
 - **Hooks must be pure and repeatable.** They run on every autosave check, every `hasUnsavedChanges()`, and every `getHTML()`. A hook that writes a timestamp or counter makes the page permanently dirty and autosaves forever.
-- A throwing **attribute** hook aborts only that hook. A throwing `clay.onSnapshot` or `clay.addDocumentTransform` callback aborts the capture: `getHTML()` throws and every `save()` fails with `msgType: "error"` until it stops throwing. Registered callbacks must handle missing elements themselves, because change-check captures have already removed `editor-ui`, `no-save`, and `no-snapshot` regions.
+- A throwing **attribute** hook aborts only that hook. A `clay.onSnapshot` or `clay.addDocumentTransform` callback that throws before it changes the clone is skipped and logged once so saves continue; one that changed the clone and then threw stops the capture, so its half-done changes are never saved. Pass `{ required: true }`, or throw an error with a string `code`, when a failure must abort the capture and fail the save with `msgType: "error"`. Registered callbacks must still handle missing elements themselves, because change-check captures have already removed `editor-ui`, `no-save`, and `no-snapshot` regions.
 - `onaftersave` writes to the live DOM, so any record change it makes counts as a new edit and causes a save loop with autosave. Mark what it writes `editor-ui`, or write inside a `freeze` scratchpad.
 - `clay:snapshot-ready` listeners receive the shared clone and must not change it.
 
@@ -1286,8 +1286,8 @@ Events, all on `document`:
 | `clay:baseline-settled` | the load-settle baseline was taken | none |
 | `clay:save-saving` | a save has been in flight 500 ms | `{ msg, msgType, timestamp }` (`msgType` is `""`) |
 | `clay:save-saved` | the host accepted | `{ msg, msgType, timestamp, etag, captureId }` |
-| `clay:save-error` | refused, or a network failure while online | `{ msg, msgType, timestamp, captureId }` (`msgType` is `""` in 1.8.2; the event name is the type) |
-| `clay:save-offline` | failed while the browser is offline | `{ msg, msgType, timestamp, captureId }` (`msgType` is `""`) |
+| `clay:save-error` | refused, or a network failure while online | `{ msg, msgType, timestamp, captureId }` (`msgType` is `"error"` or the host's `msgType`, or `""` on a local writable refusal) |
+| `clay:save-offline` | failed while the browser is offline | `{ msg, msgType, timestamp, captureId }` (`msgType` is `"error"` or the host's `msgType`) |
 | `clay:save-conflict` | 412 | adds `changedBy`, `afterTimeout`, `etag`, `captureId` |
 | `clay:save-conflict-resolved` | sync merged the version that caused the 412 | `{ timestamp }` |
 | `clay:dirty`, `clay:clean` | unsaved-work state changed | none |
@@ -1403,20 +1403,10 @@ Separate multiple attribute names with spaces. `data-id` is never merged this wa
 
 - `editor-ui`, `no-save`, `no-snapshot`: **ignored on every side.** Your copy is never touched, and the incoming copy is never read.
 - `freeze`: **the element merges, its contents never do.** A frozen element pairs, moves, is inserted and removed with its record, and merges its attributes. Your copy's contents are never touched, the incoming contents are never read, and a frozen element new to this tab arrives empty.
-- `no-dirty`, `no-watch`: **remote wins.** The incoming copy replaces yours with no merge. Use this for derived values that every tab recomputes.
+- `no-dirty`, `no-watch`: **remote wins.** The incoming copy replaces yours with no merge and records no conflict. Use this for derived values that every tab recomputes.
 - `no-trigger-autosave`: merged like ordinary content.
 - `live`: **ignored by the merge on every side.** The `live` plugin takes the value itself ([Live data: `clay="live"`](https://clayjs.com/docs/guide/live-sync/#live-data-clay-live)).
 - Root attributes the library owns (`editmode`, `savestatus`, tokens) are never written by a frame.
-
-**Known issue (ClayJS 1.8.2):** If a tab holds an unsaved edit outside `no-dirty` and also changed a `no-dirty` region, a frame that replaces that `no-dirty` region logs a loss in `clay.conflicts` and raises the conflict notice, even though `no-dirty` replacements should happen without warning. Because two tabs editing data will each recompute totals differently, this fires on concurrent edits whenever computed totals live in `no-dirty`. Until it is fixed, acknowledge those records yourself, as the finance tracker does:
-
-```js
-document.addEventListener("clay:sync-applied", () => {
-  const derived = clay.conflicts.list().filter((c) =>
-    c.detail === "remote-wins" && [c.el, c.local].some((n) => n?.closest?.('[clay~="no-dirty"]')));
-  if (derived.length) clay.conflicts.acknowledge(derived.map((c) => c.id), { reason: "reconciled" });
-});
-```
 
 **JSON.** Without `merge`, a JSON script is one value: if two writers change it, one whole blob goes to the ledger. With `merge="name"`, it merges by key: objects per key, arrays of objects by an `id` field, arrays of primitives by value, and lists without an id (grids, boards, repeated values) position by position when both sides kept the same length. `merge-key="taskId"` names another id field for every list, and `merge-key="players:uid, items:sku"` names one per list path (no spaces inside an entry).
 
@@ -1716,7 +1706,7 @@ editor.options.toolbar = [...clay.RichClay.presets.standard, "stamp"];
 
 Traps:
 
-- **Mode by attribute.** `editable` is inline mode and never sanitizes your authored markup on load. `data-richclay` without `editable` is card mode: it sanitizes in place on load with an allowlist that excludes `img`, so **it deletes images on every edit-mode open**. Use `editable`.
+- **Mode by attribute.** `editable` is inline mode and never sanitizes your authored markup on load. `data-richclay` without `editable` is card mode: on load it keeps authored `img`, `class`, `id`, and `data-*` attributes and strips scripts and event handlers. Paste and `setHTML` in card mode still use a narrower allowlist without `img`.
 - **Nested `editable` regions are refused.** Only the outer region mounts. Siblings are fine.
 - **Custom elements** (tags with a hyphen) are skipped for bare `editable`. Use `clay-editable`.
 - **The floating toolbar mounts on `document.body`, not in the top layer.** Inside `dialog.showModal()` or a `popover`, it is unusable, though shortcuts still work. Do not put `editable` inside a modal dialog. The kanban shows the card itself as a fixed overlay instead ([Detail views: the record is the modal](https://clayjs.com/docs/guide/architecture/#detail-views-the-record-is-the-modal)).
@@ -1776,6 +1766,7 @@ None of this loads for a reader. The input rules, menus, and title adapter are e
 - A `[sortable-handle]` inside the container (outside nested sortables) switches it to handle-only dragging. Nested sortables are separate.
 - Order saves as child order. There is no order attribute.
 - Every drop fires `clay:sorted` (bubbling) with `{ item, from, to, oldIndex, newIndex }`. In a cross-container move, it fires on the source container. Read `item.dataset.id` and `to.closest(...)`, not indexes.
+- `onsorting="code"` runs synchronously as an item moves with `this` and `evt`. Return `false` to cancel the move, or `1` or `-1` to pick a side. Code that uses `await` runs asynchronously and cannot cancel a move.
 - `onsorted="code"` runs on drop with `this` and `evt`.
 - Containers added later bind after about 200 ms.
 - `window.Sortable` is SortableJS 1.15.6. `Sortable.get(el).option(name, value)` changes an instance.
@@ -1785,7 +1776,6 @@ Traps:
 
 - **Handle-only mode is decided when the container binds.** If handles are injected later (like the writer's gutters), set it yourself: `Sortable.get(blocks).option("handle", "[sortable-handle]")`.
 - **One stray `[sortable-handle]` makes every other item undraggable** except by its handle.
-- **`onsorting` cannot veto a move** because its return value is lost. Use `Sortable.get(el).option("onMove", (evt) => …)`.
 - **Hidden template children count as items.** Keep blueprints in `<template>` outside the list.
 - **Sortable leaves residue** (`draggable="false"`, `style=""`, drag classes) that saves. The `sortable` plugin strips it inside `[sortable]` lists, including from a mid-drag save. A Sortable you load and wire up yourself needs a snapshot hook to strip it.
 - A peer frame arriving mid-drag merges under the drag. Rare at autosave cadence, but possible.
@@ -1856,8 +1846,8 @@ Put the file picker for an image block in chrome: `<input type="file" accept="im
 - `clay.toastPersistent(message, type)` stays until closed.
 - `clay.confirm(prompt)` resolves on confirm and **rejects with `undefined` on cancel**. Always pass a rejection handler: `clay.confirm("Delete this card?").then(del, () => {})`. `try { await clay.confirm(...) } catch (e) { e.message }` throws inside the `catch`.
 - `clay.ask(prompt, onYes, defaultValue)` resolves with the typed text.
-- **Every dialog prompt and title is HTML.** `clay.confirm(prompt, extraContent)`, `clay.ask(prompt)`, `clay.tell(title, ...paragraphs)`, and `clay.snippet(title, code)` insert their strings as markup. ``clay.confirm(`Delete "${card.title}"?`)`` runs whatever markup a collaborator typed into the title. Keep prompts constant, or escape record text first.
-- `clay.modal` is a single modal with `title`, `html`, `yes`, `no`, `onYes`, `open()`, and `close()`. Every setting resets on close, and opening any dialog rejects the one already open.
+- **Dialog prompts and titles are plain text.** `clay.confirm`, `clay.ask`, `clay.tell`, and `clay.snippet` render strings for prompts, titles, paragraphs, button labels, and snippet code as text, never parsed. Pass a DOM `Node` to show markup. `extraContent` on `ask`, `confirm`, and `snippet` takes an HTML string or a `Node`.
+- `clay.modal` is a single modal with `title`, `html`, `yes`, `no`, `onYes`, `open()`, and `close()`. `clay.modal.html` takes an HTML string or a `Node`, while `title`, `yes`, and `no` take text or a `Node`. Every setting resets on close, and opening any dialog rejects the one already open.
 
 **Never pass a live record element as `clay.modal.html`.** The modal moves the node into its runtime-only root and removes that root on close. The element is gone from the page, and a save during the dialog drops it from the file. Pass a form built from a template, and write values back to the record on confirm. For card detail, prefer the record-as-modal pattern ([Detail views: the record is the modal](https://clayjs.com/docs/guide/architecture/#detail-views-the-record-is-the-modal)).
 
@@ -1995,7 +1985,7 @@ Rules for sapjs in a malleable file:
 </script>
 ```
 
-It fits fixed-layout content sites such as landing pages, menus, pricing, FAQs, and team pages, where a non-developer changes copy and images. It does not fit apps where editing is the product: its form is a separate surface from the content, new list items clone the first item's attributes (including its state), and rich text inside lists is flattened in the sidebar. A file can use both if the CMS owns the header copy, the app owns `<main>`, and the rules never reach into the app's region. Give every list that can become empty a `cms-template` seed hidden by CSS, not by the `hidden` attribute (which is copied into every new item). Add `sortable` to the plugin list for drag in the sidebar.
+It fits fixed-layout content sites such as landing pages, menus, pricing, FAQs, and team pages, where a non-developer changes copy and images. It does not fit apps where editing is the product: its form is a separate surface from the content, new list items clone the first item's attributes (including its state), and rich text inside lists is flattened in the sidebar. A file can use both if the CMS owns the header copy, the app owns `<main>`, and the rules never reach into the app's region. Give every list that can become empty a `cms-template` seed hidden with `hidden` or `[cms-template]` CSS, not inline `display: none`. Cloning removes `cms-template` and `hidden` from new items. Add `sortable` to the plugin list for drag in the sidebar.
 
 The rules tag can declare which editor opens. `data-cms-view="inline"` edits text in place and opens small popovers for everything else, while no attribute (or `"sidebar"`) opens the form in a side panel. **Open the CMS (Edit content)** in the menu opens whichever the page declares. The CMS edits only in edit mode: while the page is in view, `clay.cms.open()` answers `{ ok: false, code: "not-allowed" }`, so a button of your own calls `clay.setMode("edit")` first.
 
@@ -2099,7 +2089,7 @@ Pick by whether the saved file must show the value:
 - **Computed only from the records** (counts, progress badges, totals, a card's face): ordinary saved content. Write it into the record markup, ship the file pre-painted, and recompute on every change. With sap, this is a paint ([sap.js: records, views and totals in markup](https://clayjs.com/docs/guide/components/#sap-js-records-views-and-totals-in-markup)) that ClayJS treats as derived. Merges leave it out and the engine repaints it from the merged records, so two tabs that changed different records end with the right value and no conflict. Hand-written derived text in saved content does not get this, so give it `no-dirty`. The starter Kanban paints its list counts and card faces this way.
 - **Different per tab** (search results, which entry is open, "overdue" against today's date, OS shortcut labels, names loaded from the people plugin): write it inside a `clay="freeze"` scratchpad ([Regions: the `clay` attribute](https://clayjs.com/docs/guide/record/#regions-the-clay-attribute)). The element saves and syncs, while its contents never do.
 - **Pure UI** (buttons, menus, handles): `editor-ui`, created from a `<template>` ([Chrome](https://clayjs.com/docs/guide/architecture/#chrome)).
-- **Optionally, `no-dirty`** for a computed value the saved file shows: it saves with the next real edit, never counts as an edit itself, and remote wins under sync. Apply the [Regions and JSON under sync](https://clayjs.com/docs/guide/live-sync/#regions-and-json-under-sync) workaround. The finance tracker does this.
+- **Optionally, `no-dirty`** for a computed value the saved file shows: it saves with the next real edit, never counts as an edit itself, and remote wins under sync. The finance tracker does this.
 - **Only in the saved file**: compute it into the save clone with `clay.addDocumentTransform`, never the live page.
 
 Always write derived text through a guard, because writing the same text is still a mutation:
@@ -2382,13 +2372,16 @@ The saved file is the data. Everyone who can download it can read everything in 
 
 ### 9.4 Data-loss recovery
 
-When a browser save or an outside edit overwrites saved data, ClayJS shows a persistent `Saved data was overwritten` warning. It reports the write source, the removed items or erased values, and a preview of the first changed field. Only editors in edit mode see it. Readers and draft visitors never see it. An owner in view mode sees it on entering edit mode. HTML Clay also shows its own bar in view mode, in edit mode until ClayJS's notice takes over, and always on documents pinned to an older ClayJS that has no notice.
+When an outside edit or a browser save removes saved data, ClayJS shows a persistent notice in edit mode. An outside change with a `reason` shows `A change from outside this page removed something you typed` (`recent`), `A change from outside this page removed everything you typed` (`all-typed`), `A change from outside this page emptied this page's data` (`emptied`), or `A change from outside this page left its data unreadable` (`unreadable`). An event without `reason` shows `Some saved data was removed`. When a save is in progress or a disk sync frame just landed, ClayJS waits for the merge to settle before showing the notice. Only editors in edit mode see it. Readers and draft visitors never see it. An owner in view mode sees it on entering edit mode. HTML Clay also shows its own bar in view mode, in edit mode until ClayJS's notice takes over, and always on documents pinned to an older ClayJS that has no notice.
 
-The notice has three buttons:
+The notice shows up to three buttons:
 
-- `Restore`, when `restorable` is `true`, puts the lost data back into the current page and reloads. When `droppedAdditions` is above `0`, the notice says `Restoring removes N items added or changed since.` The field counts the current list items that have no identical item in the saved data, so a `Restore` removes or overwrites each of them: items added since the loss and items changed since the loss.
-- `Undo the change`, when `canRevert` is `true`, restores the whole earlier file and reloads.
-- `Keep as is` posts `"dismiss"` to adopt the current page as the baseline and closes the notice without reloading. The toast's `X` only hides it in this tab.
+- `Put it back`, on a reasoned event with `canPutBack: true`, posts `"put-back"` to write your typed values back into the current page while keeping the outside change's other edits, then reloads.
+- `Restore`, on an event without `reason` and with `restorable: true`, posts `"restore"` to put the lost data back into the current page and reload (removing `droppedAdditions` items added or changed since).
+- `Undo the change`, when `canRevert` is `true`, posts `"revert"` to restore the whole earlier file and reload, removing any edits made since.
+- `Keep the change` (or `Keep as is` when `reason` is absent) posts `"dismiss"` to adopt the current page as the baseline and close the notice without reloading.
+
+The toast's `X` only hides it in this tab.
 
 A host announces `data-guard-v1` in `/_/meta` `extensions` and gives each editor a same-origin `document.dataGuard.href` per document. A client never builds that address.
 
@@ -2400,10 +2393,13 @@ A host announces `data-guard-v1` in `/_/meta` `extensions` and gives each editor
     "id": "uuid",
     "firstDetectedAt": 1762700000000,
     "lastWriteAt": 1762700000000,
+    "reason": "recent",
+    "typed": [{ "path": "items[id:2].note", "yours": "draft", "at": 1762699900000 }],
     "lossSummary": { "provenance": "external", "destroyedAtoms": 4, "removedItems": 2, "modifiedAtoms": 0, "paths": ["api.items[2]"] },
     "fieldCount": 1,
     "preview": [{ "key": "items", "now": "2 items", "yours": "4 items" }],
     "droppedAdditions": 0,
+    "canPutBack": true,
     "restorable": true,
     "canRevert": true,
     "status": "pending"
@@ -2411,7 +2407,7 @@ A host announces `data-guard-v1` in `/_/meta` `extensions` and gives each editor
 }
 ```
 
-- `POST <href>` takes `{"id", "choice"}` (`"restore"`, `"revert"` or `"dismiss"`). It answers `200` `{"ok": true, "choice", "status"}`, or `{"error"}` with `400` for an unknown choice, `404` when no event is pending, `409` when another event id is current, and `422` when that choice cannot be applied to the page.
+- `POST <href>` takes `{"id", "choice"}` (`"put-back"`, `"restore"`, `"revert"` or `"dismiss"`). It answers `200` `{"ok": true, "choice", "status"}`, or `{"error"}` with `400` for an unknown choice, `404` when no event is pending, `409` when another event id is current, and `422` when that choice cannot be applied to the page.
 - A host with `sync` also sends `{"type": "notification", "msgType": "data-loss", "action": "raised" | "resolved", "msg", "data"}` on the document's live lane, with the event in `data` for `"raised"` and `{"id"}` for `"resolved"`.
 
 A host should announce `data-guard-v1` only after the conformance rows for this capability pass.
@@ -2869,12 +2865,10 @@ Each check names the clayjs test that proves the library side.
 | `clay.getHTML()` runs hooks and closes the undo batch | [The save API](https://clayjs.com/docs/guide/saving/#the-save-api) |
 | A 412 conflict stops autosave until resolved | [Conflicts on save (412)](https://clayjs.com/docs/guide/saving/#conflicts-on-save-412) |
 | Impure hooks keep the page permanently dirty | [Hooks](https://clayjs.com/docs/guide/saving/#hooks) |
-| A throwing `onSnapshot` or `addDocumentTransform` callback blocks every save | [Hooks](https://clayjs.com/docs/guide/saving/#hooks) |
 | `onaftersave` writing to the live DOM loops autosave | [Hooks](https://clayjs.com/docs/guide/saving/#hooks) |
 | Without autosave, collaborators see nothing until a save | [What sync is](https://clayjs.com/docs/guide/live-sync/#what-sync-is) |
 | Listeners attached to records are lost when a merge recreates them | [What a merge does](https://clayjs.com/docs/guide/live-sync/#what-a-merge-does) |
 | A peer's frame re-runs inline scripts | [What a merge does](https://clayjs.com/docs/guide/live-sync/#what-a-merge-does), [Starting the app once](https://clayjs.com/docs/guide/architecture/#starting-the-app-once) |
-| A `no-dirty` region replaced by a peer raises a false conflict notice (1.8.2) | [Regions and JSON under sync](https://clayjs.com/docs/guide/live-sync/#regions-and-json-under-sync) |
 | Same-key JSON edits under `merge`: incoming wins, yours goes to the notice | [Regions and JSON under sync](https://clayjs.com/docs/guide/live-sync/#regions-and-json-under-sync) |
 | Two tabs changing one shared `data-*` attribute (labels, a counter) conflict unless a container declares `merge-tokens` or `merge-max` | [Declared attribute merges](https://clayjs.com/docs/guide/live-sync/#declared-attribute-merges) |
 | Rewriting the record at boot makes incoming frames hold | [Focus, typing and long-running editors](https://clayjs.com/docs/guide/live-sync/#focus-typing-and-long-running-editors) |
@@ -2883,14 +2877,12 @@ Each check names the clayjs test that proves the library side.
 | An `api` rule that reads a painted value can read a stale one until a tab repaints and saves | [sap.js: records, views and totals in markup](https://clayjs.com/docs/guide/components/#sap-js-records-views-and-totals-in-markup) |
 | Full sapjs markup under the sapjs core halts with `E50` | [sap.js: records, views and totals in markup](https://clayjs.com/docs/guide/components/#sap-js-records-views-and-totals-in-markup) |
 | Presence is runtime only: the host filters the roster, and a caret it cannot place is not drawn | [Presence](https://clayjs.com/docs/guide/live-sync/#presence) |
-| `data-richclay` card mode deletes images on load | [richclay: rich text (`editable`)](https://clayjs.com/docs/guide/components/#richclay-rich-text-editable) |
 | The richclay toolbar is unusable inside `showModal()` and popovers | [richclay: rich text (`editable`)](https://clayjs.com/docs/guide/components/#richclay-rich-text-editable) |
 | Rich text has its own undo; page undo never records it | [richclay: rich text (`editable`)](https://clayjs.com/docs/guide/components/#richclay-rich-text-editable), [undo: whole-page undo](https://clayjs.com/docs/guide/components/#undo-whole-page-undo) |
 | Squire undo can roll back a peer's edit in the same region | [richclay: rich text (`editable`)](https://clayjs.com/docs/guide/components/#richclay-rich-text-editable) |
 | Global `registerButton` after load does not reach mounted editors | [richclay: rich text (`editable`)](https://clayjs.com/docs/guide/components/#richclay-rich-text-editable) |
 | Screenshot paste does nothing without a `pasteImage` listener | [richclay: rich text (`editable`)](https://clayjs.com/docs/guide/components/#richclay-rich-text-editable) |
 | Sortable handle mode is fixed at bind time | [sortable: drag to reorder](https://clayjs.com/docs/guide/components/#sortable-drag-to-reorder) |
-| `onsorting` cannot veto a move | [sortable: drag to reorder](https://clayjs.com/docs/guide/components/#sortable-drag-to-reorder) |
 | Sortable residue saves | [sortable: drag to reorder](https://clayjs.com/docs/guide/components/#sortable-drag-to-reorder), [Hooks](https://clayjs.com/docs/guide/saving/#hooks) |
 | A plain input's typed value is not content until `persist` or a command writes it, so page undo has nothing to replay for it | [undo: whole-page undo](https://clayjs.com/docs/guide/components/#undo-whole-page-undo) |
 | A refused undo or redo stays on top of the stack until it is replayed or discarded | [undo: whole-page undo](https://clayjs.com/docs/guide/components/#undo-whole-page-undo) |
@@ -2904,10 +2896,7 @@ Each check names the clayjs test that proves the library side.
 | `el.nearest` reads a neighbour record's field | [clay-events, clay-dom and All](https://clayjs.com/docs/guide/components/#clay-events-clay-dom-and-all) |
 | `hide()`, `show()`, `css()` write saved inline styles | [clay-events, clay-dom and All](https://clayjs.com/docs/guide/components/#clay-events-clay-dom-and-all) |
 | A file whose painted values do not match sap's state writes at load | [sap.js: records, views and totals in markup](https://clayjs.com/docs/guide/components/#sap-js-records-views-and-totals-in-markup) |
-| Dialog prompts are HTML: record text in `clay.confirm` runs a collaborator's markup | [clay-ui: toasts and dialogs](https://clayjs.com/docs/guide/components/#clay-ui-toasts-and-dialogs) |
-| `editmode:resource type="inert/javascript"` activates as `javascript` and never runs | [Mode attributes: one file for editors and viewers](https://clayjs.com/docs/guide/edit-mode/#mode-attributes-one-file-for-editors-and-viewers) |
 | Sap's template row shows before sap loads | [sap.js: records, views and totals in markup](https://clayjs.com/docs/guide/components/#sap-js-records-views-and-totals-in-markup) |
-| CMS `cms-template` with `hidden` makes every new item invisible | [cms: content-managed pages](https://clayjs.com/docs/guide/components/#cms-content-managed-pages) |
 | Records stored twice drift | [The record container](https://clayjs.com/docs/guide/architecture/#the-record-container) |
 | `applyData` pairs rows by content and order, not by id | [Import and export](https://clayjs.com/docs/guide/architecture/#import-and-export) |
 | Activity logged from a mutation observer also logs peers and undo | [Commands](https://clayjs.com/docs/guide/architecture/#commands) |
