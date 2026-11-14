@@ -169,7 +169,7 @@
       "listeners": {
         "window": 19,
         "document": 117,
-        "Element": 50
+        "Element": 56
       },
       "observers": 3,
       "intervals": 0,

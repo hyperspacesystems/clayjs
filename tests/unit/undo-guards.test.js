@@ -95,7 +95,7 @@ test("a derived, tab-local or route attribute change after an edit does not refu
 
   expect(undo.history).toHaveLength(1);
   const receipt = undo.undo();
-  expect(receipt).toEqual({ ok: true, entryId: expect.any(String), label: "Edit", direction: "undo" });
+  expect(receipt).toEqual({ ok: true, entryId: expect.any(String), label: "Edit", direction: "undo", caret: { node: expect.anything(), offset: expect.any(Number) } });
   expect(refusals).toHaveLength(0);
   expect(text().textContent).toBe("authored");
 });
