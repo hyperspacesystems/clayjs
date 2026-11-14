@@ -136,6 +136,26 @@
 
 ## [Unreleased]
 
+## [1.25.1] - 2026-11-14
+
+### Added
+- `@panphora/clayjs/server/markdown` exports Markdown from the server.
+- The `onSnapshot` and `addDocumentTransform` hooks accept `required: true`.
+
+### Changed
+- Dialog prompts, titles, paragraphs, labels and snippet code are plain text by default. Pass a `Node` to render markup.
+- A callback passed to `onSnapshot` or `addDocumentTransform` that throws is skipped only when it left the clone unchanged.
+- The data guard notice uses "Put it back" and "Keep the change" as its actions and shows relative times such as "1 minute ago".
+- Quickcrop, toasts and notices follow the page theme on Bevel.
+- Undo receipts carry a caret hint.
+
+### Fixed
+- The block editor caret stays visible below the sticky header.
+- Undoing a toggle, converting a divider and moving a toggle keep a collaborator's edits.
+- Markdown import keeps every relative path such as setup.sh and shot.png as a local file, never a web address.
+- Negative money amounts read as -$162.40.
+- Filled buttons keep their focus ring visible.
+
 ## [1.25.0] - 2026-11-13
 
 ### Added
