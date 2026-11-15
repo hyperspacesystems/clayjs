@@ -59,7 +59,8 @@ export function parseCsv(text, { delimiter } = {}) {
   if (row.length || field !== "" || (text && !/[\r\n]$/.test(text))) records.push([...row, field]);
   if (!records.length) return { header: [], rows: [] };
   const [header, ...rows] = records;
-  const width = Math.max(header.length, ...rows.map((r) => r.length));
+  let width = header.length;
+  for (const r of rows) if (r.length > width) width = r.length;
   header.length = width;
   for (let i = 0; i < width; i++) header[i] ??= "";
   for (const r of rows) for (let i = r.length; i < width; i++) r.push("");

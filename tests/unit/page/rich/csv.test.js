@@ -16,6 +16,14 @@ test("delimiter detection ignores quoted punctuation and ragged rows pad", () =>
   expect(parseCsv("a\tb\n1\t2").rows).toEqual([["1", "2"]]);
 });
 
+test("a 200,000-row file parses without overflowing the stack", () => {
+  const text = ["id,name", ...Array.from({ length: 200000 }, (_, i) => `${i},x`)].join("\r\n");
+  const { header, rows } = parseCsv(text);
+  expect(header).toEqual(["id", "name"]);
+  expect(rows.length).toBe(200000);
+  expect(rows[199999]).toEqual(["199999", "x"]);
+});
+
 test("unterminated quotes report the opening line", () => {
   expect(() => parseCsv('a,b\n1,"broken\nline')).toThrow(CsvError);
   try { parseCsv('a,b\n1,"broken\nline'); } catch (error) { expect({ code: error.code, line: error.line }).toEqual({ code: "unterminated-quote", line: 2 }); }
