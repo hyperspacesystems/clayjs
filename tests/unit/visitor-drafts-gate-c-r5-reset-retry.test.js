@@ -151,10 +151,12 @@ test("a queued retry reaches its two-second deadline and cannot reset the draft 
   const completed = new Promise((resolve) => { blocker.oncomplete = resolve; });
   const reload = reloads();
   try {
-    const started = Date.now();
+    // The monotonic clock: the wall clock can be stepped while a test runs. Node rounds a
+    // timer to whole milliseconds, so the deadline may fire up to 1 ms short of 2000.
+    const started = performance.now();
     page.clay.visitorDrafts.reset();
     await waitFor(() => page.count("clay:drafts-store-failed") > 0, "retry deadline", 3500);
-    expect(Date.now() - started).toBeGreaterThanOrEqual(2000);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(1999);
     expect(page.control.attempts).toBe(2);
     expectFailure(page, "blocked");
     expect(reload.calls).toHaveLength(0);

@@ -11,6 +11,7 @@ import {
   bootPage,
   cacheOf,
   failingFactory,
+  sessionStarted,
   headFor,
   keyFor,
   otherTab,
@@ -126,7 +127,7 @@ test("a failed transaction is a failed save; the operation stays journaled and t
   const { factory, state } = failingFactory(base);
   useFactory(factory);
   const { clay, key, count, slots } = await bootPage({ slot: "load-failed-1" });
-  await pause();
+  await sessionStarted(state);
 
   state.fail = true;
   type("first");

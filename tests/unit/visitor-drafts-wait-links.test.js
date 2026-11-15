@@ -177,11 +177,11 @@ test("a save that never settles still lets the link go after the 3 s deadline", 
   const link = waitLink();
   try {
     type("typed just before the deadline click");
-    const started = Date.now();
+    const started = performance.now();
     const event = click(link);
     expect(event.defaultPrevented).toBe(true);
     await waitFor(() => location.calls.length > 0, "the link to be followed", 4500);
-    expect(Date.now() - started).toBeGreaterThanOrEqual(3000);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(2999);
     expect(location.calls).toEqual([link.href]);
   } finally {
     location.restore();

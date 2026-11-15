@@ -6,7 +6,7 @@
  */
 import { afterEach, expect, jest, test } from "@jest/globals";
 import { IDBFactory } from "fake-indexeddb";
-import { A, B, bootPage, cacheOf, failingFactory, headFor, keyFor, noDatabase, pause, readIdb, seedIdb, type, useFactory, waitFor } from "./helpers/visitor-drafts-idb.js";
+import { A, B, bootPage, cacheOf, failingFactory, sessionStarted, headFor, keyFor, noDatabase, pause, readIdb, seedIdb, type, useFactory, waitFor } from "./helpers/visitor-drafts-idb.js";
 
 afterEach(noDatabase);
 
@@ -161,7 +161,7 @@ test("when the database refuses the write, the download is the rescue download o
   const { clay, slots } = await bootPage({ slot: "old-download-3" });
   await waitFor(() => promptRoot() !== null, "the download prompt");
   await clay.visitorDrafts.ready;
-  await pause();
+  await sessionStarted(state);
   const watch = watchDownload(() => ({ reason: promptRoot().getAttribute("data-hcp-reason") }));
   try {
     state.fail = true;

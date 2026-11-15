@@ -548,7 +548,11 @@ export async function runCase(json) {
       return { stalled: false, value };
     };
 
-    let booted = await bootPage(fixture, { mode: json.boot.mode, host, resetModules: host_.resetModules, until });
+    // The clock is the case's from before the boot: a part the boot creates keeps the timer
+    // functions it was handed, and real ones would fire on a slow machine's schedule.
+    host_.startClock();
+    cleanups.push(() => host_.stopClock());
+    let booted = await bootPage(fixture, { mode: json.boot.mode, host, resetModules: host_.resetModules, until, wait: settle });
     cleanups.push(() => booted.resources.stop());
     if (booted.stalled) return { status: "invalid", trace, result: { errors: violations } };
     let clay = booted.clay;
@@ -603,9 +607,6 @@ export async function runCase(json) {
         delete globalThis.__clayLazyGate;
       });
     }
-
-    host_.startClock();
-    cleanups.push(() => host_.stopClock());
 
     const onModeChange = () => record("modechange", { mode: clay.mode });
     const onSnapshot = (event) => record("snapshot-ready", { forSave: event.detail?.forSave === true });
@@ -832,14 +833,13 @@ export async function runCase(json) {
         }
         case "reload": {
           // The bytes the host last accepted are the file a reload is served: this boot is
-          // torn down, and the next one reads what the host kept. The boot runs on the
-          // platform's own timers again, as the first one did.
+          // torn down, and the next one reads what the host kept. It boots on the case's
+          // clock, as the first one did.
           const accepted = host.calls.filter((call) => call.kind === "save" && call.status === 200).at(-1) ?? null;
           if (!accepted || typeof accepted.body !== "string" || accepted.body === "") {
             record("reload-refused", { reason: "the host accepted no bytes to serve" });
             break;
           }
-          await host_.stopClock();
           booted.resources.stop();
           const again = await until(bootPage(fixture, {
             mode: json.boot.mode,
@@ -847,6 +847,7 @@ export async function runCase(json) {
             resetModules: host_.resetModules,
             served: accepted.body,
             until,
+            wait: settle,
           }), `steps[${index}]`, "reload");
           if (again.stalled) {
             stalled = true;
@@ -860,7 +861,6 @@ export async function runCase(json) {
           clay = booted.clay;
           saveModule = null;
           await holdChunks();
-          await host_.startClock();
           phase = clay.modeLifecycle.state.phase;
           mode = clay.mode;
           record("reload", { bytes: accepted.body.length, etag: accepted.etag ?? null });

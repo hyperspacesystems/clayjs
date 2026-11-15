@@ -52,11 +52,11 @@ for (const entry of ["link", "API"]) {
     document.addEventListener("click", watch);
     try {
       type("typed just before download");
-      const started = Date.now();
+      const started = performance.now();
       if (entry === "API") await clay.visitorDrafts.download();
       else link.click();
       await waitFor(() => downloads.length > 0 || clicks.includes(false), "download outcome", 4500);
-      expect(Date.now() - started).toBeGreaterThanOrEqual(3000);
+      expect(performance.now() - started).toBeGreaterThanOrEqual(2999);
       expect(clicks).toEqual([true]);
       expect(downloads).toEqual(["notes.htmlclay"]);
       expect(blobs).toHaveLength(1);

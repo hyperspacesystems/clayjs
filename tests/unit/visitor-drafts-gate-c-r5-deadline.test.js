@@ -24,11 +24,11 @@ test("a blocked first transaction ends the large restore wait and preserves the 
   const completed = new Promise((resolve) => { tx.oncomplete = resolve; });
   useFactory(factory);
   let loaded;
-  const started = Date.now();
+  const started = performance.now();
   const booting = bootPage({ slot, localRaw: raw }).then((result) => { loaded = result; });
   try {
     await waitFor(() => loaded, "loader to continue after the transaction deadline", 3500);
-    expect(Date.now() - started).toBeGreaterThanOrEqual(2000);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(1999);
     expect(loaded.clay.visitorDrafts.restored()).toMatchObject({ restored: false, hadDraft: true, blocked: true });
     expect(loaded.local()).toBe(raw);
     expect(loaded.count("clay:drafts-store-failed")).toBeGreaterThan(0);

@@ -155,8 +155,12 @@ export function slowFactory(real, ms, { fail = false } = {}) {
 }
 
 // A factory whose read-write transactions throw while `state.fail` is set.
+// A factory that refuses every read-write transaction opened while `fail` is set, and counts
+// the transactions that commit: a page's session opens the database a moment after boot,
+// and its first transaction, opened before a test sets `fail`, would still carry what the
+// test typed after it. `sessionStarted(state)` waits for that one.
 export function failingFactory(real) {
-  const state = { fail: false };
+  const state = { fail: false, committed: 0 };
   const factory = {
     open(name, version) {
       const req = real.open(name, version);
@@ -167,7 +171,9 @@ export function failingFactory(real) {
         const transaction = db.transaction.bind(db);
         db.transaction = (stores, mode) => {
           if (state.fail && mode === "readwrite") throw Object.assign(new Error("full"), { name: "QuotaExceededError" });
-          return transaction(stores, mode);
+          const tx = transaction(stores, mode);
+          tx.addEventListener("complete", () => { state.committed += 1; });
+          return tx;
         };
         fake.result = db;
         fake.onsuccess?.(event);
@@ -179,6 +185,8 @@ export function failingFactory(real) {
   };
   return { factory, state };
 }
+
+export const sessionStarted = (state) => waitFor(() => state.committed > 0, "the session's first transaction");
 
 // Two records of one draft as ClayJS 1.23.0 wrote them: B was saved on top of A.
 export const A = { v: 1, savedAt: "2026-11-10T00:00:00.000Z", id: "a1aaaaaaaaaa", ancestry: ["root:"], data: { title: "title A", note: "note A", rows: [{ id: "r1", name: "First" }] } };

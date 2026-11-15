@@ -9,7 +9,7 @@
  */
 import { afterEach, expect, test } from "@jest/globals";
 import { IDBFactory } from "fake-indexeddb";
-import { B, big, bootPage, failingFactory, headFor, keyFor, noDatabase, otherTab, pause, readIdb, type, useFactory, waitFor } from "./helpers/visitor-drafts-idb.js";
+import { B, big, bootPage, failingFactory, sessionStarted, headFor, keyFor, noDatabase, otherTab, pause, readIdb, type, useFactory, waitFor } from "./helpers/visitor-drafts-idb.js";
 
 afterEach(noDatabase);
 
@@ -32,7 +32,7 @@ test("round 1 finding 1, round 2 finding 4, round 3 finding 5: while the databas
   useFactory(factory);
   const { clay, key, count } = await bootPage({ slot: "gate-retry-1" });
   await waitFor(() => promptRoot() !== null, "the download prompt");
-  await pause();
+  await sessionStarted(state);
   const watch = watchDownload();
   try {
     state.fail = true;
@@ -171,7 +171,7 @@ test("round 4 Astra 2 and Opus N1/N2 through the loader: catching up merges a co
 
 test("round 2 Astra 1 through the loader: pagehide saves newer typing after the in-flight transaction aborts", async () => {
   const real = new IDBFactory();
-  const state = { armed: false, aborted: false };
+  const state = { armed: false, aborted: false, committed: 0 };
   useFactory({
     open(name, version) {
       const req = real.open(name, version);
@@ -182,6 +182,7 @@ test("round 2 Astra 1 through the loader: pagehide saves newer typing after the 
         const transaction = db.transaction.bind(db);
         db.transaction = (stores, mode) => {
           const tx = transaction(stores, mode);
+          tx.addEventListener("complete", () => { state.committed += 1; });
           if (state.armed && mode === "readwrite") {
             const objectStore = tx.objectStore.bind(tx);
             tx.objectStore = (name) => {
@@ -213,7 +214,9 @@ test("round 2 Astra 1 through the loader: pagehide saves newer typing after the 
     },
   });
   const { clay, key } = await bootPage({ slot: "gate-abort-pagehide" });
-  await pause();
+  // The session opens the database a moment after boot, and its first transaction would
+  // carry a save made before it: the trap is for the save's own transaction.
+  await waitFor(() => state.committed > 0, "the session's first transaction");
   state.armed = true;
   type(big("a", 600 * 1024));
   expect((await clay.save()).ok).toBe(false);

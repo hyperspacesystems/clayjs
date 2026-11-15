@@ -481,12 +481,14 @@ export function createResourceCounter() {
 }
 
 /**
- * Boot the named fixture's page through the real loader. Real timers are in force here:
- * a case installs its fake clock after the page is up. A driver that lends `until` also
- * bounds the boot's own callback, so a boot parked on a boundary the case holds ends as a
- * stalled driver rather than an idle child.
+ * Boot the named fixture's page through the real loader, on the case's fake clock: a part
+ * the boot creates keeps the timer functions it was handed, so a page booted on real timers
+ * would go on firing them in real time, and a slow machine would see saves the case never
+ * scheduled. `wait(ms)` moves the case's clock; `until` also bounds the boot's own
+ * callback, so a boot parked on a boundary the case holds ends as a stalled driver rather
+ * than an idle child.
  */
-export async function bootPage(fixture, { mode, host, resetModules, served = null, until = null }) {
+export async function bootPage(fixture, { mode, host, resetModules, wait, served = null, until = null }) {
   const spec = typeof fixture === "string" ? FIXTURES[fixture] : fixture;
   // A reload is served the bytes the host last accepted, so the page boots from those
   // rather than from the fixture's authored copy.
@@ -557,12 +559,11 @@ export async function bootPage(fixture, { mode, host, resetModules, served = nul
     const up = new Promise((resolve) => boot(null, new URLSearchParams(params), resolve));
     if (until) stalled = (await until(up, "boot", "boot")).stalled;
     else await up;
-    // The lane's lock callback waits CLOSE_WAIT_MS on a real timer before it starts the
-    // room, and that timer is already ticking when the page is up: a case's fake clock
-    // would never fire it, so the wait happens here, on the real one.
-    if (pageHost && !stalled) await new Promise((resolve) => setTimeout(resolve, 600));
-    // Save's boot baseline settles on real timers too (a quiet spell, or its fallback), and
-    // a case's fake clock would never fire them: the settle a browser reaches by then runs here.
+    // The lane's lock callback waits CLOSE_WAIT_MS before it starts the room, and that
+    // timer is already ticking when the page is up: the case's clock runs past it here.
+    if (pageHost && !stalled) await wait(600);
+    // Save's boot baseline settles after a quiet spell, or its fallback: the settle a
+    // browser reaches by then runs here, so no step waits on it.
     if (!stalled && root.getAttribute("editmode") === "true") {
       const { baselineSettled, releaseBootSettle } = await runtimeImport("src/core/save.js");
       if (!baselineSettled()) releaseBootSettle();
