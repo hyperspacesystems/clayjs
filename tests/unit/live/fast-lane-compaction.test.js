@@ -4,11 +4,16 @@ import { createRooms, ROOM_ERROR_STATUS } from "../../../src/server/rooms/index.
 import { buildCandidate } from "../../../src/live/page-compaction.js";
 import { createStore } from "../../../src/live/store.js";
 import { cloneJson } from "../../../src/live/ops.js";
-import { createFastLane, RETRY_MS } from "../../../src/live/fast-lane.js";
+import { createFastLane, MIN_GAP_MS, RETRY_MS } from "../../../src/live/fast-lane.js";
 import { fetchLiveState } from "../../../src/live/server-lane.js";
 
 const TEMPLATE = new URL("../../fixtures/ypage-template.html", import.meta.url);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const until = async (done, what) => {
+  for (const started = Date.now(); !done(); await sleep(5)) {
+    if (Date.now() - started > 10000) throw new Error(`timed out waiting for ${what}`);
+  }
+};
 
 let clients = 900;
 const insert = (text, client = (clients += 1)) => {
@@ -28,7 +33,7 @@ const answerOf = (body) =>
 
 // A transport over the real room, shaped like the host: a read declares the
 // capability the way the query parameter does, a send applies the frame.
-function tab(rooms, room, { declare = 1, strip = false } = {}) {
+function tab(rooms, room, { declare = 1, strip = false, timers = {} } = {}) {
   const page = createStore({ name: "blockeditor", value: cloneJson(room.stores.get("blockeditor").value) });
   const entries = new Map([["blockeditor", { store: page }]]);
   const events = [];
@@ -47,7 +52,7 @@ function tab(rooms, room, { declare = 1, strip = false } = {}) {
       return answer;
     },
   };
-  const lane = createFastLane({ entries, transport });
+  const lane = createFastLane({ entries, transport, ...timers });
   page.onLocal((ops) => lane.local("blockeditor", ops, page.mark));
   page.onDelivery((event) => events.push(event));
   return { page, lane, handlers: () => handlers, events, sends };
@@ -80,13 +85,22 @@ test("a checkpoint-required frame is retried as soon as the compactor's frame ar
     expect(rooms.apply(room, "b", { name: "blockeditor", n: ++n, epoch: room.epoch, blockeditorGeneration: room.blockeditorTransition.id, compaction: 1, ops }).ops).toHaveLength(4);
   }
 
-  const t = tab(rooms, room);
+  // Backoff waits are held, never run: only the compactor's frame can send the
+  // refused frame again, so the retry below proves it was not the backoff.
+  const held = [];
+  const timers = {
+    setTimer: (fn, ms) => (ms > MIN_GAP_MS ? held[held.push({ ms, cleared: false }) - 1] : setTimeout(fn, ms)),
+    clearTimer: (id) => (held.includes(id) ? (id.cleared = true) : clearTimeout(id)),
+  };
+  const t = tab(rooms, room, { timers });
   await join(t);
   expect(t.page.handle.status.mode).toBe("fast");
 
-  const refusedAt = Date.now();
   t.page.handle.set(["y", "u1-a-new"], insert("new text"));
-  await sleep(80);
+  await until(() => t.sends.some((s) => s.answer.status === 503), "the 503");
+  const waiting = () => held.filter((h) => !h.cleared && h.ms <= RETRY_MS);
+  await until(() => waiting().length === 1, "the backoff after the 503");
+  const backoff = waiting()[0];
   const refused = t.sends.filter((s) => s.answer.status === 503);
   expect(refused).toHaveLength(1);
   expect(refused[0].frame.compaction).toBe(1);
@@ -98,15 +112,16 @@ test("a checkpoint-required frame is retried as soon as the compactor's frame ar
   expect(frame.from).toBe("compactor");
   const frameAt = Date.now();
   t.handlers().frame(frame);
-  await sleep(250);
+  await until(() => t.sends.some((s) => s.answer.status === 200 && s.frame.n === refused[0].frame.n), "the retry");
 
   const retried = t.sends.filter((s) => s.frame.n === refused[0].frame.n && s.answer.status === 200);
   expect(retried).toHaveLength(1);
   expect(retried[0].frame.ops).toEqual(refused[0].frame.ops);
-  // After the compactor's frame, and well before the backoff a 503 starts.
+  // After the compactor's frame, with the backoff still held: the frame cleared
+  // the backoff wait and sent at once.
   expect(retried[0].at).toBeGreaterThanOrEqual(frameAt);
-  expect(retried[0].at - frameAt).toBeLessThan(RETRY_MS / 2);
-  expect(retried[0].at - refusedAt).toBeLessThan(RETRY_MS);
+  expect(backoff.cleared).toBe(true);
+  expect(waiting()).toEqual([]);
   expect(typeof room.stores.get("blockeditor").value.y["u1-a-new"]).toBe("string");
   expect(t.events.some((e) => e.phase === "landed" && e.n === refused[0].frame.n)).toBe(true);
 
