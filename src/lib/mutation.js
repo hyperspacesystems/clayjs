@@ -170,6 +170,20 @@ const localMutation = {
   },
 
   /**
+   * Hand the change lane, now, the records a raw subscriber's drain left for a
+   * microtask (an edit made through undo's commit, command or trash). A save
+   * boundary calls it after that commit returned, so a derive engine that flushes
+   * next sees the edit. Inside a pause it leaves them to the microtask: delivered
+   * now, only non-pausable callbacks would see them.
+   */
+  deliverDeferred() {
+    if (this._pauseDepth > 0) return;
+    const batch = this._deferredChangeRecords;
+    this._deferredChangeRecords = null;
+    if (batch && batch.length) this._handleMutations(batch);
+  },
+
+  /**
    * Resume mutation observation after a pause.
    */
   resume() {

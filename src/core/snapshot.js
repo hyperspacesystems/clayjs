@@ -43,7 +43,7 @@ import { restoreAuthoredUrls } from '../lib/authored-url.js';
 import { STRIP_FROM_SAVE, STRIP_FROM_COMPARISON, STRIP_FROM_DIRTY_CHECK, NO_TRIGGER_AUTOSAVE_SELECTOR, SNAPSHOT_REMOVE_SELECTOR } from '../lib/region-policy.js';
 import { TAB_LOCAL_ROOT_ATTRS, stripRouteAttrs } from '../lib/root-attrs.js';
 import { stripEphemeral } from '../lib/ephemeral.js';
-import { stripDerived } from '../lib/derived.js';
+import { stripDerived, flushDerived } from '../lib/derived.js';
 import { createContentView } from '../lib/content-dom.js';
 
 // =============================================================================
@@ -462,6 +462,13 @@ function carryProvenance(saveNode, cloneNode) {
 }
 
 export function captureSnapshot({ flushUndo = true, authored = true, forSave = false, requestRefresh = false, context = null } = {}) {
+  // A derive engine may still have a pass queued for an edit made in this task. At a
+  // save boundary it runs first, so the clone holds what the engine paints from the page
+  // as it stands, and before undo closes its batch, so what the flush writes joins the
+  // undo step this save closes. The captures that pass flushUndo: false run per
+  // incoming frame or only read the page, and leave the engine's own timing alone.
+  if (flushUndo) flushDerived();
+
   // Force-close any pending undo idle batch BEFORE cloning the DOM, so the
   // snapshot reflects a clean undo boundary. Without this, a save that fires
   // mid-typing would leave the idle batch open across the save boundary, and

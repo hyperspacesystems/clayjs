@@ -72,7 +72,8 @@ export function isDerivedChange(change) {
   return derived;
 }
 
-const engines = new Set();
+// Each engine's repaint, and the flush it gave with it or null.
+const engines = new Map();
 let mountedOnce = false;
 
 /** True while a derive engine is registered, or the loader holds boot for one. */
@@ -84,11 +85,36 @@ const mountWaiters = [];
 
 /** Run every registered engine's repaint, synchronously. Live sync calls it right after a merge applies. */
 export function repaintDerived() {
-  for (const repaint of [...engines]) {
+  for (const repaint of [...engines.keys()]) {
     try {
       repaint();
     } catch (err) {
       console.error("clayjs: a derived repaint failed:", err);
+    }
+  }
+}
+
+/**
+ * Ask every engine that gave a flush to finish the work it has queued, synchronously. A
+ * capture at a save boundary calls it before it clones the page, so an edit and a save
+ * in one task save what the engine paints from that edit. What a flush returns is not read.
+ */
+export function flushDerived() {
+  const flushes = [...engines.values()];
+  if (!flushes.some(Boolean)) return;
+  // An engine learns of edits from the mutation hub, which hands an edit made through
+  // undo to its subscribers only on a later microtask. Deliver it first.
+  try {
+    window.clay?.Mutation?.deliverDeferred?.();
+  } catch (err) {
+    console.error("clayjs: a derived flush failed:", err);
+  }
+  for (const flush of flushes) {
+    if (!flush) continue;
+    try {
+      flush();
+    } catch (err) {
+      console.error("clayjs: a derived flush failed:", err);
     }
   }
 }
@@ -107,8 +133,8 @@ export function afterDerivedMount(fn, timeoutMs) {
 }
 
 export const derived = {
-  register(repaint) {
-    engines.add(repaint);
+  register(repaint, { flush = null } = {}) {
+    engines.set(repaint, flush);
     return () => engines.delete(repaint);
   },
   mounted() {
