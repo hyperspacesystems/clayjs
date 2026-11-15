@@ -127,6 +127,13 @@ const localMutation = {
   // synchronously inside undo's commit boundary.
   _deferredChangeRecords: null,
   _deferredChangeScheduled: false,
+  // How many of those records the dirty gate has counted already, and, while
+  // subscribers run, whether the batch they are handed is exactly those records.
+  _deferredCounted: 0,
+  _deliveringCounted: false,
+  // The change lists being handed to subscribers right now, innermost last, each
+  // with the next subscriber it calls.
+  _deliveries: [],
 
   /**
    * Pause mutation observation.
@@ -170,17 +177,46 @@ const localMutation = {
   },
 
   /**
-   * Hand the change lane, now, the records a raw subscriber's drain left for a
-   * microtask (an edit made through undo's commit, command or trash). A save
-   * boundary calls it after that commit returned, so a derive engine that flushes
-   * next sees the edit. Inside a pause it leaves them to the microtask: delivered
-   * now, only non-pausable callbacks would see them.
+   * Hand the change lane, now, what it still owes its subscribers, so a derive engine
+   * that flushes next sees every edit made so far. A save boundary calls it. First the
+   * subscribers a delivery has not reached yet, when the boundary was reached from
+   * inside an earlier subscriber (an [onmutation] that calls clay.save()): each gets
+   * that batch now, and the delivery goes on after them. Then the records a raw
+   * subscriber's drain left for a microtask (an edit made through undo's commit,
+   * command or trash). Inside a pause it leaves both: delivered now, only
+   * non-pausable callbacks would see them.
    */
   deliverDeferred() {
     if (this._pauseDepth > 0) return;
+    for (const delivery of [...this._deliveries].reverse()) {
+      const previousCounted = this._deliveringCounted;
+      this._deliveringCounted = delivery.counted;
+      try {
+        this._notifyFrom(delivery);
+      } finally {
+        this._deliveringCounted = previousCounted;
+      }
+    }
+    this._deliverDeferredBatch();
+  },
+
+  /**
+   * The dirty gate counted the records the change lane holds for a microtask: an edit
+   * made through undo marks the page dirty as its commit returns. When exactly those
+   * records are delivered, the gate does not count the same edit a second time, after a
+   * save in the same task took its token. A record deferred after this call makes the
+   * delivery count as usual.
+   */
+  _countDeferred() {
+    this._deferredCounted = this._deferredChangeRecords ? this._deferredChangeRecords.length : 0;
+  },
+
+  _deliverDeferredBatch() {
     const batch = this._deferredChangeRecords;
     this._deferredChangeRecords = null;
-    if (batch && batch.length) this._handleMutations(batch);
+    const counted = !!batch && this._deferredCounted === batch.length;
+    this._deferredCounted = 0;
+    if (batch && batch.length) this._handleMutations(batch, counted);
   },
 
   /**
@@ -221,7 +257,22 @@ const localMutation = {
   _notify(type, changes, onlyNonPausable = false) {
     this._log(`Notifying ${this._callbacks[type].length} callbacks of type "${type}"`, { changes });
 
-    for (const callback of this._callbacks[type]) {
+    const delivery = { type, changes, onlyNonPausable, counted: this._deliveringCounted, next: 0 };
+    this._deliveries.push(delivery);
+    try {
+      this._notifyFrom(delivery);
+    } finally {
+      this._deliveries.pop();
+    }
+  },
+
+  // The cursor moves past a subscriber before it runs, so a save boundary inside it
+  // (deliverDeferred) goes on from the next one, and none is called twice.
+  _notifyFrom(delivery) {
+    const { changes, onlyNonPausable } = delivery;
+    const callbacks = this._callbacks[delivery.type];
+    while (delivery.next < callbacks.length) {
+      const callback = callbacks[delivery.next++];
       // While paused, only non-pausable callbacks (pure enhancers) run.
       if (onlyNonPausable && callback.pausable !== false) continue;
 
@@ -455,9 +506,7 @@ const localMutation = {
     this._deferredChangeScheduled = true;
     queueMicrotask(() => {
       this._deferredChangeScheduled = false;
-      const batch = this._deferredChangeRecords;
-      this._deferredChangeRecords = null;
-      if (batch && batch.length) this._handleMutations(batch);
+      this._deliverDeferredBatch();
     });
   },
 
@@ -502,7 +551,7 @@ const localMutation = {
     };
   },
 
-  _handleMutations(mutations) {
+  _handleMutations(mutations, counted = false) {
     if (this._pauseDepth > 0) {
       // While paused (e.g. during a live-sync morph), only non-pausable
       // callbacks should run. With none registered, take the fast path.
@@ -510,13 +559,13 @@ const localMutation = {
         this._log(`Skipping ${mutations.length} mutations (paused)`);
         return;
       }
-      this._processMutations(mutations, true);
+      this._processMutations(mutations, true, counted);
       return;
     }
-    this._processMutations(mutations, false);
+    this._processMutations(mutations, false, counted);
   },
 
-  _processMutations(mutations, onlyNonPausable = false) {
+  _processMutations(mutations, onlyNonPausable = false, counted = false) {
     const changes = [];
     const changesByType = {
       add: [],
@@ -672,21 +721,27 @@ const localMutation = {
         }
       }
 
-      this._notify('anyChange', changes, onlyNonPausable);
+      const outerCounted = this._deliveringCounted;
+      this._deliveringCounted = counted;
+      try {
+        this._notify('anyChange', changes, onlyNonPausable);
 
-      const addOrRemove = [...changesByType.add, ...changesByType.remove];
-      if (addOrRemove.length) {
-        this._notify('addOrRemove', addOrRemove, onlyNonPausable);
-      }
+        const addOrRemove = [...changesByType.add, ...changesByType.remove];
+        if (addOrRemove.length) {
+          this._notify('addOrRemove', addOrRemove, onlyNonPausable);
+        }
 
-      if (changesByType.add.length) {
-        this._notify('addElement', changesByType.add, onlyNonPausable);
-      }
-      if (changesByType.remove.length) {
-        this._notify('removeElement', changesByType.remove, onlyNonPausable);
-      }
-      if (changesByType.attribute.length) {
-        this._notify('attribute', changesByType.attribute, onlyNonPausable);
+        if (changesByType.add.length) {
+          this._notify('addElement', changesByType.add, onlyNonPausable);
+        }
+        if (changesByType.remove.length) {
+          this._notify('removeElement', changesByType.remove, onlyNonPausable);
+        }
+        if (changesByType.attribute.length) {
+          this._notify('attribute', changesByType.attribute, onlyNonPausable);
+        }
+      } finally {
+        this._deliveringCounted = outerCounted;
       }
     }
   },
@@ -741,6 +796,9 @@ const localMutation = {
         clearTimeout(cb.timeout);
         cb.pendingChanges = null;
         this._callbacks[type].splice(index, 1);
+        for (const delivery of this._deliveries) {
+          if (delivery.type === type && index < delivery.next) delivery.next--;
+        }
         this._recomputeHasNonPausable();
         this._log(`Removed callback from ${type}. Remaining callbacks:`, {
           [type]: this._callbacks[type].length

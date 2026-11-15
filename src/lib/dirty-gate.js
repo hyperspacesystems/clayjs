@@ -114,7 +114,7 @@ export function startDirtyGate() {
   Mutation.onAnyChange(
     { omitChangeDetails: true, require: 'dirty' },
     () => {
-      if (!paused) {
+      if (!paused && !Mutation._deliveringCounted) {
         changes++;
         scheduleAnnounce();
       }
@@ -229,9 +229,15 @@ export function gateUnchangedSince(token) {
   return changes === token.gen && token.probe.every(([el, sig]) => controlSignature(el) === sig);
 }
 
-/** A change nothing in the DOM recorded: the page holds text a save has not written. */
+/**
+ * A change nothing in the DOM recorded: the page holds text a save has not written.
+ * The mark also counts the records the hub holds for a microtask (an edit made through
+ * undo), so their delivery after a save in the same task took its token is not a second
+ * edit that keeps the page dirty.
+ */
 export function gateMarkDirty() {
   changes++;
+  Mutation._countDeferred?.();
   scheduleAnnounce();
 }
 
