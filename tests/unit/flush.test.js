@@ -144,7 +144,8 @@ test("work a save cannot write, with clean bytes, is reported as 'blocked'", asy
       message: "This document has unsaved work a save cannot write."
     });
     expect(global.fetch).not.toHaveBeenCalled();
-    expect(Date.now() - started).toBeLessThan(100);
+    // Well short of the 15 s flush timeout it must not wait for; a busy box takes far more than 100 ms.
+    expect(Date.now() - started).toBeLessThan(5000);
   } finally {
     handle.dispose();
   }

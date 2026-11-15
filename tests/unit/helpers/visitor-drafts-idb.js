@@ -154,7 +154,6 @@ export function slowFactory(real, ms, { fail = false } = {}) {
   return { factory, state };
 }
 
-// A factory whose read-write transactions throw while `state.fail` is set.
 // A factory that refuses every read-write transaction opened while `fail` is set, and counts
 // the transactions that commit: a page's session opens the database a moment after boot,
 // and its first transaction, opened before a test sets `fail`, would still carry what the

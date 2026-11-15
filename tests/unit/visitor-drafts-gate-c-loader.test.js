@@ -216,7 +216,7 @@ test("round 2 Astra 1 through the loader: pagehide saves newer typing after the 
   const { clay, key } = await bootPage({ slot: "gate-abort-pagehide" });
   // The session opens the database a moment after boot, and its first transaction would
   // carry a save made before it: the trap is for the save's own transaction.
-  await waitFor(() => state.committed > 0, "the session's first transaction");
+  await sessionStarted(state);
   state.armed = true;
   type(big("a", 600 * 1024));
   expect((await clay.save()).ok).toBe(false);
