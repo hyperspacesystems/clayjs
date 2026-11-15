@@ -23,5 +23,5 @@ export { holdSlashRange, heldSlashRange } from "./chrome.js";
 export { createHistoryBridge } from "./history-intent.js";
 export { createRecoverList, focusBlock } from "./recover.js";
 export { observeDocumentTitle } from "./document-title-runtime.js";
-export { createFeatureLoader } from "./feature-loader.js";
+export { createFeatureLoader } from "../lib/editor-feature-loader.js";
 import("./editor.js").catch(() => null);

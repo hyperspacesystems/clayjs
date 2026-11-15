@@ -28,7 +28,7 @@ import { csvImportPlugin } from "./csv-import.js";
 import { styleWithLegacyId } from "../lib/style.js";
 import { historyIntentPlugin } from "./history-intent.js";
 import { aiPreviewPlugin } from "./ai-preview.js";
-import { createFeatureLoader } from "./feature-loader.js";
+import { createFeatureLoader } from "../lib/editor-feature-loader.js";
 import { COMMAND_FEATURES, FEATURES, featureForNode } from "./features/registry.js";
 import { toolViews } from "./tool-views.js";
 
