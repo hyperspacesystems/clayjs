@@ -136,6 +136,11 @@
 
 ## [Unreleased]
 
+## [1.26.2] - 2026-11-14
+
+### Changed
+- A page you left in Edit reopens in Edit when you come back to it with Back or Forward in the same tab. A reload still keeps Edit only within 30 seconds, and typing the address again opens the page in view.
+
 ## [1.26.1] - 2026-11-14
 
 ### Changed
