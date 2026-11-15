@@ -53,7 +53,7 @@ const { toastPersistent } = await import("../../../src/ui/toast.js");
 
 const RETRYING = [
   "blockeditor-converting", "blockeditor-capacity", "busy", "rate-limited", "offline",
-  "network", "network-error", "timeout", "save-history-pending",
+  "network", "network-error", "timeout", "save-history-pending", "restarting",
 ];
 const BLOCKED = [
   "blockeditor-condition-required", "blockeditor-conversion-refused", "blockeditor-conversion-required",

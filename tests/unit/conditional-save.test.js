@@ -586,6 +586,109 @@ describe("typed refusals from the host contract", () => {
   });
 });
 
+describe("restarting retries inside one logical save", () => {
+  const restarting = (header = "2") => ({
+    status: 503,
+    headers: header === null ? {} : { "Retry-After": header },
+    body: { ok: false, msg: "HTML Clay is restarting to finish an update, so nothing was saved.", msgType: "error", code: "restarting" },
+  });
+  const refused = () => { throw new TypeError("Failed to fetch"); };
+
+  beforeEach(async () => {
+    responses.meta = { spec: 1, extensions: ["conditional"], document: { etag: "seed-restart" } };
+    await rediscover();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test("waits Retry-After, then re-sends the same body, Save-ID and If-Match", async () => {
+    responses.save = (n) => (n === 1 ? restarting() : accepted("stored-restart")());
+    await edit("during the restart");
+    const pending = saveMod.savePage();
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(calls.save).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(1999);
+    expect(calls.save).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(1);
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    expect(calls.save).toHaveLength(2);
+    expect(headerOf(1, "Save-ID")).toBe(headerOf(0, "Save-ID"));
+    expect(headerOf(1, "If-Match")).toBe(headerOf(0, "If-Match"));
+    expect(calls.save[1][1].body).toBe(calls.save[0][1].body);
+  });
+
+  test("a missing Retry-After waits two seconds", async () => {
+    responses.save = (n) => (n === 1 ? restarting(null) : accepted("stored-default")());
+    await edit("no header");
+    const pending = saveMod.savePage();
+    await jest.advanceTimersByTimeAsync(1999);
+    expect(calls.save).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(1);
+    expect((await pending).ok).toBe(true);
+    expect(calls.save).toHaveLength(2);
+  });
+
+  test("refused connections after the refusal are the same restart, until the new host answers", async () => {
+    responses.save = (n) => (n === 1 ? restarting() : n <= 4 ? refused() : accepted("stored-new-host")());
+    await edit("old host gone");
+    const pending = saveMod.savePage();
+    await jest.advanceTimersByTimeAsync(0);
+    for (let i = 0; i < 4; i++) await jest.advanceTimersByTimeAsync(2000);
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    expect(calls.save).toHaveLength(5);
+    expect(headerOf(4, "Save-ID")).toBe(headerOf(0, "Save-ID"));
+  });
+
+  test("a refused connection with no restarting refusal before it is not retried", async () => {
+    responses.save = (n) => (n === 1 ? refused() : accepted("should-not-arrive")());
+    await edit("plain network failure");
+    const pending = saveMod.savePage();
+    await jest.advanceTimersByTimeAsync(2000);
+    const result = await pending;
+
+    expect(result.ok).toBe(false);
+    expect(calls.save).toHaveLength(1);
+  });
+
+  test("stops after fifteen extra attempts and surfaces the refusal", async () => {
+    responses.save = () => restarting();
+    await edit("never comes back");
+    const pending = saveMod.savePage();
+    await jest.advanceTimersByTimeAsync(0);
+    for (let i = 0; i < 15; i++) await jest.advanceTimersByTimeAsync(2000);
+    const result = await pending;
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("restarting");
+    expect(calls.save).toHaveLength(16);
+  });
+
+  test("a newer capture cancels the retry, so stale bytes are not re-sent", async () => {
+    responses.save = (n) => (n === 1 ? restarting() : accepted("should-not-arrive")());
+    await edit("superseded");
+    const pending = saveMod.savePage();
+    await jest.advanceTimersByTimeAsync(0);
+
+    const snap = await import("../../src/core/snapshot.js");
+    snap.captureForSaveAndComparison({ emitForSync: false });
+
+    await jest.advanceTimersByTimeAsync(2000);
+    const result = await pending;
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("restarting");
+    expect(calls.save).toHaveLength(1);
+  });
+});
+
 describe("blockeditor-converting retries inside one logical save", () => {
   const converting = () => ({
     status: 503,

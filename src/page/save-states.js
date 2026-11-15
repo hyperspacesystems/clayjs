@@ -9,6 +9,7 @@ import { downloadHtml, documentName } from "../core/download.js";
 // "Couldn't save" feedback exactly as it was.
 const SAVE_STATE_BY_CODE = Object.freeze({
   "blockeditor-converting": "retrying",
+  restarting: "retrying",
   "blockeditor-capacity": "retrying",
   busy: "retrying",
   "rate-limited": "retrying",

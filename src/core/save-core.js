@@ -448,6 +448,12 @@ function invalidHeaderResult() {
 // converting the page. `blockeditor-converting` is a pre-commit refusal, so the same
 // body is worth offering again; anything else is surfaced on the first answer.
 const PAGE_CONVERTING_MAX_RETRIES = 3;
+// How many extra sends one logical save may make while the host restarts to
+// finish an update. The old host refuses with `restarting` before it writes
+// anything, then stops listening until the new one is up, so after that refusal a
+// failed connection is the same restart and gets the same wait. Fifteen waits of
+// two seconds cover the update supervisor's thirty-second judgment.
+const RESTART_MAX_RETRIES = 15;
 const HTTP_DATE = /^(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), \d{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2} \d{2}:\d{2}:\d{2} GMT|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (?: \d|\d{2}) \d{2}:\d{2}:\d{2} \d{4})$/;
 
 /**
@@ -911,6 +917,7 @@ async function sendSave(content, { captureId = null, conversionHeader = null, at
   // while we wait — newer edits, a disk frame — cancels the retry instead of
   // being overwritten by stale bytes.
   let convertingRetries = 0;
+  let restartRetries = 0;
   // A bound save retries only while its own capture is still the newest. A raw
   // save has no capture identity, so it uses the newest capture at send time.
   const retryGuard = captureId ?? currentCaptureId();
@@ -942,6 +949,16 @@ async function sendSave(content, { captureId = null, conversionHeader = null, at
         // own work, rather than on the stamp the refused attempt carried.
         etag = stampToSend();
         duplicateResolved = true;
+        continue;
+      }
+
+      const restarting = (err.status === 503 && err.code === 'restarting') ||
+        (restartRetries > 0 && err instanceof TypeError);
+      if (restarting && restartRetries < RESTART_MAX_RETRIES) {
+        if (currentCaptureId() !== retryGuard) throw err;
+        restartRetries += 1;
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, err.retryAfter ?? 2) * 1000));
+        if (currentCaptureId() !== retryGuard) throw err;
         continue;
       }
 
