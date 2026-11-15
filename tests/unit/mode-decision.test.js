@@ -201,6 +201,21 @@ test("a receipt older than 30 s opens in view", async () => {
   expect(mod.mode).toBe("view");
 });
 
+test("Back or Forward to a page left in edit opens it in edit, however long ago it was left", async () => {
+  prepare({ receipt: { mode: "edit", internal: false, at: Date.now() - 10 * 60 * 1000 }, nav: "back_forward" });
+  const mod = await decide();
+
+  expect(mod.mode).toBe("edit");
+  expect(sessionStorage.getItem(RECEIPT_KEY())).toBeNull();
+});
+
+test("a reload long after the page was left in edit still opens in view", async () => {
+  prepare({ cookie: true, receipt: { mode: "edit", internal: false, at: Date.now() - 31000 }, nav: "reload" });
+  const mod = await decide();
+
+  expect(mod.mode).toBe("view");
+});
+
 test("a receipt for another document opens in view", async () => {
   prepare({ receipt: { mode: "edit", internal: true, path: "/other.html" }, nav: "reload" });
   const mod = await decide();
