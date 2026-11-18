@@ -94,6 +94,12 @@ function admitAdopt(env, room, frame, by) {
   return "ok";
 }
 function admitReceipt(env, room, frame) {
+  return env.hostMade && !(room.accepted?.commit === frame.commit && room.accepted.through === frame.through) ? "unseen" : takeReceipt(env, room, frame);
+}
+function hostReceipt(env, room, frame) {
+  return env.observer.onFrame(env, room, frame), takeReceipt(env, room, frame);
+}
+function takeReceipt(env, room, frame) {
   if (frame.through <= room.base.through) return "old";
   if (frame.through > room.seq) return "beyond";
   for (env.observer.onReceipt(env, room, frame), room.base = { commit: frame.commit, etag: frame.etag, through: frame.through }, append(env, room, { k: "receipt", commit: frame.commit, etag: frame.etag, through: frame.through }, frame); room.floor < room.log.length; ) {
@@ -162,6 +168,7 @@ function admit(env, room, frame, by) {
 export {
   admit,
   dropConnection,
+  hostReceipt,
   newInstance,
   newRoom,
   originOf,

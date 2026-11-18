@@ -41,7 +41,7 @@ function sessionWithStoredCopies() {
   return quiesce(world);
 }
 
-const ENV_FIELDS = new Set(["limits", "removals", "split", "port", "observer"]);
+const ENV_FIELDS = new Set(["limits", "removals", "hostMade", "split", "port", "observer"]);
 
 function coreProblems(files) {
   const problems = [];
@@ -53,7 +53,7 @@ function coreProblems(files) {
   return problems;
 }
 
-test("core imports only core, and reads only limits, removals, split, port and observer from the env it is given", () => {
+test("core imports only core, and reads only limits, removals, hostMade, split, port and observer from the env it is given", () => {
   const dir = path.join(lab, "core");
   const files = readdirSync(dir).filter((name) => name.endsWith(".mjs")).map((name) => [name, readFileSync(path.join(dir, name), "utf8")]);
   assert.ok(files.length >= 12);

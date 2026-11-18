@@ -72,6 +72,9 @@ if [ "$what" = gate ] || [ "$what" = everything ]; then
   sweep profile-v9-ordered "$side" 400 ordered --profile v9
   sweep profile-v9-scrambled "$side" 400 scrambled --profile v9
   step mutants-v9 node harness/fuzz.mjs --mutants "$mutants" --deep "$deep" --steps 400 --profile v9 --only wire-never-resent,wire-late-part-staged,wire-offer-judged-again --out "$out/mutants-v9.json"
+  sweep profile-v10-ordered "$side" 400 ordered --profile v10
+  sweep profile-v10-scrambled "$side" 400 scrambled --profile v10
+  step mutants-v10 node harness/fuzz.mjs --mutants "$mutants" --deep "$deep" --steps 400 --profile v10 --only host-receipt-not-made,host-opens-before-write,host-same-drops-room,host-equal-tables-new-gen,host-same-etag-not-learned --out "$out/mutants-v10.json"
   for at in "${!filepids[@]}"; do
     wait "${filepids[$at]}"
     code=$?

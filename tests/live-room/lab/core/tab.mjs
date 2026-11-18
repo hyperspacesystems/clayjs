@@ -1,7 +1,7 @@
 import { planted } from "./planted.mjs";
-import { applyFrame, resolved, covered, nextGeneration, ledgerMarks } from "./ledger.mjs";
+import { applyFrame, resolved, covered, ledgerMarks } from "./ledger.mjs";
 import { act } from "./codec.mjs";
-import { newRoom, newInstance, admit, retained, originOf } from "./room.mjs";
+import { newInstance, admit, retained, originOf } from "./room.mjs";
 import { serialize, DOC, page, parsePage, ledgerBytes } from "./record.mjs";
 import { clone } from "./lib.mjs";
 import { opsOf, actionBytes } from "./limits.mjs";
@@ -9,6 +9,7 @@ import { explode } from "./frames.mjs";
 import { COPY_VERSION, CLOSING, inFile, positions, preview, taken, weigh, markFor, madeFor } from "./recover.mjs";
 import { seenBy, reviewed, unseenBy, holds, rowsOf, marksOf, createsOf, removesOf, has } from "./conflict.mjs";
 import { codec } from "./codec.mjs";
+import { establishing, openOn } from "./host.mjs";
 
 export function newTab(id) {
   return {
@@ -850,7 +851,9 @@ function learnFromFile(env, tab, file, snap) {
   if (attached(env, tab) && file.record.gen === tab.gen && file.record.through > tab.base.through) {
     const receipt = { k: "receipt", gen: tab.gen, commit: file.record.commit, etag: file.etag, through: file.record.through };
     applyReceipt(env, tab, receipt);
-    tab.out.push(receipt);
+    if (!env.hostMade) tab.out.push(receipt);
+  } else if (env.hostMade && attached(env, tab) && file.record.commit === tab.base.commit && file.etag !== tab.base.etag && !planted("host-same-etag-not-learned")) {
+    tab.base = { ...tab.base, etag: file.etag };
   }
 }
 
@@ -867,13 +870,13 @@ function load(tab, file) {
 
 function startEstablish(env, tab, file) {
   if (tab.io) return false;
-  const epoch = file.record.epoch + 1;
-  const gen = nextGen(env, epoch);
-  const commit = nextCommit(env);
-  const record = { v: 2, doc: DOC, gen, epoch, commit, parent: file.record.commit, through: 0, room: env.port.room().id };
-  const [own, before] = file.state.opened ?? [file.record.epoch, file.record.epoch];
-  const state = nextGeneration(file.state, file.record.gen, file.record.through, epoch, env.limits.ledgerCap, file.record.room === env.port.room().id ? [planted("ledger-turn-restarts-the-room") ? epoch : own, before] : [epoch, own]);
-  request(env, tab, { kind: "establish", gen, commit, through: 0, etag: planted("establish-unconditional") ? "*" : file.etag, body: serialize(record, state) });
+  const etag = planted("establish-unconditional") ? "*" : file.etag;
+  if (env.hostMade) {
+    request(env, tab, { kind: "establish", ask: true, through: 0, etag });
+    return true;
+  }
+  const { gen, commit, body } = establishing(env, file);
+  request(env, tab, { kind: "establish", gen, commit, through: 0, etag, body });
   return true;
 }
 
@@ -899,9 +902,7 @@ function openRoom(env, tab, file, snap) {
   const named = live.record.room === room.id || planted("open-unnamed");
   if (!planted("stale-open") && (live.record.gen !== file.record.gen || !named)) return read(env, tab);
   const from = planted("stale-open") ? file : live;
-  if (room.gen) env.observer.onRoomLoss(env, room, "replaced");
-  env.port.setRoom(newRoom(from.record, from.etag, from.state, room.id));
-  env.observer.onRoom(env, env.port.room());
+  openOn(env, from.record, from.etag, from.state);
   attach(env, tab, file, snap);
   nudgeAll(env, tab);
 }
@@ -1004,7 +1005,7 @@ export function link(env, tab) {
     else if (file.record.through < room.base.through && !planted("attach-stale-file")) read(env, tab);
     else if (retiredOnOldFile(env, tab, file)) read(env, tab);
     else attach(env, tab, file, snap);
-  } else if (file.record.room === room.id || (planted("open-unnamed") && !room.gen)) {
+  } else if (!env.hostMade && (file.record.room === room.id || (planted("open-unnamed") && !room.gen))) {
     openRoom(env, tab, file, snap);
   } else {
     startEstablish(env, tab, file);

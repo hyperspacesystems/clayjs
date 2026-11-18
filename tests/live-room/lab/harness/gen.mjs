@@ -1,4 +1,4 @@
-import { newWorld, live, writer, join, userEdit, setConnected, close, roomLoss, expire, endRoom, restore, outsideWrite, restoreFromCopy, decideConflicts, quiesce, lull, attached, view, toRoom, post, waited, land, dropWire, echo, toTab, capture, answer, hostTake, deliver, step, linking, rotate, lagging, checkStep } from "./world.mjs";
+import { newWorld, live, writer, join, userEdit, setConnected, close, roomLoss, expire, endRoom, restore, outsideWrite, retitle, restoreFromCopy, decideConflicts, quiesce, lull, attached, view, toRoom, post, waited, land, dropWire, echo, toTab, capture, answer, hostTake, deliver, step, linking, rotate, lagging, checkStep } from "./world.mjs";
 import { parse } from "../core/record.mjs";
 import { faultPlan } from "./host.mjs";
 import { keyBetween } from "./vendor/order-keys.mjs";
@@ -329,6 +329,14 @@ export const MOVES = {
     return decideConflicts(world, tab, notice.job, picks) ? [tab.id, notice.job, picks] : null;
   },
 
+  title(world) {
+    return retitle(world, "step") ? [] : null;
+  },
+
+  "title-raw"(world) {
+    return retitle(world, "raw") ? [] : null;
+  },
+
   rotate(world, rnd, args) {
     const tab = args ? byId(world, args[0]) : writer(world);
     return rotate(world, tab) ? [tab.id] : null;
@@ -414,10 +422,12 @@ export const PROFILES = {
   v9: [...V3.map(([name, weight]) => [name === "out" ? "post" : name, name === "paste" ? weight * 2 : weight]), ["restore-copy", 24], ["decide", 30], ["strand", 50], ["cross", 80], ["come-back", 3], ["land", 36], ["land-lost", 4], ["drop", 3], ["echo", 3], ["wait-out", 5]].map(([name, weight]) => [name, weight * (BACK[name] ?? 1)]),
 };
 
+PROFILES.v10 = [...PROFILES.v9, ["title", 6], ["title-raw", 6]];
+
 export const PROFILE = "v3";
 
-const TRAITS = ["v3", "v4", "v5", "v6", "v7", "v8", "v9"];
-const WIDE = ["v5", "v6", "v7", "v8", "v9"];
+const TRAITS = ["v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10"];
+const WIDE = ["v5", "v6", "v7", "v8", "v9", "v10"];
 
 export function traitsOf(seed, profile = PROFILE) {
   const weights = PROFILES[profile];
@@ -438,7 +448,7 @@ export function traitsOf(seed, profile = PROFILE) {
   });
   const faults = held && rnd() < 0.3 ? [pick(rnd, ["drop", "blank"])] : null;
   const wide = WIDE.includes(profile) && rnd() < 0.6 ? { rate: pick(rnd, [0.1, 0.3, 0.6, 1]), run: pick(rnd, [1, 3, 8]) } : null;
-  return { weights: scaled, world: { split, retain, outside, ledgerCap, slow, calm }, faults, wide };
+  return { weights: scaled, world: { split, retain, outside, ledgerCap, slow, calm, ...(profile === "v10" ? { hostMade: true } : {}) }, faults, wide };
 }
 
 function nextMove(rnd, without, weights) {
@@ -509,7 +519,7 @@ export function run(seed, steps, options = {}) {
   const world = start({ ...options, seed });
   const without = options.without ?? [];
   const weights = traitsOf(seed, options.profile).weights.filter(([, weight]) => weight > 0);
-  const more = ["v3", "v4", "v9"].includes(options.profile ?? PROFILE) ? (i) => world.effective < steps && i < steps * 4 : (i) => i < steps;
+  const more = ["v3", "v4", "v9", "v10"].includes(options.profile ?? PROFILE) ? (i) => world.effective < steps && i < steps * 4 : (i) => i < steps;
   return play(world, (i) => (more(i) ? [nextMove(rnd, without, weights), Math.floor(rnd() * 4294967296)] : null), { ...options, seed });
 }
 

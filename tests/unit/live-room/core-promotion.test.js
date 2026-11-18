@@ -48,7 +48,7 @@ test("every planted defect of the lab core fails through the product adapter", (
 // Bug it catches: the product core behaves differently from the lab core on the same
 // sessions (an esbuild fold that changes a count), which the oracle alone might pass.
 test("the product core gives the lab's own counts on the same sessions", () => {
-  for (const profile of ["v3", "v8", "v9"]) {
+  for (const profile of ["v3", "v8", "v9", "v10"]) {
     const lab = conform({ adapter: "lab", suite: "fuzz", from, seeds, profile, modes: ["scrambled"] });
     const product = conform({ adapter: "product", suite: "fuzz", from, seeds, profile, modes: ["scrambled"] });
     expect({ profile, seeds: window.label, failures: product.failures, totals: product.parts[0].totals }).toEqual({ profile, seeds: window.label, failures: 0, totals: lab.parts[0].totals });

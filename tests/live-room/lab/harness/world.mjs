@@ -6,6 +6,7 @@ import { newRoom, newInstance, dropConnection, rejoin, admit } from "../core/roo
 import { labLimits } from "../core/limits.mjs";
 import { serialize, parse, DOC } from "../core/record.mjs";
 import { newTab, attached, view, edit, restoreCopy, decide, flush, toRoom, post, answered, waited, toTab, receive, sync, read, link, nudgeAll, capture, deliver, rotate, retry, nextCommit, nextGen, storeRemovals } from "../core/tab.mjs";
+import { establishing, openOn, fileAccepted, sameTables } from "../core/host.mjs";
 import { newOracle, checkStep, checkEnd } from "./oracle.mjs";
 import { tinyWorkbook } from "./lib.mjs";
 
@@ -36,6 +37,8 @@ export function newWorld(options = {}) {
     accepted: 0,
     returned: { judged: 0, kept: 0, open: 0, counted: 0, carried: 0 },
     removals: Boolean(options.removals),
+    hostMade: Boolean(options.hostMade),
+    titles: 0,
     lulls: { all: 0, away: 0, owing: 0 },
     refused: 0,
     losses: 0,
@@ -92,13 +95,21 @@ export function hostTake(world, at = 0, lost = false) {
   const [sent] = world.inflight.splice(at, 1);
   if (!sent) return false;
   let status = 0;
+  let built = null;
+  const before = get(world.host);
+  if (sent.io.ask && (sent.io.etag === world.host.etag || sent.io.etag === "*")) {
+    if (!world.room) world.room = newInstance(world);
+    built = establishing(world, get(world.host));
+  }
+  if (built && planted("host-opens-before-write")) openOn(world, built.record, world.host.etag, built.state);
   if (!lost) {
-    const body = typeof sent.io.body === "function" ? sent.io.body() : sent.io.body;
-    status = put(world.host, body, sent.io.etag, sent.io.kind).status;
+    const body = built ? built.body : typeof sent.io.body === "function" ? sent.io.body() : sent.io.body;
+    status = body === undefined ? 412 : put(world.host, body, sent.io.etag, sent.io.kind).status;
     if (status === 200) {
       world.accepted++;
       world.oracle.onAccept(world, body, sent.io.kind);
       storeRemovals(world, sent.tab, sent.io.removals ?? []);
+      if (world.hostMade) fileAccepted(world, get(world.host), before);
     }
   }
   world.answers.push({ ...sent, status });
@@ -225,8 +236,10 @@ function finalSave(world) {
     const record = { v: 2, doc: DOC, gen: room.gen, epoch: room.epoch, commit: nextCommit(world), parent: file.record.commit, through: room.seq, room: room.id };
     const body = serialize(record, room.state);
     if (put(world.host, body, file.etag, "final").status !== 200) continue;
+    const before = file;
     world.accepted++;
     world.oracle.onAccept(world, body, "final");
+    if (world.hostMade && !planted("host-own-save-not-told")) fileAccepted(world, get(world.host), before);
     if (!planted("record-not-sent-with-the-final-save")) storeRemovals(world, { id: `the room of ${room.gen}` }, room.removals.filter(({ at }) => at[1] > file.record.through));
     return;
   }
@@ -243,6 +256,24 @@ export function endRoom(world, tab, save) {
 
 export const restore = (world, at) => outsideWrite(world, "restore", at, null);
 
+export function retitle(world, how) {
+  const room = world.room?.gen ? world.room : null;
+  const gen = get(world.host).record.gen;
+  world.host.title = `t${++world.titles}`;
+  if (how === "step") outsideWrite(world, "fanout", "live", null);
+  else rawWrite(world, world.host.body, "raw");
+  world.oracle.onOtherBytes(world, room, gen);
+  return true;
+}
+
+export function rawWrite(world, body, kind) {
+  const before = get(world.host);
+  write(world.host, body, kind);
+  if (world.hostMade) fileAccepted(world, get(world.host), before);
+  nudgeAll(world);
+  return true;
+}
+
 export function outsideWrite(world, kind, at, action) {
   const version = at === "live" ? world.host : world.host.versions[at];
   if (!version) return false;
@@ -256,6 +287,7 @@ export function outsideWrite(world, kind, at, action) {
     return true;
   }
   if (patch) act(source.state.wb, action);
+  if (world.hostMade && !planted("host-equal-tables-new-gen") && sameTables(source, current)) return rawWrite(world, world.host.body, kind);
   const cut = room ? [room.gen, room.seq] : [current.record.gen, current.record.through];
   const dirty = Boolean(room) && (room.gen !== current.record.gen || room.seq > current.record.through);
   let backup = null;

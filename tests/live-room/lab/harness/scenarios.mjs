@@ -1,11 +1,12 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { newWorld, join, userEdit, setConnected, close, roomLoss, expire, restore, outsideWrite, restoreFromCopy, decideConflicts, quiesce, settle, drain, view, toRoom, post, waited, land, dropWire, echo, toTab, capture, answer, hostTake, deliver, read, link, rotate, checkStep } from "./world.mjs";
+import { newWorld, join, userEdit, setConnected, close, roomLoss, expire, restore, outsideWrite, restoreFromCopy, decideConflicts, quiesce, settle, drain, view, toRoom, post, waited, land, dropWire, echo, toTab, capture, answer, hostTake, deliver, read, link, rotate, checkStep, retitle } from "./world.mjs";
 import { get, readRecovery, verdict } from "./host.mjs";
 import { replay } from "../core/recover.mjs";
 import { parse, recordBudget, ledgerBytes } from "../core/record.mjs";
 import { W } from "../core/ledger.mjs";
-import { tailBudget } from "../core/room.mjs";
+import { tailBudget, admit } from "../core/room.mjs";
+import { fileAccepted } from "../core/host.mjs";
 import { REAL_LIMITS } from "../core/limits.mjs";
 import { FIXTURES } from "./vendor/fixtures.mjs";
 import { usePlant, PLANTS } from "../core/planted.mjs";
@@ -76,6 +77,7 @@ function stage(count = 2, options = {}) {
     restored: (tab) => tab.notices.findLast((notice) => notice.kind === "restored"),
     outside: (kind, at, action) => step(() => outsideWrite(world, kind, at, action)),
     rotate: (tab) => step(() => rotate(world, tab)),
+    title: (how) => step(() => retitle(world, how)),
     end: () => quiesce(world),
     file: () => get(world.host),
     cell: (row, col) => get(world.host).state.wb.rows[row]?.cells[col],
@@ -263,6 +265,101 @@ export const SCENARIOS = [
       s.send(ben);
       s.end();
       expect(s.cell("r2", "c2") === "y", "a later write by Ben is not undone by a copy of Ana's write");
+    },
+  },
+  {
+    name: "host-makes-the-receipt",
+    about: "Ben's write is in the room and Ana's tab saves the file. The host makes the receipt when it accepts the write, so no tab sends one, and Ben's tab shows his edit as saved.",
+    plants: ["host-receipt-not-made"],
+    run() {
+      const { s, world, tabs } = stage(2, { hostMade: true });
+      const [ana, ben] = tabs;
+      const id = s.type(ben, "r1", "c1", "ben");
+      s.send(ben);
+      s.recv(ana);
+      s.recv(ben);
+      s.save(ana);
+      s.answer("ok");
+      expect(!ana.out.some((frame) => frame.k === "receipt"), "Ana's tab sends no receipt");
+      expect(world.room.base.through === 1, "the host's receipt tells the room the save landed");
+      s.recv(ben);
+      expect(s.status(ben, id) === "saved", "Ben's edit shows as saved");
+      s.end();
+    },
+  },
+  {
+    name: "tab-receipt-checked-against-the-host",
+    about: "Ben's write is in the room and not saved. A tab reports a receipt for a commit the host never accepted. The room answers that it has not seen that commit and keeps Ben's edit unsaved.",
+    plants: ["host-receipt-trusts-the-tab"],
+    run() {
+      const { s, world, tabs } = stage(2, { hostMade: true });
+      const [ana, ben] = tabs;
+      s.type(ben, "r1", "c1", "ben");
+      s.send(ben);
+      const answer = admit(world, world.room, { k: "receipt", gen: world.room.gen, commit: "c99999999999", etag: "e99", through: 1 }, ana.id);
+      expect(answer === "unseen", `the room refuses the receipt (answer ${answer})`);
+      expect(world.room.base.through === 0, "the room still counts Ben's edit as unsaved");
+      s.end();
+    },
+  },
+  {
+    name: "host-writes-the-establishing-commit",
+    about: "Ana's tab asks for a new generation and sends no bytes. The host's first write is lost, and the room stays on its generation. Her tab asks again, the host writes the establishing commit, and only then opens the room on it.",
+    plants: ["host-opens-before-write"],
+    run() {
+      const { s, world, tabs } = stage(2, { hostMade: true });
+      const [ana, ben] = tabs;
+      const before = world.room.gen;
+      s.rotate(ana);
+      expect(world.inflight.length === 1 && world.inflight[0].io.body === undefined, "Ana's tab asks for the establishing commit and sends no bytes");
+      s.host(0, true);
+      expect(world.room.gen === before, "a lost establishing write leaves the room on its generation");
+      s.deliver();
+      s.rotate(ana);
+      s.answer("ok");
+      expect(world.room.gen !== before && s.file().record.gen === world.room.gen && s.file().record.room === world.room.id, "the room opens on the generation the file names");
+      const id = s.type(ben, "r1", "c1", "ben");
+      s.end();
+      expect(s.cell("r1", "c1") === "ben" && s.status(ben, id) === "saved", "Ben's edit on the new generation is saved");
+    },
+  },
+  {
+    name: "title-change-keeps-the-room",
+    about: "Ben's write is in the room and not saved. A program changes only the title of the file, once on its own and once through the outside write step. The room keeps its generation and takes the new ETag, and Ben's edit is saved.",
+    plants: ["host-same-drops-room", "host-equal-tables-new-gen", "host-same-etag-not-learned"],
+    run() {
+      const { s, world, tabs } = stage(2, { hostMade: true });
+      const [ana, ben] = tabs;
+      const id = s.type(ben, "r1", "c1", "ben");
+      s.send(ben);
+      s.recv(ana);
+      const room = world.room;
+      s.title("raw");
+      expect(world.room === room && room.base.etag === s.file().etag, "the room stays and takes the new ETag");
+      s.title("step");
+      expect(world.room === room && s.file().record.gen === room.gen, "the outside write step keeps the generation");
+      s.end();
+      expect(s.cell("r1", "c1") === "ben" && s.status(ben, id) === "saved", "Ben's edit is saved");
+    },
+  },
+  {
+    name: "cell-changed-under-a-kept-tag-ends-the-room",
+    about: "Ben's edit is saved. The host is told of a write that keeps the commit record and changes a cell, as an agent editing the file on disk would make. The host sees the tables changed and answers outside, so the room ends and no save of its state can erase the agent's cell. (The lab's oracle does not model the write itself yet: that is round L2b part 2, an overwrite found after the fact.)",
+    plants: ["host-same-ignores-tables"],
+    run() {
+      const { s, world, tabs } = stage(2, { hostMade: true });
+      const [ana, ben] = tabs;
+      s.type(ben, "r1", "c1", "ben");
+      s.send(ben);
+      s.recv(ana);
+      s.save(ana);
+      s.answer("ok");
+      const before = s.file();
+      const after = { ...before, etag: "e-agent", state: { ...before.state, wb: structuredClone(before.state.wb) } };
+      after.state.wb.rows.r2.cells.c2 = "agent";
+      const answer = fileAccepted(world, after, before);
+      expect(answer === "outside" && !world.room, `a write that changed a table under a kept tag ends the room (answer ${answer})`);
+      s.end();
     },
   },
   {

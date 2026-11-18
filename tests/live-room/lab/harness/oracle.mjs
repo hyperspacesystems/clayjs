@@ -351,6 +351,11 @@ export function newOracle(world) {
         throw new Error(`P1 the room accepted a receipt for ${frame.commit} through ${frame.through}, and ${commit ? `that commit is ${commit.gen}#${commit.through}` : "the host never accepted that commit"}`);
       }
     },
+    onOtherBytes(theWorld, room, gen) {
+      const now = parse(theWorld.host.body).record.gen;
+      if (now !== gen) throw new Error(`H3 a write that changed no table moved the file from ${gen} to ${now}`);
+      if (room && theWorld.room !== room) throw new Error(`H3 a write that changed no table ended the room on ${room.gen}`);
+    },
     onFrame(theWorld, room, frame) {
       const ops = frameOps(frame);
       if (ops > theWorld.limits.opsPerFrame) throw new Error(`F1 a ${frame.k} frame with ${ops} operations reached the room, over the cap of ${theWorld.limits.opsPerFrame}`);

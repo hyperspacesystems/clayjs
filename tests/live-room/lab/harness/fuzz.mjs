@@ -334,6 +334,10 @@ function shrunk(caught, opts) {
   for (const { seed } of opts.tails ? [] : caught.slice(0, opts.shrink)) {
     const error = failing(seed, opts.steps, options);
     if (!error) continue;
+    if (!error.moves) {
+      out.push({ seed, message: error.message, moves: [], shown: [] });
+      continue;
+    }
     const small = shrink(error.moves, { ...options, seed }, failureClass(error));
     const again = attempt(small.moves, { ...options, seed });
     out.push({ seed, message: small.error.message, moves: small.moves, shown: again?.world?.shown ?? [] });
@@ -362,7 +366,7 @@ async function mutants(opts) {
   const rows = [];
   const modes = modesOf(opts);
   const [part, parts] = opts.slice;
-  const wanted = (name) => (opts.only.length ? opts.only.includes(name) : !name.startsWith("file-") && !name.startsWith("wire-") && (opts.removals ? name.startsWith("record-") : !name.startsWith("record-")));
+  const wanted = (name) => (opts.only.length ? opts.only.includes(name) : !name.startsWith("file-") && !name.startsWith("wire-") && !name.startsWith("host-") && (opts.removals ? name.startsWith("record-") : !name.startsWith("record-")));
   for (const plant of Object.keys(PLANTS).filter(wanted).filter((_, at) => at % parts === part)) {
     const row = { plant, about: PLANTS[plant] };
     for (const mode of modes) {

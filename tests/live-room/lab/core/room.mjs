@@ -187,6 +187,16 @@ function admitAdopt(env, room, frame, by) {
 }
 
 function admitReceipt(env, room, frame) {
+  if (env.hostMade && !planted("host-receipt-trusts-the-tab") && !(room.accepted?.commit === frame.commit && room.accepted.through === frame.through)) return "unseen";
+  return takeReceipt(env, room, frame);
+}
+
+export function hostReceipt(env, room, frame) {
+  env.observer.onFrame(env, room, frame);
+  return takeReceipt(env, room, frame);
+}
+
+function takeReceipt(env, room, frame) {
   if (frame.through <= room.base.through) return "old";
   if (frame.through > room.seq) return "beyond";
   env.observer.onReceipt(env, room, frame);

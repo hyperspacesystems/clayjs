@@ -198,6 +198,14 @@ export const PLANTS = {
   "wire-late-part-staged": "the room stages a part that lands after its connection ended, and holds its bytes until the room ends",
   "wire-offer-judged-again": "the room keeps no answer for a restore offer it admitted, so the same offer sent again after a lost answer is judged again and answered as already counted",
   "wire-receipt-not-resent": "a tab that sends its frames again (its wait ran out, or it linked to its room again) does not send a receipt whose answer it never got, so the room never learns of the save",
+  "host-receipt-not-made": "the host does not make a receipt when it accepts the room's next commit, so with receipts from tabs gone the room never learns of the save",
+  "host-receipt-trusts-the-tab": "the room takes a receipt a tab reports without checking it against the last commit the host accepted",
+  "host-opens-before-write": "the host opens the room on a new generation when it builds the establishing commit, before the write is on disk",
+  "host-same-drops-room": "the host classifies a write that changed only bytes outside the tables as an outside write and drops the room",
+  "host-same-etag-not-learned": "a tab that reads a file whose commit it already has, with new bytes outside the tables, keeps the old ETag, so every save it makes is refused",
+  "host-own-save-not-told": "the host's own final save of a room it keeps does not go through fileAccepted, so the kept room never learns that the file holds its edits",
+  "host-same-ignores-tables": "the host classifies a write that keeps the commit record as same without comparing the tables, so a cell changed under a kept tag is erased by the room's next save",
+  "host-equal-tables-new-gen": "the outside write step does not stop when the incoming tables equal the current ones, so a title change starts a new generation",
   "wire-part-refusal-not-told": "the room refuses a paste for space when its last part lands but does not tell the author, whose answer came back for an older copy of that part, so the tab waits for its paste forever",
 };
 

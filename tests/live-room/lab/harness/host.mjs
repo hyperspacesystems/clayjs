@@ -14,12 +14,17 @@ export const FIRST_COMMIT = "c00000000000";
 export function newHost(wb) {
   const record = { v: 2, doc: DOC, gen: FIRST_GEN, epoch: 0, commit: FIRST_COMMIT, parent: null, through: 0 };
   const body = serialize(record, newState(clone(wb)));
-  return { etag: "e0", writes: 0, body, versions: [{ kind: "initial", commit: FIRST_COMMIT, body }], recoveries: [], decisions: [], removals: [], copyWrites: 0, copyFaults: 0, markWrites: 0, markFaults: 0, removalSaves: 0, faults: null, deaf: null, deafMark: null };
+  return { etag: "e0", writes: 0, title: "", body, versions: [{ kind: "initial", commit: FIRST_COMMIT, body }], recoveries: [], decisions: [], removals: [], copyWrites: 0, copyFaults: 0, markWrites: 0, markFaults: 0, removalSaves: 0, faults: null, deaf: null, deafMark: null };
 }
 
 export const get = (host) => ({ etag: host.etag, ...parse(host.body) });
 
+const TITLE = /<title>[^<]*<\/title>/;
+
+export const withTitle = (body, title) => (title ? `<!doctype html><title>${title}</title>${body.replace(TITLE, "").slice("<!doctype html>".length)}` : body.replace(TITLE, ""));
+
 export function write(host, body, kind) {
+  body = withTitle(body, host.title);
   host.body = body;
   host.etag = `e${++host.writes}`;
   host.versions.push({ kind, commit: parse(body).record.commit, body });
