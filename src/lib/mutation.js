@@ -74,8 +74,50 @@ import { isEphemeralAttr } from './ephemeral.js';
 import { isDerivedChange } from './derived.js';
 
 import { isUserDrivenNow, markUserDriven } from './user-gesture.js';
+import { hasOwnedRegions, isOwnedRoot, matchOwnedRoot, onOwnedChange, ownedRevisionMoved } from './owned-regions.js';
+
+function outermostOwned(node, memo) {
+  let root = memo.get(node);
+  if (root !== undefined) return root;
+  root = null;
+  for (let at = node; at; at = at.parentNode) {
+    if (isOwnedRoot(at)) root = at;
+  }
+  memo.set(node, root);
+  return root;
+}
+
+function ownedRootFor(mutation, memo) {
+  const target = mutation.target;
+  const root = target.parentNode ? outermostOwned(target.parentNode, memo) : null;
+  if (root) return root;
+  return mutation.type === 'childList' && isOwnedRoot(target) ? outermostOwned(target, memo) : null;
+}
+
+function outsideOwned(records) {
+  if (!hasOwnedRegions()) return records;
+  const memo = new Map();
+  const kept = records.filter((record) => !ownedRootFor(record, memo));
+  return kept.length === records.length ? records : kept;
+}
+
+function expandOutsideOwned(node) {
+  if (!hasOwnedRegions()) return [node, ...node.querySelectorAll('*')];
+  const out = [];
+  const visit = (element) => {
+    out.push(element);
+    if (matchOwnedRoot(element)) return;
+    for (let child = element.firstElementChild; child; child = child.nextElementSibling) visit(child);
+  };
+  visit(node);
+  return out;
+}
 
 const dummyElem = document.createElement("div");
+
+// How many times deliverDeferred hands out what its own deliveries queued. A page whose
+// subscribers keep writing past this leaves the rest to the browser's own delivery.
+const DELIVERY_ROUNDS = 8;
 
 // Attributes clayjs itself writes on <html>: savestatus flips on every save,
 // editmode/pageowner on every mode change. They are library state, not page
@@ -127,10 +169,6 @@ const localMutation = {
   // synchronously inside undo's commit boundary.
   _deferredChangeRecords: null,
   _deferredChangeScheduled: false,
-  // How many of those records the dirty gate has counted already, and, while
-  // subscribers run, whether the batch they are handed is exactly those records.
-  _deferredCounted: 0,
-  _deliveringCounted: false,
   // The change lists being handed to subscribers right now, innermost last, each
   // with the next subscriber it calls.
   _deliveries: [],
@@ -177,46 +215,35 @@ const localMutation = {
   },
 
   /**
-   * Hand the change lane, now, what it still owes its subscribers, so a derive engine
-   * that flushes next sees every edit made so far. A save boundary calls it. First the
-   * subscribers a delivery has not reached yet, when the boundary was reached from
-   * inside an earlier subscriber (an [onmutation] that calls clay.save()): each gets
+   * Hand every subscriber, now, what the change lane still owes it, so a save boundary
+   * reads a page whose every edit has been handed out: a derive engine that flushes next
+   * has heard of it, and the dirty gate has counted it before the save takes its token.
+   * First the subscribers a delivery has not reached yet, when the boundary was reached
+   * from inside an earlier subscriber (an [onmutation] that calls clay.save()): each gets
    * that batch now, and the delivery goes on after them. Then the records a raw
-   * subscriber's drain left for a microtask (an edit made through undo's commit,
-   * command or trash). Inside a pause it leaves both: delivered now, only
-   * non-pausable callbacks would see them.
+   * subscriber's drain left for a microtask (an edit made through undo's commit, command
+   * or trash), then what the browser has queued. A subscriber that writes when it is
+   * handed a batch queues more, so those two repeat until nothing is left, a few rounds at
+   * most. Inside a pause it leaves all of it: delivered now, only non-pausable callbacks
+   * would see it.
    */
   deliverDeferred() {
     if (this._pauseDepth > 0) return;
-    for (const delivery of [...this._deliveries].reverse()) {
-      const previousCounted = this._deliveringCounted;
-      this._deliveringCounted = delivery.counted;
-      try {
-        this._notifyFrom(delivery);
-      } finally {
-        this._deliveringCounted = previousCounted;
-      }
+    for (const delivery of [...this._deliveries].reverse()) this._notifyFrom(delivery);
+    for (let round = 0; round < DELIVERY_ROUNDS; round++) {
+      const held = this._deliverDeferredBatch();
+      const queued = this._observer ? this._observer.takeRecords() : [];
+      if (queued.length) this._onRecords(queued);
+      if (!held && !queued.length) return;
     }
-    this._deliverDeferredBatch();
   },
 
-  /**
-   * The dirty gate counted the records the change lane holds for a microtask: an edit
-   * made through undo marks the page dirty as its commit returns. When exactly those
-   * records are delivered, the gate does not count the same edit a second time, after a
-   * save in the same task took its token. A record deferred after this call makes the
-   * delivery count as usual.
-   */
-  _countDeferred() {
-    this._deferredCounted = this._deferredChangeRecords ? this._deferredChangeRecords.length : 0;
-  },
-
+  // Returns how many records it handed over.
   _deliverDeferredBatch() {
     const batch = this._deferredChangeRecords;
     this._deferredChangeRecords = null;
-    const counted = !!batch && this._deferredCounted === batch.length;
-    this._deferredCounted = 0;
-    if (batch && batch.length) this._handleMutations(batch, counted);
+    if (batch && batch.length) this._handleMutations(batch);
+    return batch ? batch.length : 0;
   },
 
   /**
@@ -254,15 +281,21 @@ const localMutation = {
     }
   },
 
-  _notify(type, changes, onlyNonPausable = false) {
-    this._log(`Notifying ${this._callbacks[type].length} callbacks of type "${type}"`, { changes });
-
-    const delivery = { type, changes, onlyNonPausable, counted: this._deliveringCounted, next: 0 };
-    this._deliveries.push(delivery);
+  // One batch for every type, in order. Each type's delivery is listed before the first
+  // runs, so a save boundary inside an anyChange subscriber (an [onmutation] that calls
+  // clay.save()) hands the later types this batch too, before the save takes its token.
+  _notifyAll(lists, onlyNonPausable) {
+    const deliveries = lists
+      .filter(([type, changes]) => type === 'anyChange' || changes.length > 0)
+      .map(([type, changes]) => ({ type, changes, onlyNonPausable, next: 0 }));
+    for (let i = deliveries.length - 1; i >= 0; i--) this._deliveries.push(deliveries[i]);
     try {
-      this._notifyFrom(delivery);
+      for (const delivery of deliveries) {
+        this._log(`Notifying ${this._callbacks[delivery.type].length} callbacks of type "${delivery.type}"`, { changes: delivery.changes });
+        this._notifyFrom(delivery);
+      }
     } finally {
-      this._deliveries.pop();
+      this._deliveries.splice(this._deliveries.length - deliveries.length, deliveries.length);
     }
   },
 
@@ -421,8 +454,10 @@ const localMutation = {
   // filtering and no pause gating: raw means raw (undo runs its own filter and
   // its own pause). Captured BEFORE the change lane's isInert / extension-attr
   // intake drops, which the raw subscriber must not inherit.
-  _fanOutRaw(records) {
-    if (!this._rawSubscribers.length || !records.length) return;
+  _fanOutRaw(all) {
+    if (!this._rawSubscribers.length || !all.length) return;
+    const records = outsideOwned(all);
+    if (!records.length) return;
     for (const sub of this._rawSubscribers) {
       try {
         sub.cb(records);
@@ -449,12 +484,14 @@ const localMutation = {
     const pulled = withoutLibraryNoise(this._observer ? this._observer.takeRecords() : []);
     const requesterIsRaw = !!requester && this._rawSubscribers.indexOf(requester) !== -1;
 
+    const raw = this._rawSubscribers.length ? outsideOwned(pulled) : pulled;
+
     if (pulled.length) {
       // (a) records owed to other raw subscribers (the global queue is now empty
       // for them too, so hand them their copy via their buffer).
       for (const sub of this._rawSubscribers) {
-        if (sub === requester) continue;
-        sub.buffer.push(...pulled);
+        if (sub === requester || !raw.length) continue;
+        sub.buffer.push(...raw);
         this._scheduleBufferFlush(sub);
       }
 
@@ -470,7 +507,7 @@ const localMutation = {
     if (requesterIsRaw) {
       const own = requester.buffer;
       requester.buffer = [];
-      return own.length ? own.concat(pulled) : pulled;
+      return own.length ? own.concat(raw) : raw;
     }
     return pulled;
   },
@@ -551,7 +588,7 @@ const localMutation = {
     };
   },
 
-  _handleMutations(mutations, counted = false) {
+  _handleMutations(mutations) {
     if (this._pauseDepth > 0) {
       // While paused (e.g. during a live-sync morph), only non-pausable
       // callbacks should run. With none registered, take the fast path.
@@ -559,13 +596,13 @@ const localMutation = {
         this._log(`Skipping ${mutations.length} mutations (paused)`);
         return;
       }
-      this._processMutations(mutations, true, counted);
+      this._processMutations(mutations, true);
       return;
     }
-    this._processMutations(mutations, false, counted);
+    this._processMutations(mutations, false);
   },
 
-  _processMutations(mutations, onlyNonPausable = false, counted = false) {
+  _processMutations(mutations, onlyNonPausable = false) {
     const changes = [];
     const changesByType = {
       add: [],
@@ -574,10 +611,18 @@ const localMutation = {
       characterData: []
     };
 
+    const ownedMemo = hasOwnedRegions() ? new Map() : null;
+    const ownedTouched = new Set();
+
     for (const mutation of mutations) {
+      if (ownedMemo) {
+        const ownedRoot = ownedRootFor(mutation, ownedMemo);
+        if (ownedRoot) { ownedTouched.add(ownedRoot); continue; }
+      }
+
       // Intake drop: a no-watch / mutations-ignore subtree (or extension noise)
       // is invisible to every consumer, so skip it without walking. All other
-      // region attributes are resolved per-consumer in _notify.
+      // region attributes are resolved per-consumer in _notifyFrom.
       const policyTransition = mutation.type === 'attributes' && isPolicyAttribute(mutation.attributeName);
       if (!policyTransition && isInert(mutation.target)) {
         continue;
@@ -614,7 +659,7 @@ const localMutation = {
 
         for (const node of mutation.addedNodes) {
           if (node.nodeType === 1 && !isInert(node)) {
-            const addedNodes = [node, ...node.querySelectorAll('*')];
+            const addedNodes = expandOutsideOwned(node);
             this._log(`Processing ${addedNodes.length} added nodes`, { addedNodes });
 
             for (const element of addedNodes) {
@@ -633,7 +678,7 @@ const localMutation = {
 
         for (const node of mutation.removedNodes) {
           if (node.nodeType === 1 && !isInert(node)) {
-            const removedNodes = [node, ...node.querySelectorAll('*')];
+            const removedNodes = expandOutsideOwned(node);
             this._log(`Processing ${removedNodes.length} removed nodes`, { removedNodes });
 
             for (const element of removedNodes) {
@@ -696,6 +741,10 @@ const localMutation = {
       }
     }
 
+    for (const root of ownedTouched) {
+      if (!isInert(root) && ownedRevisionMoved(root)) changes.push({ type: 'owned', element: root });
+    }
+
     if (changes.length) {
       this._log('Processing collected changes', {
         total: changes.length,
@@ -712,38 +761,39 @@ const localMutation = {
       // The DIRTY domain, not the autosave one: an edit inside a batching region
       // is still the person's work, and the save that carries it is still human.
       // Runs synchronously in the MO callback; skipped during paused-morph drains.
-      if (!onlyNonPausable && isUserDrivenNow()) {
-        for (const change of changes) {
-          if (!isDerivedChange(change) && !skipForPolicy(this._policyForChange(change), 'dirty')) {
-            markUserDriven();
-            break;
-          }
-        }
-      }
+      this._markIfUserDriven(changes, onlyNonPausable);
 
-      const outerCounted = this._deliveringCounted;
-      this._deliveringCounted = counted;
-      try {
-        this._notify('anyChange', changes, onlyNonPausable);
+      this._notifyAll([
+        ['anyChange', changes],
+        ['addOrRemove', [...changesByType.add, ...changesByType.remove]],
+        ['addElement', changesByType.add],
+        ['removeElement', changesByType.remove],
+        ['attribute', changesByType.attribute],
+      ], onlyNonPausable);
+    }
+  },
 
-        const addOrRemove = [...changesByType.add, ...changesByType.remove];
-        if (addOrRemove.length) {
-          this._notify('addOrRemove', addOrRemove, onlyNonPausable);
-        }
-
-        if (changesByType.add.length) {
-          this._notify('addElement', changesByType.add, onlyNonPausable);
-        }
-        if (changesByType.remove.length) {
-          this._notify('removeElement', changesByType.remove, onlyNonPausable);
-        }
-        if (changesByType.attribute.length) {
-          this._notify('attribute', changesByType.attribute, onlyNonPausable);
-        }
-      } finally {
-        this._deliveringCounted = outerCounted;
+  _markIfUserDriven(changes, onlyNonPausable) {
+    if (onlyNonPausable || !isUserDrivenNow()) return;
+    for (const change of changes) {
+      if (!isDerivedChange(change) && !skipForPolicy(this._policyForChange(change), 'dirty')) {
+        markUserDriven();
+        return;
       }
     }
+  },
+
+  _announce(changes, onlyNonPausable) {
+    this._markIfUserDriven(changes, onlyNonPausable);
+    this._notifyAll([['anyChange', changes]], onlyNonPausable);
+  },
+
+  _ownedChanged(roots) {
+    const paused = this._pauseDepth > 0;
+    if (paused && !this._hasNonPausable) return;
+    const changes = [];
+    for (const root of roots) if (!isInert(root)) changes.push({ type: 'owned', element: root });
+    if (changes.length) this._announce(changes, paused);
   },
 
   _observer: null,
@@ -893,6 +943,8 @@ if (typeof window !== 'undefined' && !existingHub) {
     document.dispatchEvent(new CustomEvent('clay:mutation-ready', { detail: { Mutation } }));
   } catch {}
 }
+
+onOwnedChange((roots) => Mutation._ownedChanged?.(roots));
 
 export default Mutation;
 function policyBeforeMutation(record) {

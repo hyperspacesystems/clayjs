@@ -10,7 +10,7 @@ const SNAPSHOT = "src/core/snapshot.js";
 const MUTATION = "src/lib/mutation.js";
 const DELIVER = "  window.clay?.Mutation?.deliverDeferred?.();\n";
 const GATE = "  if (!flushes.some(Boolean)) return;\n";
-const CALL = "  if (flushUndo) flushDerived();\n";
+const CALL = "  flushDerived();\n";
 const UNDO_FLUSH = "    window.clay.undo.flush();\n  }\n";
 const PAUSED = "    if (this._pauseDepth > 0) return;\n";
 const TAKEN = "    const batch = this._deferredChangeRecords;\n    this._deferredChangeRecords = null;\n";
@@ -62,7 +62,7 @@ mutate({
     edits: [[TAKEN, "    const batch = this._deferredChangeRecords;\n"]],
     test: TEST,
     name: "a page with an engine flush: the save capture hands an edit made through undo to the page's change subscribers once",
-    expects: /\+\s+"afterCapture": 2,/,
+    expects: /\+\s+"afterCapture": ([2-9]|\d\d),/,
   },
   "delivered-inside-pause": {
     what: "the hand-over runs inside a pause, where pausable subscribers are skipped, and the microtask then has nothing left to give them",

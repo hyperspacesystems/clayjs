@@ -35,6 +35,7 @@
  * INTEGRATES WITH: snapshot.js (receives snapshot-ready events)
  */
 
+import { beginOwnedMerge, hasOwnedRegions, matchesOwnedSelector, ownedBodies, ownedRootOf, ownedRootsIn, withoutOwnedBodies } from '../lib/owned-regions.js';
 import { createIdentityStore } from "../vendor/hyper-morph-identity.vendor.js";
 import { pageRelay } from "./page-relay.js";
 import { loadedEngine, mergeEngine } from "./merge-engine.js";
@@ -58,7 +59,7 @@ import { SyncStream, pageHidden } from './stream.js';
 import { streamOpened, streamClosed, streamEvent, LIVE_EVENTS } from '../live/stream-bridge.js';
 import { conflicts, conflictLedger, loadConflicts } from './conflicts-facade.js';
 import { upgradeReplaces, stopForUpgrade } from './version-guard.js';
-import { isDerivedAttr, ownsDerivedText, stripDerived, repaintDerived, paintSignatureOfHtml, derivedActive } from '../lib/derived.js';
+import { repaintsAttr, repaintsText, stripRepainted, repaintDerived, paintSignatureOfHtml } from '../lib/derived.js';
 
 // The edit-only half of live sync (save, admin and editing-sender code) is a
 // separate chunk. Edit mode starts it as live-sync evaluates, so its modules
@@ -178,7 +179,8 @@ const FREEZE_SELECTOR = '[clay~="freeze"], [freeze], [save-freeze]';
 
 function emptyScratchpads(root) {
   for (const el of root.querySelectorAll(FREEZE_SELECTOR)) el.replaceChildren();
-  if (derivedActive()) stripDerived(root);
+  for (const { element } of ownedRootsIn(root)) element.replaceChildren();
+  stripRepainted(root);
   return root;
 }
 
@@ -343,6 +345,7 @@ class LiveSync {
     // await outlasts a later save, can no longer rewind the base.
     this._diskBase = null;
     this._diskBaseTicket = 0;
+    this._ownedUnmerged = new Map();
     this._agreeSeq = 0;
     // The ticket of the save currently in flight, taken when it captured.
     this._saveTicket = 0;
@@ -568,7 +571,7 @@ class LiveSync {
    */
   _seedBases() {
     if (pageMaybeDirty()) return;
-    const clone = captureSnapshot({ flushUndo: false });
+    const clone = captureSnapshot({ flushUndo: false, purpose: 'sync' });
     this._setPeerBase(serializeForSync(clone), this.identity.exportMap(clone, originalSnapshotNode), this._ticket());
     this._setDiskBase(captureForSaveAndComparison({ emitForSync: false }).forSave, this._ticket());
   }
@@ -623,6 +626,7 @@ class LiveSync {
     // (a save response still on the wire) cannot land in the new run.
     this._diskBase = null;
     this._diskBaseTicket = this._ticket();
+    this._ownedUnmerged.clear();
     this._saveTicket = 0;
     this._savedSnapshot?.abort?.abort();
     this._savedSnapshot = null;
@@ -683,7 +687,7 @@ class LiveSync {
         // dirty at start held its frames in 1.5.2, and its own scripts may still be
         // rewriting content the merge cannot reach.
         if (startHtml !== null && this._applyGen === applyGen && this._saveEpoch === saveEpoch && this.lastHtml === startHtml) {
-          const clone = captureSnapshot({ flushUndo: false });
+          const clone = captureSnapshot({ flushUndo: false, purpose: 'sync' });
           this._setPeerBase(serializeForSync(clone), this.identity.exportMap(clone, originalSnapshotNode), this._ticket());
         }
         if (startDiskSeeded && this._diskBaseTicket === startDiskTicket) {
@@ -1226,6 +1230,7 @@ class LiveSync {
         identityMap,
         ticket: this._saveTicket,
         captureId: event.detail.captureId ?? null,
+        ownedBodies: ownedBodies(clone),
       };
       if (event.detail.sliced) {
         // The save strips this clone as soon as the event returns, so a serialization
@@ -1354,7 +1359,7 @@ class LiveSync {
     // after the capture this relay was built from. At floor 0 the html is unchanged.
     const sent = acceptedBytesFor(captureId) ?? acceptedHtml;
     const floor = typeof sent === 'string' ? blockeditorFormatFloor(sent) : 0;
-    payload = { ...payload, html: asSent(withPageFormatFloor(payload.html, Math.max(knownPageFormatFloor(), floor)), sent) };
+    payload = { ...payload, html: asSent(withPageFormatFloor(payload.html, Math.max(knownPageFormatFloor(), floor)), sent, pending.ownedBodies) };
 
     // Skip only an unstamped repeat, judged against the base as it stood. A
     // landed save is news even when its bytes equal the last relay: "Keep mine"
@@ -2065,9 +2070,33 @@ class LiveSync {
     // resolved against the same nodes hyper-morph will see; a Document is
     // taken as given, so nothing is parsed twice.
     let remote = html;
+    let finishOwned = null;
+    let ownedBase = null;
+    const unmergedBase = this._ownedUnmerged.get(source) ?? null;
+    if (hasOwnedRegions()) {
+      if (typeof remote === 'string') remote = new DOMParser().parseFromString(remote, 'text/html');
+      canonicalizeReceived(remote);
+      finishOwned = beginOwnedMerge({
+        document: remote,
+        html,
+        source,
+        seq,
+        etag,
+        dirty: this.lane === 'live' && pageMaybeDirty(),
+        get base() {
+          const from = unmergedBase ?? base;
+          if (ownedBase === null && from != null) {
+            ownedBase = typeof from === 'string' ? new DOMParser().parseFromString(from, 'text/html') : from;
+            canonicalizeReceived(ownedBase);
+          }
+          return ownedBase;
+        },
+      });
+      for (const { element } of ownedRootsIn(remote)) element.replaceChildren();
+    }
     const syntheticByAuthored = new Map();
     if (isIdMap(identityMap)) {
-      remote = new DOMParser().parseFromString(html, 'text/html');
+      if (typeof remote === 'string') remote = new DOMParser().parseFromString(remote, 'text/html');
       canonicalizeReceived(remote);
       const imported = loadedEngine().HyperMorph.importMap(remote.documentElement, identityMap);
       for (const el of remote.querySelectorAll('[data-id], [id]')) {
@@ -2082,14 +2111,14 @@ class LiveSync {
       live: document,
       remote,
       ignore: (el) => el.matches(SYNC_IGNORE_SELECTOR),
-      opaque: (el) => el.matches(FREEZE_SELECTOR) || (derivedActive() && ownsDerivedText(el)),
+      opaque: (el) => el.matches(FREEZE_SELECTOR) || matchesOwnedSelector(el) || repaintsText(el),
       remoteWins: (el) => el.matches(REMOTE_WINS_SELECTOR),
-      ignoreAttribute: (el, name, merged) => isRootLocalAttr(el, name, merged) || (derivedActive() && isDerivedAttr(merged || el, name)),
+      ignoreAttribute: (el, name, merged) => isRootLocalAttr(el, name, merged) || repaintsAttr(merged || el, name),
       attributeMerge,
       protectFocusedValue: true,
       // Focus inside ClayJS's own UI (a shadow root) has nothing on the page to put back,
       // and restoring the stale page selection would pull focus out of the field.
-      restoreFocus: document.activeElement?.localName !== 'clay-editor-ui',
+      restoreFocus: document.activeElement?.localName !== 'clay-editor-ui' && !ownedRootOf(document.activeElement),
       keepLiveOnly: source === 'peer',
       scripts: { mergeTags: loadedEngine().mergeTagRecognizers },
       hooks: { beforeAttributeUpdated },
@@ -2150,7 +2179,7 @@ class LiveSync {
       try {
         pending = mergeDocument({
           ...common,
-          base: scratchpadsEmptied(base),
+          base: scratchpadsEmptied(unmergedBase === null ? ownedBase ?? base : base),
           local: { root: localRoot, toLive: originalSnapshotNode },
           identity: {
             base: sideIdentity(baseIdentityMap),
@@ -2167,11 +2196,19 @@ class LiveSync {
     // loads are still pending. This is the moment the frame's bytes were true
     // of the document, so the lane dates its base here, not after the await:
     // a save that captures during the wait is newer than this frame.
+    const owned = finishOwned ? finishOwned() : null;
+    if (owned?.failed) {
+      if (unmergedBase === null && typeof base === 'string') this._ownedUnmerged.set(source, base);
+      edit?.holdForOwnedMerge(etag);
+    } else if (owned) {
+      this._ownedUnmerged.delete(source);
+    }
     const ticket = this._ticket();
     this._morphTicket = ticket;
     let report;
     try {
       report = await pending;
+      if (owned?.diverged) report.localDiverged = true;
     } catch (err) {
       lineageCapture.invalidate(conflicts.list());
       try {
@@ -2206,7 +2243,7 @@ class LiveSync {
       const synthetic = mapIds.has(id) ? id : syntheticByAuthored.get(id);
       if (synthetic) store.adopt(el, synthetic);
     }
-    return { report, ticket, typedDuringWait, conflictIds };
+    return { report, ticket, typedDuringWait, conflictIds, ownedFailed: owned ? owned.failed : null };
   }
 
   /**
@@ -2259,6 +2296,7 @@ class LiveSync {
     let diverged = false;
     let typedDuringWait = false;
     let stamped = false;
+    let ownedMerged = false;
     try {
       // Hold the whole frame only when this tab has unsaved edits and no
       // baseline to merge them against (the first frame of a fresh
@@ -2301,10 +2339,10 @@ class LiveSync {
       // knowingly missing what disk holds, and a stamp there would let its next
       // save replace that change with nobody told.
 
-      const { report, ticket, typedDuringWait: typed, conflictIds } = await this._mergeIncoming(html, identityMap, {
+      const { report, ticket, typedDuringWait: typed, conflictIds, ownedFailed } = await this._mergeIncoming(html, identityMap, {
         base: this.lastHtml,
         baseIdentityMap: this._lastIdentityMap,
-        captureLocal: () => captureSnapshot({ flushUndo: false }),
+        captureLocal: () => captureSnapshot({ flushUndo: false, purpose: 'sync' }),
         synthetic: true,
         source: 'peer',
         seq,
@@ -2338,7 +2376,8 @@ class LiveSync {
       // above, and deliberately the same moment: the two claims a page makes
       // when it adopts a stamp are "the host stores this version" and "I hold
       // it", and only the second one is this tab's to make.
-      if (!(this._acceptedSaveTicket > ticket)) {
+      ownedMerged = ownedFailed === false;
+      if (!ownedFailed && !(this._acceptedSaveTicket > ticket)) {
         if (typeof etag === 'string' && etag) {
           recordEtag(etag);
           stamped = true;
@@ -2427,6 +2466,7 @@ class LiveSync {
     // Only where autosave is on: a manual-save page must never auto-write, so
     // there the merge stays local, still dirty, until the person saves.
     if (stamped) edit?.conflictResolvedBySync(etag);
+    if (ownedMerged) edit?.ownedMergeRecovered(etag);
     this._saveAfterMerge(diverged, typedDuringWait);
   }
 
@@ -2467,6 +2507,7 @@ class LiveSync {
     let diverged = false;
     let typedDuringWait = false;
     let stamped = false;
+    let ownedMerged = false;
     try {
       // Hold the whole frame only when this tab has unsaved edits and no
       // baseline to merge them against. Lane-guarded like the peer path: a
@@ -2520,7 +2561,7 @@ class LiveSync {
       // file. The merged document is activated for edit mode before it is
       // applied, exactly as boot would have, so every node, local or incoming,
       // goes live from its own saved form.
-      const { report, ticket, typedDuringWait: typed, conflictIds } = await this._mergeIncoming(html, null, {
+      const { report, ticket, typedDuringWait: typed, conflictIds, ownedFailed } = await this._mergeIncoming(html, null, {
         base: this._diskBase,
         captureLocal: () => captureForMerge().saveClone,
         synthetic: false,
@@ -2549,7 +2590,8 @@ class LiveSync {
       // and the listener in etag.js falls back to asking the host. A save
       // accepted since this frame captured already recorded a newer stamp, and
       // this body, older than that save, must not rewind it — nor clear it.
-      if (!(this._acceptedSaveTicket > ticket)) {
+      ownedMerged = ownedFailed === false;
+      if (!ownedFailed && !(this._acceptedSaveTicket > ticket)) {
         if (typeof etag === 'string' && etag) {
           recordEtag(etag);
           stamped = true;
@@ -2576,7 +2618,7 @@ class LiveSync {
         // classify this frame's content as local edits and splice it over a
         // newer peer frame. Rebuild it exactly the way the send pipeline
         // does, so it stays in the snapshot domain.
-        const clone = captureSnapshot({ flushUndo: false });
+        const clone = captureSnapshot({ flushUndo: false, purpose: 'sync' });
         this._setPeerBase(serializeForSync(clone), this.identity.exportMap(clone, originalSnapshotNode), ticket);
         this._applyGen++;
       }
@@ -2610,6 +2652,7 @@ class LiveSync {
     // save sees both as changes and writes the merge back. Only where
     // autosave is on, as in the peer lane.
     if (stamped) edit?.conflictResolvedBySync(etag);
+    if (ownedMerged) edit?.ownedMergeRecovered(etag);
     this._saveAfterMerge(diverged, typedDuringWait);
     // A disk frame from a writer that does not paint (an agent, the data API)
     // changes records and leaves the painted values as they were. If the page's
@@ -2688,10 +2731,12 @@ const acceptedBytesFor = (captureId) =>
 // attribute comes back as `=""`. When the relay describes the same document the host
 // stored, it carries the stored bytes themselves, so a peer reads what a reload would.
 // One that holds regions the file leaves out (`no-save`) keeps its own serialization.
-function asSent(html, sent) {
+export function asSent(html, sent, bodies = null) {
   if (typeof sent !== 'string' || sent === html) return html;
+  const shells = bodies && bodies.length ? [withoutOwnedBodies(html, bodies), withoutOwnedBodies(sent, bodies)] : null;
+  const [mine, theirs] = shells && shells[0] !== null && shells[1] !== null ? shells : [html, sent];
   const root = (source) => new DOMParser().parseFromString(source, 'text/html').documentElement;
-  return root(html).isEqualNode(root(sent)) ? sent : html;
+  return root(mine).isEqualNode(root(theirs)) ? sent : html;
 }
 
 // Singleton instance

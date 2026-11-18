@@ -1,124 +1,95 @@
-// node tests/mutations/dirty-gate-undo-save.mjs [counted-again] [counted-again-sap] [no-count-on-mark] [no-count-on-mark-command] [no-count-on-mark-undo] [counts-twice] [counted-when-grown] [stale-count] [nested-inherits-counted-after] [nested-inherits-counted] [nested-not-restored] [delivered-at-token] [queue-delivered-at-token]
-// Each entry puts one bug into a scratch copy of how the dirty gate counts an edit made
-// through undo, and names the test that must then fail. With no argument every entry
-// runs, one after another.
+// node tests/mutations/dirty-gate-undo-save.mjs [held-after-token] [held-after-token-sap] [held-after-token-commit] [held-after-token-command] [held-after-token-undo] [clear-swallows-later-edit] [held-dropped] [held-not-in-save] [held-delivered-twice] [queue-not-in-save]
+// Each entry puts one bug into a scratch copy of how a save hands out an edit made
+// through undo before it takes its dirty-gate token, and names the test that must then
+// fail. With no argument every entry runs, one after another.
 import { mutate } from "./harness.mjs";
 
 const TEST = "tests/unit/dirty-gate-undo-save.test.js";
 const GATE = "src/lib/dirty-gate.js";
 const MUTATION = "src/lib/mutation.js";
-const SKIP = "      if (!paused && !Mutation._deliveringCounted) {\n";
-const MARK = "  Mutation._countDeferred?.();\n";
-const TOKEN = "export function gateCaptureToken() {\n";
-const EXACT = "    const counted = !!batch && this._deferredCounted === batch.length;\n";
-const RESET = "    this._deferredCounted = 0;\n";
-const SET = "      this._deliveringCounted = counted;\n";
-const RESTORE = "        this._deliveringCounted = outerCounted;\n";
+const HELD = "      const held = this._deliverDeferredBatch();\n";
+const NOT_HELD = "      const held = 0;\n";
 const STUCK = /\+\s+"unsaved": "true",/;
 
 mutate({
-  "counted-again": {
-    what: "the gate counts the delivery of records it already counted, so a row moved to the trash counts twice and the save in the same task cannot clear the page",
-    file: GATE,
-    edits: [[SKIP, "      if (!paused) {\n"]],
+  "held-after-token": {
+    what: "a save leaves the records undo held for their microtask, so a row moved to the trash counts after the token and the save cannot clear the page",
+    file: MUTATION,
+    edits: [[HELD, NOT_HELD]],
     test: TEST,
     name: "a row moved to the trash, then a save in the same task: the save clears unsaved and announces clay:clean",
     expects: STUCK,
   },
-  "counted-again-sap": {
-    what: "the same bug on a page the sapjs core paints, where the save's own flush delivers the held records",
-    file: GATE,
-    edits: [[SKIP, "      if (!paused) {\n"]],
+  "held-after-token-sap": {
+    what: "the same bug on a page the sapjs core paints, where the save's own flush asks for the held records",
+    file: MUTATION,
+    edits: [[HELD, NOT_HELD]],
     test: TEST,
     name: "on a page the sapjs core paints, a row moved to the trash, then a save in the same task: the save holds the new count and clears unsaved",
     expects: STUCK,
   },
-  "no-count-on-mark": {
-    what: "undo's mark no longer counts the records the hub holds, so their delivery counts the commit a second time",
-    file: GATE,
-    edits: [[MARK, ""]],
+  "held-after-token-commit": {
+    what: "the same bug, seen through clay.undo.commit",
+    file: MUTATION,
+    edits: [[HELD, NOT_HELD]],
     test: TEST,
     name: "an edit made through clay.undo.commit, then a save in the same task: the save clears unsaved and announces clay:clean",
     expects: STUCK,
   },
-  "no-count-on-mark-command": {
+  "held-after-token-command": {
     what: "the same bug, seen through clay.undo.command",
-    file: GATE,
-    edits: [[MARK, ""]],
+    file: MUTATION,
+    edits: [[HELD, NOT_HELD]],
     test: TEST,
     name: "an edit made through clay.undo.command, then a save in the same task: the save clears unsaved and announces clay:clean",
     expects: STUCK,
   },
-  "no-count-on-mark-undo": {
+  "held-after-token-undo": {
     what: "the same bug, seen through an undo",
-    file: GATE,
-    edits: [[MARK, ""]],
+    file: MUTATION,
+    edits: [[HELD, NOT_HELD]],
     test: TEST,
     name: "an undo, then a save in the same task: the save clears unsaved and announces clay:clean",
     expects: STUCK,
   },
-  "counts-twice": {
-    what: "the same bug, counted directly: one row moved to the trash adds two to the gate",
+  "clear-swallows-later-edit": {
+    what: "a save clears the gate whatever was counted after its token, so an edit made after the save's capture is reported saved",
     file: GATE,
-    edits: [[SKIP, "      if (!paused) {\n"]],
-    test: TEST,
-    name: "an edit made through undo counts once",
-    expects: /Received: 2/,
-  },
-  "counted-when-grown": {
-    what: "a held batch that grew after undo's mark is still taken as counted, so an edit made after the save's capture is swallowed and the page reads clean",
-    file: MUTATION,
-    edits: [[EXACT, "    const counted = !!batch && this._deferredCounted > 0;\n"]],
+    edits: [["  if (changes === token.gen) {\n    clearedAt = token.gen;\n", "  {\n    clearedAt = changes;\n"]],
     test: TEST,
     name: "an edit made after the save's capture and held with the undo edit keeps the page dirty",
     expects: /\+\s+"unsaved": null,/,
   },
-  "stale-count": {
-    what: "the count of an earlier held batch outlives its delivery, so a later batch of the same size is skipped",
+  "held-dropped": {
+    what: "the hub drops a held batch instead of handing it out, so an edit undo held never counts",
     file: MUTATION,
-    edits: [[RESET, ""]],
+    edits: [["    if (batch && batch.length) this._handleMutations(batch);\n", ""]],
     test: TEST,
     name: "an edit held after an earlier undo edit was delivered still counts",
     expects: /Received: 0/,
   },
-  "nested-inherits-counted-after": {
-    what: "a delivery that starts inside the delivery of counted records is taken as counted too, so an edit a page subscriber makes there is never counted",
+  "held-not-in-save": {
+    what: "a save leaves the held records to their microtask, so the page's change subscribers hear of the undo edit only after clay.save() returns",
     file: MUTATION,
-    edits: [[SET, "      this._deliveringCounted = counted || outerCounted;\n"]],
+    edits: [[HELD, NOT_HELD]],
     test: TEST,
-    name: "an edit a page subscriber makes while the undo edit is delivered still counts",
-    expects: /\+\s+"counted": 1,/,
+    name: "an edit made through undo reaches the page's change subscribers inside clay.save(), before the save reads the page, and once",
+    expects: /\+\s+"inSave": 0,/,
   },
-  "nested-inherits-counted": {
-    what: "the same bug, seen from a subscriber that runs before the gate",
+  "held-delivered-twice": {
+    what: "the hub hands out a held batch and keeps it, so the subscribers are handed the undo edit again",
     file: MUTATION,
-    edits: [[SET, "      this._deliveringCounted = counted || outerCounted;\n"]],
+    edits: [["    this._deferredChangeRecords = null;\n", ""]],
     test: TEST,
-    name: "a subscriber that runs before the gate and makes an edit while the undo edit is delivered: the undo edit counts once and the new edit counts",
-    expects: /\+\s+"counted": 1,/,
+    name: "an edit made through undo reaches the page's change subscribers inside clay.save(), before the save reads the page, and once",
+    expects: /\+\s+"(inSave|after)": ([2-9]|\d\d),/,
   },
-  "nested-not-restored": {
-    what: "a delivery nested inside the delivery of counted records leaves the flag off, so the gate, later in the outer delivery, counts the undo edit a second time",
+  "queue-not-in-save": {
+    what: "a save leaves what the browser has queued to the browser, so on a page without undo the subscribers hear of the edit only after clay.save() returns",
     file: MUTATION,
-    edits: [[RESTORE, ""]],
+    edits: [["      const queued = this._observer ? this._observer.takeRecords() : [];\n", "      const queued = [];\n"]],
     test: TEST,
-    name: "a subscriber that runs before the gate and makes an edit while the undo edit is delivered: the undo edit counts once and the new edit counts",
-    expects: /\+\s+"counted": 3,/,
-  },
-  "delivered-at-token": {
-    what: "a save hands its subscribers the records undo left for a microtask before it takes its token, so they run inside clay.save()",
-    file: GATE,
-    edits: [[TOKEN, TOKEN + "  Mutation.deliverDeferred();\n"]],
-    test: TEST,
-    name: "an edit made through undo still reaches the page's change subscribers after clay.save() returns, as before",
-    expects: /\+\s+"inSave": 1,/,
-  },
-  "queue-delivered-at-token": {
-    what: "a save hands its subscribers what the browser has queued before it takes its token, so on a page without undo they run inside clay.save()",
-    file: GATE,
-    edits: [[TOKEN, TOKEN + "  Mutation._deliverBeforePause();\n"]],
-    test: TEST,
-    name: "a page without undo: an edit reaches the page's change subscribers after clay.save() returns, as before",
-    expects: /\+\s+"inSave": 1,/,
+    name: "a page without undo: an edit reaches the page's change subscribers inside clay.save(), before the save reads the page, and once",
+    expects: /\+\s+"inSave": 0,/,
   },
 });

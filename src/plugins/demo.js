@@ -25,6 +25,7 @@
 import { morph } from "../vendor/hyper-morph.vendor.js";
 import { STRIP_FROM_SAVE } from "../lib/region-policy.js";
 import { isEditMode } from "../core/is-edit-mode.js";
+import { ownedBytes } from "../lib/owned-regions.js";
 
 const KEY = "clay:demo:" +
   (document.documentElement.getAttribute("demo-key") || window.location.pathname);
@@ -50,7 +51,7 @@ let failNextSave = false;
 let snapshotBody = null;
 
 document.addEventListener("clay:snapshot-ready", (event) => {
-  snapshotBody = event.detail.documentElement.querySelector("body")?.outerHTML || null;
+  snapshotBody = ownedBytes(event.detail.documentElement.querySelector("body")?.outerHTML || "") || null;
 });
 
 function postedHtml(raw) {

@@ -104,5 +104,5 @@ function* saveSteps(pin) {
   yield;
   if (pin.pageFormatMarker) setFormatMarker(pin.clone, pin.pageFormatMarker);
   const forSave = yield* rendererSteps(pin.clone, today, pin);
-  return completeSaveCapture(pin, { forSave, forComparison, forDirty });
+  return completeSaveCapture(pin, { forSave, forComparison, forDirty, today });
 }

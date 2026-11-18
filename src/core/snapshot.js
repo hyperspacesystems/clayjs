@@ -45,6 +45,7 @@ import { TAB_LOCAL_ROOT_ATTRS, stripRouteAttrs } from '../lib/root-attrs.js';
 import { stripEphemeral } from '../lib/ephemeral.js';
 import { stripDerived, flushDerived } from '../lib/derived.js';
 import { createContentView } from '../lib/content-dom.js';
+import { holesToRevisions, ownedBytes, ownedRevisions, pinOwnedRegions } from '../lib/owned-regions.js';
 
 // =============================================================================
 // HOOK REGISTRIES
@@ -304,6 +305,10 @@ const XHTML_NS = 'http://www.w3.org/1999/xhtml';
  * a marker only while serializing, so the clone holds the same nodes when this returns.
  */
 export function serializeClone(clone) {
+  return ownedBytes(serializeCloneRaw(clone));
+}
+
+function serializeCloneRaw(clone) {
   const blocks = noscriptBlocks(clone);
   if (!blocks.length) return "<!DOCTYPE html>" + clone.outerHTML;
   const raw = swapNoscriptMarkers(blocks);
@@ -401,13 +406,25 @@ function serializeSaveClone(clone, context = null) {
     try { state = capturePageStateReader(clone); } catch (_) {}
     if (state) capturePageStates.set(context.captureId, state);
   }
-  const today = serializeClone(clone);
-  if (!saveRenderer) return today;
+  const today = serializeCloneRaw(clone);
+  if (!saveRenderer) return ownedBytes(today);
+  let rendered;
   try {
-    return runSaveRenderer(context, () => saveRenderer(clone, today));
+    rendered = runSaveRenderer(context, () => saveRenderer(clone, today));
   } catch (err) {
     console.error('clayjs: save renderer failed, sending the full serialization', err);
-    return today;
+    return ownedBytes(today);
+  }
+  return ownedSaveBytes(rendered, today);
+}
+
+function ownedSaveBytes(rendered, today) {
+  if (rendered === today) return ownedBytes(today);
+  try {
+    return ownedBytes(rendered);
+  } catch (err) {
+    console.error('clayjs: the save renderer changed an owned region marker, sending the full serialization', err);
+    return ownedBytes(today);
   }
 }
 
@@ -461,13 +478,18 @@ function carryProvenance(saveNode, cloneNode) {
   for (let i = 0; i < saveKids.length; i++) carryProvenance(saveKids[i], cloneKids[i]);
 }
 
-export function captureSnapshot({ flushUndo = true, authored = true, forSave = false, requestRefresh = false, context = null } = {}) {
+/**
+ * What a save boundary runs before it reads the page. A capture that flushes runs it
+ * first; a save runs it itself, so it can take its dirty-gate token after it and capture
+ * with flushUndo: false.
+ */
+export function flushBoundary() {
   // A derive engine may still have a pass queued for an edit made in this task. At a
   // save boundary it runs first, so the clone holds what the engine paints from the page
   // as it stands, and before undo closes its batch, so what the flush writes joins the
   // undo step this save closes. The captures that pass flushUndo: false run per
   // incoming frame or only read the page, and leave the engine's own timing alone.
-  if (flushUndo) flushDerived();
+  flushDerived();
 
   // Force-close any pending undo idle batch BEFORE cloning the DOM, so the
   // snapshot reflects a clean undo boundary. Without this, a save that fires
@@ -477,15 +499,21 @@ export function captureSnapshot({ flushUndo = true, authored = true, forSave = f
   // flushUndo: false is for captures that are not save boundaries (the scoped
   // live-sync dirty oracle runs per incoming frame, and flushing there would
   // shatter the user's undo batches mid-typing).
-  if (flushUndo && typeof window !== 'undefined' && window.clay?.undo?.flush) {
+  if (typeof window !== 'undefined' && window.clay?.undo?.flush) {
     window.clay.undo.flush();
   }
+}
+
+export function captureSnapshot({ flushUndo = true, authored = true, forSave = false, requestRefresh = false, context = null, owned = 'bytes', purpose = 'save' } = {}) {
+  if (flushUndo) flushBoundary();
 
   // The view records each clone node's live original straight into the provenance
   // map as it clones, including the nodes inside a <template>'s content fragment,
   // so the source map can ask which live node any clone node came from.
-  const view = createContentView(document.documentElement, { capability: 'snapshot', provenance: snapshotProvenance });
+  const pins = pinOwnedRegions(owned, purpose);
+  const view = createContentView(document.documentElement, { capability: 'snapshot', provenance: snapshotProvenance, holes: pins });
   const clone = view.root;
+  for (const hole of view.holes) hole.copy.appendChild(view.document.createComment(pins.get(hole.live)));
 
   for (const hook of snapshotHooks) {
     stripSnapshotRegions(clone);
@@ -579,8 +607,8 @@ function stripDiagnosticBeacons(clone) {
  *
  * @returns {HTMLElement}
  */
-export function captureSaveClone({ flushUndo = true, authored = true } = {}) {
-  return prepareCloneForSave(captureSnapshot({ flushUndo, authored }), { authored });
+export function captureSaveClone({ flushUndo = true, authored = true, owned = 'bytes', purpose = 'save' } = {}) {
+  return prepareCloneForSave(captureSnapshot({ flushUndo, authored, owned, purpose }), { authored });
 }
 
 // Attributes that render exactly like their absence. A scroll lock or a browser
@@ -598,7 +626,7 @@ export function prepareForCompare(clone) {
 
 export function serializeForCompare(clone) {
   prepareForCompare(clone);
-  return "<!DOCTYPE html>" + clone.outerHTML;
+  return ownedRevisions("<!DOCTYPE html>" + clone.outerHTML);
 }
 
 /**
@@ -611,7 +639,7 @@ export function serializeForCompare(clone) {
  * @returns {string} HTML string with all autosave-off regions stripped
  */
 export function captureForComparison({ flushUndo = true } = {}) {
-  const clone = captureSnapshot({ flushUndo });
+  const clone = captureSnapshot({ flushUndo, owned: 'revision' });
 
   // Run inline [onbeforesave] handlers
   runAuthoredHandlers(clone, 'onbeforesave');
@@ -644,7 +672,7 @@ export function captureForComparison({ flushUndo = true } = {}) {
  * @returns {string}
  */
 export function captureForDirtyCheck({ flushUndo = true } = {}) {
-  const clone = captureSnapshot({ flushUndo });
+  const clone = captureSnapshot({ flushUndo, owned: 'revision' });
 
   runAuthoredHandlers(clone, 'onbeforesave');
 
@@ -671,7 +699,7 @@ export function captureForDirtyCheck({ flushUndo = true } = {}) {
  * @returns {{ forComparison: string, forDirty: string }}
  */
 export function captureForComparisonAndDirty({ flushUndo = true } = {}) {
-  const clone = captureSnapshot({ flushUndo });
+  const clone = captureSnapshot({ flushUndo, owned: 'revision' });
 
   runAuthoredHandlers(clone, 'onbeforesave');
 
@@ -751,6 +779,7 @@ export function prepareSaveCapture({ emitForSync = true, flushUndo = true, reque
   // Clone for comparison before stripping (cheaper than cloning live DOM)
   const compareClone = clonePreventingOnclone(clone);
   carryProvenance(clone, compareClone);
+  holesToRevisions(compareClone);
 
   // The dirty domain differs from the autosave domain only inside no-trigger-autosave
   // regions, so a document without one pays nothing: one string serves both.
@@ -758,6 +787,7 @@ export function prepareSaveCapture({ emitForSync = true, flushUndo = true, reque
     ? clonePreventingOnclone(clone)
     : null;
   if (dirtyClone) carryProvenance(clone, dirtyClone);
+  holesToRevisions(dirtyClone);
 
   // Save clone: run hooks (freeze restore lives here), THEN strip [no-save]/[save-remove]
   // LAST (snapshot-algorithm step 7) so freeze-restored [no-save] content can't leak to disk.
@@ -817,8 +847,8 @@ export function readCapturePageState(pin) {
  *
  * @returns {{ forSave: string, forComparison: string, forDirty: string, captureId: number }}
  */
-export function completeSaveCapture(pin, { forSave, forComparison, forDirty }) {
-  const result = { forSave, forComparison, forDirty, captureId: pin.captureId };
+export function completeSaveCapture(pin, { forSave, forComparison, forDirty, today = forSave }) {
+  const result = { forSave: ownedSaveBytes(forSave, today), forComparison, forDirty, captureId: pin.captureId };
   if (pin.context && pin.context.artifact) captureArtifacts.set(result, pin.context.artifact);
   pin.result = result;
   return result;
@@ -853,11 +883,11 @@ export function captureForSaveAndComparison(opts = {}) {
   const pin = prepareSaveCapture(opts);
   try {
     readCapturePageState(pin);
-    const today = serializeClone(pin.clone);
+    const today = serializeCloneRaw(pin.clone);
     const forComparison = pin.compareClone ? serializeForCompare(pin.compareClone) : null;
     const forDirty = pin.dirtyClone ? serializeForCompare(pin.dirtyClone) : forComparison;
     const forSave = pin.renderer ? runSaveRenderer(pin.context, () => pin.renderer(pin.clone, today)) : today;
-    return completeSaveCapture(pin, { forSave, forComparison, forDirty });
+    return completeSaveCapture(pin, { forSave, forComparison, forDirty, today });
   } catch (err) {
     releaseSaveCapture(pin);
     throw err;
@@ -892,7 +922,7 @@ export function captureForSaveAndComparison(opts = {}) {
  * @returns {{ saveClone: HTMLElement, compareClone: HTMLElement, pairMap: WeakMap }}
  */
 export function captureForMerge() {
-  const clone = captureSnapshot({ flushUndo: false });
+  const clone = captureSnapshot({ flushUndo: false, purpose: 'sync' });
 
   runAuthoredHandlers(clone, 'onbeforesave');
 
@@ -1001,7 +1031,7 @@ export function serializeForSync(clone) {
   // module produces. Spec section 2 asks for that, and it costs nothing on the wire:
   // a receiver parses the string and morphs documentElement against documentElement,
   // so the prologue is consumed by the parser and never reaches the morph.
-  return "<!DOCTYPE html>" + shell.slice(0, shell.length - endTag.length) + inner + endTag;
+  return ownedBytes("<!DOCTYPE html>" + shell.slice(0, shell.length - endTag.length) + inner + endTag);
 }
 
 /** A private deep copy of a capture's clone, for work that outlives the capture event. */
@@ -1019,8 +1049,8 @@ export function copyCaptureClone(clone) {
  * @returns {string} Body innerHTML with form values synced
  */
 export function captureBodyForSync() {
-  const clone = captureSnapshot();
-  return clone.querySelector('body').innerHTML;
+  const clone = captureSnapshot({ purpose: 'sync' });
+  return ownedBytes(clone.querySelector('body').innerHTML);
 }
 
 /**
@@ -1066,5 +1096,5 @@ export function serializeRecoveryClone(clone, { prepared = false } = {}) {
  * Nothing is sent and no event fires.
  */
 export function captureRecoveryPage() {
-  return serializeSaveClone(captureSaveClone({ flushUndo: false, authored: false }));
+  return serializeSaveClone(captureSaveClone({ flushUndo: false, authored: false, purpose: 'recovery' }));
 }

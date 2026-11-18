@@ -74,6 +74,7 @@ import {
 import { keepaliveHeld, onSaveAccepted } from '../core/save-core.js';
 import { SLICED_SAVE_MIN_BYTES } from '../core/save-slices.js';
 import { lastSeenEtag } from '../core/etag.js';
+import { hasOwnedRegions } from '../lib/owned-regions.js';
 
 const state = {
   installed: false,
@@ -375,7 +376,7 @@ export function renderSave(clone, today, opts = {}) {
  * here, so it is refused like any other render that cannot be trusted: today's bytes.
  */
 export function* renderSaveSteps(clone, today, opts = {}) {
-  if (!state.installed) return today;
+  if (!state.installed || hasOwnedRegions()) return today;
   // A refresh still waiting for idle time runs now, so this save never renders from a
   // map a morph made stale. It pairs against the page, not this clone: onbeforesave may
   // have changed the clone, and the map must describe the live page.
@@ -526,7 +527,7 @@ function partialReprint(reason, printed) {
  */
 function adopt(bytes, accepted) {
   state.adoptions++;
-  if (!state.installed) return;
+  if (!state.installed || hasOwnedRegions()) return;
   report(bytes, accepted && accepted.artifact ? accepted.artifact.source.outcome : null);
   if (adoptCandidate(bytes, accepted)) return;
   state.pendingBytes = bytes;
@@ -587,7 +588,7 @@ function queueRepair(event) {
     // fetch asks again rather than installing the version it asked about.
     state.adoptions++;
   }
-  if (!state.installed) return;
+  if (!state.installed || hasOwnedRegions()) return;
   if (detail && detail.source === 'disk' && typeof detail.html === 'string') {
     if (isProjected(detail.html)) state.refetch = true;
     else state.pendingBytes = detail.html;

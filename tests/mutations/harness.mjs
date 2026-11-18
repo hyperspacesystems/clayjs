@@ -42,12 +42,12 @@ function scratchCopy(extra) {
   return dir;
 }
 
-function runJest(dir, file, name, log) {
+function runJest(dir, file, name, log, args = []) {
   const out = join(dir, "jest-result.json");
   rmSync(out, { force: true });
   const run = spawnSync(
     process.execPath,
-    [join(dir, "node_modules", "jest", "bin", "jest.js"), file, "-t", name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "--json", "--outputFile", out],
+    [join(dir, "node_modules", "jest", "bin", "jest.js"), file, "-t", name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "--json", "--outputFile", out, ...args],
     { cwd: dir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env: { ...process.env, NODE_OPTIONS: [process.env.NODE_OPTIONS, "--experimental-vm-modules"].filter(Boolean).join(" "), FORCE_COLOR: "0" } },
   );
   const said = plain(run.stderr ?? "");
@@ -74,7 +74,7 @@ function mutateOne(label, m) {
   const dir = scratchCopy([m.test, ...(m.needs ?? [])]);
   const log = [];
   try {
-    const before = green(runJest(dir, m.test, m.name, log), "before the bug");
+    const before = green(runJest(dir, m.test, m.name, log, m.jestArgs), "before the bug");
 
     const path = join(dir, m.file);
     const original = readFileSync(path, "utf8");
@@ -85,10 +85,10 @@ function mutateOne(label, m) {
       mutated = mutated.replace(find, () => replace);
     }
     writeFileSync(path, mutated);
-    const mutant = runJest(dir, m.test, m.name, log);
+    const mutant = runJest(dir, m.test, m.name, log, m.jestArgs);
 
     writeFileSync(path, original);
-    const after = green(runJest(dir, m.test, m.name, log), "after the bug came out");
+    const after = green(runJest(dir, m.test, m.name, log, m.jestArgs), "after the bug came out");
 
     const failed = mutant.filter((t) => t.status === "failed");
     const expected = failed.filter((t) => m.expects.test(plain(t.failureMessages.join("\n"))));

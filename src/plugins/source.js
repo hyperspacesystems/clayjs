@@ -34,6 +34,7 @@
 
 import { onSaveAccepted } from '../core/save-core.js';
 import { startsAtImport } from '../core/is-edit-mode.js';
+import { hasOwnedRegions } from '../lib/owned-regions.js';
 
 // Today's answer before the session installs: the same fields `stats()` returns, with
 // `installed: false` and nothing counted.
@@ -131,7 +132,7 @@ function installOnce() {
  * would without this plugin.
  */
 function ensureForSave() {
-  if (!admitted || answered) return null;
+  if (!admitted || answered || hasOwnedRegions()) return null;
   return installOnce();
 }
 

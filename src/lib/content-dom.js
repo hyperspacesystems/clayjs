@@ -45,10 +45,11 @@ function hasOwnCapability(element, capability) {
 
 const CONTROL_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'OPTION'])
 
-function pairTree(source, copy, maps, drop) {
+function pairTree(source, copy, maps, drop, holes) {
   if (source.nodeType === 1 && drop(source)) { maps.dropped.push(copy); return }
   maps.cloneToLive.set(copy, source)
   maps.liveToClone.set(source, copy)
+  if (holes && holes.has(source)) { maps.holes.push({ live: source, copy }); return }
   let sourceChildren = source
   let copyChildren = copy
   if (source.nodeType === 1) {
@@ -65,12 +66,33 @@ function pairTree(source, copy, maps, drop) {
   } else if (source.nodeType !== 11) return
   let c = copyChildren.firstChild
   for (let s = sourceChildren.firstChild; s && c; s = s.nextSibling) {
-    pairTree(s, c, maps, drop)
+    pairTree(s, c, maps, drop, holes)
     c = c.nextSibling
   }
 }
 
-export function createContentView(context, { capability = 'data', exclude = null, inherit = true, provenance = null } = {}) {
+function importWithHoles(source, doc, holes, spine) {
+  if (holes.has(source)) return doc.importNode(source, false)
+  if (!spine.has(source)) return doc.importNode(source, true)
+  const copy = doc.importNode(source, false)
+  for (let child = source.firstChild; child; child = child.nextSibling) {
+    copy.appendChild(importWithHoles(child, doc, holes, spine))
+  }
+  return copy
+}
+
+function holeSpine(holes, root) {
+  const spine = new Set()
+  for (const hole of holes.keys()) {
+    for (let node = hole.parentNode; node && !spine.has(node); node = node.parentNode) {
+      spine.add(node)
+      if (node === root) break
+    }
+  }
+  return spine
+}
+
+export function createContentView(context, { capability = 'data', exclude = null, inherit = true, provenance = null, holes = null } = {}) {
   if (!context) throw new TypeError('createContentView requires a DOM context')
   const sourceDocument = context.nodeType === 9 ? context : context.ownerDocument
   if (!sourceDocument?.implementation?.createHTMLDocument) {
@@ -86,10 +108,14 @@ export function createContentView(context, { capability = 'data', exclude = null
     ? (el) => hasOwnCapability(el, capability) || !!(exclude && el.matches(exclude))
     : (el) => excluded(el, capability, capabilityMatch, exclude, sourceRoot, false)
   let root = null
+  const found = []
+  const holeRoots = holes && holes.size ? holes : null
   if (sourceRoot.nodeType !== 1 || !excluded(sourceRoot, capability, capabilityMatch, exclude, sourceRoot, inherit)) {
-    root = inertDocument.importNode(sourceRoot, true)
-    const maps = { cloneToLive, liveToClone, dropped: [], controls: [] }
-    pairTree(sourceRoot, root, maps, drop)
+    root = holeRoots
+      ? importWithHoles(sourceRoot, inertDocument, holeRoots, holeSpine(holeRoots, sourceRoot))
+      : inertDocument.importNode(sourceRoot, true)
+    const maps = { cloneToLive, liveToClone, dropped: [], controls: [], holes: found }
+    pairTree(sourceRoot, root, maps, drop, holeRoots)
     for (const node of maps.dropped) node.remove()
     // Control state is copied once the copy holds only what the view keeps, so a
     // <select> sees exactly the options the old node-by-node import gave it.
@@ -109,6 +135,7 @@ export function createContentView(context, { capability = 'data', exclude = null
 
   return {
     root,
+    holes: found,
     document: inertDocument,
     capability,
     selector: capabilitySelector(capability),

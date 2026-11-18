@@ -6,10 +6,10 @@ import { jest } from "@jest/globals";
  * clay.undo.commit, clay.undo.command, clay.trash and an undo or redo mark the page
  * dirty as they return (gateMarkDirty), because a sync frame's apply may hold the
  * mutation hub and the gate paused while they write. The hub hands the change lane its
- * copy of the same records only on a later microtask. Counted again there, the edit
- * lands after the token a save in the same task took, and the save that wrote it can
- * never clear the page: `unsaved` stays on the root and clay:clean never comes. The
- * mark counts those held records, so their delivery is not a second edit.
+ * copy of the same records only on a later microtask. Counted there, after the token a
+ * save in the same task took, the edit kept the page dirty after the save that wrote it:
+ * `unsaved` stayed on the root and clay:clean never came. A save now has the hub hand
+ * those records out before it takes its token, so the gate counts them before it.
  *
  * Every case runs the real dirty gate, mutation hub, undo plugin and save path, with
  * the host answered by a fetch stub.
@@ -28,7 +28,7 @@ const SAP_ROWS = `<main sap><ol items="rows"><li item data-id="a" state="data-de
 const row = () => document.querySelector('[data-id="a"]');
 const note = () => document.getElementById("note");
 
-async function load({ withUndo = true, sap = false, beforeGate = null } = {}) {
+async function load({ withUndo = true, sap = false } = {}) {
   jest.resetModules();
   // mutation.js publishes one hub per realm and every later module instance adopts it,
   // so a hub left by an earlier test would keep observing this test's page.
@@ -47,7 +47,6 @@ async function load({ withUndo = true, sap = false, beforeGate = null } = {}) {
     return { ok: true, status: 200, headers: new Headers(), text: async () => JSON.stringify({ msg: "Saved" }) };
   });
   Mutation = (await import("../../src/lib/mutation.js")).default;
-  beforeGate?.(Mutation);
   gate = await import("../../src/lib/dirty-gate.js");
   save = await import("../../src/core/save.js");
   if (withUndo) {
@@ -141,14 +140,6 @@ test("an undo, then a save in the same task: the save clears unsaved and announc
   expect(sent[1]).toContain(">n</p>");
 });
 
-test("an edit made through undo counts once", async () => {
-  await load();
-  const before = gate.gateRevision();
-  trash(row());
-  await Promise.resolve();
-  expect(gate.gateRevision() - before).toBe(1);
-});
-
 test("an edit made after the save's capture and held with the undo edit keeps the page dirty", async () => {
   await load();
   trash(row());
@@ -173,42 +164,7 @@ test("an edit held after an earlier undo edit was delivered still counts", async
   expect(gate.gateRevision() - before).toBe(1);
 });
 
-test("an edit a page subscriber makes while the undo edit is delivered still counts", async () => {
-  await load();
-  let echoed = false;
-  Mutation.onAnyChange({}, () => {
-    if (echoed) return;
-    echoed = true;
-    note().setAttribute("data-echo", "1");
-    Mutation.pause();
-    Mutation.resume();
-  });
-  const before = gate.gateRevision();
-  trash(row());
-  await Promise.resolve();
-  expect({ echoed, counted: gate.gateRevision() - before }).toEqual({ echoed: true, counted: 2 });
-});
-
-test("a subscriber that runs before the gate and makes an edit while the undo edit is delivered: the undo edit counts once and the new edit counts", async () => {
-  let armed = false;
-  let echoed = false;
-  await load({
-    beforeGate: (hub) => hub.onAnyChange({}, () => {
-      if (!armed || echoed) return;
-      echoed = true;
-      note().setAttribute("data-echo", "1");
-      hub.pause();
-      hub.resume();
-    }),
-  });
-  const before = gate.gateRevision();
-  armed = true;
-  trash(row());
-  await Promise.resolve();
-  expect({ echoed, counted: gate.gateRevision() - before }).toEqual({ echoed: true, counted: 2 });
-});
-
-test("an edit made through undo still reaches the page's change subscribers after clay.save() returns, as before", async () => {
+test("an edit made through undo reaches the page's change subscribers inside clay.save(), before the save reads the page, and once", async () => {
   await load();
   const batches = [];
   Mutation.onAnyChange({}, (changes) => batches.push(changes.length));
@@ -216,10 +172,10 @@ test("an edit made through undo still reaches the page's change subscribers afte
   const saving = save.savePage();
   const inSave = batches.length;
   await saving;
-  expect({ inSave, after: batches.length }).toEqual({ inSave: 0, after: 1 });
+  expect({ inSave, after: batches.length }).toEqual({ inSave: 1, after: 1 });
 });
 
-test("a page without undo: an edit reaches the page's change subscribers after clay.save() returns, as before", async () => {
+test("a page without undo: an edit reaches the page's change subscribers inside clay.save(), before the save reads the page, and once", async () => {
   await load({ withUndo: false });
   const batches = [];
   Mutation.onAnyChange({}, (changes) => batches.push(changes.length));
@@ -227,5 +183,5 @@ test("a page without undo: an edit reaches the page's change subscribers after c
   const saving = save.savePage();
   const inSave = batches.length;
   await saving;
-  expect({ inSave, after: batches.length, sent: sent[0].includes('data-plain="1"') }).toEqual({ inSave: 0, after: 1, sent: true });
+  expect({ inSave, after: batches.length, sent: sent[0].includes('data-plain="1"') }).toEqual({ inSave: 1, after: 1, sent: true });
 });

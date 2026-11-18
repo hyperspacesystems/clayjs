@@ -1,11 +1,13 @@
 import { ownsAttr, paintsOf, stripPaints, eachPainted } from "../vendor/sap-ownership.vendor.js";
 import { bootPhase } from "../core/boot-phase.js";
+import { ownedRootsIn } from "./owned-regions.js";
 
 // Values a derive engine (sapjs) paints from the page's records: attr:, class:,
 // css:, text and show output inside a [sap] root. They are saved like any other
-// content, but they are never an edit: comparisons, the dirty gate, undo and
-// merges leave them out, and the engine repaints them after every merge, before
-// anything records a baseline. Which parts of an element are painted is read
+// content, but they are never an edit: comparisons, the dirty gate and undo leave
+// them out. A merge leaves out the ones this tab paints again (repaintsText and the
+// rest below), and the engine repaints them after every merge, before anything
+// records a baseline. Which parts of an element are painted is read
 // from its own attributes, so the same answer holds for the live page, a
 // snapshot clone and a parsed frame. No expression is evaluated here.
 
@@ -17,6 +19,21 @@ export const ownsDerivedText = (el) => !!el && el.nodeType === 1 && !!paintsOf(e
 
 /** Remove every painted value from a detached tree, in place. Never the live page. */
 export const stripDerived = (root) => stripPaints(root);
+
+// A merge asks a different question from the three above: "if I leave this value out,
+// will this tab paint it again?" Only a registered engine paints, and a plugin's rules
+// count only while that plugin is installed here. With no plugin rules on the page,
+// these answer as the three above do behind derivedActive().
+const installed = (plugin) => !!window.Sap?.plugins?.has?.(plugin);
+
+export const repaintsAttr = (el, name) => derivedActive() && ownsAttr(el, name, null, installed);
+
+export const repaintsText = (el) => derivedActive() && !!el && el.nodeType === 1 && !!paintsOf(el, installed)?.text;
+
+/** Remove every value this tab paints again from a detached merge input, in place. */
+export function stripRepainted(root) {
+  if (derivedActive()) stripPaints(root, installed);
+}
 
 /** Every painted value under root, in document order, as one string. */
 export function paintSignature(root) {
@@ -33,7 +50,9 @@ export function paintSignature(root) {
 
 /** paintSignature of a document's bytes, such as the file on disk. */
 export function paintSignatureOfHtml(html) {
-  return paintSignature(new DOMParser().parseFromString(html, "text/html"));
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  for (const { element } of ownedRootsIn(doc)) element.replaceChildren();
+  return paintSignature(doc);
 }
 
 function withoutTokens(value, owned, split, join, nameOf) {

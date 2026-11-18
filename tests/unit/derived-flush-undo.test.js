@@ -10,7 +10,9 @@ import { jest } from "@jest/globals";
  * engine learns of edits from the change lane, so when the save's flush runs it has not
  * heard of the edit yet. A save boundary therefore hands the change lane what the hub
  * still holds before the engines flush (Mutation.deliverDeferred), and only on a page
- * whose engine gave a flush.
+ * whose engine gave a flush. A save hands it over again before it takes its dirty-gate
+ * token, on every page (save-token-at-clone.test.js); the cases here take the capture
+ * alone, without a save.
  *
  * Every case runs the real undo plugin and the real mutation hub. The cases with a
  * painted value run the vendored sapjs core, which registers its own flush.

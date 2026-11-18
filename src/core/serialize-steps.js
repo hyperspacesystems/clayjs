@@ -15,6 +15,7 @@ import {
   swapNoscriptMarkers
 } from './snapshot.js';
 import { TAB_LOCAL_ROOT_ATTRS } from '../lib/root-attrs.js';
+import { ownedBytes, ownedRevisions } from '../lib/owned-regions.js';
 
 const XHTML_NS = 'http://www.w3.org/1999/xhtml';
 
@@ -93,7 +94,7 @@ export function* serializeCloneSteps(clone) {
 /** `serializeForCompare`, in steps. */
 export function* serializeForCompareSteps(clone) {
   prepareForCompare(clone);
-  return yield* serializeTreeSteps(clone);
+  return ownedRevisions(yield* serializeTreeSteps(clone));
 }
 
 /** `serializeForSync`, in steps: the same bytes, `yield`ing every `SLICE_BYTES` of output. */
@@ -113,5 +114,5 @@ export function* serializeForSyncSteps(clone) {
   out.push(endTag);
   let html = out.join('');
   for (const [marker, text] of raw) html = html.split(marker).join(text);
-  return html;
+  return ownedBytes(html);
 }

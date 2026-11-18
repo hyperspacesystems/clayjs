@@ -27,10 +27,11 @@ import {
   knownPageFormatFloor,
   PAGE_FORMAT_META
 } from "./save-core.js";
-import { captureForComparisonAndDirty, captureForSaveAndComparison, captureForDirtyCheck, captureSaveClone, releaseCaptureArtifact } from "./snapshot.js";
+import { captureForComparisonAndDirty, captureForSaveAndComparison, captureForDirtyCheck, captureSaveClone, releaseCaptureArtifact, flushBoundary } from "./snapshot.js";
 import { saveLimit, saveLimits, inspectSaveSize } from "./save-size.js";
 import { SLICED_SAVE_MIN_BYTES } from "./save-slices.js";
 import { paintSignature } from "../lib/derived.js";
+import { ownedConflictHandlers, withoutQuietRevisions } from "../lib/owned-regions.js";
 import { NO_TRIGGER_AUTOSAVE_SELECTOR } from "../lib/region-policy.js";
 import { seedEtag, learnConditionalSaves, lastSeenEtag, recordEtag } from "./etag.js";
 import { startDirtyGate, gateCaptureToken, gateClearIfUnchanged, gateRevision, pageMaybeDirty } from "../lib/dirty-gate.js";
@@ -248,6 +249,10 @@ let pendingAutosave = false;
 // True while a savePage/savePageForce request is on the wire. Only those drain the
 // queue when they land, so an autosave never queues behind a raw saveHtml call.
 let ownSaveOnWire = false;
+// While a save runs its boundary, the list its answer goes to. A save asked for then (an
+// [onmutation] that calls clay.save() as the boundary hands it the edit) joins it rather
+// than capturing inside it: the clone that follows reads the page after the request.
+let joiningSave = null;
 
 // ============================================
 // AUTOSAVE SUSPENSION
@@ -453,8 +458,8 @@ export function acceptedReceipt(generation = saveGenerationAt) {
  * leave open.
  */
 export function adoptEntryBaseline({ represented } = {}) {
-  const token = gateCaptureToken();
-  const { forComparison, forDirty } = captureForComparisonAndDirty();
+  const token = boundaryToken();
+  const { forComparison, forDirty } = captureForComparisonAndDirty({ flushUndo: false });
   const etag = typeof represented?.etag === "string" && represented.etag ? represented.etag : null;
 
   // Work a session left unsaved is the person's. A version the file has moved past is
@@ -614,6 +619,7 @@ function heldForPreview(callback, resolve) {
 // a live-sync frame that brought the page back in step, or the other tab going away.
 let conflictHold = false;
 let conflictEtag = null;
+let ownedMergeHold = false;
 
 function holdForConflict(etag) {
   conflictEtag = etag ?? null;
@@ -623,10 +629,59 @@ function holdForConflict(etag) {
 }
 
 function releaseConflictHold() {
+  ownedMergeHold = false;
   if (!conflictHold) return;
   conflictHold = false;
   conflictEtag = null;
   resumeAutosave();
+}
+
+/**
+ * The owner of a region could not merge an incoming version. This tab keeps its own
+ * region and stops autosaving over a version it does not hold, exactly as after a
+ * refused save, until a later version merges.
+ */
+export function holdForOwnedMerge(etag = null) {
+  const first = !ownedMergeHold;
+  ownedMergeHold = true;
+  holdForConflict(etag);
+  if (!first) return;
+  setSaveState('conflict', 'A newer version of this document could not be merged into this tab', 'conflict', {
+    hadTimeout: false,
+    changedBy: null,
+    afterTimeout: false,
+    etag: etag ?? null,
+    code: 'owned-merge-failed',
+    reason: null,
+    retryAfter: null,
+    captureId: null,
+  });
+}
+
+/** A later version merged, so the hold a failed region merge placed is over. */
+export function ownedMergeRecovered(etag = null) {
+  if (!ownedMergeHold) return;
+  ownedMergeHold = false;
+  conflictEtag = null;
+  conflictResolvedBySync(etag);
+}
+
+/**
+ * True when every unsaved change sits inside a region whose owner resolves save
+ * conflicts itself: the dirty string and the saved one are equal once the revisions
+ * of those regions are taken out.
+ */
+function ownersResolveConflicts(forDirty = null) {
+  if (!ownedConflictHandlers().length) return false;
+  let current = forDirty;
+  if (typeof current !== 'string') {
+    try {
+      current = captureForDirtyCheck({ flushUndo: false });
+    } catch (_) {
+      return false;
+    }
+  }
+  return withoutQuietRevisions(current) === withoutQuietRevisions(lastSavedDirty);
 }
 
 /** True while this tab is refusing to autosave over a version it has not seen. */
@@ -650,6 +705,7 @@ export function conflictResolvedBySync(etag) {
   if (conflictEtag && etag !== conflictEtag) return;
   conflictHold = false;
   conflictEtag = null;
+  ownedMergeHold = false;
   const awaitingManualSave = !autosaveActive() && pageMaybeDirty();
   if (!awaitingManualSave) {
     if (document.documentElement.getAttribute('savestatus') === 'conflict') {
@@ -800,6 +856,23 @@ function applySaveResult(result, forComparison, forDirty, label, gateToken, forS
         savingTimeout = null;
       }
       document.documentElement.setAttribute('savestatus', 'saved');
+      return;
+    }
+    // Every unsaved change belongs to an owner that resolves conflicts itself: it is
+    // told, and the general notice and the hold stay away.
+    if (!conflictHold && ownersResolveConflicts(forDirty)) {
+      if (savingTimeout) {
+        clearTimeout(savingTimeout);
+        savingTimeout = null;
+      }
+      const detail = { etag: result.conflictEtag ?? null, changedBy: result.changedBy ?? null, captureId };
+      for (const handle of ownedConflictHandlers()) {
+        try {
+          handle(detail);
+        } catch (err) {
+          console.error('clayjs: an owned region conflict handler failed', err);
+        }
+      }
       return;
     }
     holdForConflict(result.conflictEtag);
@@ -1125,7 +1198,8 @@ async function runSlicedSave(ctx, lane) {
   document.addEventListener('clay:sync-applied', onApplied);
   try {
     for (let round = 0; round < 2; round++) {
-      const gateToken = gateCaptureToken();
+      const gateToken = boundaryToken(ctx.joiners);
+      if (ctx.joiners?.explicit) ctx.explicit = true;
       const epoch = {
         generation: saveGenerationAt,
         baselines: baselineRevision,
@@ -1134,6 +1208,7 @@ async function runSlicedSave(ctx, lane) {
       const job = prepDriver.beginSaveCapture({
         requestRefresh: true,
         forRequest: true,
+        flushUndo: false,
         pageFormatMarker: epoch.floor ? { name: PAGE_FORMAT_META, content: String(epoch.floor) } : null,
       });
       // The copies this capture could cover are the ones held right now: reading them
@@ -1241,6 +1316,39 @@ function startSlicedSave(ctx) {
 }
 
 /**
+ * The dirty-gate token for a capture taken right after this returns, with flushUndo: false.
+ *
+ * The boundary runs first (the engines flush, undo closes its batch), then the hub hands
+ * every subscriber what it still owes, so an edit the clone holds is counted before the
+ * token and an edit made after the clone is counted after it. A save passes the list its
+ * answer goes to, and a save asked for while this runs is added to that list.
+ */
+function boundaryToken(joiners = null) {
+  const outer = joiningSave;
+  joiningSave = joiners;
+  try {
+    flushBoundary();
+    Mutation.deliverDeferred();
+    return gateCaptureToken();
+  } finally {
+    joiningSave = outer;
+  }
+}
+
+// A save asked for inside another save's boundary answers with that save's result. An
+// explicit one makes that save explicit, so it writes what only an explicit save writes.
+function joinSave(callback, explicit) {
+  const joiners = joiningSave;
+  if (explicit) joiners.explicit = true;
+  return new Promise((resolve) => {
+    joiners.push((result) => {
+      if (typeof callback === 'function') callback(result);
+      resolve(result);
+    });
+  });
+}
+
+/**
  * One save attempt, explicit or automatic.
  *
  * Both kinds take the same single combined capture — the save domain, the
@@ -1255,6 +1363,7 @@ function startSlicedSave(ctx) {
  * @returns {Promise<{msg: string, msgType: string}>}
  */
 function attemptSave(options, callback = () => {}) {
+  if (joiningSave) return joinSave(callback, options.kind === 'explicit');
   // The first save of a session still learning the host's conditional-save capability
   // waits for that answer, so it carries If-Match when the host honours one.
   if (capabilityPending) return capabilityKnown.then(() => attemptSave(options, callback));
@@ -1289,7 +1398,7 @@ function afterWait(wait, attempt) {
 }
 
 function attemptSaveNow({ kind, permit = null }, callback = () => {}) {
-  const explicit = kind === 'explicit';
+  let explicit = kind === 'explicit';
 
   return new Promise((resolve) => {
     if (!isEditMode && !window.clay?.testMode) {
@@ -1414,6 +1523,7 @@ function attemptSaveNow({ kind, permit = null }, callback = () => {}) {
         blockeditorFormatFloor: 0,
         quietConflict: false,
         settleSoonQueued,
+        joiners: soonQueued,
         callback,
         resolve,
       })) return;
@@ -1423,10 +1533,11 @@ function attemptSaveNow({ kind, permit = null }, callback = () => {}) {
     // forSave strips non-persisted regions ([no-save]/[save-remove])
     // forComparison additionally strips every autosave-off region
     const startedAt = monotonic();
-    let capture, forSave, forComparison, forDirty, captureId;
-    const gateToken = gateCaptureToken();
+    let capture, forSave, forComparison, forDirty, captureId, gateToken;
     try {
-      capture = captureForSaveAndComparison({ requestRefresh: true, forRequest: true });
+      gateToken = boundaryToken(soonQueued);
+      if (soonQueued.explicit) explicit = true;
+      capture = captureForSaveAndComparison({ requestRefresh: true, forRequest: true, flushUndo: false });
       ({ forSave, forComparison, forDirty, captureId } = capture);
     } catch (err) {
       console.error(`${explicit ? 'savePage' : 'savePageThrottled'}: captureForSaveAndComparison failed`, err);
@@ -1578,15 +1689,16 @@ export function savePageForce(callback = () => {}, { quietConflict = false, bloc
         blockeditorFormatFloor,
         quietConflict,
         settleSoonQueued,
+        joiners: soonQueued,
         callback,
         resolve,
       })) return;
     }
 
-    let capture, forSave, forComparison, forDirty, captureId;
-    const gateToken = gateCaptureToken();
+    let capture, forSave, forComparison, forDirty, captureId, gateToken;
     try {
-      capture = captureForSaveAndComparison({ requestRefresh: true, forRequest: true });
+      gateToken = boundaryToken(soonQueued);
+      capture = captureForSaveAndComparison({ requestRefresh: true, forRequest: true, flushUndo: false });
       ({ forSave, forComparison, forDirty, captureId } = capture);
     } catch (err) {
       console.error('savePageForce: captureForSaveAndComparison failed', err);
@@ -1725,7 +1837,7 @@ async function flushBytes(keepalive, deadline, permit, run = { over: false }) {
       if (run.over) return null;
     }
     if (isSaveConflicted()) throw flushError('This document has a conflict to resolve.', 'conflict');
-    const token = gateCaptureToken();
+    const token = boundaryToken();
     if (!bytesUnsaved()) {
       gateClearIfUnchanged(token);
       if (hasUnsavedState()) throw flushError('This document has unsaved work a save cannot write.', 'blocked');
@@ -1765,6 +1877,11 @@ async function flushBytes(keepalive, deadline, permit, run = { over: false }) {
  * @returns {Promise<{ok: boolean, msg: string, msgType: string}>}
  */
 export async function saveOverwritingConflict(callback = () => {}) {
+  if (!conflictHold && ownersResolveConflicts()) {
+    const refused = { ...skipped_('This document resolves save conflicts itself'), code: 'owned-conflict' };
+    if (typeof callback === 'function') callback(refused);
+    return refused;
+  }
   await seedEtag({ fresh: true });
   return savePageForce(callback);
 }
@@ -1900,7 +2017,7 @@ function noteHealedFrom(signature) {
 
 /** The painted values of the page as it would be saved. */
 export function currentPaintSignature() {
-  return paintSignature(captureSaveClone({ flushUndo: false }));
+  return paintSignature(captureSaveClone({ flushUndo: false, owned: 'revision' }));
 }
 
 /**
@@ -2137,8 +2254,8 @@ function initBaselineCapture() {
     // comparison bytes match, so settle cannot absorb a later unsent edit.
     if (!bootUserEdited && baselineRevision === immediateRevision) {
       // Store stripped version so comparisons are direct (no parsing needed)
-      const gateToken = gateCaptureToken();
-      const { forComparison: contents, forDirty: contentsDirty } = captureForComparisonAndDirty();
+      const gateToken = boundaryToken();
+      const { forComparison: contents, forDirty: contentsDirty } = captureForComparisonAndDirty({ flushUndo: false });
       setLastSavedBaselines(contents, contentsDirty);
       baselineContents = contents;
       // Boot churn (modules rewriting attributes at DOM-ready) counted toward

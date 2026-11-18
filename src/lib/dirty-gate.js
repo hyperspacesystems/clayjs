@@ -114,7 +114,7 @@ export function startDirtyGate() {
   Mutation.onAnyChange(
     { omitChangeDetails: true, require: 'dirty' },
     () => {
-      if (!paused && !Mutation._deliveringCounted) {
+      if (!paused) {
         changes++;
         scheduleAnnounce();
       }
@@ -212,32 +212,36 @@ export function gateCaptureToken() {
   return { gen: changes, probe };
 }
 
-/** A token for the page as it is now: what the browser has queued is counted first. */
+// Hands the gate every change the hub still owes it: what a delivery has not reached yet,
+// what undo's commit, a command or the trash left for a microtask, and what the browser has
+// queued. Inside a pause only the browser's queue is taken, as a delivery there would reach
+// non-pausable callbacks alone.
+function countOwed() {
+  if (Mutation._pauseDepth > 0) Mutation._deliverBeforePause();
+  else Mutation.deliverDeferred();
+}
+
+/** A token for the page as it is now: every change the hub still owes is counted first. */
 export function gateTokenNow() {
-  Mutation._deliverBeforePause();
+  countOwed();
   return gateCaptureToken();
 }
 
 /**
  * True when nothing was recorded since the token was taken and every [persist] control
- * still holds what it held then. Records the browser has queued are delivered first, so
- * the answer holds in the task that made a change too.
+ * still holds what it held then. Every change the hub still owes is counted first, so the
+ * answer holds in the task that made a change too, an edit made through undo or the trash
+ * included.
  */
 export function gateUnchangedSince(token) {
   if (!token) return false;
-  Mutation._deliverBeforePause();
+  countOwed();
   return changes === token.gen && token.probe.every(([el, sig]) => controlSignature(el) === sig);
 }
 
-/**
- * A change nothing in the DOM recorded: the page holds text a save has not written.
- * The mark also counts the records the hub holds for a microtask (an edit made through
- * undo), so their delivery after a save in the same task took its token is not a second
- * edit that keeps the page dirty.
- */
+/** A change nothing in the DOM recorded: the page holds text a save has not written. */
 export function gateMarkDirty() {
   changes++;
-  Mutation._countDeferred?.();
   scheduleAnnounce();
 }
 

@@ -10,7 +10,8 @@ import { jest } from "@jest/globals";
  * file keeps the old painted value, and a second save says "No changes to save"
  * because painted values are left out of every comparison. A save boundary therefore
  * hands the rest of the subscribers the batch being delivered before the engines flush
- * (Mutation.deliverDeferred), and only on a page whose engine gave a flush.
+ * (Mutation.deliverDeferred). Every save does it again before it takes its dirty-gate
+ * token, so a page with no engine flush hands them the batch before its clone too.
  *
  * The cases with a painted value run the vendored sapjs core, the real [onmutation]
  * wiring and the real save path, with the host answered by a fetch stub. The core
@@ -19,7 +20,6 @@ import { jest } from "@jest/globals";
 
 let gate;
 let save;
-let snapshot;
 let lib;
 let Mutation;
 let trash;
@@ -58,7 +58,6 @@ async function load(body, { sap = false, onmutation = true, undo = false, before
   beforeGate?.(Mutation);
   gate = await import("../../src/lib/dirty-gate.js");
   save = await import("../../src/core/save.js");
-  snapshot = await import("../../src/core/snapshot.js");
   lib = await import("../../src/lib/derived.js");
   window.clay.derived = lib.derived;
   window.clay.save = (...args) => {
@@ -128,7 +127,7 @@ test("the subscribers a save hands the batch to are not handed it again when the
   expect({ saves: saves.length, batches: batches.length }).toEqual({ saves: 1, batches: 1 });
 });
 
-test("a page with no engine flush: a save from a change subscriber leaves the subscribers after it to the delivery, as before", async () => {
+test("a page with no engine flush: a save from a change subscriber hands the subscribers after it the batch before it reads the page, and once", async () => {
   await load(PLAIN_PAGE);
   const batches = [];
   Mutation.onAnyChange({}, (changes) => batches.push(changes.length));
@@ -137,13 +136,13 @@ test("a page with no engine flush: a save from a change subscriber leaves the su
   root().setAttribute("n", "4");
   await settled();
 
-  expect({ saves: saves.length, inCapture, after: batches.length }).toEqual({ saves: 1, inCapture: 0, after: 1 });
+  expect({ saves: saves.length, inCapture, after: batches.length }).toEqual({ saves: 1, inCapture: 1, after: 1 });
 });
 
-test("a save boundary reached in a delivery nested inside the delivery of an undo edit: the undo edit still counts once", async () => {
+test("a save started in a delivery nested inside the delivery of an undo edit, on a page with an engine flush: the save holds both edits and leaves the page clean", async () => {
   let armed = false;
   let echoed = false;
-  let captured = false;
+  let started = false;
   await load(NOTE_PAGE, {
     onmutation: false,
     undo: true,
@@ -156,17 +155,24 @@ test("a save boundary reached in a delivery nested inside the delivery of an und
         hub.resume();
       });
       hub.onAnyChange({}, () => {
-        if (!echoed || captured) return;
-        captured = true;
-        snapshot.captureForSaveAndComparison();
+        if (!echoed || started) return;
+        started = true;
+        window.clay.save();
       });
     },
   });
   lib.derived.register(() => {}, { flush: () => {} });
-  const before = gate.gateRevision();
   armed = true;
   trash(document.querySelector('[data-id="a"]'));
-  await Promise.resolve();
+  await settled();
 
-  expect({ echoed, captured, counted: gate.gateRevision() - before }).toEqual({ echoed: true, captured: true, counted: 2 });
+  expect({
+    echoed,
+    started,
+    sent: sent.length,
+    unsaved: document.documentElement.getAttribute("unsaved"),
+    dirty: gate.pageMaybeDirty(),
+  }).toEqual({ echoed: true, started: true, sent: 1, unsaved: null, dirty: false });
+  expect(sent[0]).toContain('data-echo="1"');
+  expect(sent[0]).toContain('data-id="a" data-deleted-at="');
 });

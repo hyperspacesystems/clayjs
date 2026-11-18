@@ -45,6 +45,7 @@
 
 import { EXTENSION_NODE_SELECTOR } from './extension-noise.js';
 import { capabilitySelector, expandsTo, hasCapability, hasPolicyToken, POLICY_TOKENS } from './region-capabilities.js';
+import { own } from './owned-regions.js';
 
 export const PERSIST = { FULL: 'full', FROZEN: 'frozen', NONE: 'none' };
 
@@ -296,6 +297,7 @@ export const regionShape = {
   skipForPolicy,
   strictestPolicy,
   addRegionToken,
+  own,
   PERSIST,
   TOKENS,
   REGION_ATTRS,

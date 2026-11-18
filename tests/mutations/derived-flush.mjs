@@ -7,10 +7,11 @@ import { mutate } from "./harness.mjs";
 const TEST = "tests/unit/derived-flush.test.js";
 const SNAPSHOT = "src/core/snapshot.js";
 const DERIVED = "src/lib/derived.js";
-const CALL = "  if (flushUndo) flushDerived();\n";
+const CALL = "  flushDerived();\n";
 const CLONED = "  const clone = view.root;\n";
 const SAVE = "src/core/save.js";
 const SITES = "the save boundaries outside snapshot.js flush the engines: both boot baselines, the entry baseline and the close warning";
+const ENTRY = "  const { forComparison, forDirty } = captureForComparisonAndDirty({ flushUndo: false });\n";
 const unflushed = (line) => [line, line.replace("();", "({ flushUndo: false });")];
 
 mutate({
@@ -33,7 +34,7 @@ mutate({
   "flush-after-clone": {
     what: "the engines flush after the page was cloned, so the paint misses the bytes",
     file: SNAPSHOT,
-    edits: [[CALL, ""], [CLONED, CLONED + CALL]],
+    edits: [[CALL, ""], [CLONED, CLONED + "  if (flushUndo) flushDerived();\n"]],
     test: TEST,
     name: "the sapjs core: an edit and a save in one task save the value the engine paints from that edit",
     expects: /Expected substring: ">5<\/output>"/,
@@ -41,7 +42,7 @@ mutate({
   "flush-on-every-capture": {
     what: "a capture that only reads the page flushes the engines too",
     file: SNAPSHOT,
-    edits: [[CALL, "  flushDerived();\n"]],
+    edits: [["  if (flushUndo) flushBoundary();\n", "  flushBoundary();\n"]],
     test: TEST,
     name: "every capture at a save boundary flushes first, and a capture that only reads the page does not",
     expects: /\+\s+"merge": 1,/,
@@ -84,7 +85,7 @@ mutate({
   "settled-baseline-unflushed": {
     what: "the settled boot baseline is captured without flushing the engines",
     file: SAVE,
-    edits: [unflushed("      const { forComparison: contents, forDirty: contentsDirty } = captureForComparisonAndDirty();\n")],
+    edits: [["      const gateToken = boundaryToken();\n", "      const gateToken = gateCaptureToken();\n"]],
     test: TEST,
     name: SITES,
     expects: /\+\s+"settledBaseline": 0,/,
@@ -92,7 +93,7 @@ mutate({
   "entry-baseline-unflushed": {
     what: "the entry baseline is captured without flushing the engines",
     file: SAVE,
-    edits: [unflushed("  const { forComparison, forDirty } = captureForComparisonAndDirty();\n")],
+    edits: [[`  const token = boundaryToken();\n${ENTRY}`, `  const token = gateCaptureToken();\n${ENTRY}`]],
     test: TEST,
     name: SITES,
     expects: /\+\s+"entryBaseline": 0,/,
