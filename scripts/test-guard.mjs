@@ -38,9 +38,20 @@ To run the whole suite here anyway: CLAYJS_LOCAL_SUITE=1 npm test`);
   process.exit(2);
 }
 
+// On a test box, passing files' console output is dropped and file events go to $TESTBOX_OUT.
+// verbose would print console output past any reporter, and 'summary' keeps the Tests: line.
+// The package.json jest config ships with the package, so these flags live here instead.
+const passed = (name) => args.some((arg) => flags.get(arg.split("=")[0]) === name);
+const ownFile = (relative) => fileURLToPath(new URL(relative, import.meta.url));
+const extra = [];
+if (process.env.TESTBOX === "1" && process.env.JEST_CONSOLE !== "all" && !passed("reporters")) {
+  extra.push("--verbose=false", `--reporters=${ownFile("../tests/reporters/failing-console.cjs")}`, "--reporters=summary");
+}
+if (!passed("testSequencer")) extra.push(`--testSequencer=${ownFile("../tests/duration-sequencer.cjs")}`);
+
 const jest = fileURLToPath(new URL("../node_modules/jest/bin/jest.js", import.meta.url));
 const nodeOptions = [process.env.NODE_OPTIONS, "--experimental-vm-modules"].filter(Boolean).join(" ");
-const { status } = spawnSync(process.execPath, [jest, ...args], {
+const { status } = spawnSync(process.execPath, [jest, ...args, ...extra], {
   stdio: "inherit",
   env: { ...process.env, NODE_OPTIONS: nodeOptions },
 });
