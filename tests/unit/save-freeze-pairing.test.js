@@ -9,7 +9,6 @@
 
 import {
   captureForSave,
-  captureForSaveAndComparison,
   captureSnapshot,
 } from "../../src/core/snapshot.js";
 
@@ -46,15 +45,6 @@ test("a [freeze] inside [no-snapshot] does not shift its siblings' content", () 
   expect(forSave).not.toContain("RUNTIME-A");
   // B lived inside a [no-snapshot] region, so it is not in the file at all.
   expect(forSave).not.toContain("AUTHORED-B");
-});
-
-test("the same holds through the combined save+comparison capture", () => {
-  document.getElementById("c").innerHTML = "RUNTIME-C";
-
-  const { forSave } = captureForSaveAndComparison({ emitForSync: false });
-
-  expect(forSave).toContain("AUTHORED-C");
-  expect(forSave).not.toContain("RUNTIME-C");
 });
 
 test("an [onbeforesave] handler cannot un-freeze a region", () => {

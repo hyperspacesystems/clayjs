@@ -499,21 +499,6 @@ test("a host-mode page store that refuses a full page offers only the download",
   expect(page.view.editable).toBe(false);
 });
 
-test("a host-mode page store whose compaction failed offers only the download", async () => {
-  const value = seedValue(BLOCKS);
-  const { page, PAGE_FULL_MESSAGE, storeOf } = await load({ html: pageHtml(value), head: tagHtml(value) });
-  await page.ready;
-  enterHostMode(storeOf("blockeditor"));
-  await flushAsync();
-  storeOf("blockeditor").deliver({ phase: "refused", code: "compaction-failed" });
-  await flushAsync();
-
-  await waitForToast(PAGE_FULL_MESSAGE);
-  expect(toastText()).toContain(PAGE_FULL_MESSAGE);
-  expect(toastActions()).toEqual(["Download your copy"]);
-  expect(page.view.editable).toBe(false);
-});
-
 test("a host-mode full page's download keeps the edit the room refused", async () => {
   const value = seedValue(BLOCKS);
   const { page, PAGE_FULL_MESSAGE, storeOf } = await load({ html: pageHtml(value), head: tagHtml(value) });

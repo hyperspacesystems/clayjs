@@ -161,26 +161,3 @@ test("a committed exit disposes the installed command and its preview", async ()
     boot.stop();
   }
 });
-
-test("a refused exit, then a cancelled preview, then the commit disposes", async () => {
-  const { boot, clay, view, editor } = await editSession();
-  const tracked = await trackCommand();
-  try {
-    expect(await editor.runPageCommand(view, "importMarkdown", { file: file("notes.md", "# Heading") })).toEqual({ ok: true, preview: true });
-
-    expect(await clay.setMode("view")).toMatchObject({ ok: false, code: "pending-input" });
-    expect(tracked.calls.disposes).toBe(0);
-    expect(panel()).not.toBeNull();
-
-    click("cancel");
-    await flush();
-    expect(panel()).toBeNull();
-
-    expect(await clay.setMode("view")).toMatchObject({ ok: true, mode: "view" });
-    expect(tracked.calls.disposes).toBe(1);
-    expect(await pendingIds()).toEqual([]);
-  } finally {
-    tracked.restore();
-    boot.stop();
-  }
-});

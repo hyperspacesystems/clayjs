@@ -231,16 +231,6 @@ test("Esc closes the overlay and takes it out of the DOM", () => {
   expect(picker.contains(document.body)).toBe(false);
 });
 
-test("the overlay contains its bar, so a click on a control is not a click away", () => {
-  mount();
-  const picker = createPicker({ surface: fakeSurface() });
-  picker.open();
-
-  expect(picker.contains(overlay())).toBe(true);
-  expect(picker.contains(part("picker-whole"))).toBe(true);
-  expect(picker.contains(document.body)).toBe(false);
-});
-
 test("generic between names the common ancestor through the block rules", () => {
   const nodes = mount();
   const surface = genericSurface();

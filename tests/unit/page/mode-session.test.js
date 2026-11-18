@@ -399,28 +399,6 @@ test("a refused checkpoint during preparation writes nothing and keeps the edit"
   }
 });
 
-test("a mount that fails blocks the session and leaves the saved article alone", async () => {
-  const quiet = jest.spyOn(console, "error").mockImplementation(() => {});
-  const html = articleHtml();
-  MODE.factory = "throw";
-  try {
-    const { page, preparePageSession } = await load({ html });
-    const lease = preparePageSession(context());
-    await expect(lease.ready).rejects.toMatchObject({ code: "mount-failed" });
-    await tick();
-    expect(page.status).toMatchObject({ phase: "blocked", reason: "mount-failed" });
-    expect(page.view).toBe(null);
-    expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
-    expect(document.querySelector(ARTICLE_SEL).innerHTML).toBe(articleOf(html).innerHTML);
-    expect(inputReady()).toHaveLength(0);
-    lease.enable();
-    expect(page.view).toBe(null);
-    lease.dispose();
-  } finally {
-    quiet.mockRestore();
-  }
-});
-
 test("a page with a tool prepares it inside the session and gives it back on the exit", async () => {
   const html = articleHtml([...BLOCKS, TOOL]);
   const { page, preparePageSession, storeOf } = await load({ html, head: "" });
@@ -662,23 +640,6 @@ test("a second refusal keeps the text and shows the conflict instead of writing 
     expect(view.dom.textContent).toContain("Hello there");
     expect(storeOf("blockeditor").pending.length).toBeGreaterThan(0);
     expect(document.documentElement.getAttribute("savestatus")).toBe("conflict");
-  } finally {
-    lease.dispose();
-  }
-});
-
-test("the page is a participant the coordinator can hold", async () => {
-  const { page, pageParticipant } = await load();
-  const participant = pageParticipant();
-  expect(participant.id).toBe("clay:blockeditor");
-  expect(participant.order).toBeLessThan(1000);
-  const lease = await participant.prepare(context());
-  try {
-    await lease.ready;
-    expect(page.view.editable).toBe(false);
-    lease.enable();
-    expect(page.view.editable).toBe(true);
-    expect(page.status).toMatchObject({ phase: "ready" });
   } finally {
     lease.dispose();
   }

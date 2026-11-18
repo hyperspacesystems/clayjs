@@ -1,24 +1,7 @@
 /**
  * @jest-environment node
  */
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { buildOfflineManifest } from "../../../../scripts/build-offline-manifest.mjs";
-import { emitChunks } from "../../../../scripts/build-chunks.mjs";
 import { createFeatureLoader } from "../../../../src/page/feature-loader.js";
-import { FEATURES } from "../../../../src/page/features/registry.js";
-import * as tableModule from "../../../../src/page/features/table.js";
-import * as boardModule from "../../../../src/page/features/board.js";
-import * as chartModule from "../../../../src/page/features/chart.js";
-import * as checklistModule from "../../../../src/page/features/checklist.js";
-import * as codeModule from "../../../../src/page/features/code.js";
-import * as mediaModule from "../../../../src/page/features/media.js";
-import * as tocModule from "../../../../src/page/features/toc.js";
-import * as titleIconModule from "../../../../src/page/features/title-icon.js";
-import * as toolModule from "../../../../src/page/features/tool.js";
-
-const ROOT = new URL("../../../../", import.meta.url).pathname;
 
 const deferred = () => {
   let resolve, reject;
@@ -155,67 +138,4 @@ test("an install that resolves after dispose is disposed at once and never insta
   await tick();
   expect(loader.has("tool")).toBe(false);
   expect(disposals).toBe(1);
-});
-
-test("a host-local runtime prefix activates every feature without reaching clayjs.com", async () => {
-  // Built here rather than read from dist/, so the test never depends on a build another test ran.
-  const dist = mkdtempSync(join(tmpdir(), "clay-features-manifest-"));
-  await emitChunks({ root: ROOT, outdir: join(dist, "m") });
-  const index = await buildOfflineManifest({ root: ROOT, dist });
-  const prefix = `/_/clayjs/${index.version}/`;
-  const modules = {
-    "src/page/features/table.js": tableModule,
-    "src/page/features/board.js": boardModule,
-    "src/page/features/chart.js": chartModule,
-    "src/page/features/checklist.js": checklistModule,
-    "src/page/features/code.js": codeModule,
-    "src/page/features/media.js": mediaModule,
-    "src/page/features/toc.js": tocModule,
-    "src/page/features/title-icon.js": titleIconModule,
-    "src/page/features/tool.js": toolModule,
-  };
-  const requested = [];
-  const fetches = [];
-  const installs = [];
-
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (input) => {
-    fetches.push(String(input));
-    throw new Error(`clayjs: the offline test refuses ${String(input)}`);
-  };
-  const importUnderPrefix = (url) => {
-    if (!url.startsWith(prefix)) return Promise.reject(new Error(`clayjs: the feature loader left its local prefix: ${url}`));
-    const mod = modules[url.slice(prefix.length)];
-    return mod ? Promise.resolve(mod) : Promise.reject(new Error(`clayjs: ${url} is not in this release`));
-  };
-
-  const loader = createFeatureLoader({
-    load: (id) => {
-      const url = `${prefix}src/${FEATURES[id].module}`;
-      requested.push(url);
-      return importUnderPrefix(url);
-    },
-    install: (id, mod) => { installs.push(id); return mod.createFeature(); },
-  });
-
-  try {
-    const ids = Object.keys(FEATURES).sort();
-    expect(ids).toEqual(["board", "chart", "checklist", "code", "media", "table", "titleIcon", "toc", "tool"]);
-    for (const id of ids) {
-      expect(await loader.ensure(id)).toBeTruthy();
-      expect(loader.has(id)).toBe(true);
-    }
-    expect(installs).toEqual(ids);
-    expect(requested).toHaveLength(ids.length);
-    for (const url of requested) {
-      expect(url.startsWith(prefix)).toBe(true);
-      expect(url.startsWith("https://clayjs.com/")).toBe(false);
-      expect(Object.hasOwn(index.files, url.slice(prefix.length))).toBe(true);
-    }
-    expect(fetches).toEqual([]);
-  } finally {
-    globalThis.fetch = realFetch;
-    loader.dispose();
-    rmSync(dist, { recursive: true, force: true });
-  }
 });

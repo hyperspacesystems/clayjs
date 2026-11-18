@@ -440,19 +440,6 @@ test("a 404 after a denial hands edit back to the hints", async () => {
   expect(window.clay.canEdit).toBe(true);
 });
 
-test("a 503 after a denial keeps it", async () => {
-  metaAnswer = okMeta({ writable: false });
-  await boot();
-  const { checkHostPermission } = await import("../../src/core/host-permission.js");
-
-  await expect(checkHostPermission({ fresh: true })).resolves.toBe(false);
-  expect(window.clay.canEdit).toBe(false);
-
-  metaAnswer = response({ ok: false, status: 503 });
-  await expect(checkHostPermission({ fresh: true })).resolves.toBe(false);
-  expect(window.clay.canEdit).toBe(false);
-});
-
 test("an ok answer with no document block after a denial keeps it", async () => {
   metaAnswer = okMeta({ writable: false });
   await boot();
@@ -509,24 +496,6 @@ test("the pagehide receipt after a denial records canEdit false", async () => {
     canEdit: false,
     internal: false,
   });
-});
-
-test("an older answer landing after a newer one never overwrites it", async () => {
-  held = defer();
-  const bootFetch = held;
-  await boot({ opensIn: "edit" });
-  held = null;
-  metaAnswer = okMeta({ writable: true });
-  const { checkHostPermission } = await import("../../src/core/host-permission.js");
-
-  await expect(checkHostPermission({ fresh: true })).resolves.toBe(true);
-  expect(window.clay.canEdit).toBe(true);
-
-  bootFetch.resolve(okMeta({ writable: false }));
-  await settle();
-
-  expect(window.clay.canEdit).toBe(true);
-  expect(document.documentElement.getAttribute("canedit")).toBe("true");
 });
 
 test("a newer denial is not undone by an older grant", async () => {

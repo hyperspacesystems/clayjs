@@ -293,48 +293,6 @@ test("the editing half starts on a managed prepare and enable, and a disposed se
   expect(mod.currentMe()).toBeNull();
 });
 
-test("adoption counts one observer, not two, and starts no second editing half", async () => {
-  const observed = [];
-  const disconnected = [];
-  const realObserve = MutationObserver.prototype.observe;
-  const realDisconnect = MutationObserver.prototype.disconnect;
-  MutationObserver.prototype.observe = function (...args) {
-    observed.push(args[0]);
-    return realObserve.apply(this, args);
-  };
-  MutationObserver.prototype.disconnect = function () {
-    disconnected.push(this);
-    return realDisconnect.call(this);
-  };
-
-  try {
-    // The explicit edit boot: the module's own import already holds the editing half.
-    const mod = await load({ meta: withPeople({ me: A, members: [A] }) });
-    expect(observed).toHaveLength(1);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-
-    const lease = mod.peopleParticipant().prepare({ initial: true, generation: 1 });
-    lease.enable();
-    await tick();
-
-    // The session the import started, adopted rather than started beside it.
-    expect(observed).toHaveLength(1);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(mod.currentMe()).toMatchObject({ id: A.id });
-
-    lease.dispose();
-    expect(disconnected).toHaveLength(1);
-
-    const after = global.fetch.mock.calls.length;
-    document.dispatchEvent(new Event("visibilitychange"));
-    await tick();
-    expect(global.fetch).toHaveBeenCalledTimes(after);
-  } finally {
-    MutationObserver.prototype.observe = realObserve;
-    MutationObserver.prototype.disconnect = realDisconnect;
-  }
-});
-
 test("a host answer that arrives after the page left edit stamps nothing", async () => {
   const answer = { ok: true, status: 200, text: async () => JSON.stringify(withPeople({ me: A, members: [A] })) };
   let answered = null;

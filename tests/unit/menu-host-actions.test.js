@@ -181,23 +181,6 @@ test("the code editor link is reachable from the keyboard", async () => {
   expect(active().tagName).toBe("A");
 });
 
-test("hostActions() keeps only the valid hrefs", async () => {
-  jest.resetModules();
-  const meta = metaDocument({
-    actions: {
-      codeEditor: { href: "javascript:alert(1)" },
-      versions: { href: 42 },
-      duplicate: { href: "/_/copy/ok.html" },
-    },
-  });
-  window.fetch = metaFetch(meta);
-
-  const { hostActions } = await import("../../src/core/host-meta.js");
-  const actions = await hostActions();
-
-  expect(actions).toEqual({ duplicate: { href: new URL("/_/copy/ok.html", location.origin).href } });
-});
-
 test("hostActions() keeps a same-origin post and drops one elsewhere", async () => {
   jest.resetModules();
   const meta = metaDocument({

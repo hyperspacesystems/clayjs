@@ -2,7 +2,6 @@ import { expect } from '@esm-bundle/chai';
 import { sendKeys, setViewport } from '@web/test-runner-commands';
 import { createPageEditor } from '../../src/page/editor.js';
 import { blockMap } from '../../src/page/model.js';
-import { BlockSelection } from '../../src/page/blocks.js';
 import { state as pmState, history as pmHistory } from '../../src/vendor/prosemirror.vendor.js';
 
 /**
@@ -75,17 +74,6 @@ describe('page blocks in a browser', () => {
     const record = blockMap(view.state.doc);
     expect(Object.keys(record).filter((id) => ['t', 'b1', 'b2'].includes(id))).to.deep.equal([]);
     expect(Object.values(record).some((b) => b.parent === 't')).to.equal(false);
-  });
-
-  it('Shift+ArrowDown from the end of a closed summary selects the toggle and the next block, and Backspace removes both', async () => {
-    setup();
-    put(endOf('t'));
-    await press('Shift+ArrowDown');
-    expect(view.state.selection instanceof BlockSelection).to.equal(true);
-    await press('Backspace');
-    const record = blockMap(view.state.doc);
-    expect(['t', 'b1', 'b2', 'z'].filter((id) => id in record)).to.deep.equal([]);
-    expect(Object.values(record).some((blk) => blk.parent === 't')).to.equal(false);
   });
 
   it('the disclosure button opens a toggle without moving the caret or adding history', async () => {

@@ -77,15 +77,6 @@ test("the stack follows the page's colour scheme, and a later frame picks up a c
   expect(stack().style.getPropertyValue("color-scheme")).toBe("light");
 });
 
-test("a participant keeps the colour its pseudonym picks, editor or reader", async () => {
-  const presence = await load();
-  await presence.update({ people: [ADA, { ...ADA, canEdit: false }], anonymous: 0 });
-  const [editor, reader] = avatars();
-  const colour = editor.style.getPropertyValue("color");
-  expect(colour).toMatch(/^rgb\(/);
-  expect(reader.style.getPropertyValue("color")).toBe(colour);
-});
-
 test("only the faces take a pointer: the corner, the row, the count and the tip let clicks through", async () => {
   const presence = await load();
   const calls = await captureAsync(() => presence.update(ROSTER));

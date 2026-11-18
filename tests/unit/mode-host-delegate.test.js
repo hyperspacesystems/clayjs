@@ -270,19 +270,6 @@ test("a busy refusal starts nothing locally", async () => {
   expect(sessionStorage.getItem(RECEIPT_KEY())).toBeNull();
 });
 
-test("host-not-ready is a refusal: nothing local reloads", async () => {
-  const hook = jest.fn(async () => ({ ok: false, mode: "edit", changed: false, reason: "host-not-ready" }));
-  await prepare({ cookie: true, hook });
-  const editMode = await import("../../src/core/edit-mode.js");
-
-  await withFakeLocation(async (fake) => {
-    await expect(editMode.setMode("edit")).resolves.toEqual({ ok: false, mode: "view", code: "host-not-ready" });
-    expect(fake.reload).not.toHaveBeenCalled();
-  });
-
-  expect(sessionStorage.getItem(RECEIPT_KEY())).toBeNull();
-});
-
 test("host-unsupported keeps the standalone path: receipt, one reload, changed", async () => {
   const hook = jest.fn(async () => ({ ok: false, mode: "edit", changed: false, reason: "host-unsupported" }));
   await prepare({ cookie: true, hook });

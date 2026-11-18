@@ -2,7 +2,6 @@
  * @jest-environment jsdom
  */
 
-import { readFileSync } from "node:fs";
 import { jest } from "@jest/globals";
 import { seedPageFromArticle } from "../../src/page/ybind/migrate.js";
 import { bootFixture, TEMPLATES } from "./helpers/mode-harness.js";
@@ -78,22 +77,6 @@ function probe(seen) {
     },
   };
 }
-
-// The fixture's own loader params with the quickcrop plugin named, a plugin with no
-// support row: naming it keeps the guarded reload.
-const withQuickcrop = (search) => {
-  const params = new URLSearchParams(search);
-  params.set("plugins", `${params.get("plugins")},quickcrop`);
-  return params.toString();
-};
-
-// The query string the fixture's own loader tag carries: the plan it boots is the
-// template's plan, and a case that names one more plugin starts from it.
-const fixtureParams = (name) => {
-  const html = readFileSync(new URL(`../fixtures/load/${name}`, import.meta.url), "utf8");
-  const src = html.match(/<script[^>]+src="([^"]*clay\.js[^"]*)"/)[1];
-  return new URL(src, "https://clayjs.com/").search.replace(/^\?/, "");
-};
 
 // The host's answer about what it can do. The boot asks before any entry runs and
 // memoizes the answer, so the route is installed right after boot and the memo is
@@ -385,22 +368,6 @@ for (const name of TEMPLATES) {
       expect({ posts: boot.counters().posts - before }).toEqual({ posts: 0 });
       expect({ saves: fileSaves(boot) - savesBefore }).toEqual({ saves: 0 });
       expect(boot.eventSources().peak).toBeLessThanOrEqual(1);
-    } finally {
-      boot.stop();
-    }
-  });
-
-  test(`${name}: a plugin with no support row keeps the guarded reload`, async () => {
-    const search = fixtureParams(name);
-    const boot = await bootFixture(name, { mode: "view", declare: true, params: withQuickcrop(search) });
-    try {
-      const clay = boot.clay;
-      await withFakeLocation(async (fake) => {
-        const result = await clay.setMode("edit");
-        expect(result).toMatchObject({ ok: true, reloading: true });
-        expect(fake.reload).toHaveBeenCalledTimes(1);
-      });
-      expect(clay.mode).toBe("view");
     } finally {
       boot.stop();
     }

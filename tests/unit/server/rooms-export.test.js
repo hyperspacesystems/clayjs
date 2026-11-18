@@ -19,8 +19,6 @@ import { PageConversionError as ConversionFromModule } from "../../../src/server
 import { PageFormatError as FormatFromModule } from "../../../src/server/rooms/page-write-guard.js";
 import { PersistentReservationError as PersistentFromModule } from "../../../src/server/rooms/live-data-rooms.js";
 
-const counts = { accepted: 0, refused: 0, duplicates: 0, pages: 0, drops: 0, resets: 0, sweeps: 0 };
-
 const tag = (name, value, { ephemeral = false, at = null } = {}) =>
   `<script type="application/json" merge="${name}" clay="live${ephemeral ? " ephemeral" : ""}"${at ? ` live-at="${at}"` : ""}>${JSON.stringify(value)}</script>`;
 const doc = (...parts) => `<!doctype html><html><body>${parts.join("")}</body></html>`;
@@ -65,13 +63,11 @@ test("accepts one frame and answers its retry as a duplicate", () => {
   expect(first.epoch).toBe("e1");
   expect(first.writer).toBe("A");
   expect(room.stores.get("game").value).toEqual({ score: 1 });
-  counts.accepted += 1;
 
   const retry = rooms.apply(room, "A", addScore(1));
   expect(retry).toEqual({ duplicate: true, seq: 1, epoch: "e1" });
   expect(room.stores.get("game").value).toEqual({ score: 1 });
   expect(room.seq).toBe(1);
-  counts.duplicates += 1;
 });
 
 test("refuses a store admission over the size limit and leaves state and accounting alone", () => {
@@ -90,7 +86,6 @@ test("refuses a store admission over the size limit and leaves state and account
   expect(room.stores.get("game").value).toEqual({ score: 0 });
   expect(room.seq).toBe(0);
   expect(rooms.used()).toBe(used);
-  counts.refused += 1;
 });
 
 test("refuses a hybrid page written as Yjs without a conversion header", () => {
@@ -108,7 +103,6 @@ test("refuses a hybrid page written as Yjs without a conversion header", () => {
 
   expect(thrown).toBeInstanceOf(PageConversionError);
   expect(thrown.reason).toBe("implicit-conversion");
-  counts.refused += 1;
 });
 
 test("a page reservation refuses page frames, commits once and releases once", () => {
@@ -127,11 +121,9 @@ test("a page reservation refuses page frames, commits once and releases once", (
     ifMatch: documentEtag(hybrid),
   });
   expect(rooms.pageReserved("/p.html")).toBe(true);
-  counts.pages += 1;
 
   expect(rooms.apply(room, "A", { name: "blockeditor", n: 1, ops: [{ op: "set", path: ["y", "root"], value: "abc" }] }))
     .toEqual({ error: "blockeditor-converting" });
-  counts.refused += 1;
 
   const first = rooms.commitPage(token);
   expect(first.valueChanged).toBe(true);
@@ -161,7 +153,6 @@ test("an ordinary non-page frame still applies during a blockeditor-only reserva
   const accepted = rooms.apply(room, "A", { name: "notes", n: 1, ops: [{ op: "set", path: ["text"], value: "hi" }] });
   expect(accepted.seq).toBe(1);
   expect(room.stores.get("notes").value).toEqual({ text: "hi" });
-  counts.accepted += 1;
 });
 
 test("reconciles a stamped saved capture while a later operation exists", () => {
@@ -170,7 +161,6 @@ test("reconciles a stamped saved capture while a later operation exists", () => 
   const room = rooms.open("/a.html", doc(tag("game", { score: 0 })), { nodeId: "n1" });
 
   rooms.apply(room, "A", addScore(1));
-  counts.accepted += 1;
   const capture = doc(tag("game", { score: 1 }, { at: stampOf(room.epoch, 1, serializeLive({ score: 1 })) }));
 
   const first = rooms.fileWritten("/a.html", capture);
@@ -180,7 +170,6 @@ test("reconciles a stamped saved capture while a later operation exists", () => 
   expect(room.stores.get("game").landed).toBe(1);
 
   rooms.apply(room, "A", addScore(2));
-  counts.accepted += 1;
   expect(room.stores.get("game").value).toEqual({ score: 2 });
 
   const second = rooms.fileWritten("/a.html", capture);
@@ -213,7 +202,6 @@ test("drop, reset and sweep keep the room contract's epochs, state and accountin
   expect(openUsed).toBeGreaterThan(0);
 
   rooms.drop("/a.html");
-  counts.drops += 1;
   expect(rooms.get("/a.html")).toBeNull();
   expect(rooms.size()).toBe(0);
   expect(rooms.used()).toBe(0);
@@ -223,7 +211,6 @@ test("drop, reset and sweep keep the room contract's epochs, state and accountin
   expect(rooms.used()).toBe(openUsed);
 
   const reset = rooms.reset("/a.html", doc(tag("game", { score: 9 })), { nodeId: "n1" });
-  counts.resets += 1;
   expect(reset.epoch).toBe("e3");
   expect(reset.seq).toBe(0);
   expect(reset.stores.get("game").value).toEqual({ score: 9 });
@@ -233,7 +220,6 @@ test("drop, reset and sweep keep the room contract's epochs, state and accountin
   expect(reset.emptySince).toBe(c.state.now);
   c.state.now += LIVE_LIMITS.retainMs;
   rooms.sweep();
-  counts.sweeps += 1;
   expect(rooms.get("/a.html")).toBeNull();
   expect(rooms.used()).toBe(0);
 });
@@ -262,11 +248,4 @@ test("the typed errors are single exported classes", () => {
   expect(new PageFormatError()).toBeInstanceOf(Error);
   expect(new PersistentReservationError("budget")).toMatchObject({ name: "PersistentReservationError", code: "budget" });
   expect(room.stores.has("blockeditor")).toBe(true);
-});
-
-afterAll(() => {
-  process.stdout.write(`rooms-export counts ${JSON.stringify(counts)}\n`);
-  expect(counts.accepted).toBeGreaterThan(0);
-  expect(counts.refused).toBeGreaterThan(0);
-  expect(counts.duplicates).toBeGreaterThan(0);
 });

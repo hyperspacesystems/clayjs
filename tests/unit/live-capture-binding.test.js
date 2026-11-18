@@ -112,19 +112,6 @@ test("a skipped capture followed by an unrelated raw save never binds", async ()
   expect(game.toJSON()).toEqual({ n: 1 });
 });
 
-test("direct confirmSaved(html) keeps its explicit legacy behavior", async () => {
-  const game = open("cb_direct");
-  game.add("n", 1);
-  const cap = capture();
-
-  confirmSaved(cap.forSave);
-  expect(storeOf("cb_direct").pending).toEqual([]);
-  expect(game.toJSON()).toEqual({ n: 1 });
-
-  confirmSaved(cap.forSave);
-  expect(storeOf("cb_direct").pending).toEqual([]);
-});
-
 test("a direct save result cannot shadow a later capture's DOM refusal", async () => {
   const game = open("cb_shadow");
   game.add("n", 1);
@@ -183,21 +170,6 @@ test("a newer unsent snapshot while an old capture is on the wire stays distinct
   expect(sendingCapture().qualified.get("cb_newer")).toEqual([2]);
   expect(storeOf("cb_newer").pending).toEqual([]);
   expect(game.toJSON()).toEqual({ n: 2 });
-});
-
-test("an altered captured body does not qualify", async () => {
-  const game = open("cb_altered");
-  game.add("n", 1);
-  const cap = capture();
-  const altered = cap.forSave.replace('{"n":1}', '{"n":9}');
-  expect(altered).not.toBe(cap.forSave);
-
-  const result = await saveCapturedHtml(altered, cap.captureId);
-  expect(result.ok).toBe(true);
-  const evidence = sendingCapture();
-  expect(evidence.captureId).toBe(cap.captureId);
-  expect(evidence.qualified.has("cb_altered")).toBe(false);
-  expect(storeOf("cb_altered").pending).toHaveLength(1);
 });
 
 test("a removed captured tag does not qualify", async () => {

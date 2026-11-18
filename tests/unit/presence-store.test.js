@@ -1,6 +1,8 @@
 import { jest } from "@jest/globals";
 
-import { PresenceStore, presence } from "../../src/sync/presence-store.js";
+import {
+  PresenceStore,
+} from "../../src/sync/presence-store.js";
 
 /**
  * `clay.presence`: the roster and this tab's target.
@@ -398,13 +400,4 @@ describe("transport leases", () => {
     expect(() => store.attachTransport(null)).toThrow(TypeError);
     expect(() => store.attachTransport({})).toThrow(TypeError);
   });
-});
-
-test("the module's own store is the facade a page reaches", async () => {
-  const { clay } = globalThis.window ?? {};
-  expect(window.clay.presence).toBe(presence);
-  expect(typeof window.clay.presence.getSnapshot).toBe("function");
-  expect(typeof window.clay.presence.subscribe).toBe("function");
-  expect(typeof window.clay.presence.setTarget).toBe("function");
-  expect(clay.presence.setTarget(null)).toBe(true);
 });

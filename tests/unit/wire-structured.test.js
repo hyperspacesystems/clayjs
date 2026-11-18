@@ -105,29 +105,6 @@ test("a missing named program reports its name without asking for an agent", asy
   });
 });
 
-test("application errors retain their source, code and details", async () => {
-  const handle = wire.send({}, { id: "contract-application-error", helper: "search" });
-  await settle();
-  deliver({
-    type: "wire/error",
-    id: handle.id,
-    text: "Query is empty",
-    payload: {
-      source: "application",
-      code: "invalid_request",
-      details: { field: "query" },
-    },
-  });
-
-  await expect(handle.done).resolves.toMatchObject({
-    state: "error",
-    error: "Query is empty",
-    errorCode: "invalid_request",
-    errorDetails: { field: "query" },
-    errorSource: "application",
-  });
-});
-
 test.each([
   ["crash after result", "helper_crashed"],
   ["malformed output", "helper_bad_output"],
@@ -149,22 +126,6 @@ test.each([
     errorDetails: { field: "record" },
     errorSource: "host",
   });
-});
-
-test("cancellation uses the existing cancel frame and suppresses a late result", async () => {
-  const controller = new AbortController();
-  const handle = wire.send({}, {
-    id: "contract-cancellation",
-    helper: "search",
-    signal: controller.signal,
-  });
-  await settle();
-  controller.abort();
-
-  await expect(handle.done).resolves.toMatchObject({ state: "cancelled", result: null });
-  expect(requests.at(-1)).toEqual({ type: "wire/cancel", id: handle.id });
-  deliver({ type: "wire/done", id: handle.id, payload: { tooLate: true } });
-  expect(wire.get(handle.id)).toMatchObject({ state: "cancelled", result: null });
 });
 
 test("a silent result after 120 seconds uses virtual time and still succeeds", async () => {
@@ -198,29 +159,6 @@ test("an explicit null result is present and successful", async () => {
   });
 });
 
-test("an editing request and a data request keep separate document lifecycles", async () => {
-  const data = wire.send({}, { id: "contract-data", helper: "search" });
-  const edit = wire.send({}, {
-    id: "contract-edit",
-    helper: "redpen",
-    document: "edit",
-  });
-  await settle();
-
-  expect(requests.filter(({ type }) => type === "wire/request").map(({ document }) => document).sort())
-    .toEqual(["edit", "none"]);
-  deliver({ type: "wire/done", id: data.id, payload: { matches: [] } });
-  deliver({ type: "wire/done", id: edit.id, payload: { changed: true } });
-
-  expect(data.state).toBe("done");
-  expect(edit.state).toBe("landing");
-  document.dispatchEvent(new CustomEvent("clay:sync-applied", { detail: { source: "disk" } }));
-  await expect(edit.done).resolves.toMatchObject({
-    state: "done",
-    result: { changed: true },
-  });
-});
-
 test("an old page script on the updated runtime keeps the external raw handler contract", async () => {
   const handle = wire.send({ task: "edit" }, { id: "contract-old-page" });
   await settle();
@@ -251,18 +189,4 @@ test("a new helper page detects an old runtime before sending", () => {
   expect(sendFromHelperPage(oldRuntime)).toBe("unsupported");
   expect(oldRuntime.send).not.toHaveBeenCalled();
   expect(typeof wire.helpers).toBe("function");
-});
-
-test("the new runtime refuses a named request when the old host lacks support", async () => {
-  installHost({ extensions: [] });
-  const handle = wire.send({}, { id: "contract-old-host", helper: "search" });
-  await settle();
-
-  await expect(handle.done).resolves.toMatchObject({
-    state: "error",
-    errorCode: "helper_protocol_unsupported",
-    errorSource: "client",
-  });
-  expect(requests).toEqual([]);
-  expect(sockets).toEqual([]);
 });

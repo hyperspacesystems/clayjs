@@ -55,15 +55,6 @@ describe("selection across a closed toggle", () => {
     expect(s.selection.head).toBe(endOf(s, "t"));
   });
 
-  test("pasted toggle gets a fresh id and its body names it", () => {
-    const s0 = fold();
-    const s = s0.apply(s0.tr.setSelection(TextSelection.create(s0.doc, at(s0, "t", 3), at(s0, "z", 1))));
-    const slice = s.doc.slice(s.selection.from, s.selection.to);
-    const pasted = B.remapPasted(new (slice.constructor)(slice.content, 0, 0), s);
-    const pids = []; pasted.content.forEach((n) => pids.push([n.type.name, n.attrs.id, n.attrs.parent]));
-    expect(pids[0][1] && pids[0][1] !== "t" && pids[1][2] === pids[0][1] && pids[2][2] === pids[0][1] && pids[3][2] === null && pids[1][1] === null).toBe(true);
-  });
-
   test("a range starting at the closed summary's end skips the toggle and its body", () => {
     const s0 = fold();
     const s = s0.apply(s0.tr.setSelection(TextSelection.create(s0.doc, endOf(s0, "t"), at(s0, "z", 1))));

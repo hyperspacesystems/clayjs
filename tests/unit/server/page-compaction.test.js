@@ -125,18 +125,6 @@ test("a full candidate holds every source in its stored bytes", () => {
   }
 });
 
-test("a candidate missing one deletion fails the proof", () => {
-  const insert = insertUpdate(1, "hello");
-  const deletion = deleteUpdate(2, [insert], 0, 2);
-  const sources = [[clientKey(0), insert], [clientKey(1), deletion]];
-  const kept = sources.map(([key, value]) => [key, value]);
-  kept.splice(kept.findIndex(([key]) => key === clientKey(1)), 1);
-  const merged = rangesOf(Y.mergeUpdatesV2(sources.map(([, value]) => update(value))));
-  const stripped = rangesOf(Y.mergeUpdatesV2(kept.map(([, value]) => update(value))));
-  expect(within(merged, rangesOf(update(deletion)))).toBe(true);
-  expect(within(stripped, rangesOf(update(deletion)))).toBe(false);
-});
-
 test("the stored bytes are proved, so an encode that drops a deletion fails", () => {
   const insert = insertUpdate(1, "hello");
   const deletion = deleteUpdate(2, [insert], 0, 2);

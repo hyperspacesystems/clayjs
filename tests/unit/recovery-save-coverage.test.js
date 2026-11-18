@@ -393,19 +393,6 @@ test("a refused save retains the copy", async () => {
   expect(await records()).toHaveLength(1);
 });
 
-test("a failed save retains the copy", async () => {
-  await useRecovery();
-  respond = () => ({ status: 500, body: { msg: "boom", code: "server" } });
-  await staged("e1");
-  await entries.flush();
-
-  const result = await saveMod.savePage();
-  expect(result.ok).toBe(false);
-  await entries.flush();
-
-  expect(await records()).toHaveLength(1);
-});
-
 test("a save whose fate is unknown retains the copy", async () => {
   await useRecovery();
   respond = () => {

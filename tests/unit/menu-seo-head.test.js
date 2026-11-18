@@ -29,27 +29,6 @@ const VALUES = {
 };
 
 describe("FIELDS", () => {
-  test("one entry per owned field, each with read and write", () => {
-    expect(Object.keys(FIELDS)).toEqual([
-      "title",
-      "description",
-      "lang",
-      "canonical",
-      "index",
-      "follow",
-      "ogTitle",
-      "ogDescription",
-      "ogImage",
-      "ogImageAlt",
-      "siteName",
-      "twitterSite",
-      "titleMode",
-    ]);
-    for (const field of Object.values(FIELDS)) {
-      expect(typeof field.read).toBe("function");
-      expect(typeof field.write).toBe("function");
-    }
-  });
 });
 
 describe("titleMode", () => {

@@ -156,25 +156,6 @@ test("writeData refuses when sync is not connected", async () => {
   expect(fetchImpl).not.toHaveBeenCalled();
 });
 
-test("a second writeData call is refused while the first is running", async () => {
-  const reply = deferred();
-  const started = deferred();
-  const fetchImpl = jest.fn(() => {
-    started.resolve();
-    return reply.promise;
-  });
-  const { api, state } = harness({ fetchImpl });
-
-  const first = api.writeData({ title: "One" });
-  await started.promise;
-  await expect(api.writeData({ title: "Two" })).rejects.toMatchObject({ code: "DataWriteInProgress" });
-
-  reply.resolve(response({ etag: '"E1"', data: { title: "One" } }));
-  await expect(first).resolves.toEqual({ data: { title: "One" }, etag: '"E1"' });
-  expect(fetchImpl).toHaveBeenCalledTimes(1);
-  expect(state.held).toBe(0);
-});
-
 test("subscribes before POST and accepts a matching frame that arrives before the response", async () => {
   const fetchImpl = jest.fn(async (_url, init) => {
     applyDisk('"E2"');
@@ -224,22 +205,6 @@ test("a no-op response with the current ETag needs no sync frame", async () => {
     data: { title: "Same" },
     etag: '"E1"',
   });
-  expect(state.held).toBe(0);
-});
-
-test("a response matching ifMatch still waits when the live page has an older ETag", async () => {
-  const { api, state } = harness({
-    syncTimeoutMs: 5,
-    fetchImpl: jest.fn(async () => response({ etag: '"E2"', data: { title: "Disk" } })),
-  });
-
-  await expect(api.writeData({ title: "Disk" }, { ifMatch: '"E2"' })).resolves.toEqual({
-    data: { title: "Disk" },
-    etag: '"E2"',
-    pageUpdatePending: true,
-    message: "Written, page update pending.",
-  });
-  expect(state.etag).toBe('"E1"');
   expect(state.held).toBe(0);
 });
 

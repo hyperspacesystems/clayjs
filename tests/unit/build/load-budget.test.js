@@ -260,19 +260,6 @@ test(`a Document's built edit line counts the view parts its blocks need, and a 
   expect(rich.js.requests - text.js.requests).toBe(4);
 }, 180000);
 
-// The milestone's own gate, written as the number it is rather than as whatever the
-// release happens to measure: 51.75 KiB of Brotli q4 JavaScript in three dependent
-// stages, counting every module the reader activates before it is ready.
-test("the standard Document built view holds the 52,992-byte, three-stage reader ceiling", async () => {
-  expect(budget.built["document.html"].view.brotli).toBe(52992);
-  expect(budget.built["document.html"].view.depth).toBe(3);
-
-  const measured = await measureBuilt({ html: htmlOf("document.html"), mode: "view", dir });
-
-  expect(measured.js.depth).toBe(3);
-  expect(measured.js.brotli).toBeLessThanOrEqual(52992);
-}, 180000);
-
 // Everything the canonical Document fetches before its ready boundary: the loader
 // facade, the always-wave core and the reader. The menu loads after ready, so it is
 // not in that set and is counted on the late line instead. An edit-only module

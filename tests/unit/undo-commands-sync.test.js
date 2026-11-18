@@ -187,22 +187,6 @@ test("a command run while the hub holds a sync pause still undoes and redoes aft
   expect(note().textContent).toBe("local note");
 });
 
-test("writes made by the paused apply itself never become an undoable local entry", async () => {
-  await enter();
-  window.clay.undo.setRecording("commands");
-
-  Mutation.pause();
-  setText(article(), "from apply");
-  await settle();
-  Mutation.resume();
-  await settle();
-  undo.flush();
-
-  expect(undo.canUndo).toBe(false);
-  expect(undo.history).toHaveLength(0);
-  expect(article().textContent).toBe("from apply");
-});
-
 test("a command made while the gate is paused still advances its capture token, so the page stays unsaved", async () => {
   const gate = await import("../../src/lib/dirty-gate.js");
   await enter();

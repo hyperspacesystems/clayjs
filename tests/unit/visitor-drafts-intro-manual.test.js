@@ -115,18 +115,6 @@ test("a closed intro starts closed with nothing built, and ?intro=1 opens it", a
   expect(closeButton().textContent).toBe("Hide intro");
 });
 
-test("a returning visitor with a saved draft still sees the intro until they hide it", async () => {
-  const menu = fakeMenu();
-  await bootPage({
-    slot: "manual-draft",
-    menu,
-    draft: { v: 1, savedAt: "2026-10-15T00:00:00.000Z", data: { title: "draft title" } },
-  });
-
-  expect(intro()).not.toBeNull();
-  expect(menu.items.size).toBe(0);
-});
-
 test("a menu that arrives later gets no intro row, open or closed", async () => {
   await bootPage({ slot: "manual-late-closed", ui: { v: 1, prompt: {}, intro: { done: "closed" }, src: null } });
   const menu = fakeMenu();

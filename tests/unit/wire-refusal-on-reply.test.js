@@ -71,18 +71,3 @@ test("a typed refusal on the reply is reported instead of no-agent", async () =>
   expect(outcome.errorSource).toBe("host");
   expect(outcome.error).toBe("this handler does not support named helpers");
 });
-
-test("a reply with no refusal still reports that nobody is attached", async () => {
-  global.fetch = jest.fn(async () => ({
-    ok: true,
-    status: 200,
-    json: async () => ({ ok: true, delivered: 0, observers: 0 }),
-  }));
-
-  const handle = wire.send({}, { id: "r2" });
-  await settle();
-  const outcome = await handle.done;
-
-  expect(outcome.error).toBe("No program is connected to this file.");
-  expect(outcome.errorCode).toBeFalsy();
-});

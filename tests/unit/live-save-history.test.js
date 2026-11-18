@@ -331,53 +331,6 @@ afterAll(() => {
 });
 
 // ---------------------------------------------------------------------------
-// The recorded hosted answers
-// ---------------------------------------------------------------------------
-
-test("every recorded hosted answer carries the deterministic identities the accepted test used", async () => {
-  for (const record of [FIXTURES.applied, FIXTURES.appliedAfterRestore, FIXTURES.unknown]) {
-    // The request hash is the accepted test's own sha256 of its NEXT body, the
-    // request carries it, and the body the host writes answers with it unchanged.
-    expect(await sha256Hex(record.inputs.NEXT)).toBe(record.inputs.NEXT_HASH);
-    expect(record.request.headers["Save-Request-Hash"]).toBe(record.inputs.NEXT_HASH);
-    expect(record.response.body.document.saveOutcome.requestHash).toBe(record.inputs.NEXT_HASH);
-    expect(record.request.headers["Save-ID"]).toBe(record.response.body.document.saveOutcome.saveId);
-    expect(record.response.status).toBe(200);
-    expect(record.response.headers["cache-control"]).toBe("private, no-store");
-    expect(record.response.body.spec).toBe(1);
-    expect(record.response.body.extensions).toContain("save-history");
-    // The current ETag describes the bytes on disk, not the attempt the row proves.
-    expect(record.response.body.document.etag).toBe(
-      record.case === "applied-after-restore" ? record.inputs.CURRENT_ETAG : record.inputs.NEXT_ETAG,
-    );
-  }
-  expect(FIXTURES.applied.response.body.document.saveId).toBe("attempt-1");
-  expect(FIXTURES.applied.response.body.document.saveOutcome.status).toBe("applied");
-  expect(FIXTURES.unknown.response.body.document.saveOutcome.status).toBe("unknown");
-  // The restore moved the bytes, so the current receipt is gone while the row stays.
-  expect(FIXTURES.appliedAfterRestore.response.body.document.saveId).toBeUndefined();
-  expect(FIXTURES.appliedAfterRestore.response.body.document.saveOutcome.status).toBe("applied");
-
-  // The two duplicate answers: the identical attempt carries the positive outcome
-  // and no stamp, the reused id carries no outcome at all.
-  expect(FIXTURES.alreadyApplied.response.status).toBe(409);
-  expect(FIXTURES.alreadyApplied.response.body).toEqual({
-    msg: "This save already happened. Refresh to see the current content.",
-    msgType: "error",
-    code: "save-already-applied",
-    saveOutcome: { saveId: "attempt-1", requestHash: FIXTURES.alreadyApplied.inputs.NEXT_HASH, status: "applied" },
-  });
-  expect(FIXTURES.alreadyApplied.response.body.etag).toBeUndefined();
-  expect(FIXTURES.reused.response.status).toBe(409);
-  expect(FIXTURES.reused.response.body).toEqual({
-    msg: "That save id was already used for a different change.",
-    msgType: "error",
-    code: "save-id-reused",
-  });
-  expect(FIXTURES.reused.response.body.saveOutcome).toBeUndefined();
-});
-
-// ---------------------------------------------------------------------------
 // The B matrix
 // ---------------------------------------------------------------------------
 

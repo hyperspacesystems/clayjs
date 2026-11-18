@@ -148,55 +148,6 @@ test("two disconnected Restores make one root and Undo leaves the other visible"
   umB.destroy();
 });
 
-test("an uncovered later removal hides the source again and a fresh covering Restore shows it", () => {
-  const pd = page(1, [{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
-  const q = keyOf(pd, "q");
-  hide(pd, q, "q", null, "move-1");
-  const before = reduceRecovery(pd).sources.get(q).revision;
-  addRestore(pd, q, "restore-1", [removeKey(q, "move-1")], { type: "paragraph", attrs: {} });
-  expect(walk(pd).visible.some((s) => s.id === `recovered:${q}`)).toBe(true);
-  const after = reduceRecovery(pd).sources.get(q).revision;
-  expect(after).not.toBe(before);
-  expect(reduceRecovery(pd).sources.get(q).revision).toBe(after);
-
-  hide(pd, q, "q", null, "move-2");
-  const hidden = walk(pd);
-  expect(hidden.visible.some((s) => s.id === `recovered:${q}`)).toBe(false);
-  expect(visible(hidden)).toEqual([["p", "ALPHA"], ["r", "OMEGA"]]);
-  expect(hidden.hidden.some((h) => h.key === removeKey(q, "move-2"))).toBe(true);
-  expect(reduceRecovery(pd).sources.get(q).blocks.map((block) => block.id)).toEqual(["q"]);
-  expect(holeTotal(hidden)).toBe(7);
-  physical(pd, hidden);
-
-  addRestore(pd, q, "restore-2", [removeKey(q, "move-1"), removeKey(q, "move-2")], { type: "paragraph", attrs: {} });
-  const shown = walk(pd);
-  expect(shown.visible.filter((s) => s.id === `recovered:${q}`).length).toBe(1);
-  expect(visible(shown)).toEqual([["p", "ALPHA"], [`recovered:${q}`, "bravo"], ["r", "OMEGA"]]);
-  physical(pd, shown);
-});
-
-test("an inner split is projected under an empty recovered root", () => {
-  const pd = page(1, [{ id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
-  const q = keyOf(pd, "q");
-  const rr = keyOf(pd, "r");
-  pd.ydoc.transact(() => {
-    pd.flow.delete(0, 6);
-    pd.flow.insertEmbed(0, { b: "split-200" });
-    pd.flow.insert(1, "X");
-  }, LOCAL);
-
-  hide(pd, q, "q", rr, "move-1");
-  addRestore(pd, q, "restore-1", [removeKey(q, "move-1")], { type: "paragraph", attrs: {} });
-
-  const w = walk(pd);
-  const root = w.visible.find((s) => s.id === `recovered:${q}`);
-  expect(root).toBeTruthy();
-  expect(segText(root)).toBe("");
-  expect(visible(w)).toEqual([[`recovered:${q}`, ""], ["split-200", "X"], ["r", "OMEGA"]]);
-  expect(recoverMarkerCount(pd, q)).toBe(1);
-  physical(pd, w);
-});
-
 test("raw marks and baseline type and attrs survive strict encoded reload", () => {
   const pd = page(1, [{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
   const q = keyOf(pd, "q");

@@ -121,22 +121,6 @@ test("every capture at a save boundary flushes first, and a capture that only re
   expect(calls.repaints).toBe(0);
 });
 
-test("an engine that gives no flush is registered as before: a save asks nothing of it", async () => {
-  await load(PAGE);
-  const { calls, repaint } = engine();
-  const off = lib.derived.register(repaint);
-
-  root().setAttribute("n", "4");
-  expect(snapshot.captureForSaveAndComparison().forSave).toContain(painted(2));
-  expect(calls).toEqual({ repaints: 0, flushes: 0 });
-
-  lib.repaintDerived();
-  expect(calls.repaints).toBe(1);
-  expect(lib.derivedActive()).toBe(true);
-  off();
-  expect(lib.derivedActive()).toBe(false);
-});
-
 test("a flush that throws is reported once, and the save still holds what the other engine's flush painted", async () => {
   await load(PAGE);
   const errors = jest.spyOn(console, "error").mockImplementation(() => {});

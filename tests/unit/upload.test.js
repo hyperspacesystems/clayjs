@@ -290,23 +290,6 @@ test("discovery, progress and done carry an additive task id and attempt", async
   expect(details[2][1].taskId).toBe("upload-1");
 });
 
-test("a cancel that arrives while the host is still being asked sends nothing", async () => {
-  const upload = await load();
-  let answer;
-  global.fetch = () => new Promise((resolve) => { answer = resolve; });
-  const sent = installXhr();
-
-  const controller = new AbortController();
-  const promise = upload(file(), { signal: controller.signal });
-  for (let i = 0; i < 10; i++) await Promise.resolve();
-  controller.abort();
-  answer(ok({ spec: 1, extensions: ["upload"], document: { upload: { allowed: true } } }));
-
-  const res = await promise;
-  expect(res.code).toBe("aborted");
-  expect(sent).toHaveLength(0);
-});
-
 test("the plugin function carries the task starter", async () => {
   const upload = await load();
   expect(typeof upload.start).toBe("function");

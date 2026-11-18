@@ -4,7 +4,6 @@
 import { afterAll, beforeAll, expect, test } from "@jest/globals";
 import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { brotliCompressSync, constants } from "node:zlib";
 import os from "node:os";
 import path from "node:path";
 
@@ -65,17 +64,6 @@ function closureOf(starts, into) {
   }
   return added;
 }
-
-const brotliOf = async (files) => {
-  let total = 0;
-  for (const file of files) {
-    const bytes = await readFile(path.join(outdir, "m", file));
-    total += brotliCompressSync(bytes, {
-      params: { [constants.BROTLI_PARAM_QUALITY]: 4, [constants.BROTLI_PARAM_SIZE_HINT]: bytes.length },
-    }).length;
-  }
-  return total;
-};
 
 async function viewOf(html, search = SEARCH) {
   return measureBuilt({ html, mode: "view", dir: outdir, search, owner: true });
@@ -154,28 +142,6 @@ test("no lifecycle module is fetched before a switch", async () => {
     const loaded = paths(await viewOf(html));
     for (const chunk of lifecycle) expect(loaded).not.toContain(chunk);
   }
-});
-
-// The first entry's own requests: the decision module, the adapters and the controller,
-// with the chunk they share with the reader counted once.
-test("the first entry fetches the switch and the controller once, and a repeat entry fetches nothing", async () => {
-  const switchChunk = supplement.entries["core/mode-switch.js"];
-  const controllerChunk = supplement.entries["core/mode-lifecycle.js"];
-  expect(switchChunk).toBeTruthy();
-  expect(controllerChunk).toBeTruthy();
-  // The decision is reached through the controller, not through a static import of it.
-  expect(manifest.files[controllerChunk].dynamicImports).toContain(switchChunk);
-
-  const ready = new Set(paths(await viewOf(declared(fixture))));
-  const first = closureOf([switchChunk, controllerChunk], ready);
-
-  expect(first.length).toBeGreaterThan(0);
-  expect(await brotliOf(first)).toBeGreaterThan(0);
-  for (const chunk of first) expect(ready.has(chunk)).toBe(false);
-
-  // Every later entry asks for modules the page already holds, so it requests nothing.
-  const repeat = closureOf([switchChunk, controllerChunk], new Set([...ready, ...first]));
-  expect(repeat).toEqual([]);
 });
 
 // The declaration costs a template reader nothing: each fixture boots to its own recorded

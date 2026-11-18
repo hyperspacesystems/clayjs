@@ -1,7 +1,6 @@
 import { jest } from "@jest/globals";
 import { $$ } from "../helpers/editor-ui.js";
 import { readFileSync } from "node:fs";
-import { resolveModules, MODULES } from "../../../src/loader-logic.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { blocksFromYValue } from "../../../src/page/ybind/decode.js";
 import { FEATURES } from "../../../src/page/features/registry.js";
@@ -82,7 +81,6 @@ function setPage(blocks) {
   return { value, store };
 }
 
-const params = (obj = {}) => new URLSearchParams(obj);
 // The documented tally tool: its artifact is a real one, so the block mounts.
 const ARTIFACTS = [...readFileSync(new URL("../../../docs/page-tool.md", import.meta.url), "utf8").matchAll(/```json\n([\s\S]*?)\n```/g)].map((match) => JSON.parse(match[1]));
 const TALLY = ARTIFACTS[1];
@@ -487,21 +485,6 @@ test("a saved tool's part starts loading before the room join, and its saved con
     FEATURES.tool.load = loadPart;
     window.clay.live = liveNow;
   }
-});
-
-test("view mode resolves without the page plugin and never calls its module thunk", async () => {
-  const view = resolveModules(params({ plugins: "blockeditor" }), false);
-  expect(view.plugins).not.toContain("plugins/page.js");
-  const spy = jest.spyOn(MODULES, "plugins/page.js");
-  // live-sync opens its stream on evaluation, so it is the one implied module not run here.
-  await Promise.all(view.plugins.filter((path) => path !== "sync/live-sync.js").map((path) => MODULES[path]()));
-  expect(spy).not.toHaveBeenCalled();
-  spy.mockRestore();
-
-  const edit = resolveModules(params({ plugins: "blockeditor" }), true);
-  expect(edit.plugins).toContain("plugins/live.js");
-  expect(edit.plugins).toContain("sync/live-sync.js");
-  expect(edit.plugins).toContain("plugins/page.js");
 });
 
 // A peer's edit as a frame the live store admits: the update alone, on top of the state

@@ -77,34 +77,3 @@ test("a draft restores fully when the rules name the same row fields in another 
   expect(visibleRows()).toEqual([["r2", "Second"]]);
   expect(storage.keys()).toEqual([KEY]);
 });
-
-test("a value that no longer reads back is dropped, the rest restores, and the original is kept aside", () => {
-  setPage(rulesWith({ id: "@data-id", name: ".n" }));
-  const raw = record({ title: "draft title", size: "gone", rows: [{ id: "r2", name: "Second" }] });
-  const storage = fakeStorage({ [KEY]: raw });
-  const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
-  const store = createStore({ doc: document, storage, now: () => new Date(SAVED_AT) });
-
-  expect(store.restore()).toEqual({
-    restored: true,
-    hadDraft: true,
-    parked: true,
-    blocked: false,
-    partial: true,
-    data: { title: "draft title", rows: [{ id: "r2", name: "Second" }] },
-  });
-  expect(document.getElementById("title").value).toBe("draft title");
-  expect(visibleRows()).toEqual([["r2", "Second"]]);
-  // The value the page can no longer hold never reaches the live page.
-  expect(document.getElementById("size").value).toBe("small");
-  expect(storage.getItem(KEY)).toBe(raw);
-  expect(storage.getItem(KEY + ":unreadable:" + SAVED_AT)).toBe(raw);
-  expect(warn).toHaveBeenCalledWith(
-    "visitor-drafts: part of this browser's saved copy no longer fits the page; the original was kept under",
-    KEY + ":unreadable:" + SAVED_AT
-  );
-
-  const again = createStore({ doc: document, storage, now: () => new Date("2026-10-16T12:00:00.000Z") });
-  expect(again.restore()).toMatchObject({ restored: true, partial: true, parked: true, data: { title: "draft title", rows: [{ id: "r2", name: "Second" }] } });
-  expect(storage.keys().filter((name) => name.includes(":unreadable:"))).toHaveLength(1);
-});

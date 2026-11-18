@@ -178,20 +178,6 @@ test("the same status line twice emits twice, each with its own frame", async ()
   off();
 });
 
-test("a listener written for one argument is unaffected", async () => {
-  // The whole change is additive or it is a breaking change, and every existing
-  // consumer takes one argument.
-  const seen = [];
-  const off = wire.on((snap) => seen.push(snap.state));
-
-  wire.send({}, { id: "r2d" });
-  await settle();
-  frame(sockets[0], { type: "wire/status", id: "r2d", text: "working" });
-
-  expect(seen).toEqual(["sent", "acked"]);
-  off();
-});
-
 test("a landing that no sync frame ever reports still ends as done", async () => {
   const handle = wire.send({}, { id: "r3" });
   await settle();

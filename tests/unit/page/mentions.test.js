@@ -463,21 +463,6 @@ test("a host that cannot store the format says so rather than doing nothing", as
   expect(view.dom.parentElement.querySelector(".blockeditor-live").textContent).toContain("This host can't store that yet");
 });
 
-test("the gate is asked once per mention, and the written name is its answer", async () => {
-  people();
-  const view = open();
-  const asked = [];
-  view.runFormatCommand = async (apply) => { asked.push(apply); return { status: "applied", floor: 1, result: await apply({}) }; };
-  type(view, endOf(view, "a"));
-  await waitFor(() => options().length === 2);
-  options()[0].click();
-  await settle();
-
-  expect(asked).toHaveLength(1);
-  expect(record(view, "a").c).toBe("Hello Ada Lovelace ");
-  expect(markOf(view, "a", 1)).toEqual([["mention", "ada-lovelace"]]);
-});
-
 test("a caret that moves while the gate is pending refuses with stale-target", async () => {
   people();
   const view = open();

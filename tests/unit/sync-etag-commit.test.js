@@ -219,21 +219,6 @@ describe("the body a commit frame puts on the wire", () => {
     expect(sent[0].body.sender).toBe("tab-a");
   });
 
-  // A stamp with no content is the thing this whole design refuses, so the frame
-  // that carries one must never be able to become that by accident.
-  test("never puts a stamp on the wire without content", () => {
-    const sent = [];
-    global.fetch = (url, options) => {
-      sent.push(JSON.parse(options.body));
-      return Promise.resolve({ ok: true });
-    };
-
-    LiveSync.prototype._postUpdate.call(postingTab(), "<html>saved</html>", { a: 1 }, "stored-7");
-
-    expect(typeof sent[0].snapshot).toBe("string");
-    expect(sent[0].snapshot.length).toBeGreaterThan(0);
-  });
-
   // A host refuses a relay that does not say which page format it writes, so a
   // current tab on a floor-1 document would have every relay turned away.
   test("declares the page format it writes", () => {

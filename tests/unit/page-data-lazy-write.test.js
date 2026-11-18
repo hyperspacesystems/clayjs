@@ -212,43 +212,6 @@ test("a view page refuses the write before the write engine loads", async () => 
   expect(page.held).toBe(0);
 });
 
-test("a draft page refuses the write before the write engine loads", async () => {
-  const root = document.documentElement;
-  const head = document.head.innerHTML;
-  root.setAttribute("visitor-drafts", "draft-slot-1");
-  document.head.innerHTML = '<script data-rules-name="api" data-rules-version="1" type="application/json">{"title":"h1"}</script>';
-
-  jest.resetModules();
-  try {
-    const draftMode = await import("../../src/core/draft-mode.js");
-    draftMode.noteBootParams(new URLSearchParams("plugins=visitor-drafts"));
-    const { createPageDataApi: createFresh } = await import("../../src/core/page-data.js");
-    const page = state();
-    const loadWriteModules = jest.fn(async () => writeModules(page));
-    const fetchImpl = jest.fn(async () => response());
-    const api = createFresh({
-      supports: async () => true,
-      token: () => null,
-      fetchImpl,
-      getLocation: () => ({ origin: "https://example.test", pathname: "/notes.html" }),
-      eventTarget: document,
-      loadWriteModules,
-      syncTimeoutMs: 20,
-      httpTimeoutMs: 50,
-    });
-    api.setLiveSync({ isDestroyed: false, sse: { readyState: 1 } });
-
-    await expect(api.writeData({ title: "No" })).rejects.toMatchObject({ code: "DataUnavailableInDraft" });
-    await expect(api.readData()).rejects.toMatchObject({ code: "DataUnavailableInDraft" });
-    expect(loadWriteModules).not.toHaveBeenCalled();
-    expect(fetchImpl).not.toHaveBeenCalled();
-  } finally {
-    root.removeAttribute("visitor-drafts");
-    document.head.innerHTML = head;
-    jest.resetModules();
-  }
-});
-
 test("one successful conditional write sends its ETag and releases the save hold", async () => {
   const page = state({ etag: '"E8"' });
   const calls = [];

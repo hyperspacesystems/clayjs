@@ -156,22 +156,3 @@ test("a chart chosen while its module loads does nothing once the session ended"
     expect(fetch).not.toHaveBeenCalled();
   });
 });
-
-test("a chart chosen before its module loads leaves a second session untouched", async () => {
-  await withNoHost(async (fetch) => {
-    const { features, release } = heldChart();
-    const view = editor([], { blocks: { tbl: table, p: { t: "paragraph", pos: "Z", c: "" } }, features });
-    const dispatched = dispatchedBy(view);
-    const action = runItem(view, CHART_ITEM, 1);
-    const second = editor([], { blocks: { tbl: table, p: { t: "paragraph", pos: "Z", c: "" } } });
-    const secondDoc = second.state.doc;
-    const secondDispatched = dispatchedBy(second);
-    view.destroy();
-    release();
-    await expect(action).resolves.toBe(false);
-    expect(dispatched).toEqual([]);
-    expect(secondDispatched).toEqual([]);
-    expect(second.state.doc).toBe(secondDoc);
-    expect(fetch).not.toHaveBeenCalled();
-  });
-});

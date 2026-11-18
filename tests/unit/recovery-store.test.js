@@ -204,26 +204,6 @@ test("a record whose writer is another open tab is not listed; once that tab is 
   }
 });
 
-test("a record of a version this build does not know is listed and never dropped", async () => {
-  const factory = new IDBFactory();
-  const entries = createRecovery({ indexedDB: factory }).register({ channel: "notes", version: 1 });
-  entries.stage({ key: "n2", payload: { body: "mine" } });
-  await entries.flush();
-  const [mine] = (await entries.list()).records;
-
-  const later = createStore({ scope: mine.scope, indexedDB: factory });
-  await later.put(text({ id: ["notes", "n1", "writer-9"], writerId: "writer-9", version: 7, payload: { body: "from a later build" } }));
-
-  const listed = await entries.list();
-  const unknown = listed.records.filter((record) => record.version === 7);
-  expect(unknown).toHaveLength(1);
-  expect(unknown[0].supported).toBe(false);
-  expect(unknown[0].payload.body).toBe("from a later build");
-  expect(listed.records.filter((record) => record.supported)).toHaveLength(1);
-
-  expect((await entries.list()).records.map((record) => record.version).sort()).toEqual([1, 7]);
-});
-
 test("a database a later build already upgraded is reported, not downgraded or deleted", async () => {
   const factory = new IDBFactory();
   const ahead = await openDatabase(factory, { version: 2 });

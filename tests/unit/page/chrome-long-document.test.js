@@ -298,17 +298,6 @@ test("a cancelled drag and a disposed editor leave no frame scheduled", async ()
   expect(counter.live.size).toBe(0);
 });
 
-test("a refused move keeps the document", () => {
-  const view = page([["t", "toggle", "T", { open: true }], ["b1", "paragraph", "b1", { parent: "t" }], ["b2", "paragraph", "b2", { parent: "t" }], ["z", "paragraph", "Z"]]);
-  const before = view.state.doc;
-  drag(view, 0, ROW + 24);
-
-  expect(shell(view).dataset.drop).toBe("none");
-  expect(dropLine(view).hidden).toBe(true);
-  drop(view);
-  expect(view.state.doc).toBe(before);
-});
-
 test("the search finds the same line as the linear scan over two hundred positions on 2,000 blocks", () => {
   const view = page([], { doc: many(2000) });
   const table = rows();

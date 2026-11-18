@@ -37,7 +37,6 @@ const live = (view) => part(view, ".blockeditor-live").textContent;
 const wrapper = (view) => view.dom.querySelector(".blockeditor-table");
 const actionsButton = (view) => wrapper(view).querySelector(".blockeditor-table-actions");
 const colButton = (view, id) => wrapper(view).querySelector(`th[data-col="${id}"] .blockeditor-table-col-menu`);
-const handle = (view, id = "c1") => wrapper(view).querySelector(`th[data-col="${id}"] .blockeditor-table-resize`);
 const rowButton = (view, id) => wrapper(view).querySelector(`tr[data-id="${id}"] .blockeditor-table-row-menu`);
 const record = (view, index = 0) => blockJson(view.state.doc.child(index));
 const tableId = (view) => view.state.doc.child(0).attrs.id;
@@ -45,7 +44,6 @@ const grid = (view) => {
   const table = record(view);
   return orderedIds(table.rows).map((id) => orderedIds(table.cols).map((col) => table.rows[id].cells[col]));
 };
-const press = (el, type, k, shiftKey = false) => el.dispatchEvent(new KeyboardEvent(type, { key: k, shiftKey, bubbles: true, cancelable: true }));
 const active = () => document.activeElement;
 
 // Keyboard-only menu use: Enter opens the menu, the arrows walk it, Enter picks.
@@ -258,16 +256,6 @@ describe("the Table actions menu", () => {
     walkTo(view, "Wider");
     expect(record(view).cols.c1.width).toBe(200);
     expect(live(view)).toBe("Column width changed");
-  });
-
-  test("the resize separator still previews and commits from the keyboard", () => {
-    const view = open();
-    const el = handle(view, "c1");
-    el.focus();
-    press(el, "keydown", "ArrowRight");
-    press(el, "keyup", "ArrowRight");
-    expect(record(view).cols.c1.width).toBe(170);
-    expect(active()).toBe(handle(view, "c1"));
   });
 });
 

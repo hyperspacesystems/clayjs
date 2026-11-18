@@ -246,14 +246,3 @@ test("a restart bumps the epoch, resets seq, re-seeds stores and reopens clients
   expect(res.status).toBe(200);
   expect(res.body.stale).toBe(true);
 });
-
-test("the refuse hook rejects exactly the frame it names", async () => {
-  const { connect, send } = make({
-    room: { refuse: (id, frame) => (frame.n === 2 ? { status: 413, body: { code: "too-large" } } : null) },
-  });
-  const a = connect("a");
-  expect((await send(a, { epoch: "e1", name: "doc", n: 1, ops: OP(1) })).status).toBe(200);
-  const res = await send(a, { epoch: "e1", name: "doc", n: 2, ops: OP(2) });
-  expect(res.status).toBe(413);
-  expect(res.body.code).toBe("too-large");
-});

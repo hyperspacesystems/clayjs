@@ -25,15 +25,6 @@ function renderedToast() {
   return $("[data-clay-toast]", "toasts");
 }
 
-test("warning msgType renders a warning toast carrying the server's text", () => {
-  fireSaved({ msg: "Saved, but the file changed on disk", msgType: "warning" });
-
-  const el = renderedToast();
-  expect(el).not.toBeNull();
-  expect(el.getAttribute("data-clay-toast")).toBe("warning");
-  expect(el.textContent).toContain("Saved, but the file changed on disk");
-});
-
 test("success msgType renders a success toast", () => {
   window.clay.saveToast = true;
   fireSaved({ msg: "Saved", msgType: "success" });

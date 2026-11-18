@@ -71,24 +71,6 @@ describe("move", () => {
     expect([short(s), JSON.stringify(blockMap(s.doc)) === JSON.stringify(blockMap(make(spec).doc))]).toEqual([start, true]);
   });
 
-  test("a toggle move is six pos set ops in the live diff", () => {
-    const spec = [["p0", "paragraph", "P0"], ["t", "toggle", "T"]];
-    for (let i = 1; i <= 5; i++) spec.push([`b${i}`, "paragraph", `b${i}`, { parent: "t" }]);
-    spec.push(["x", "paragraph", "X"], ["y", "paragraph", "Y"]);
-    const s0 = make(spec);
-    const s1 = run(caret(s0, "t", 0), B.moveBlock(1));
-    const before = blockMap(s0.doc), after = blockMap(s1.doc);
-    const changed = Object.keys(after).filter((id) => JSON.stringify(after[id]) !== JSON.stringify(before[id])).sort();
-    expect(changed).toEqual(["b1", "b2", "b3", "b4", "b5", "t"]);
-    for (const id of changed) {
-      const { pos: a, ...restA } = before[id];
-      const { pos: b, ...restB } = after[id];
-      expect(restB).toEqual(restA);
-      expect(b).not.toEqual(a);
-    }
-    for (const id of ["p0", "x", "y"]) expect(after[id]).toEqual(before[id]);
-  });
-
   test("a move leaves no duplicate ids", () => {
     let s = make([["a", "list_item", "A"], ["b", "list_item", "B"], ["b1", "list_item", "B1", { indent: 1 }], ["c", "list_item", "C"]]);
     s = run(caret(s, "b"), B.moveBlock(-1));

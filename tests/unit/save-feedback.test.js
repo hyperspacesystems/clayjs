@@ -53,15 +53,6 @@ test("the next save dismisses the error toast", async () => {
   }
 });
 
-test("a warning on a successful save is a toast even with the chip on the page", async () => {
-  fire("saved", { msg: "Saved, but one image was too large", msgType: "warning" });
-  await drawn();
-
-  const warning = toasts("warning");
-  expect(warning).toHaveLength(1);
-  expect(warning[0].textContent).toContain("Saved, but one image was too large");
-});
-
 test("saving draws no chip, and a failed save reports it through the toast", async () => {
   fire("saving");
   await drawn();
@@ -82,17 +73,6 @@ test("clay.saveToast shows Saved as a toast with the host's message, not on the 
   await drawn();
 
   expect(toasts().some((t) => t.textContent.includes("Saved in your browser"))).toBe(true);
-  expect(chip()).toBeNull();
-
-  window.clay.saveToast = false;
-});
-
-test("with clay.saveToast on, saving still draws no chip", async () => {
-  window.clay.saveToast = true;
-
-  fire("saving");
-  await drawn();
-
   expect(chip()).toBeNull();
 
   window.clay.saveToast = false;

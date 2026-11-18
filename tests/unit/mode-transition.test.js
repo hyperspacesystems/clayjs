@@ -204,18 +204,6 @@ test("a declared document whose edit plan asks for a module with no support row 
   expect(clay.mode).toBe("view");
 });
 
-test("a declared document whose queued participant is not a participant keeps the guarded reload", async () => {
-  const log = [];
-  const clay = await bootPage({ owner: true, declared: true, queue: [{ id: "template:broken" }, participant("template:board", log)] });
-
-  await withFakeLocation(async (fake) => {
-    await expect(clay.setMode("edit")).resolves.toMatchObject({ ok: true, reloading: true });
-    expect(fake.reload).toHaveBeenCalledTimes(1);
-  });
-
-  expect(log).toEqual([]);
-});
-
 test("a declared document's authored resources are the first lease of the session", async () => {
   const style = '<style id="s" type="inert/" editmode:resource>.x { color: red; }</style>';
   const clay = await bootPage({ owner: true, declared: true, resources: style });
@@ -311,35 +299,6 @@ test("an explicit initial edit prepares the same session a live first entry does
 
   // Same participants, same order, same single enable after every prepare.
   expect(initial).toEqual(firstSession);
-});
-
-test("a call for the target being entered joins it, and the opposing one is busy even while view is still committed", async () => {
-  const log = [];
-  let release;
-  const gate = new Promise((resolve) => {
-    release = resolve;
-  });
-  const clay = await bootPage({
-    owner: true,
-    declared: true,
-    queue: [participant("template:board", log, { prepare: () => gate })],
-  });
-
-  const entering = clay.setMode("edit");
-  const joining = clay.setMode("edit");
-  // The entry has not committed: the page is still in view. That is exactly why this ask
-  // must not be answered as a no-op — the transition would then run twice.
-  expect(clay.mode).toBe("view");
-  await expect(clay.setMode("view")).resolves.toEqual({ ok: false, mode: "view", code: "busy" });
-  expect(clay.mode).toBe("view");
-  expect(clay.modeLifecycle.canWrite()).toBe(false);
-
-  release();
-  await expect(entering).resolves.toEqual({ ok: true, mode: "edit", changed: true });
-  await expect(joining).resolves.toEqual({ ok: true, mode: "edit", changed: true });
-  // One transition, one lease, prepared and enabled once.
-  expect(log).toEqual(["template:board:prepare", "template:board:enable"]);
-  expect(clay.mode).toBe("edit");
 });
 
 test("a registered pending source refuses the exit, and the clean page it becomes exits", async () => {

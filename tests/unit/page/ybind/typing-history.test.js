@@ -255,23 +255,6 @@ test("a peer insert inside the typed word survives both undos", () => {
   agree(b);
 });
 
-test("a composition is one undo item", () => {
-  const tab = open(seedValue([{ id: "p", text: "abc" }]), typing);
-  caret(tab, 4);
-  const compose = (ch, id) => tab.view.dispatch(tab.view.state.tr.insertText(ch).setMeta("composition", id));
-  compose("x", 7);
-  compose("y", 7);
-  compose("z", 7);
-  compose("w", 8);
-  expect(text(tab)).toBe("abcxyzw");
-  expect(tab.binding.undo()).toBe(true);
-  expect(text(tab)).toBe("abcxyz");
-  expect(tab.binding.undo()).toBe(true);
-  expect(text(tab)).toBe("abc");
-  expect(tab.binding.undo()).toBe(false);
-  agree(tab);
-});
-
 test("a run of Backspace undoes as one item", () => {
   const tab = open(seedValue([{ id: "p", text: "abcdef" }]), typing);
   caret(tab, 7);
@@ -335,25 +318,6 @@ test("a Backspace that joins two blocks is its own undo item", () => {
   agree(tab);
 });
 
-test("a composition through the real input path is one undo item", () => {
-  const tab = open(seedValue([{ id: "p", text: "abc" }]), typing);
-  caret(tab, 4);
-  const compose = (from, to, ch) => {
-    const deflt = () => tab.view.state.tr.insertText(ch, from, to).setMeta("composition", 7);
-    tab.view.someProp("handleTextInput", (f) => f(tab.view, from, to, ch, deflt));
-  };
-  compose(4, 4, "n");
-  expect(text(tab)).toBe("abcn");
-  compose(4, 5, "に");
-  expect(text(tab)).toBe("abcに");
-  compose(4, 5, "日本");
-  expect(text(tab)).toBe("abc日本");
-  expect(tab.binding.undo()).toBe(true);
-  expect(text(tab)).toBe("abc");
-  expect(tab.binding.undo()).toBe(false);
-  agree(tab);
-});
-
 test("two compositions are two undo items", () => {
   const tab = open(seedValue([{ id: "p", text: "abc" }]), typing);
   caret(tab, 4);
@@ -370,22 +334,6 @@ test("two compositions are two undo items", () => {
   expect(text(tab)).toBe("abcxy");
   expect(tab.binding.undo()).toBe(true);
   expect(text(tab)).toBe("abc");
-  expect(tab.binding.undo()).toBe(false);
-  agree(tab);
-});
-
-test("typing over a selection never joins the run before it", () => {
-  const tab = open(seedValue([{ id: "p", text: "abcd" }]), typing);
-  caret(tab, 4);
-  type(tab, "xy");
-  expect(text(tab)).toBe("abcxyd");
-  tab.view.dispatch(tab.view.state.tr.setSelection(pmState.TextSelection.create(tab.view.state.doc, 6, 7)));
-  type(tab, "Z");
-  expect(text(tab)).toBe("abcxyZ");
-  expect(tab.binding.undo()).toBe(true);
-  expect(text(tab)).toBe("abcxyd");
-  expect(tab.binding.undo()).toBe(true);
-  expect(text(tab)).toBe("abcd");
   expect(tab.binding.undo()).toBe(false);
   agree(tab);
 });

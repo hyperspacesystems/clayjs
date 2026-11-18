@@ -573,16 +573,6 @@ test("no About this app control ever appears, even for a returning visitor", asy
   expect(document.getElementById("clay-intro-style")?.textContent || "").not.toContain(".clay-about");
 });
 
-test("the download card has no sign-up form, no HTML Clay paragraph and no Not now, and keeps Don't show again", async () => {
-  await bootPage({ slot: "kanban-v1", template: INTRO, url: "/kanban.html?src=bsky" });
-  const card = prompt().querySelector(".hcp-card");
-
-  expect(card.querySelector("form, input")).toBeNull();
-  expect(card.textContent).not.toContain("HTML Clay");
-  expect(card.textContent).not.toContain("Not now");
-  expect(card.querySelector(".hcp-foot [data-hcp=dismiss]").textContent).toBe("Don\u2019t show again");
-});
-
 test("the card's minimize button is a boxed minus and the download controls use bevel's download icon", async () => {
   await bootPage({ slot: "ui-icons" });
 

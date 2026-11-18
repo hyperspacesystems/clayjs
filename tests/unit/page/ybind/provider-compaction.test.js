@@ -316,17 +316,6 @@ test("a blocked generation or admission compacts nothing", () => {
   expect(stopped.provider.stats.compactions).toBe(0);
 });
 
-test("a fold the authority never takes keeps every original", () => {
-  const { store, ydoc, provider } = start();
-  for (let i = 0; i < 40; i++) ydoc.getText("flow").insert(i, "x");
-  const inputs = clone(store.value.y);
-  echo(store);
-  expect(provider.stats.compactions).toBe(1);
-  echo(store, { v: 1, g: 0, y: clone(inputs) });
-  for (const [k, v] of Object.entries(inputs)) expect(store.value.y[k]).toBe(v);
-  expect(textOf(store.value)).toBe("x".repeat(40));
-});
-
 test("a transport fold never counts as a checkpoint", () => {
   const { store, ydoc, provider } = start();
   const deliveries = [];

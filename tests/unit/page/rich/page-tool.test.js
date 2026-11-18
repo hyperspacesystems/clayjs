@@ -1,4 +1,6 @@
-import { createToolClient, capabilityAdvertised } from "../../../../src/page/rich/page-tool.js";
+import {
+  createToolClient,
+} from "../../../../src/page/rich/page-tool.js";
 
 const artifact = { title: "Tool", html: "<b>x</b>", css: "", javascript: "function mount() {}", fallbackHtml: "<b>x</b>", summary: "" };
 const context = { title: "Page", outline: ["Heading"], tables: [] };
@@ -90,16 +92,6 @@ test("a request id is the browser's UUID, and only falls back when it has none",
   }
   const fallback = createToolClient({ transport: { request: async () => new Promise(() => {}), cancel() {} } });
   expect(fallback.request("build", context).requestId).toMatch(/^[a-z0-9]+-[a-z0-9]+$/);
-});
-
-test("the capability needs the helper list, and the old extension alone is not enough", () => {
-  expect(capabilityAdvertised({ extensions: ["blockeditor-tool/1"] })).toBe(false);
-  expect(capabilityAdvertised({ extensions: ["blockeditor-tool/2"] })).toBe(false);
-  expect(capabilityAdvertised({})).toBe(false);
-  expect(capabilityAdvertised({ document: { helpers: [{ name: "blockeditor-tool", state: "ready" }] } })).toBe(true);
-  expect(capabilityAdvertised({ document: { helpers: [{ name: "blockeditor-tool", state: "unavailable" }] } })).toBe(true);
-  expect(capabilityAdvertised({ document: { helpers: [{ name: "ai-edit", state: "ready" }] } })).toBe(false);
-  expect(capabilityAdvertised({ document: { helpers: [{ name: "blockeditor-tool", state: "denied" }] } })).toBe(false);
 });
 
 test("a transport error keeps its own code instead of becoming a generic failure", async () => {

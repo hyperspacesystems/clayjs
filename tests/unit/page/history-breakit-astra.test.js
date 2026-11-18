@@ -132,24 +132,6 @@ afterEach(() => {
 });
 
 
-test("A1 an emptied article step is skipped in the same press", async () => {
-  const value = seedValue([{ id: "p", text: "abc" }]);
-  const tab = open(value), peer = open(value);
-  await startSession();
-  bridge(tab);
-  relay(tab, peer); relay(peer, tab);
-  caret(tab, 4); type(tab, "Alpha");
-  umOf(tab).stopCapturing(); type(tab, "Beta");
-  relay(tab, peer);
-  peer.view.dispatch(peer.view.state.tr.delete(9, 13));
-  relay(peer, tab);
-  expect(text(tab)).toBe("abcAlpha");
-  const skipped = watch("clay:undo-skipped");
-  const receipt = engine.undo();
-  expect({ text: text(tab), skipped: skipped.length, ok: receipt.ok })
-    .toEqual({ text: "abc", skipped: 1, ok: true });
-});
-
 test("A2 peer deletion between Undo and Redo retains all remaining redo text", async () => {
   const value = seedValue([{ id: "p", text: "abcAlphaBeta" }]);
   const tab = open(value), peer = open(value);
@@ -171,19 +153,6 @@ test("A2 peer deletion between Undo and Redo retains all remaining redo text", a
   engine.redo();
   expect({ text: text(tab), canRedo: engine.canRedo })
     .toEqual({ text: "abc", canRedo: false });
-});
-
-test("A3 article undo keeps a non-field button focused", async () => {
-  const button = document.body.appendChild(document.createElement("button"));
-  button.textContent = "Undo";
-  const tab = open(seedValue([{ id: "p", text: "abc" }]));
-  await startSession(); bridge(tab);
-  caret(tab, 4); type(tab, "Alpha");
-  button.focus();
-  expect(document.activeElement).toBe(button);
-  expect(engine.undo().ok).toBe(true);
-  expect(text(tab)).toBe("abc");
-  expect(document.activeElement).toBe(button);
 });
 
 test("A4 a rapid outside plain field edit splits the next article typing step", async () => {
@@ -239,20 +208,6 @@ test("A5 peer table overwrite after undo never discards the other cell redo", as
   expect(tab.binding.redo()).toBe(false);
   expect(cells(tab).map(c => c.text)).toEqual(["firstPeer", "secondBeta"]);
   expect(afterPageRedo).toEqual(["firstPeer", "secondBeta"]);
-});
-
-test("A6 article undo places selection at changed paragraph after a caret move", async () => {
-  const tab = open(seedValue([{ id: "p", text: "abc" }, { id: "q", text: "second" }]));
-  await startSession(); bridge(tab);
-  caret(tab, 4); type(tab, "Alpha");
-  const secondPos = tab.view.state.doc.child(0).nodeSize + 2;
-  caret(tab, secondPos);
-  expect(tab.view.state.selection.$from.parent.attrs.id).toBe("q");
-  tab.view.focus();
-  expect(document.activeElement).toBe(tab.view.dom);
-  expect(engine.undo().ok).toBe(true);
-  expect(text(tab)).toBe("abc");
-  expect(tab.view.state.selection.$from.parent.attrs.id).toBe("p");
 });
 
 

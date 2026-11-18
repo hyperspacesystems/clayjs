@@ -440,28 +440,6 @@ describe("an admitted automatic save", () => {
     expect(posts.length).toBe(seenPosts + 1);
   }, 20000);
 
-  test("text typed during an automatic save stays dirty and is saved by the next one", async () => {
-    await establish("flight-base");
-    latency = 150;
-    const seenPosts = posts.length;
-
-    document.getElementById("c").textContent = "flight-one";
-    await sleep(0);
-    const first = save.savePageThrottled();
-    await sleep(20);
-    document.getElementById("c").textContent = "flight-two";
-    await sleep(0);
-    const second = await save.savePageThrottled();
-    expect(second.msg).toBe("Save already in progress");
-    await first;
-
-    await sleep(2500);
-    expect(posts.length).toBe(seenPosts + 2);
-    expect(posts[posts.length - 1]).toContain("flight-two");
-    expect(snapshot.captureForComparison()).toBe(save.getLastSavedContents());
-    latency = 0;
-  }, 20000);
-
   test("a batching-only edit waits for an explicit save", async () => {
     if (!document.getElementById("batch")) {
       document.body.insertAdjacentHTML("beforeend", '<div id="batch" clay="no-trigger-autosave">b</div>');

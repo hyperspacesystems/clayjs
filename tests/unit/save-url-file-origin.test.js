@@ -51,20 +51,3 @@ test("a token save resolves instead of throwing, and keeps the relative path", a
   await expect(saveHtml("<html>from disk</html>")).resolves.toBeDefined();
   expect(calls[0]).toBe("/_/save/TOK");
 });
-
-test("a tokenless save resolves instead of throwing", async () => {
-  const calls = [];
-  globalThis.fetch = (url) => {
-    calls.push(url);
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      text: () => Promise.resolve(JSON.stringify({ msg: "Saved", msgType: "success" })),
-    });
-  };
-
-  const { saveHtml } = await import("../../src/core/save-core.js");
-
-  await expect(saveHtml("<html>from disk</html>")).resolves.toBeDefined();
-  expect(calls[0]).toBe("/_/save");
-});

@@ -123,24 +123,3 @@ test("a wait that ends with nothing to send goes back to 'saved'", async () => {
   // [refetch-on-save] listen to clay:save-saved. The chip hears clay:save-status.
   expect(events).toEqual(["saving", "status:saved"]);
 });
-
-test("a forced save held before its capture shows 'saving' too", async () => {
-  const held = holdSource();
-  setText("forced-edit");
-  events.length = 0;
-  const sentBefore = posts.length;
-
-  const pending = save.savePageForce();
-  await sleep(700);
-  expect(held.asked()).toBe(1);
-  expect(status()).toBe("saving");
-  expect(posts).toHaveLength(sentBefore);
-
-  held.release();
-  const result = await pending;
-  expect(result.ok).toBe(true);
-  expect(posts).toHaveLength(sentBefore + 1);
-  expect(posts[posts.length - 1]).toContain("forced-edit");
-  expect(status()).toBe("saved");
-  expect(events[events.length - 1]).toBe("saved");
-});

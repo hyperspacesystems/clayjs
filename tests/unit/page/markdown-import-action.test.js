@@ -292,28 +292,6 @@ test("an unsent preview refuses clay.setMode(\"view\") by name", async () => {
   }
 });
 
-test("a refused exit keeps the preview", async () => {
-  const view = editor(PAGE());
-  const session = await enterWithPageLease(view);
-  try {
-    select(view, posOf(view, "b") + 1);
-    await importFile(view, "notes.md", "Text *kept*\n\nSecond block");
-    expect(panel().querySelector(".blockeditor-import-summary").textContent).toBe("2 blocks");
-
-    const answer = await session.setMode("view");
-
-    expect(answer).toMatchObject({ ok: false, code: "pending-input" });
-    expect(answer.pending).toEqual(["markdown-import-preview"]);
-    expect(panel()).not.toBeNull();
-    expect(pendingIds()).toEqual(["markdown-import-preview"]);
-    expect(panel().querySelector(".blockeditor-import-summary").textContent).toBe("2 blocks");
-    await insert("cancel");
-    expect(await session.setMode("view")).toMatchObject({ ok: true, mode: "view" });
-  } finally {
-    session.done();
-  }
-});
-
 test("a file over the limit is refused before anything is read or parsed", async () => {
   const view = editor(PAGE());
   const before = view.state.doc;

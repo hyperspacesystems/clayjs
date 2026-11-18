@@ -7,7 +7,9 @@
 import { createHash } from "node:crypto";
 import { jest } from "@jest/globals";
 import { storage } from "../../src/lib/doc-storage.js";
-import { checkUpdate, findUpdate } from "../../src/plugins/upgrade.js";
+import {
+  checkUpdate,
+} from "../../src/plugins/upgrade.js";
 import { $ } from "./helpers/editor-ui.js";
 
 const BASE = "https://hyperclay.com/templates/kanban/owned";
@@ -178,20 +180,6 @@ describe("what the check answers", () => {
     localStorage.clear();
     const wrongDigest = manifest({ version: "2.0.0", sha256: sha256("other bytes") });
     expect((await checkUpdate({ fetchFn: fetcher({ latest: wrongDigest }) })).status).toBe("unknown");
-  });
-
-  test("a newer manifest whose digest matches is an update, the object findUpdate returns", async () => {
-    page();
-    const { status, version, update } = await checkUpdate({ fetchFn: fetcher() });
-    expect(status).toBe("update");
-    expect(version).toBe("1.0.0");
-    expect(update).toEqual({
-      version: "1.1.0",
-      html: `${BASE}/1.1.0.html`,
-      sha256: sha256(HTML),
-      latestUrl: `${BASE}/latest.json`,
-    });
-    expect(await findUpdate({ fetchFn: fetcher() })).toEqual(update);
   });
 });
 

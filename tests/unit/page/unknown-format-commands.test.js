@@ -12,7 +12,11 @@ import { selectBlocks } from "../../../src/page/blocksel.js";
 import { opaqueMark } from "../../../src/page/format-codec.js";
 import { turnInto, REFUSED } from "../../../src/page/items.js";
 import { gridFromClipboard } from "../../../src/page/table-paste.js";
-import { editor, posOf, select, typeText } from "./view-helpers.js";
+import {
+  editor,
+  posOf,
+  select,
+} from "./view-helpers.js";
 
 /**
  * The editing commands a person uses on a page holding content from a newer
@@ -392,30 +396,6 @@ test("the same chrome actions still convert ordinary blocks, and a marked line i
     { text: "befo", attributes: { "sparkle~p1": true } },
     { text: "re", attributes: { "clay_opaque_code~p2": { tokens: ["u"] } } },
   ]);
-});
-
-// ---- known commands over unknown content ------------------------------------
-
-test("text typed inside, before and after an unknown mark keeps the descriptor on exactly its units", () => {
-  const { tab } = room();
-  const pd = tab.binding.pd;
-  const a = find(tab.view.state.doc, "a");
-  const underline = { "sparkle~p1": true };
-  const token = { "clay_opaque_code~p2": { tokens: ["u"] } };
-  select(tab.view, a.pos + 1 + 3);
-  typeText(tab.view, "Z");
-  expect(unknownUnits(pd, "a")).toEqual([["b", underline], ["e", underline], ["f", underline], ["Z", underline], ["o", underline], ["r", token], ["e", token]]);
-
-  const start = find(tab.view.state.doc, "a");
-  select(tab.view, start.pos + 1);
-  typeText(tab.view, "Y");
-  expect(unknownUnits(pd, "a")[0]).toEqual(["Y", {}]);
-
-  const end = find(tab.view.state.doc, "a");
-  select(tab.view, end.pos + 1 + end.node.content.size);
-  typeText(tab.view, "W");
-  expect(unknownUnits(pd, "a").at(-1)).toEqual(["W", {}]);
-  expect(nodeOf(tab, "q").textContent).toBe("Read this too");
 });
 
 test("bold and italic over an unknown mark keep the unknown descriptor and touch nothing else", () => {

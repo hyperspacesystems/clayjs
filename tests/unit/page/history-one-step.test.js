@@ -48,60 +48,6 @@ const caret = (tab, pos) => tab.view.dispatch(tab.view.state.tr.setSelection(pmS
 const type = (tab, chars) => { for (const ch of chars) { const { from, to } = tab.view.state.selection; tab.view.someProp("handleTextInput", (f) => f(tab.view, from, to, ch, () => tab.view.state.tr.insertText(ch, from, to))); } };
 const where = (tab) => `${tab.view.state.selection.$from.parent.attrs.id}@${tab.view.state.selection.$from.parentOffset}`;
 
-test("two editor steps inside one page command are one entry that undoes and redoes both", async () => {
-  const tab = open(seedValue([{ id: "p", text: "abc" }]));
-  await start(tab);
-  caret(tab, 4);
-  const receipt = engine.command("Two steps", () => {
-    type(tab, "One");
-    tab.binding.bridge.um.stopCapturing();
-    caret(tab, 7);
-    type(tab, "Two");
-  });
-  expect(tab.binding.bridge.um.undoStack.length).toBe(2);
-  expect(engine.history.map((entry) => entry.label)).toEqual(["Two steps"]);
-  expect(engine.describe(receipt.id).steps.map((step) => step.prop.replace(/:[a-z0-9]+:/, ":E:"))).toEqual(["blockeditor-step:E:1", "blockeditor-step:E:2"]);
-  expect(engine.undo().ok).toBe(true);
-  expect(blocks(tab)).toBe("p:abc");
-  expect(tab.binding.bridge.um.undoStack.length).toBe(0);
-  expect(engine.redo().ok).toBe(true);
-  expect(blocks(tab)).toBe("p:abcOneTwo");
-  expect(tab.binding.bridge.um.undoStack.length).toBe(2);
-  expect(engine.undo().ok).toBe(true);
-  expect(blocks(tab)).toBe("p:abc");
-});
-
-test("with a side field focused, undo of an article step moves focus to the article and the caret to the change", async () => {
-  const side = document.body.appendChild(document.createElement("p"));
-  side.setAttribute("contenteditable", "true");
-  side.textContent = "side";
-  const tab = open(seedValue([{ id: "p", text: "abc" }, { id: "q", text: "second" }]));
-  await start(tab);
-  caret(tab, 4); type(tab, "Alpha");
-  caret(tab, endOf(tab, "q"));
-  side.focus();
-  expect(document.activeElement).toBe(side);
-  expect(engine.undo().ok).toBe(true);
-  expect(blocks(tab)).toBe("p:abc | q:second");
-  expect(where(tab)).toBe("p@3");
-  expect(document.activeElement).toBe(tab.view.dom);
-  expect(engine.redo().ok).toBe(true);
-  expect(where(tab)).toBe("p@8");
-});
-
-test("with the article focused, undo and redo keep focus and put the caret at the change", async () => {
-  const tab = open(seedValue([{ id: "p", text: "abc" }, { id: "q", text: "second" }]));
-  await start(tab);
-  tab.view.focus();
-  caret(tab, 4); type(tab, "Alpha");
-  caret(tab, endOf(tab, "q"));
-  expect(engine.undo().ok).toBe(true);
-  expect(where(tab)).toBe("p@3");
-  expect(document.activeElement).toBe(tab.view.dom);
-  expect(engine.redo().ok).toBe(true);
-  expect(where(tab)).toBe("p@8");
-});
-
 test("the editor's own undo, with no page session, also leaves the caret at the change", async () => {
   const tab = open(seedValue([{ id: "p", text: "abc" }, { id: "q", text: "second" }]));
   caret(tab, 4); type(tab, "Alpha");

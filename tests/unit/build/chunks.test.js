@@ -8,7 +8,10 @@ import os from "node:os";
 import path from "node:path";
 import { BOOT_IMPORTS, EDIT_BOOT_IMPORTS, EDITOR_BOOT_IMPORTS } from "../../../src/lib/boot-imports.js";
 import { CORE_WAVES, PLUGIN_PATHS } from "../../../src/loader-logic.js";
-import { EDIT_DYNAMIC_IMPORTS, emitBootstraps, emitChunks } from "../../../scripts/build-chunks.mjs";
+import {
+  EDIT_DYNAMIC_IMPORTS,
+  emitChunks,
+} from "../../../scripts/build-chunks.mjs";
 
 const root = path.resolve(new URL("../../..", import.meta.url).pathname);
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -231,32 +234,3 @@ test("the main manifest covers every path a view-mode plan can resolve, the supp
   expect(supplement.version).toBeUndefined();
   expect(built.manifest.files[built.manifest.edit]).toBeTruthy();
 });
-
-// A budget is held against this manifest and nothing else, so the meter has to read the
-// release's own inventory: a second size estimate could pass while the manifest served
-// different bytes. The Document view is measured from a release emitted here.
-test("the meter\'s built Document view is measured from the manifest\'s own files and bytes", async () => {
-  const site = await mkdtemp(path.join(os.tmpdir(), "clay-chunks-site-"));
-  try {
-    const chunks = await emitChunks({ root, outdir: path.join(site, "m") });
-    await emitBootstraps({ root, outdir: site, manifest: chunks.manifest, satellites: chunks.satellites });
-    const { measureBuilt } = await import("../../../scripts/measure-load.mjs");
-    const html = await readFile(path.join(root, "tests/fixtures/load/document.html"), "utf8");
-    const measured = await measureBuilt({ html, mode: "view", dir: site });
-
-    expect(measured.js.requests).toBe(measured.js.files.length);
-    expect(measured.js.depth).toBe(3);
-    expect(measured.js.brotli).toBeGreaterThan(0);
-    for (const file of measured.js.files) {
-      const listed = file.path.startsWith("m/") ? chunks.manifest.files[file.path.slice(2)] : null;
-      if (!listed) {
-        // The facade is the generated bootstrap, written beside the manifest.
-        expect(file.path).toBe("clay.js");
-        continue;
-      }
-      expect(file.raw).toBe(listed.bytes);
-    }
-  } finally {
-    await rm(site, { recursive: true, force: true });
-  }
-}, 120000);

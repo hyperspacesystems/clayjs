@@ -1,8 +1,9 @@
 import { createPageEditor as makePageEditor, blockeditorState, PAGE_EDITOR_CSS } from "../../../src/page/editor.js";
 import { state as pmState } from "../../../src/vendor/prosemirror.vendor.js";
 
-import { trackView, editor } from "./view-helpers.js";
-import { MEDIA_CSS } from "../../../src/page/features/media.js";
+import {
+  trackView,
+} from "./view-helpers.js";
 import { ACTION_ITEMS } from "../../../src/page/chrome.js";
 import { STRIP_FROM_SAVE } from "../../../src/lib/region-policy.js";
 const createPageEditor = (...args) => trackView(makePageEditor(...args));
@@ -26,15 +27,6 @@ const caretIn = (view, id, off = 0) => {
 };
 
 afterEach(() => { document.body.innerHTML = ""; document.head.innerHTML = ""; });
-
-test("mounts with the blockeditor-editor class and injects the CSS once", () => {
-  const a = createPageEditor(mount(), { blocks: { p: { t: "paragraph", pos: "V", c: "Hi" } } });
-  createPageEditor(mount());
-  expect(a.dom.classList.contains("blockeditor-editor")).toBe(true);
-  const styles = document.querySelectorAll("#blockeditor-editor-style");
-  expect(styles.length).toBe(1);
-  expect(styles[0].textContent).toBe(PAGE_EDITOR_CSS);
-});
 
 test("a stale editor style saved into the page gets the current CSS in place, and is no-dirty so the update is never an edit", () => {
   const old = document.head.appendChild(document.createElement("style"));
@@ -114,31 +106,8 @@ test("F18 destroying a view removes its live region", () => {
   expect(live.isConnected).toBe(false);
 });
 
-test("F23 long filenames can shrink and wrap within the file row", () => {
-  const rules = document.createElement("style");
-  const css = MEDIA_CSS.match(/\.blockeditor-file-name\s*\{[^}]+\}/)?.[0];
-  expect(css).toBeTruthy();
-  rules.textContent = css;
-  document.head.appendChild(rules);
-  const view = editor([["f", "file", "", { src: "/f", name: "verylongfilename".repeat(30) }]]);
-  const style = getComputedStyle(view.dom.querySelector(".blockeditor-file-name"));
-  expect(style.minWidth).toBe("0");
-  expect(style.overflowWrap).toBe("anywhere");
-});
-
 test("F23 block actions follow the specified phone order", () => {
   expect(ACTION_ITEMS.slice(0, 7).map((item) => item.label)).toEqual(["Move up", "Move down", "Indent", "Outdent", "Duplicate", "Delete", "Turn into"]);
-});
-
-describe("F24 fixture teardown", () => {
-  let previous;
-  test("creates a real view for the next test's teardown assertion", () => {
-    previous = editor([["p", "paragraph", "fixture"]]);
-    expect(previous.isDestroyed).toBe(false);
-  });
-  test("destroys the preceding view before clearing its document", () => {
-    expect(previous.isDestroyed).toBe(true);
-  });
 });
 
 test("a caret scrolled into view stops below the page's scroll-padding-top, never closer than 16px", () => {

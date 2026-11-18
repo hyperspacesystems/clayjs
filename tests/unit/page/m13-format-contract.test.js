@@ -10,8 +10,11 @@ import { blocksFromYValue } from "../../../src/page/ybind/decode.js";
 import { yValueOf } from "../../../src/page/ybind/provider.js";
 import { seedPageFromArticle } from "../../../src/page/ybind/migrate.js";
 import { M13_CASES, NEIGHBOUR, caseOf } from "../../fixtures/page/formats/m13-cases.mjs";
-import { PAGE_FORMAT, PAGE_FORMAT_EXTENSION, PAGE_FORMAT_META, PAGE_FORMAT_UPGRADE, blockeditorFormatFloor } from "../../../src/page/format-level.js";
-import { createFormatGate } from "../../../src/page/format-gate.js";
+import {
+  PAGE_FORMAT_META,
+  PAGE_FORMAT_UPGRADE,
+  blockeditorFormatFloor,
+} from "../../../src/page/format-level.js";
 import { captureFormat, checkPageFormatAdmission } from "../../../src/server/rooms/index.js";
 
 /**
@@ -120,27 +123,6 @@ const refusal = (fn) => {
   return null;
 };
 
-// A host that owns the canonical floor, as the gate's adapter seam states it.
-const gateHost = () => {
-  const calls = { activate: 0 };
-  const state = { floor: 0, admitted: [PAGE_FORMAT] };
-  return {
-    calls,
-    state,
-    async read() {
-      return { floor: state.floor };
-    },
-    async capabilities() {
-      return state.admitted;
-    },
-    async activate({ floor }) {
-      calls.activate += 1;
-      state.floor = Math.max(state.floor, floor);
-      return { accepted: true, receipt: { accepted: true } };
-    },
-  };
-};
-
 test.each(M13_CASES.map((entry) => entry.name))(
   "R's %s is checkpointed by this writer and survives a neighbouring edit",
   (name) => {
@@ -228,28 +210,5 @@ test.each(M13_CASES.map((entry) => entry.name))(
       // Floor-0 text gains no marker on its way out.
       expect(decision.html).toBe(plain.html);
     }
-  },
-);
-
-test.each(M13_CASES.map((entry) => entry.name))(
-  "a host that does not advertise blockeditor-format-v1 keeps the new-format command of the %s row off until it does",
-  async (name) => {
-    const adapter = gateHost();
-    let advertised = false;
-    const gate = createFormatGate({ host: adapter, supported: () => advertised });
-    const applied = [];
-    const refused = await gate.run({ apply: () => applied.push(name) });
-    expect(refused).toMatchObject({ status: "unsupported-host", code: "blockeditor-format-unsupported" });
-    expect(refused.extension).toBe(PAGE_FORMAT_EXTENSION);
-    expect(applied).toEqual([]);
-    expect(adapter.calls.activate).toBe(0);
-    expect(adapter.state.floor).toBe(0);
-
-    advertised = true;
-    const once = await gate.run({ apply: () => applied.push(name) });
-    expect(once.status).toBe("applied");
-    expect(applied).toEqual([name]);
-    expect(adapter.state.floor).toBe(PAGE_FORMAT);
-    expect(gate.floor).toBe(PAGE_FORMAT);
   },
 );

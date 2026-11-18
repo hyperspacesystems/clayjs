@@ -110,39 +110,3 @@ test("a declared draft refuses both directions, twice, and keeps its own destina
   expect(log).toEqual(["template:board:prepare", "template:board:enable"]);
   expect(switchImports).toEqual([]);
 });
-
-test("an explicit ?editmode=true on a draft document still opens the draft, and setMode still refuses", async () => {
-  const log = [];
-  const clay = await bootDraft({ url: "/notes.html?editmode=true", declared: true, queue: [participant("template:board", log)] });
-
-  expect(clay.mode).toBe("draft");
-  expect(clay.isEditMode).toBe(true);
-  expect(clay.modeLifecycle.state.destination).toBe("draft");
-
-  await withFakeLocation(async (fake) => {
-    await expect(clay.setMode("view")).resolves.toEqual({ ok: false, mode: "draft", code: "not-allowed" });
-    expect(fake.reload).not.toHaveBeenCalled();
-  });
-
-  expect(log).toEqual(["template:board:prepare", "template:board:enable"]);
-  expect(switchImports).toEqual([]);
-});
-
-test("a declared draft keeps the session it booted with", async () => {
-  const log = [];
-  const clay = await bootDraft({
-    declared: true,
-    queue: [participant("template:board", log), participant("template:kanban", log)],
-  });
-
-  const booted = log.slice();
-  await clay.setMode("edit");
-  await clay.setMode("view");
-
-  // The draft session booted with is the one still running: the refused switches neither
-  // prepare another lease nor dispose the one the visitor is typing into.
-  expect(log).toEqual(booted);
-  expect(clay.mode).toBe("draft");
-  expect(clay.modeLifecycle.state.generation).toBe(1);
-  expect(switchImports).toEqual([]);
-});

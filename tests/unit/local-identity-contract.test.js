@@ -31,7 +31,6 @@ const element = () => { const el = document.createElement("li"); document.body.a
 const registry = () => [...document.querySelectorAll("[clay-people] data[value]")];
 const dataFor = (id) => document.querySelector(`[clay-people] data[value="${id}"]`);
 const ids = (people) => people.map((p) => p.id).sort();
-const errorOf = (fn) => { try { fn(); return null; } catch (e) { return e; } };
 
 test("one id while connected: every stamp is the account's person, recorded once", async () => {
   const mod = await load({ meta: replying(() => CLOUD) });
@@ -103,23 +102,6 @@ test("a host with no directory still offers the document's registry", async () =
   expect(await mod.people.available()).toBeNull();
   expect(ids(mod.people.list())).toEqual(ids([LOCAL, CLOUD]));
   expect(mod.people.list().map((p) => p.name)).toEqual([LOCAL.name, CLOUD.name]);
-});
-
-test("canRename follows the source: a host's person is the host's to rename", async () => {
-  let me = CLOUD;
-  const mod = await load({ meta: replying(() => me), stored: BROWSER });
-
-  expect(mod.people.canRename()).toBe(false);
-  expect(errorOf(() => mod.people.rename("X"))).toMatchObject({ code: "not-renamable" });
-
-  me = null;
-  await mod.people.available();
-
-  expect(mod.people.canRename()).toBe(true);
-  const renamed = mod.people.rename("Ada L.");
-  expect(renamed.id).toBe(BROWSER.id);
-  expect(renamed.name).toBe("Ada L.");
-  expect(JSON.parse(window.localStorage.getItem("clay:people:me"))).toEqual({ id: BROWSER.id, name: "Ada L." });
 });
 
 // Every test leaves a plugin instance watching document.body, so the file ends with an

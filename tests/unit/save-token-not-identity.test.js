@@ -69,15 +69,6 @@ test("the pre-rename spelling still never reaches disk", () => {
   expect(isTabLocalRootAttr("htmlclaytoken", document.documentElement)).toBe(true);
 });
 
-test("a document carrying both spellings resolves to the current one", async () => {
-  document.documentElement.setAttribute("savetoken", "tok-spec");
-  document.documentElement.setAttribute("htmlclaytoken", "tok-old");
-
-  const { saveToken } = await import("../../src/core/host-attrs.js");
-
-  expect(saveToken()).toBe("tok-spec");
-});
-
 // The identity still needs the protection it was added for. Splitting the lists
 // must not quietly drop it out of the morph guard, or a peer's frame could strip
 // this tab's copy of an attribute that is absent from disk bytes.

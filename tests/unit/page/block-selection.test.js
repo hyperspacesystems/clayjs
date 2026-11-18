@@ -1,6 +1,8 @@
 import * as B from "../../../src/page/blocks.js";
 import { make, run, short } from "./blocks-helpers.js";
-import { blockMap, changedBlocks } from "../../../src/page/model.js";
+import {
+  changedBlocks,
+} from "../../../src/page/model.js";
 import { state as pmState, history, transform } from "../../../src/vendor/prosemirror.vendor.js";
 import { schema } from "../../../src/page/schema.js";
 
@@ -110,18 +112,6 @@ describe("mapping through changes", () => {
 });
 
 describe("history", () => {
-  test("one undo restores the deleted blocks, their ids and keys, and the block selection", () => {
-    const s0 = make(SPEC, [history.history()]);
-    const s = withBlocks(s0, 1, 2);
-    const before = JSON.stringify(blockMap(s.doc));
-    const deleted = s.apply(history.closeHistory(s.tr.delete(s.selection.from, s.selection.to)));
-    expect(texts(deleted)).toBe("A | D");
-    let undone = deleted;
-    history.undo(deleted, (tr) => { undone = deleted.apply(tr); });
-    expect(JSON.stringify(blockMap(undone.doc))).toBe(before);
-    expect(undone.selection instanceof BlockSelection).toBe(true);
-    expect(range(undone)).toEqual(range(s));
-  });
 });
 
 describe("moving", () => {

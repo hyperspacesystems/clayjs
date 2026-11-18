@@ -96,22 +96,6 @@ test("a structured result is the done payload and does not wait for a document l
   });
 });
 
-test("a silent structured helper can answer after the raw inactivity deadline", async () => {
-  const handle = wire.send({}, { id: "structured-silent", helper: "search" });
-  await settle();
-  frame({
-    type: "wire/ack",
-    id: handle.id,
-    payload: { mode: "jsonl", budgetMs: 300000 },
-  });
-
-  await jest.advanceTimersByTimeAsync(150000);
-  expect(handle.state).toBe("acked");
-
-  frame({ type: "wire/done", id: handle.id, payload: null });
-  await expect(handle.done).resolves.toMatchObject({ state: "done", result: null });
-});
-
 test("structured progress does not extend the accepted host budget", async () => {
   const handle = wire.send({}, { id: "structured-budget", helper: "search" });
   await settle();

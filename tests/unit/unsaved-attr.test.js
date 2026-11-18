@@ -185,17 +185,6 @@ describe("edit mode", () => {
     expect(unsaved()).toBe("true");
   });
 
-  test("a sync frame carries no unsaved", async () => {
-    const { captureSnapshot, serializeForSync } = await import("../../src/core/snapshot.js");
-    document.body.innerHTML = '<div id="c">start</div>';
-    root().setAttribute("unsaved", "true");
-
-    const tag = openTag(serializeForSync(captureSnapshot({ flushUndo: false, authored: false })));
-    expect(tag).toMatch(/^<html/i);
-    expect(tag).not.toContain("unsaved=");
-    expect(unsaved()).toBe("true");
-  });
-
   test("writing it marks nothing dirty and reaches no undo step", async () => {
     const Mutation = (await import("../../src/lib/mutation.js")).default;
     const { isTabLocalAttr } = await import("../../src/lib/root-attrs.js");

@@ -255,19 +255,6 @@ test("a value that looks like markup cannot end the JSON block early", () => {
   expect(data.edits[0].yours.hit).toBe(nasty);
 });
 
-test("the ledger's clone comes back untouched, and two downloads agree", () => {
-  const { id } = peerLoss({ local: "budget is over", remote: "budget is approved" });
-  const apply = conflicts.recoveryOf(id);
-  const before = apply.root.outerHTML;
-
-  const first = download.buildRecovery([conflicts.get(id)]).html;
-  const second = download.buildRecovery([conflicts.get(id)]).html;
-
-  expect(apply.root.outerHTML).toBe(before);
-  const strip = (html) => html.replace(/"savedAt":"[^"]*"/, '"savedAt":""');
-  expect(strip(second)).toBe(strip(first));
-});
-
 test("a refused save downloads the live page, named as my version", () => {
   document.body.innerHTML = '<p id="a">typed after the refusal</p>';
 

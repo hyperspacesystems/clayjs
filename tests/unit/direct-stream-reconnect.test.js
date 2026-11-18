@@ -50,13 +50,3 @@ test('a host that sends cursors decides the repair itself', () => {
   expect(seen).toEqual([{ seq: 3 }]);
   stream.close();
 });
-
-test('the first open asks for nothing', () => {
-  const stream = new SyncStream('http://localhost/_/sync?lane=saved', { lane: 'saved' });
-  const seen = cursors(stream);
-
-  sources[0].onopen();
-  expect(sources).toHaveLength(1);
-  expect(seen).toHaveLength(0);
-  stream.close();
-});

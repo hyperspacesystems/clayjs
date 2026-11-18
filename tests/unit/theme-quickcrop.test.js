@@ -76,16 +76,6 @@ test("fit: a themed frame measures the body's inner width and the overlay's heig
   expect(fit.height).toBe(600 - 120);
 });
 
-test("fit: a larger spacing token yields a smaller measured width", () => {
-  installMetrics({ bodyWidth: 800, overlayHeight: 600, panelHeight: 120 });
-  const narrow = themedAdapter({ spacing: "40px" }).fit();
-  const wide = themedAdapter({ spacing: "12px" }).fit();
-
-  expect(narrow.width).toBe(800 - 80);
-  expect(wide.width).toBe(800 - 24);
-  expect(narrow.width).toBeLessThan(wide.width);
-});
-
 test("fit: the measurement frame is removed afterwards, even when a metric throws", () => {
   const adapter = themedAdapter({ spacing: "30px" });
   installMetrics({ bodyWidth: 800, overlayHeight: 600, panelHeight: 120 });

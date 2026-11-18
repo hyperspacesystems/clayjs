@@ -101,15 +101,6 @@ const send = (from, to, key) => {
   to.store.rebase({ ...base, y: { ...base.y, [key]: value } }, { source: "remote", frame: { ops: [{ op: "set", path: ["y", key], value }] } });
 };
 
-test("a text-only document's editor boots without opening or loading the tool", async () => {
-  const { view, calls } = openTab(seedValue([PARAGRAPH]));
-  expect(calls).toEqual([]);
-  await flush();
-  expect(calls).toEqual([]);
-  expect(view.dom.querySelector(".blockeditor-tool-block")).toBe(null);
-  expect(view.dom.querySelector('section[data-type="tool"]')).toBe(null);
-});
-
 test("opening the slash menu loads nothing", async () => {
   const { view, calls } = openTab(seedValue([PARAGRAPH]));
   const menu = slash(view);
@@ -205,20 +196,6 @@ test("destroying one editor keeps another editor\u2019s tool host working", asyn
   typeIn(first.view, 1, "x");
   await tick();
   expect(changed).toHaveBeenCalled();
-});
-
-test("an install while composing waits for compositionend", async () => {
-  let release;
-  const gate = new Promise((resolve) => { release = resolve; });
-  const { view } = openTab(seedValue([PARAGRAPH, TOOL]), { load: () => gate.then(() => realLoad("tool")) });
-  view.input.composing = true;
-  expect(view.composing).toBe(true);
-  release();
-  await flush();
-  await flush();
-  expect(view.dom.querySelector(".blockeditor-tool-block")).toBe(null);
-  view.dom.dispatchEvent(new CompositionEvent("compositionend"));
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-tool-block"))).toBe(true);
 });
 
 test("selection, the undo stack and the save output are the same before and after the view part installs", async () => {

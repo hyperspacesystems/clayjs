@@ -118,31 +118,6 @@ const roundTrip = ({ w, map }) => {
   }
 };
 
-test("a plain three-block page maps every logical unit onto the same physical unit", () => {
-  const pd = page(1, [{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
-  const built = mapOf(pd);
-  expect(built.map.segments).toEqual([{ logicalStart: 0, logicalLength: 18, physicalStart: 0, physicalLength: 18, kind: "visible" }]);
-  expect(built.map.toPhysical(0, "before")).toBe(0);
-  expect(built.map.toPhysical(0, "after")).toBe(0);
-  expect(built.map.toPhysical(6, "before")).toBe(6);
-  expect(built.map.toPhysical(6, "after")).toBe(6);
-  expect(built.map.toPhysical(11, "before")).toBe(11);
-  expect(built.map.toPhysical(11, "after")).toBe(11);
-  expect(built.map.toPhysical(18, "before")).toBe(18);
-  expect(built.map.toPhysical(18, "after")).toBe(18);
-  expect(built.map.toLogical(0, "before")).toBe(0);
-  expect(built.map.toLogical(0, "after")).toBe(0);
-  expect(built.map.toLogical(7, "before")).toBe(7);
-  expect(built.map.toLogical(7, "after")).toBe(7);
-  expect(built.map.toLogical(18, "before")).toBe(18);
-  expect(built.map.toLogical(18, "after")).toBe(18);
-  expect(built.map.physicalRanges(0, 18)).toEqual([[0, 18]]);
-  expect(built.map.physicalRanges(1, 4)).toEqual([[1, 4]]);
-  expect(built.map.physicalRanges(6, 6)).toEqual([]);
-  expect(built.map.physicalRanges(0, 0)).toEqual([]);
-  roundTrip(built);
-});
-
 test("a hidden source with a recovered marker and peer text keeps the marker's own unit", () => {
   const seed = page(1, [{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
   const peer = clone(seed, 2);

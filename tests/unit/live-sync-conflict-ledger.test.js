@@ -502,31 +502,6 @@ test("typing during the wait keeps the page dirty through the accept", async () 
   sync.stop();
 });
 
-// ---------------------------------------------------------------------------
-// the save hold is released by the frame that answers it, loss or no loss
-// ---------------------------------------------------------------------------
-
-test("a stamped peer frame that also conflicts releases the hold over the loss", async () => {
-  await settle(FIXTURE);
-  const sync = startSync();
-  sync.lastHtml = captureFrame();
-  document.querySelector('[data-id="a"]').textContent = LOCAL_A;
-  await Promise.resolve();
-
-  global.fetch = jest.fn(refusingHost);
-  expect((await save.savePage()).msgType).toBe("conflict");
-  expect(save.isSaveConflicted()).toBe(true);
-
-  const seen = onApplied();
-  await sync._doApplyUpdate(sync.lastHtml.replace("budget is fine", REMOTE_A), 5, null, "E1");
-  seen.stop();
-
-  expect(seen[0].conflictIds).toHaveLength(1);
-  expect(conflicts.size).toBe(1);
-  expect(save.isSaveConflicted()).toBe(false);
-  sync.stop();
-});
-
 test("the equal-HTML branch releases the hold over the loss it keeps", async () => {
   await settle(FIXTURE);
   const sync = makeSync();

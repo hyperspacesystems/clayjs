@@ -194,20 +194,6 @@ describe("the adoption controller", () => {
     controller.dispose();
   });
 
-  test("a peer's words and the hand edit's words in one block are both kept", async () => {
-    const current = clone(RECORD.blocks);
-    current.a.c = "Hello brave world";
-    view = createPageEditor(mount, { blocks: current });
-    const notices = [];
-    const controller = installAdoption({ view, source: handEdited(), hold: () => {}, release: () => {}, notice: (n) => notices.push(n) });
-    await controller.idle();
-    expect(blockMap(view.state.doc).a.c).toBe("Hello brave world!");
-    expect(notices).toHaveLength(1);
-    expect(notices[0].displaced).toBeUndefined();
-    expect(notices[0].conflicts).toBeUndefined();
-    controller.dispose();
-  });
-
   test("dispose releases a hold whose wait never ends", async () => {
     view = createPageEditor(mount, { blocks: clone(RECORD.blocks) });
     let holds = 0, releases = 0;

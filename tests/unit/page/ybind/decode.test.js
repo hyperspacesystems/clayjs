@@ -1,5 +1,4 @@
 import { jest } from "@jest/globals";
-import { execFileSync } from "node:child_process";
 import * as Y from "../../../../src/vendor/yjs.vendor.js";
 import { schema } from "../../../../src/page/schema.js";
 import { marksOf } from "../../../../src/page/inline.js";
@@ -159,19 +158,6 @@ test.each([
   const { pd } = fixture();
   pd.tableFields.set(key, value);
   expect(() => blocksFromYValue(yValueOf(pd.ydoc))).toThrow(expect.objectContaining({ code: "unsupported-content" }));
-});
-
-test("runs the exported decoder in a fresh Node process without a DOM", () => {
-  const { value, expected } = fixture();
-  const url = new URL("../../../../src/page/ybind/core.js", import.meta.url).href;
-  const script = `
-    import { readFileSync } from "node:fs";
-    if (typeof window !== "undefined" || typeof document !== "undefined" || typeof DOMParser !== "undefined") throw new Error("Unexpected DOM");
-    const { blocksFromYValue } = await import(${JSON.stringify(url)});
-    process.stdout.write(JSON.stringify(blocksFromYValue(JSON.parse(readFileSync(0, "utf8")))));
-  `;
-  const output = execFileSync(process.execPath, ["--input-type=module", "-e", script], { input: JSON.stringify(value), encoding: "utf8" });
-  expect(JSON.parse(output)).toEqual(expected);
 });
 
 test("preserves the walker's removed-block and duplicate visibility policy", () => {

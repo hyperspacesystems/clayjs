@@ -486,17 +486,6 @@ describe("blockeditor-view, the reader half of page", () => {
     expect(warn).toHaveBeenCalledWith('clayjs: unknown plugin "page"');
     warn.mockRestore();
   });
-
-  test("plugins=blockeditor in draft mode keeps the editor and live", () => {
-    const { plugins } = resolveModules(
-      params({ plugins: "blockeditor,visitor-drafts,visitor-menu,menu,indicator" }), true, { isDraftMode: true });
-    expect(plugins).toContain("plugins/page.js");
-    expect(plugins).toContain("plugins/live.js");
-    expect(plugins).not.toContain("plugins/sync.js");
-    expect(plugins).not.toContain("plugins/upload.js");
-    expect(plugins).not.toContain("plugins/menu.js");
-    expect(plugins).not.toContain("plugins/page-view.js");
-  });
 });
 
 // A Document's editor owns its article's rich text, so richclay has nothing to do

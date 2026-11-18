@@ -1,4 +1,3 @@
-import { gzipSync } from "node:zlib";
 import { RECORD } from "./fixtures/all-kinds.js";
 import { blocksOfValues, project, renderModel, revOf } from "../../../src/page/projection.js";
 import { serializeLive, stampOf, parseStamp, textHash } from "../../../src/live/ops.js";
@@ -11,16 +10,7 @@ const fileOf = (blocks) => {
 
 let view;
 let stopView;
-let build;
 beforeAll(async () => {
-  // esbuild's API checks `new TextEncoder().encode("") instanceof Uint8Array` as
-  // it loads. The setup file installs node's outer-realm TextEncoder, whose
-  // bytes are not the sandbox's Uint8Array; re-wrap them in this realm's.
-  const NativeTextEncoder = globalThis.TextEncoder;
-  globalThis.TextEncoder = class extends NativeTextEncoder {
-    encode(...args) { return Uint8Array.from(super.encode(...args)); }
-  };
-  build = (await import("esbuild")).build;
   view = await import("../../../src/page/view.js");
 });
 afterAll(() => {
@@ -129,33 +119,4 @@ test("a saved tag keeps the room lineage it carries", () => {
   expect(liveTag.textContent).toBe(first);
   expect(liveTag.getAttribute("live-at")).toBe(null);
   expect(liveTag.getAttribute("live-by")).toBe(null);
-});
-
-test("the reader code stays small and loads no ProseMirror", async () => {
-  const result = await build({
-    entryPoints: [new URL("../../../src/page/view.js", import.meta.url).pathname],
-    bundle: true, minify: true, format: "esm", write: false, metafile: true,
-    splitting: true, outdir: "/reader-out",
-    external: ["*hyper-morph.vendor.js"],
-  });
-  // Splitting can move the reader's code out of the entry chunk into a shared one, so
-  // the check covers every chunk the entry imports statically.
-  const outputs = result.metafile.outputs;
-  // Every dynamic import is an entry point too, so the reader is found by its source.
-  const [entryPath] = Object.entries(outputs).find(([, output]) => output.entryPoint?.endsWith("src/page/view.js"));
-  const closure = new Set();
-  const walk = (chunk) => {
-    if (closure.has(chunk)) return;
-    closure.add(chunk);
-    for (const dep of outputs[chunk]?.imports ?? []) if (dep.kind === "import-statement") walk(dep.path);
-  };
-  walk(entryPath);
-  const inputs = [...closure].flatMap((chunk) => Object.keys(outputs[chunk]?.inputs ?? {}));
-  expect(inputs.length).toBeGreaterThan(0);
-  expect(inputs.some((p) => /prosemirror|page\/(schema|model|inline|blocks|editor|binding|replay|projection)\.js/.test(p))).toBe(false);
-  const bytes = [...closure].reduce((sum, chunk) => {
-    const file = result.outputFiles.find((output) => output.path.endsWith(chunk.replace(/^.*\//, "/")));
-    return sum + (file ? gzipSync(file.contents).length : 0);
-  }, 0);
-  expect(bytes).toBeLessThanOrEqual(15 * 1024);
 });

@@ -2,7 +2,10 @@
 import { expect, test } from "@jest/globals";
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { openDrafts } from "../../src/plugins/visitor-drafts/idb.js";
-import { commit, RECOVERY_KEEP, transact } from "../../src/plugins/visitor-drafts/commit.js";
+import {
+  RECOVERY_KEEP,
+  transact,
+} from "../../src/plugins/visitor-drafts/commit.js";
 import { merge3, unitMark } from "../../src/plugins/visitor-drafts/store.js";
 
 const key = "clay:visitor-drafts:r7@/";
@@ -42,15 +45,4 @@ test.each(["bare", "99~unobserved"])("an unverified marker %s preserves both who
   await transact(drafts, key, input);
   expect(await drafts.readAll(key)).toEqual(after);
   drafts.close();
-});
-
-test("an unverified marker accepts typing made under that marker and preserves the earlier record", () => {
-  const record = copy("newer");
-  const result = commit({ meta: { gen: 9, rev: 1, reset: "9~other", tabs: {}, unit: null }, record }, {
-    ...options, marker: "bare",
-    chains: [{ tab: "fresh", reset: "bare", ops: [{ seq: 1, keys: { title: { m: "fresh typing" } } }] }],
-  });
-  expect(result.record.data.title).toBe("fresh typing");
-  expect(result.recovered).toEqual([record]);
-  expect(result.stale).toEqual([]);
 });

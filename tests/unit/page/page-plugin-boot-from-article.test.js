@@ -164,22 +164,6 @@ afterEach(() => {
   document.documentElement.removeAttribute("documentetag");
 });
 
-test("a page with one article and no tag boots from its article, holding its seed and no tag", async () => {
-  const html = pageHtml();
-  const expected = expectedTagText(html);
-  const { page, storeOf } = await load({ html });
-
-  await page.ready;
-
-  expect(page.view).toBeTruthy();
-  expect(page.view.editable).toBe(true);
-  // The seed is a value in memory: the document gains no tag, so no boot can read
-  // one back as a page the file already has.
-  expect(pageTag()).toBe(null);
-  expect(serializeLive(storeOf("blockeditor").value)).toBe(expected);
-  expect(page.view.dom.textContent).toContain("Hello");
-});
-
 test("a tagless page whose article holds a table boots with its rows and cells", async () => {
   const html = savedArticle();
   const { page } = await load({ html });

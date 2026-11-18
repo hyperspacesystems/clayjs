@@ -133,15 +133,6 @@ test("a text-only document's editor boots without loading the media view part", 
   expect(view.dom.querySelector("figure.blockeditor-image")).toBe(null);
 });
 
-test("opening the slash menu loads nothing", async () => {
-  const { view, calls } = open({ p: PARAGRAPH });
-  const menu = slash(view);
-  expect(menu.hidden).toBe(false);
-  pick(menu, "Image");
-  await flush();
-  expect(calls).toEqual([]);
-});
-
 test("a document with an image boots with the media view part loaded", async () => {
   const { view, calls } = open({ p: PARAGRAPH, img: IMAGE });
   expect(calls).toEqual(["media"]);

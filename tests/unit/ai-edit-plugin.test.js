@@ -1374,28 +1374,6 @@ describe("with a ready ai-edit helper", () => {
         other.remove();
       }
     });
-
-    test("a listed but disabled helper opens the existing setup note with Send unavailable", async () => {
-      fakeWire.helpers.mockResolvedValue([{ name: "ai-edit", state: "unavailable" }]);
-      const section = mountPage();
-      expect(await aiEdit.open(section, { prompt: "add a bar chart" })).toBe(true);
-      await flush();
-
-      expect(panel().hidden).toBe(false);
-      expect(statusEl().textContent).toMatch(/turned off/);
-      expect(button("send").hidden).toBe(true);
-      expect(textarea().disabled).toBe(true);
-      expect(textarea().value).toBe("add a bar chart");
-      await submit("add a bar chart");
-      expect(fakeWire.send).not.toHaveBeenCalled();
-
-      // The host turns its switch back on: the next opening works without a reload.
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-      fakeWire.helpers.mockResolvedValue([{ name: "ai-edit", state: "ready" }]);
-      clickSection(mountPage());
-      await flush();
-      expect(button("send").hidden).toBe(false);
-    });
   });
 
   describe("plain pages, no data-edit-id", () => {

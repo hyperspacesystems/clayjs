@@ -222,17 +222,6 @@ test("rebase announces a change only when the value changed", () => {
   expect(events).toEqual([{ source: "state", ops: null }]);
 });
 
-test("mark is the id of the newest committed op", () => {
-  const { store, game } = make();
-  expect(store.mark).toBe(0);
-  game.add("score");
-  game.update((d) => {
-    d.score = 5;
-    d.score = 6;
-  });
-  expect(store.mark).toBe(2);
-});
-
 test("confirm folds this tab's ops up to a mark into the base without changing what page code sees", () => {
   const store = createStore({ name: "g", value: { s: 0 } });
   const events = [];

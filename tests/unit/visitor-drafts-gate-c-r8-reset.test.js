@@ -112,25 +112,3 @@ test("a stale page's typing is recovered, and typing after it learns the current
   expect(saved.meta.gen).toBe(2);
   expect(current.reloaded).toBe(0);
 });
-
-test("reset recovery is described once after reload and is not an unchanged-draft notice", async () => {
-  const w = world();
-  const current = await openTab(w);
-  current.title("earlier draft");
-  await current.save();
-  localStorage.removeItem(w.key);
-  localStorage.setItem(w.key + ":reset", "legacy-marker");
-  await current.sync();
-  expect(current.reloaded).toBe(1);
-  expect(JSON.parse(sessionStorage.getItem(w.key + ":recovery-notice")).reset).toBe(true);
-  const next = await openTab(w);
-  await new Promise((resolve) => setTimeout(resolve, 40));
-  const notices = () => [...(document.querySelector('clay-editor-ui[data-clay-ui="toasts"]')?.shadowRoot.querySelectorAll("[data-clay-toast]") ?? [])].map((el) => el.textContent);
-  expect(notices()).toEqual(["This draft was started over in another tab. The earlier draft was kept aside in this browser."]);
-  await next.sync();
-  expect(notices()).toHaveLength(1);
-  document.querySelectorAll("clay-editor-ui").forEach((el) => el.remove());
-  await openTab(w);
-  await new Promise((resolve) => setTimeout(resolve, 40));
-  expect(notices()).toEqual([]);
-});

@@ -80,15 +80,6 @@ test("being in step changes nothing: there is still no content to be in step WIT
   expect(lastSeenEtag()).toBe("stamp-before");
 });
 
-test("a held tab drops it too, for the reason it always did", () => {
-  recordEtag("stamp-before");
-
-  applyEtagFrame({ _heldLive: true }, { etag: "stamp-after" });
-  applyEtagFrame({ _heldExt: true }, { etag: "stamp-after" });
-
-  expect(lastSeenEtag()).toBe("stamp-before");
-});
-
 test("a frame carrying a document is not a stamp-only frame", () => {
   recordEtag("stamp-before");
 

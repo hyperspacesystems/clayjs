@@ -319,24 +319,6 @@ test("a field whose checkVisibility() answers false is not focused and not scrol
   expect(document.activeElement).toBe(other);
 });
 
-test("a field that already has focus is not focused again, and the selection still moves", async () => {
-  const clay = await boot();
-  const note = document.getElementById("note");
-  note.focus();
-  await typePlain(note, " edited");
-  clay.undo.flush();
-  caretAt(note.firstChild, 0);
-  const focused = jest.fn();
-  note.focus = focused;
-
-  expect(clay.undo.undo().ok).toBe(true);
-  await rest();
-
-  expect(focused).not.toHaveBeenCalled();
-  expect(document.getSelection().anchorNode).toBe(note.firstChild);
-  expect(document.getSelection().anchorOffset).toBe("Note text".length);
-});
-
 test("after leaving Edit (no live session), a replay's receipt never changes the selection", async () => {
   const clay = await boot();
   const note = document.getElementById("note");

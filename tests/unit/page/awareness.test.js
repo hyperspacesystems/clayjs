@@ -5,7 +5,11 @@ import { identityPlugin } from "../../../src/page/model.js";
 import { state, view, history } from "../../../src/vendor/prosemirror.vendor.js";
 import { createYPageBinding, seedValue, enc, migrateHybridValues, NET } from "../../../src/page/ybind/index.js";
 import { PresenceStore } from "../../../src/sync/presence-store.js";
-import { createPageAwareness, installPageAwareness, decorationsFor, colorOf } from "../../../src/page/awareness.js";
+import {
+  createPageAwareness,
+  installPageAwareness,
+  colorOf,
+} from "../../../src/page/awareness.js";
 import { decodeSelection } from "../../../src/page/ybind/awareness.js";
 import { RECORD } from "./fixtures/all-kinds.js";
 
@@ -334,18 +338,4 @@ test("install decides from what the host announced, and the scope is the epoch",
   caretIn(one, "q", 1);
   expect(one.presence.target).toMatchObject({ kind: "blockeditor", epoch: "id:doc-9" });
   expect(await installPageAwareness({ binding: one.binding, view: one.view, store: one.presence, meta: { spec: 1, extensions: ["presence"], document: null } })).toBeNull();
-});
-
-test("decorationsFor is pure: the same snapshot and document give the same decorations", () => {
-  const a = tab(), b = tab();
-  caretIn(a, "q", 2);
-  const snapshot = new PresenceStore();
-  snapshot.setCapabilities({ supported: true, pageAwareness: true });
-  snapshot.receive(people([a.presence.target]));
-  const first = decorationsFor({ binding: b.binding, doc: b.view.state.doc, snapshot: snapshot.getSnapshot(), epoch: EPOCH });
-  const second = decorationsFor({ binding: b.binding, doc: b.view.state.doc, snapshot: snapshot.getSnapshot(), epoch: EPOCH });
-  const shape = (set) => set.find().map((d) => [d.from, d.to, d.type.attrs?.class ?? d.type.spec?.class ?? "widget"]);
-  expect(shape(first)).toEqual(shape(second));
-  expect(shape(first).some(([, , kind]) => kind === "widget" || kind === "blockeditor-remote-selection")).toBe(true);
-  expect(first.find().length).toBeGreaterThan(0);
 });

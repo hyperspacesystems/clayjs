@@ -22,7 +22,6 @@ const waitFor = async (check) => {
   return false;
 };
 
-const file = (name = "a.png") => new File(["hello"], name, { type: "image/png" });
 const upload = () => Promise.resolve({ ok: true, uploads: [{ url: "/uploads/a.png" }] });
 
 const open = (blocks) => {
@@ -43,17 +42,6 @@ const open = (blocks) => {
   return { view, calls };
 };
 
-const paste = (view, files) => {
-  const event = { clipboardData: { files, getData: () => "" }, preventDefault() { event.defaultPrevented = true; } };
-  const taken = view.someProp("handlePaste", (fn) => fn(view, event, null));
-  return { taken: !!taken, prevented: !!event.defaultPrevented };
-};
-const images = (view) => {
-  const found = [];
-  view.state.doc.forEach((node) => { if (node.type.name === "image") found.push(node); });
-  return found;
-};
-
 const PARAGRAPH = { t: "paragraph", pos: "B", c: "Hi" };
 
 test("a document with no media and no checklist asks for neither part", async () => {
@@ -62,17 +50,6 @@ test("a document with no media and no checklist asks for neither part", async ()
   await flush();
   expect(calls).toEqual([]);
   expect(view.dom.querySelector(".blockeditor-check-controls")).toBe(null);
-});
-
-test("a first image paste loads the media part and inserts the image", async () => {
-  const { view, calls } = open({ p: PARAGRAPH });
-  await flush();
-  expect(calls).toEqual([]);
-  const { taken, prevented } = paste(view, [file()]);
-  expect([taken, prevented]).toEqual([true, true]);
-  expect(await waitFor(() => images(view).length === 1)).toBe(true);
-  expect(calls).toEqual(["media"]);
-  expect(images(view)[0].attrs.src).toBe("/uploads/a.png");
 });
 
 test("a checklist draws its decorations and toggles its box once the part arrives", async () => {

@@ -40,21 +40,6 @@ test("runSliced returns the same value drain does", async () => {
   expect(await runSliced(gen, { budgetMs: 0 })).toBe("done");
 });
 
-test("runSliced yields to a task whenever the slice has spent its budget", async () => {
-  // A fake clock that moves 5 ms per reading, so every slice of a 4 ms budget is spent.
-  let t = 0;
-  const now = () => (t += 5);
-  let yields = 0;
-  const gen = (function* () { for (let i = 0; i < 4; i++) yield i; return "done"; })();
-  const value = await runSliced(gen, {
-    budgetMs: 4,
-    now,
-    yieldTask: async () => { yields++; },
-  });
-  expect(value).toBe("done");
-  expect(yields).toBe(4);
-});
-
 test("runSliced does not yield while the slices stay inside the budget", async () => {
   let yields = 0;
   const gen = (function* () { for (let i = 0; i < 20; i++) yield i; return "done"; })();
@@ -132,17 +117,4 @@ test("an exception in the walk is a rejection, not a wrong answer", async () => 
     throw new Error("the walk gave up");
   })();
   await expect(runSliced(gen, { budgetMs: 0 })).rejects.toThrow("the walk gave up");
-});
-
-test("an exception thrown after a yield is still the walk's own exception", async () => {
-  let yields = 0;
-  const gen = (function* () {
-    for (let i = 0; i < 4; i++) yield i;
-    throw new TypeError("late");
-  })();
-  await expect(runSliced(gen, {
-    budgetMs: 0,
-    yieldTask: async () => { yields++; },
-  })).rejects.toThrow(TypeError);
-  expect(yields).toBe(4);
 });

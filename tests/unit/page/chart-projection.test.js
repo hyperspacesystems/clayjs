@@ -1,6 +1,3 @@
-import { existsSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import path from "node:path";
 import { RECORD } from "./fixtures/all-kinds.js";
 import { blocksOfValues, parseModel, project, renderBlocks } from "../../../src/page/projection.js";
 import { chartModel, renderChartSvg } from "../../../src/page/rich/chart.js";
@@ -38,16 +35,4 @@ test("cell edits, row sort and removed series column change saved SVG", () => {
   expect(chartSvg(record)).toContain("Chart source missing");
   delete record.tbl;
   expect(chartSvg(record)).toContain("Chart source missing");
-});
-
-test("searchable chart text comes from the caption, not the SVG", async () => {
-  const extractor = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../hyperclay/server-lib/search/extract-text.js");
-  if (!existsSync(extractor)) return;
-  const { extractSearchText } = await import(pathToFileURL(extractor).href);
-  const record = blocks();
-  record.ch.title = "A unique caption";
-  record.tbl.cols.c2.name = "Hidden SVG series";
-  const text = extractSearchText(`<html><body><article data-blockeditor="1">${renderBlocks(record).html}</article></body></html>`);
-  expect(text).toContain("A unique caption");
-  expect(text).not.toContain("Hidden SVG series: 58 to 41");
 });

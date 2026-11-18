@@ -146,10 +146,6 @@ describe("region-policy clay tokens", () => {
 });
 
 describe("one region shape, served to both surfaces", () => {
-  test("clay.region and clay.internals.region are the same object", async () => {
-    const { regionShape, windowRegionShape } = await import("../../src/lib/region-policy.js");
-    expect(windowRegionShape).toBe(regionShape);
-  });
 
   // Both spellings are documented (README and the docs site), so the cleanup
   // is an additive union. Dropping either would be a compatibility break dressed

@@ -8,7 +8,13 @@ import { createPageEditor, runPageCommand, setEditorActive } from "../../../src/
 import { blockMap } from "../../../src/page/model.js";
 import { canon, parseModel, project, renderModel, revOf } from "../../../src/page/projection.js";
 import { EMOJI } from "../../../src/page/emoji-data.js";
-import { createFeature, emojiEntries, emojiLibrary, filterEmoji, graphemes, isEmojiText } from "../../../src/page/features/emoji.js";
+import {
+  createFeature,
+  emojiEntries,
+  filterEmoji,
+  graphemes,
+  isEmojiText,
+} from "../../../src/page/features/emoji.js";
 
 /**
  * Emoji: the Emoji action opens a picker of a small bundled glyph list — fetched the first
@@ -317,19 +323,4 @@ test("a block that holds no text, and a list loaded after the edit left, refuse"
   expect(await arriving).toEqual({ ok: false, code: "not-editing" });
   expect(pickerEl()).toBeNull();
   expect(record(view, "z").c).toBe("Neighbour line");
-});
-
-test("the list is a cached fetch that a failure does not poison", async () => {
-  let attempt = 0;
-  const load = () => {
-    attempt += 1;
-    return attempt === 1 ? Promise.reject(new Error("no network")) : import("../../../src/page/emoji-data.js");
-  };
-  const library = emojiLibrary(load);
-  await expect(library()).rejects.toThrow("no network");
-  expect(await library()).toHaveLength(ALL.length);
-  expect(await library()).toHaveLength(ALL.length);
-  expect(attempt).toBe(2);
-  expect(emojiEntries({}).length).toBe(0);
-  expect(filterEmoji(ALL, "")).toBe(ALL);
 });

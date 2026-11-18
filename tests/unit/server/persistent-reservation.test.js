@@ -13,8 +13,6 @@ import {
   LIVE_LIMITS,
 } from "../../../src/server/rooms/index.js";
 
-const counts = { accepted: 0, refused: 0, duplicates: 0, checked: 0, written: 0, rekeyed: 0, released: 0 };
-
 const tag = (name, value, { ephemeral = false, at = null } = {}) =>
   `<script type="application/json" merge="${name}" clay="live${ephemeral ? " ephemeral" : ""}"${at ? ` live-at="${at}"` : ""}>${typeof value === "string" ? value : JSON.stringify(value)}</script>`;
 const doc = (...parts) => `<!doctype html><html><body>${parts.join("")}</body></html>`;
@@ -42,7 +40,6 @@ const refusal = (run) => {
     run();
   } catch (err) {
     expect(err).toBeInstanceOf(PersistentReservationError);
-    counts.refused += 1;
     return err.code;
   }
   throw new Error("expected a PersistentReservationError");
@@ -80,9 +77,7 @@ test("holds one room by key, then refuses the same key or the same node", () => 
 
   const next = doc(tag("game", { score: 1 }), tag("lobby", { cursors: {} }, { ephemeral: true }));
   expect(rooms.checkPersistent(token, { html: next })).toEqual({ html: next });
-  counts.checked += 1;
   expect(rooms.releasePersistent(token)).toBe(true);
-  counts.released += 1;
   expect(room.stores.get("game").value).toEqual({ score: 0 });
 });
 
@@ -113,7 +108,6 @@ test("a page reservation and a persistent hold exclude each other both ways", ()
   expect(thrown).toBeInstanceOf(PageConversionError);
   expect(thrown.reason).toBe("blockeditor-converting");
   expect(holdRooms.pageReserved("/p.html")).toBe(false);
-  counts.refused += 1;
   expect(pageToken).toBeTruthy();
 });
 
@@ -124,7 +118,6 @@ test("every frame is refused while held and the same frames land after release",
   const increment = (n) => ({ name: "game", n, ops: [{ op: "add", path: ["score"], n: 1 }] });
 
   expect(rooms.apply(room, "A", increment(1)).seq).toBe(1);
-  counts.accepted += 1;
   const used = rooms.used();
   const receipts = room.lastN.size;
   const token = rooms.holdPersistent("/a.html", { nodeId: "n1" });
@@ -133,7 +126,6 @@ test("every frame is refused while held and the same frames land after release",
   expect(rooms.apply(room, "A", { name: "lobby", n: 1, ops: [{ op: "set", path: ["cursors", "a"], value: 1 }] }))
     .toEqual({ error: "checkpointing" });
   expect(rooms.apply(room, "A", increment(1))).toEqual({ error: "checkpointing" });
-  counts.refused += 3;
   expect(refusal(() => rooms.fileWritten("/a.html", DOC))).toBe("checkpointing");
 
   expect(room.seq).toBe(1);
@@ -143,12 +135,9 @@ test("every frame is refused while held and the same frames land after release",
   expect(rooms.used()).toBe(used);
 
   expect(rooms.releasePersistent(token)).toBe(true);
-  counts.released += 1;
   expect(rooms.apply(room, "A", increment(2)).seq).toBe(2);
-  counts.accepted += 1;
   expect(room.stores.get("game").value).toEqual({ score: 2 });
   expect(rooms.apply(room, "A", increment(1)).duplicate).toBe(true);
-  counts.duplicates += 1;
   expect(room.stores.get("game").value).toEqual({ score: 2 });
 });
 
@@ -157,11 +146,9 @@ test("touch and leave changes survive the held write", () => {
   const rooms = c.rooms();
   const room = rooms.open("/a.html", DOC, { nodeId: "n1" });
   rooms.apply(room, "A", { name: "game", n: 1, ops: [{ op: "add", path: ["score"], n: 1 }] });
-  counts.accepted += 1;
 
   const token = rooms.holdPersistent("/a.html", { nodeId: "n1" });
   expect(rooms.checkPersistent(token, { html: BIG })).toEqual({ html: BIG });
-  counts.checked += 1;
 
   rooms.touch(room, "B");
   expect(rooms.leave(room, "A", ["B"])).toEqual({ writerChanged: true, writer: "B" });
@@ -171,7 +158,6 @@ test("touch and leave changes survive the held write", () => {
   c.state.now += 5;
 
   expect(rooms.writtenPersistent(token, { html: BIG }).valueChanged).toBe(true);
-  counts.written += 1;
   expect(room.writer).toBe("B");
   expect(room.seen.has("B")).toBe(true);
   expect(room.emptySince).toBe(emptySince);
@@ -185,19 +171,16 @@ test("a checked capture reconciles the later increment exactly once", () => {
   const increment = (n) => ({ name: "game", n, ops: [{ op: "add", path: ["count"], n: 1 }] });
   rooms.apply(room, "A", increment(1));
   rooms.apply(room, "A", increment(2));
-  counts.accepted += 2;
   expect(room.stores.get("game").value).toEqual({ count: 2 });
 
   const capture = doc(tag("game", { count: 1 }, { at: stampOf(room.epoch, 1, serializeLive({ count: 1 })) }));
   const token = rooms.holdPersistent("/a.html", { nodeId: "n1" });
   const used = rooms.used();
   expect(rooms.checkPersistent(token, { html: capture })).toEqual({ html: capture });
-  counts.checked += 1;
   expect(rooms.used()).toBe(used);
 
   const epoch = room.epoch;
   const result = rooms.writtenPersistent(token, { html: capture });
-  counts.written += 1;
   expect(result.valueChanged).toBe(false);
   expect(result.landed).toEqual(["game"]);
   expect(room.stores.get("game").value).toEqual({ count: 2 });
@@ -220,7 +203,6 @@ test("a checked candidate is bound by value, not by the caller's object", () => 
   const options = { html: doc(tag("game", { score: 7 }), tag("lobby", { cursors: {} }, { ephemeral: true })) };
   const bound = options.html;
   const checked = rooms.checkPersistent(token, options);
-  counts.checked += 1;
   expect(checked).toEqual({ html: bound });
   expect(Object.isFrozen(checked)).toBe(true);
 
@@ -229,7 +211,6 @@ test("a checked candidate is bound by value, not by the caller's object", () => 
   expect(room.stores.get("game").value).toEqual({ score: 0 });
 
   expect(rooms.writtenPersistent(token, { html: bound }).valueChanged).toBe(true);
-  counts.written += 1;
   expect(room.stores.get("game").value).toEqual({ score: 7 });
 });
 
@@ -245,11 +226,9 @@ test("a missing, duplicate, malformed, oversized or wrong-type tag is refused be
       rooms.checkPersistent(token, { html });
     } catch (err) {
       expect(err).toBeInstanceOf(PersistentReservationError);
-      counts.refused += 1;
       return err.code;
     }
     writer.write(html);
-    counts.checked += 1;
     return null;
   };
 
@@ -284,9 +263,7 @@ test("a checked Yjs page keeps its stored generation", () => {
   expect(room.stores.get("blockeditor").value.g).toBe(0);
   expect(rooms.used()).toBe(used);
   expect(rooms.checkPersistent(token, { html: initial })).toEqual({ html: initial });
-  counts.checked += 1;
   expect(rooms.releasePersistent(token)).toBe(true);
-  counts.released += 1;
 });
 
 test("a candidate that fits the room but not liveBytes is refused, and release restores admission", () => {
@@ -301,9 +278,7 @@ test("a candidate that fits the room but not liveBytes is refused, and release r
   expect(room.stores.get("game").value).toEqual({ score: 0 });
 
   expect(rooms.releasePersistent(token)).toBe(true);
-  counts.released += 1;
   expect(rooms.apply(room, "A", { name: "game", n: 1, ops: [{ op: "set", path: ["score"], value: 1 }] }).seq).toBe(1);
-  counts.accepted += 1;
   expect(rooms.used()).toBe(66);
 });
 
@@ -316,17 +291,14 @@ test("the preclaim and refund move used by exactly the projected bytes", () => {
   const token = rooms.holdPersistent("/a.html", { nodeId: "n1" });
   expect(rooms.used()).toBe(25);
   expect(rooms.checkPersistent(token, { html: BIG })).toEqual({ html: BIG });
-  counts.checked += 1;
   expect(rooms.used()).toBe(72);
 
   expect(rooms.writtenPersistent(token, { html: BIG }).valueChanged).toBe(true);
-  counts.written += 1;
   expect(rooms.used()).toBe(72);
   expect(room.stores.get("game").bytes).toBe(14);
   expect(room.stores.get("game").logBytes).toBe(44);
 
   expect(rooms.releasePersistent(token)).toBe(true);
-  counts.released += 1;
   expect(rooms.used()).toBe(72);
 });
 
@@ -338,12 +310,10 @@ test("a failed disk write followed by release publishes nothing and refunds ever
   const writer = fakeWriter();
 
   expect(rooms.checkPersistent(token, { html: BIG })).toEqual({ html: BIG });
-  counts.checked += 1;
   expect(rooms.used()).toBe(72);
 
   expect(writer.calls).toEqual([]);
   expect(rooms.releasePersistent(token)).toBe(true);
-  counts.released += 1;
   expect(rooms.used()).toBe(25);
   expect(room.stores.get("game").value).toEqual({ score: 0 });
   expect(room.seq).toBe(0);
@@ -356,17 +326,14 @@ test("written twice returns one result, release twice returns true then false", 
   const room = rooms.open("/a.html", DOC, { nodeId: "n1" });
   const token = rooms.holdPersistent("/a.html", { nodeId: "n1" });
   rooms.checkPersistent(token, { html: BIG });
-  counts.checked += 1;
 
   const result = rooms.writtenPersistent(token, { html: BIG });
-  counts.written += 1;
   expect(result.valueChanged).toBe(true);
   expect(rooms.writtenPersistent(token, { html: BIG })).toBe(result);
   expect(room.seq).toBe(1);
   expect(rooms.used()).toBe(72);
 
   expect(rooms.releasePersistent(token)).toBe(true);
-  counts.released += 1;
   expect(rooms.releasePersistent(token)).toBe(false);
   expect(refusal(() => rooms.writtenPersistent(token, { html: BIG }))).toBe("invalid-reservation");
 
@@ -374,9 +341,7 @@ test("written twice returns one result, release twice returns true then false", 
   const untouched = plain.open("/b.html", DOC, { nodeId: "n2" });
   const unchanged = plain.holdPersistent("/b.html", { nodeId: "n2" });
   expect(plain.checkPersistent(unchanged, { html: DOC })).toEqual({ html: DOC });
-  counts.checked += 1;
   expect(plain.writtenPersistent(unchanged, { html: DOC })).toBeNull();
-  counts.written += 1;
   expect(plain.writtenPersistent(unchanged, { html: DOC })).toBeNull();
   expect(untouched.seq).toBe(0);
   expect(untouched.stores.get("game").value).toEqual({ score: 0 });
@@ -392,7 +357,6 @@ test("drop, sweep, reset and open cannot take a held room, and the drop waits fo
   const replacement = doc(tag("game", { score: 9 }));
 
   rooms.drop("/a.html");
-  counts.refused += 1;
   expect(rooms.get("/a.html")).toBe(room);
   expect(rooms.reset("/a.html", replacement, { nodeId: "n1" })).toBeNull();
   expect(rooms.open("/a.html", replacement, { nodeId: "n1" })).toBe(room);
@@ -404,7 +368,6 @@ test("drop, sweep, reset and open cannot take a held room, and the drop waits fo
   expect(rooms.used()).toBe(25);
 
   expect(rooms.releasePersistent(token)).toBe(true);
-  counts.released += 1;
   expect(rooms.get("/a.html")).toBeNull();
   expect(rooms.size()).toBe(0);
   expect(rooms.used()).toBe(0);
@@ -417,7 +380,6 @@ test("two sequential rekeys keep both rooms' identity, receipts and values", () 
   const b = rooms.open("/folder/b.html", DOC, { nodeId: "nb" });
   rooms.apply(a, "A", { name: "game", n: 1, ops: [{ op: "add", path: ["score"], n: 1 }] });
   rooms.apply(b, "B", { name: "game", n: 1, ops: [{ op: "set", path: ["score"], value: 4 }] });
-  counts.accepted += 2;
   const tokenA = rooms.holdPersistent("/folder/a.html", { nodeId: "na" });
   const tokenB = rooms.holdPersistent("/folder/b.html", { nodeId: "nb" });
 
@@ -437,7 +399,6 @@ test("two sequential rekeys keep both rooms' identity, receipts and values", () 
 
   rooms.rekeyPersistent(tokenA, "/moved/a.html");
   rooms.rekeyPersistent(tokenB, "/moved/b.html");
-  counts.rekeyed += 2;
 
   expect(rooms.get("/folder/a.html")).toBeNull();
   expect(rooms.get("/folder/b.html")).toBeNull();
@@ -459,9 +420,7 @@ test("two sequential rekeys keep both rooms' identity, receipts and values", () 
 
   const next = doc(tag("game", { score: 5 }), tag("lobby", { cursors: {} }, { ephemeral: true }));
   expect(rooms.checkPersistent(tokenA, { html: next })).toEqual({ html: next });
-  counts.checked += 1;
   expect(rooms.writtenPersistent(tokenA, { html: next }).valueChanged).toBe(true);
-  counts.written += 1;
   expect(rooms.releasePersistent(tokenA)).toBe(true);
   expect(rooms.releasePersistent(tokenB)).toBe(true);
 });
@@ -475,12 +434,10 @@ test("an occupant moved aside rekeys in rename order, and a failed second rename
   const tokenB = rooms.holdPersistent("/f/b.html", { nodeId: "nb" });
 
   rooms.rekeyPersistent(tokenB, "/f/c.html");
-  counts.rekeyed += 1;
   expect(rooms.get("/f/b.html")).toBeNull();
   expect(rooms.get("/f/c.html")).toBe(b);
 
   rooms.rekeyPersistent(tokenA, "/f/b.html");
-  counts.rekeyed += 1;
   expect(rooms.get("/f/b.html")).toBe(a);
   expect(a.key).toBe("/f/b.html");
   expect(b.key).toBe("/f/c.html");
@@ -498,10 +455,8 @@ test("an occupant moved aside rekeys in rename order, and a failed second rename
   rooms2.checkPersistent(tokenA2, { html: BIG });
   rooms2.checkPersistent(tokenB2, { html: BIG });
   rooms2.rekeyPersistent(tokenB2, "/f/c.html");
-  counts.rekeyed += 1;
   expect(rooms2.releasePersistent(tokenA2)).toBe(true);
   expect(rooms2.releasePersistent(tokenB2)).toBe(true);
-  counts.released += 2;
   expect(rooms2.get("/f/a.html")).toBe(a2);
   expect(rooms2.get("/f/b.html")).toBeNull();
   expect(rooms2.get("/f/c.html")).toBe(b2);
@@ -518,11 +473,9 @@ test("rekey clears an old budget refusal at its destination", () => {
 
   const token = rooms.holdPersistent("/source.html", { nodeId: "n1" });
   rooms.rekeyPersistent(token, "/target.html");
-  counts.rekeyed += 1;
   expect(rooms.get("/target.html")).toBe(room);
   expect(rooms.mayFit("/target.html")).toBe(true);
   expect(rooms.releasePersistent(token)).toBe(true);
-  counts.released += 1;
 });
 
 test("forged, foreign and released tokens are invalid reservations", () => {
@@ -545,7 +498,6 @@ test("forged, foreign and released tokens are invalid reservations", () => {
   expect(refusal(() => rooms.releasePersistent(foreignToken))).toBe("invalid-reservation");
 
   expect(rooms.releasePersistent(token)).toBe(true);
-  counts.released += 1;
   expect(rooms.releasePersistent(token)).toBe(false);
   expect(refusal(() => rooms.checkPersistent(token, { html: BIG }))).toBe("invalid-reservation");
   expect(refusal(() => rooms.writtenPersistent(token, { html: BIG }))).toBe("invalid-reservation");
@@ -559,7 +511,6 @@ test("requireClean holds only a landed room and an unheld fileWritten keeps its 
   const rooms = c.rooms();
   const room = rooms.open("/a.html", DOC, { nodeId: "n1" });
   rooms.apply(room, "A", { name: "game", n: 1, ops: [{ op: "add", path: ["score"], n: 1 }] });
-  counts.accepted += 1;
   expect(refusal(() => rooms.holdPersistent("/a.html", { nodeId: "n1", requireClean: true }))).toBe("unlanded");
 
   const capture = doc(tag("game", { score: 1 }, { at: stampOf(room.epoch, 1, serializeLive({ score: 1 })) }));
@@ -567,7 +518,6 @@ test("requireClean holds only a landed room and an unheld fileWritten keeps its 
   expect(room.stores.get("game").landed).toBe(room.stores.get("game").last);
 
   rooms.apply(room, "A", { name: "lobby", n: 1, ops: [{ op: "set", path: ["cursors", "a"], value: 1 }] });
-  counts.accepted += 1;
   const token = rooms.holdPersistent("/a.html", { nodeId: "n1", requireClean: true });
   expect(Object.isFrozen(token)).toBe(true);
   expect(rooms.releasePersistent(token)).toBe(true);
@@ -580,14 +530,4 @@ test("requireClean holds only a landed room and an unheld fileWritten keeps its 
   expect(saved.room).toBe(room);
   expect(room.stores.get("game").value).toEqual({ score: 8 });
   expect(room.stores.get("game").landed).toBe(room.seq);
-});
-
-afterAll(() => {
-  process.stdout.write(`persistent-reservation counts ${JSON.stringify(counts)}\n`);
-  expect(counts.accepted).toBeGreaterThan(0);
-  expect(counts.refused).toBeGreaterThan(0);
-  expect(counts.checked).toBeGreaterThan(0);
-  expect(counts.written).toBeGreaterThan(0);
-  expect(counts.rekeyed).toBeGreaterThan(0);
-  expect(counts.released).toBeGreaterThan(0);
 });

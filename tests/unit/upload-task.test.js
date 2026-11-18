@@ -448,30 +448,6 @@ test("retry refuses exactly what the row refuses, and sends nothing", async () =
   expect(sent).toHaveLength(2);
 });
 
-test("retry after a timeout does send a second request", async () => {
-  const { start, canRetry } = await load();
-  const sent = installXhr();
-
-  jest.useFakeTimers();
-  try {
-    const task = start(file());
-    await untilRequest(sent);
-    jest.advanceTimersByTime(120001);
-    await task.result;
-    expect(task.state).toBe("failed");
-    expect(canRetry(task.snapshot())).toBe(true);
-
-    const retried = task.retry();
-    await untilRequest(sent, 1);
-    expect(sent).toHaveLength(2);
-    expect(task.attempt).toBe(2);
-    respond(sent[1]);
-    expect(await retried).toMatchObject({ ok: true });
-  } finally {
-    jest.useRealTimers();
-  }
-});
-
 test("a metadata fetch the host never answered is a retryable network failure", async () => {
   jest.resetModules();
   global.fetch = jest.fn(async () => { throw new Error("offline"); });

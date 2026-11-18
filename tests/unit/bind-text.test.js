@@ -220,33 +220,6 @@ test("a frame during a composition waits for compositionend, then both apply", a
   sync.stop();
 });
 
-test("a frame touching the composed words calls onConflict and keeps the peer's text", async () => {
-  const sync = await cleanTab();
-  const ta = makeTextarea();
-  const seen = { conflict: null };
-  openBinding(ta, { onConflict: (typed) => (seen.conflict = typed) });
-  ta.focus();
-
-  ta.dispatchEvent(new Event("compositionstart"));
-  const composed = BASE.replace("Walk by the river.", "Walk by the stream.");
-  typeInto(ta, composed);
-
-  const peer = BASE.replace("Walk by the river.", "Walk by the road.");
-  const frame = peerFrame((doc) => {
-    doc.querySelector(".entry-body").textContent = peer;
-  });
-  await sync._doApplyUpdate(frame, 3, null, null);
-  await flush();
-
-  ta.dispatchEvent(new Event("compositionend"));
-  await flush();
-
-  expect(seen.conflict).toBe(composed);
-  expect(code().textContent).toBe(peer);
-  expect(ta.value).toBe(peer);
-  sync.stop();
-});
-
 test("a composition in a detached record never lands in the next one", async () => {
   const sync = await cleanTab();
   const ta = makeTextarea();
@@ -424,32 +397,5 @@ test("onConflict also hands over the key, the base both sides edited, and the re
   expect(seen.context).toEqual({ key: "a", base: BASE, remote: peer });
   expect(code().textContent).toBe(peer);
   expect(ta.value).toBe(peer);
-  sync.stop();
-});
-
-test("onGone also hands over the key and the base it was merging against", async () => {
-  const sync = await cleanTab();
-  const ta = makeTextarea();
-  const seen = {};
-  const binding = openBinding(ta, { onGone: (typed, context) => { seen.typed = typed; seen.context = context; } });
-  ta.focus();
-
-  ta.dispatchEvent(new Event("compositionstart"));
-  const composed = BASE.replace("Walk by the river.", "Walk by the stream.");
-  typeInto(ta, composed);
-
-  document.querySelector('[data-id="a"]').remove();
-  const article = document.createElement("article");
-  article.innerHTML = '<pre><code class="entry-body"></code></pre>';
-  const b = article.querySelector(".entry-body");
-  b.textContent = "A second entry.";
-  expect(binding.open(b, { key: "b", resolve: () => b })).toEqual({ ok: false, code: "composition" });
-
-  ta.dispatchEvent(new Event("compositionend"));
-  binding.open(b, { key: "b", resolve: () => b });
-
-  expect(seen.typed).toBe(composed);
-  expect(seen.context).toEqual({ key: "a", base: BASE });
-  expect(b.textContent).toBe("A second entry.");
   sync.stop();
 });

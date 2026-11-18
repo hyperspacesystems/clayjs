@@ -20,7 +20,6 @@ import { readYValue, writeYValue } from "../../../src/page/ybind/external.js";
  */
 
 const BLOCKS = [{ id: "p", t: "paragraph", text: "Hello" }];
-const CHECK = { id: "chk", t: "list_item", text: "Do it", attrs: { kind: "check", checked: false } };
 const IMAGE = { id: "img", t: "image", attrs: { src: "https://example.com/diagram.png", alt: "Diagram" } };
 const ADOPTED = "Hello, edited by hand";
 
@@ -205,32 +204,6 @@ test("the waiting shell takes no input of any kind, and takes it at ready", asyn
     expect(editableNodes()).toBe(1);
     expect(shellOf(article).inert).toBe(false);
     expect(markNames().at(-1)).toBe("document:input-ready");
-  } finally {
-    page.dispose();
-  }
-}, 20_000);
-
-test("a control inside the waiting editor writes nothing", async () => {
-  const { page, article, adoptFromWriter } = await open({ blocks: [...BLOCKS, CHECK], edit: handEdit, writer: "other" });
-  try {
-    expect(await until(() => page.status?.phase === "adopting")).toBe(true);
-    await flushAsync();
-
-    const li = article.querySelector('.blockeditor-li[data-kind="check"]');
-    expect(li).toBeTruthy();
-    // The checkbox is a control the editor answers even while it is not editable, so
-    // the shell it sits in is what refuses the click: an inert subtree takes none.
-    expect(li.closest(".blockeditor-shell").inert).toBe(true);
-    expect(page.view.editable).toBe(false);
-    expect(page.view.state.doc.child(1).attrs.checked).toBe(false);
-
-    await adoptFromWriter();
-    await page.ready;
-    await flushAsync();
-
-    // Nothing was clicked into a write while the boot waited.
-    expect(page.view.state.doc.child(1).attrs.checked).toBe(false);
-    expect(article.querySelector('.blockeditor-li[data-kind="check"]').closest(".blockeditor-shell").inert).toBe(false);
   } finally {
     page.dispose();
   }

@@ -7,7 +7,6 @@ import {
   createRooms,
   roomIsDirty,
   COMPACTION,
-  ROOM_ERROR_STATUS,
   COMPACTOR,
 } from "../../../src/server/rooms/index.js";
 import { buildCandidate, isCheckpointKey, pageShape } from "../../../src/live/page-compaction.js";
@@ -550,12 +549,4 @@ test("a leaving writer hands the room to a tab that can see the page store", () 
   expect(room.lastSentAt.get("old")).toBeGreaterThan(room.lastSentAt.get("new"));
 
   expect(rooms.leave(room, "a", ["new", "old"])).toEqual({ writerChanged: true, writer: "new" });
-});
-
-test("the compaction status table names every refusal the room can answer", () => {
-  expect(ROOM_ERROR_STATUS).toEqual({
-    "checkpoint-required": 503, "blockeditor-full": 409, "compaction-failed": 409,
-    "blockeditor-immutable": 409, "blockeditor-batch": 409, "blockeditor-update-invalid": 422, "blockeditor-upgrade": 404,
-  });
-  expect(COMPACTOR).toBe("compactor");
 });

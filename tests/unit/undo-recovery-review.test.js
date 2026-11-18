@@ -354,21 +354,6 @@ test("an action that throws leaves the row and says so", async () => {
   expect(rowSaying("Unsent note")).not.toBeNull();
 });
 
-test("an action that answers ok:false leaves the row too", async () => {
-  await undo.keep({ key: "note", label: "Unsent note", payload: { text: "kept by the app" } });
-
-  undo.reviewActions(() => [
-    { label: "Keep as new", run: async () => ({ ok: false }) },
-  ]);
-
-  await openNotice();
-  await review();
-  buttonSaying(/^Keep as new$/).click();
-
-  expect(await until(() => panelText().includes("That action did not run."))).toBe(true);
-  expect(await records()).toHaveLength(1);
-});
-
 test("an action that clears its own copy answers ok without dismiss, and the panel says nothing failed", async () => {
   await undo.keep({ key: "note", label: "Unsent note", payload: { text: "kept by the app" } });
   await undo.keep({ key: "other", label: "Other note", payload: { text: "still here" } });

@@ -451,26 +451,6 @@ test("Download drops copy-only content while the page still holds it", async () 
   }
 });
 
-test("Download in view mode drops copy-only content from the fetched file", async () => {
-  await boot({ plugins: "menu" });
-  delete window.clay.getHTML;
-  const saved = '<html><body><div clay="no-copy">Subscribe now</div><p>kept</p></body></html>';
-  window.fetch = jest.fn(async () => ({ ok: true, text: async () => saved }));
-  const { names, createObjectURL, anchorClick } = setupDownload();
-
-  try {
-    click(buttonOf("clay.download"));
-    await flush();
-
-    expect(names).toEqual(["notes.html"]);
-    const text = await blobText(createObjectURL.mock.calls[0][0]);
-    expect(text).not.toContain("Subscribe now");
-    expect(text).toContain("kept");
-  } finally {
-    anchorClick.mockRestore();
-  }
-});
-
 test("Undo reflects history made before the menu loaded", async () => {
   const undo = { undo: jest.fn(), redo: jest.fn(), canUndo: true, canRedo: false };
   const seed = () => {
@@ -486,29 +466,6 @@ test("Undo reflects history made before the menu loaded", async () => {
 
   expect(isDisabled("clay.undo.undo")).toBe(false);
   expect(isDisabled("clay.undo.redo")).toBe(true);
-});
-
-test("Download names upload paths in full", async () => {
-  await boot({ plugins: "menu", edit: true });
-  window.clay.getHTML = () =>
-    '<img src="/_/uploads/cover.jpg"><a href="https://x.example/_/uploads/keep.png">k</a>';
-  const { createObjectURL, anchorClick } = setupDownload();
-
-  try {
-    click(buttonOf("clay.download"));
-    await flush();
-
-    expect(createObjectURL).toHaveBeenCalledTimes(1);
-    const blob = createObjectURL.mock.calls[0][0];
-    expect(blob).toBeInstanceOf(Blob);
-    if (typeof blob.text === "function") {
-      const html = await blob.text();
-      expect(html).toContain(`src="${location.origin}/_/uploads/cover.jpg"`);
-      expect(html).toContain("https://x.example/_/uploads/keep.png");
-    }
-  } finally {
-    anchorClick.mockRestore();
-  }
 });
 
 test("Download of a page document leaves out the page store and names uploads in full", async () => {

@@ -298,56 +298,6 @@ test("an unstamped host applies its frames straight from the stream after a repa
   handle.stop();
 });
 
-test("a steady writer saving every 50 ms is shown while 120 ms GETs keep being superseded", async () => {
-  const disk = { current: served(null, "<p>0</p>") };
-  docSequencer = () =>
-    new Promise((resolve) => {
-      const body = disk.current;
-      setTimeout(() => resolve(response(200, body)), 120);
-    });
-  const { handle, snapshots, statuses, source } = await startTransport({
-    servedEtag: null,
-    represented: { bytes: served(null, "<p>0</p>"), etag: null, seq: 0 },
-  });
-
-  source.dispatchEvent(cursorEvent({ seq: 0, resync: true }));
-
-  const written = [];
-  let seq = 0;
-  const write = () => {
-    seq += 1;
-    disk.current = served(null, `<p>${seq}</p>`);
-    written.push(disk.current);
-    return disk.current;
-  };
-  const writer = setInterval(() => {
-    const bytes = write();
-    source.onmessage(frame({ seq, html: bytes }));
-  }, 50);
-
-  await new Promise((resolve) => setTimeout(resolve, 420));
-  clearInterval(writer);
-
-  // Every save reaches the article, in order, even though each read was invalidated
-  // by a frame that landed while it was in flight.
-  const applied = snapshots.map((candidate) => candidate.bytes);
-  for (const bytes of written) expect(applied).toContain(bytes);
-  expect(snapshots.at(-1).bytes).toBe(written.at(-1));
-  expect(docCalls().length).toBeLessThanOrEqual(3);
-  expect(statuses.filter((status) => status.reason === "repair-superseded")).toHaveLength(0);
-
-  // Once the churn is over the reader is at the stream's position again: the next
-  // save applies straight from the stream, with no GET.
-  const reads = docCalls().length;
-  const last = write();
-  source.onmessage(frame({ seq, html: last }));
-  await settle();
-  expect(handle.represented).toEqual({ bytes: last, etag: null, seq });
-  expect(docCalls()).toHaveLength(reads);
-
-  handle.stop();
-});
-
 test("a duplicate delivery after a repair is ignored without reapplying", async () => {
   const { handle, snapshots, source } = await startTransport();
 

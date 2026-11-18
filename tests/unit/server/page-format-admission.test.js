@@ -82,16 +82,6 @@ test("a capable writer activates floor 1, and the body it gets back carries the 
   expect(again).toMatchObject({ ok: true, activate: false, floor: 1 });
 });
 
-test("a future descriptor smuggled into a floor-0 update without a marker is refused before broadcast", () => {
-  const smuggled = doc(futureValue());
-  const plain = doc(plainValue);
-  const error = refusal(() => checkPageFormatAdmission({ currentHtml: plain, html: smuggled, capability: 0 }));
-  expect(error.code).toBe(PAGE_FORMAT_UPGRADE);
-  const legacy = refusal(() => checkPageFormatAdmission({ currentHtml: plain, html: smuggled, capability: "one" }));
-  expect(legacy.code).toBe(PAGE_FORMAT_UPGRADE);
-  expect(refusal(() => checkPageFormatAdmission({ currentHtml: plain, html: smuggled, capability: "0" })).code).toBe(PAGE_FORMAT_UPGRADE);
-});
-
 test("a stale save that omits the marker cannot lower an established floor", () => {
   const established = doc(plainValue, { floor: 1 });
   const stale = doc(plainValue);

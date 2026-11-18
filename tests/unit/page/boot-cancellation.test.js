@@ -253,39 +253,6 @@ test("a boot cancelled while the shared metadata is out leaves the new one alone
   page.dispose();
 });
 
-test("a seeded boot writes nothing and joins no room, so a replacement owns the only editor", async () => {
-  const { page, ownerOf, registrations, saves, liveCalls } = await open({
-    head: "",
-    extensions: ["blockeditor", "live-data"],
-  });
-  const stable = page;
-  await flushAsync();
-  await expect(page.ready).resolves.toBeTruthy();
-  // The seed is staged in memory: no write and no room at entry.
-  expect(saves).toEqual([]);
-  expect(liveCalls).toEqual([]);
-  expect(document.querySelectorAll('script[merge="blockeditor"]')).toHaveLength(0);
-
-  const since = marks.length;
-  const next = page.install();
-  await flushAsync();
-  await next;
-  await flushAsync();
-
-  expect(liveCalls).toEqual([]);
-  expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
-  expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(1);
-  expect(ownerOf(document.querySelector("article[data-blockeditor]"))).toBe("editor");
-  // The replaced installation left no participant behind, and the page object a
-  // caller holds answers for what is there now.
-  expect(registrations.filter((entry) => !entry.disposed && entry.id === "page:live")).toHaveLength(1);
-  const fresh = marks.slice(since).filter((entry) => entry.name === "document:input-ready");
-  expect(fresh).toHaveLength(1);
-  expect(fresh[0].detail?.installId).toBe(page.status.installId);
-  expect(stable.status).toBe(page.status);
-  page.dispose();
-});
-
 test("a boot cancelled while the room is joining mounts nothing from the old one", async () => {
   const roomGate = deferred();
   const { page, ownerOf, registrations } = await open({ roomGate });

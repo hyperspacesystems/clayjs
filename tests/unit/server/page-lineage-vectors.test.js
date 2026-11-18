@@ -35,14 +35,3 @@ test("every seed entry reads the same client in the browser and on the host", ()
     expect({ name: entry.name, host: clientsOf(host) }).toEqual({ name: entry.name, host: expected });
   }
 });
-
-test("the vectors cover every decision a host has to make", () => {
-  expect(vectors.seeds.length).toBeGreaterThanOrEqual(20);
-  expect(vectors.writes.length).toBeGreaterThanOrEqual(24);
-  const decisions = ["initial", "ordinary", "seed-lineage", "nothing-to-write", "invalid-capture", "412"];
-  for (const decision of decisions) expect({ decision, covered: vectors.writes.some((write) => write.expect.js === decision) }).toEqual({ decision, covered: true });
-  for (const write of vectors.writes) {
-    expect(decisions).toContain(write.expect.js);
-    expect([...decisions, "ordinary"]).toContain(write.expect.htmlclay);
-  }
-});

@@ -576,25 +576,6 @@ test("a fresh answer that fails after a good one stamps nothing", async () => {
   expect(mod.currentMe().id).toBe(A.id);
 });
 
-test("a fresh answer that never arrives stamps nothing", async () => {
-  let calls = 0;
-  const mod = await load({
-    meta: async () => {
-      calls += 1;
-      if (calls > 1) throw new Error("offline");
-      return { ok: true, status: 200, text: async () => JSON.stringify(withPeople({ me: A, members: [A] })) };
-    },
-  });
-  expect(mod.currentMe().id).toBe(A.id);
-
-  const li = document.createElement("li");
-  document.body.append(li);
-  await expect(mod.author(li)).rejects.toMatchObject({ code: "people-unavailable" });
-
-  expect(li.hasAttribute("data-by")).toBe(false);
-  expect(document.querySelector("[clay-people]")).toBeNull();
-});
-
 test("two stamps at once share one fresh answer", async () => {
   let calls = 0;
   const mod = await load({

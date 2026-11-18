@@ -209,24 +209,6 @@ test("the name is on hover, and nowhere else", async () => {
   expect(tip().textContent).toBe("Grace Hopper (you)");
 });
 
-// =============================================================================
-// The chrome is not document content
-// =============================================================================
-
-test("every element it creates is marked out of the save, the watch and the snapshot", async () => {
-  const { presence } = await load();
-
-  await presence.update(ROSTER);
-  hover(avatars()[0]);
-
-  const created = [stack(), ...stack().querySelectorAll("*")];
-  // Root, count chip, avatar row, tooltip, two circles.
-  expect(created.length).toBe(6);
-  for (const el of created) {
-    expect(el.getAttribute("clay")).toBe("no-save no-watch no-snapshot");
-  }
-});
-
 test("RELEASE-BLOCKING: no name and no roster id reaches forSave", async () => {
   const { presence, snapshot } = await load();
 

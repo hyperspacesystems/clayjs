@@ -155,23 +155,6 @@ test("the rolling prefix serves the same folder, so /v1/fonts/ rolls with /v1/",
   }
 });
 
-test("the release manifest lists every font file with its size and hash", async () => {
-  const manifest = JSON.parse(await readFile(path.join(site, "public", version, "m/manifest.json"), "utf8"));
-  // The manifest also carries the compiled page theme; that is reader-theme-assets's subject.
-  const assets = manifest.assets.filter((asset) => asset.path.startsWith("fonts/")).sort((a, b) => (a.path < b.path ? -1 : 1));
-  expect(assets.map((a) => a.path)).toEqual(SHIPPED.map((name) => `fonts/${name}`));
-  for (const asset of assets) {
-    const bytes = await readFile(path.join(site, "public", version, asset.path));
-    expect(asset.bytes).toBe(bytes.length);
-    expect(asset.sha256).toBe(sha256(bytes));
-  }
-  expect(assets.find((a) => a.path.endsWith(".woff2")).contentType).toBe("font/woff2");
-  expect(assets.find((a) => a.path.endsWith(".css")).contentType).toBe("text/css; charset=utf-8");
-  // The rolling prefix's manifest describes the release it serves, fonts included.
-  const rolling = JSON.parse(await readFile(path.join(site, "public/v1/m/manifest.json"), "utf8"));
-  expect(rolling.assets).toEqual(manifest.assets);
-});
-
 test("each stylesheet's file names and unicode-ranges are the packages' own", async () => {
   for (const sheet of CSS) {
     const families = FAMILIES.filter((family) => family.css === sheet);

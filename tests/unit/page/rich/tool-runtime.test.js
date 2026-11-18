@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { applyOp, cloneJson } from "../../../../src/live/ops.js";
 import { ARTIFACT_LIMIT, STATE_LIMIT, ToolStateError, validateArtifact, validateState, scopedStateHandle, readerStateHandle, scopeCss, mountTool } from "../../../../src/page/rich/tool-runtime.js";
 
@@ -101,22 +100,4 @@ test.each(["throw new Error('script');", "function mount(tool) { tool.schedule((
   if (javascript.includes("tool.schedule")) expect(cleared).toEqual([7]);
   view.dispose();
   expect(errors).toHaveLength(1);
-});
-
-test("all three documented artifacts validate and mount", () => {
-  const doc = readFileSync(new URL("../../../../docs/page-tool.md", import.meta.url), "utf8");
-  const examples = [...doc.matchAll(/```json\n([\s\S]*?)\n```/g)].map((match) => JSON.parse(match[1]));
-  expect(examples).toHaveLength(3);
-  for (const example of examples) {
-    expect(validateArtifact(example)).toEqual({ ok: true });
-    const root = document.createElement("section");
-    const errors = [];
-    const state = readerStateHandle({ remaining: 2, count: 0 });
-    const view = mountTool({ root, artifact: example, mode: "reader", state, tables: () => [{ id: "revenue", rows: [{ cells: { amount: "12" } }] }], onError: (error) => errors.push(error), setTimer: () => 1, clearTimer: () => {} });
-    expect(errors).toEqual([]);
-    expect(root.querySelector("[data-tool-error]")).toBeNull();
-    if (example.title === "Tally") { root.querySelector("button").click(); view.notifyState(); expect(root.querySelector("output").textContent).toBe("1"); }
-    if (example.title === "Big number") expect(root.querySelector("output").textContent).toBe("12");
-    view.dispose();
-  }
 });

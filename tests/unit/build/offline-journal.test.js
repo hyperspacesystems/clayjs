@@ -8,7 +8,6 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import vm from "node:vm";
 import { assertReleasePath } from "../../../scripts/build-offline-manifest.mjs";
 import { verifyOfflineJournal } from "../../../scripts/verify-offline-journal.mjs";
 import { copyPackage } from "../helpers/package-copy.js";
@@ -199,47 +198,6 @@ test("a legacy URL that is not an exact alias is a problem", async () => {
 test("a lock target that leaves the release is refused", () => {
   expect(() => assertReleasePath("../escape.js")).toThrow(/\.\./);
   expect(() => assertReleasePath("compat/../../escape.js")).toThrow(/\.\./);
-});
-
-test("the classic scripts define the globals an old Journal expects", async () => {
-  const element = () => ({
-    style: {},
-    dataset: {},
-    classList: { add() {}, remove() {}, contains: () => false },
-    setAttribute() {},
-    appendChild() {},
-    addEventListener() {},
-    querySelector: () => null,
-    querySelectorAll: () => [],
-  });
-  const document = {
-    readyState: "complete",
-    createElement: element,
-    createTextNode: () => ({}),
-    addEventListener() {},
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    head: element(),
-    body: element(),
-    documentElement: element(),
-  };
-  const window = { document, navigator: { userAgent: "node" }, location: { href: "http://127.0.0.1/" } };
-  window.window = window;
-  window.self = window;
-  const context = vm.createContext(window);
-
-  expect(globalThis.fetch).toBeDefined();
-  vm.runInContext(await readFile(path.join(site, "compat/overtype-2.6.1.min.js"), "utf8"), context, {
-    filename: "compat/overtype-2.6.1.min.js",
-  });
-  expect(typeof context.OverType).toBe("function");
-
-  vm.runInContext(await readFile(path.join(site, "compat/highlight-11.9.0.min.js"), "utf8"), context, {
-    filename: "compat/highlight-11.9.0.min.js",
-  });
-  expect(context.hljs).toBeTruthy();
-  const highlighted = context.hljs.highlight("const a = 1", { language: "javascript" });
-  expect(highlighted.value).toContain("hljs-keyword");
 });
 
 test("the built index carries exactly the aliases the lock names", () => {

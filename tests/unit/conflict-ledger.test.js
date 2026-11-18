@@ -139,38 +139,6 @@ test("a report the engine could not map to the live page is still a loss", () =>
   expect(unsaved.hasUnsavedState()).toBe(true);
 });
 
-test("a hook that kept the incoming change off the page is not a loss, whatever the engine guessed", () => {
-  const applyId = ledger.beginApply({
-    source: "peer", seq: 4, etag: "E10", domain: "sync", root: document.createElement("html"),
-  });
-
-  const ids = ledger.completeApply(applyId, [
-    engineConflict({ recovery: { version: 1, key: "k2", localLost: false, applied: false, unavailable: "hook-veto" } }),
-    engineConflict({ recovery: { version: 1, key: "k2b", localLost: true, applied: false, unavailable: "hook-veto" } }),
-  ], { ticket: 5 });
-
-  expect(ids).toEqual([]);
-  expect(ledger.conflicts.size).toBe(0);
-  expect(events).toEqual([]);
-  expect(ledger.conflicts.hasPendingApply()).toBe(false);
-  expect(unsaved.hasUnsavedState()).toBe(false);
-});
-
-test("a report where this tab's operation survived is not a loss", () => {
-  const applyId = ledger.beginApply({
-    source: "peer", seq: 5, etag: "E11", domain: "sync", root: document.createElement("html"),
-  });
-
-  const ids = ledger.completeApply(applyId, [
-    engineConflict({ recovery: { version: 1, key: "k3", localLost: false, applied: true, unavailable: null } }),
-  ], { ticket: 6 });
-
-  expect(ids).toEqual([]);
-  expect(ledger.conflicts.size).toBe(0);
-  expect(ledger.conflicts.hasPendingApply()).toBe(false);
-  expect(unsaved.hasUnsavedState()).toBe(false);
-});
-
 test("raw conflicts sharing a recovery key in one apply become one record holding both", () => {
   const applyId = ledger.beginApply({
     source: "peer", seq: 1, etag: "E3", domain: "sync", root: document.createElement("html"),

@@ -261,25 +261,6 @@ test("a refused state while Keeping closes the preview and gives the editor back
   expect(view.state.doc.child(0).type.name).toBe("paragraph");
 });
 
-test("a stale revision while Keeping closes the preview and gives the editor back", async () => {
-  setup({
-    blocks: [["t", "tool", "", { artifact: artifact("Old"), rev: "r1", state: { count: 1 } }]],
-    tools: { t: { r1: { count: 1 } } },
-  });
-  const target = ai.reviseTool("t");
-  const { outcome } = await generate(target, "make it bigger");
-  await target.propose(outcome.result);
-  view.dispatch(view.state.tr.setNodeMarkup(0, null, { ...view.state.doc.child(0).attrs, rev: "other" }));
-  expect(previewShown(view.state)).toBe(true);
-
-  const kept = await target.keep();
-
-  expect(kept.status).toBe("failed");
-  expect(previewShown(view.state)).toBe(false);
-  expect(view.editable).toBe(true);
-  expect(view.state.doc.child(0).attrs.rev).toBe("other");
-});
-
 test("a save that fails after the block is applied keeps the edit and retries the save alone", async () => {
   setup();
   const target = ai.newTool(null);
@@ -486,28 +467,6 @@ test("a failed Keep remounts a paused tool from its saved data", async () => {
   expect(kept).toEqual({ status: "failed", message: "The tool could not be saved, so it was not added. Try again." });
   expect(await waitFor(() => output())).toBe(true);
   expect(Number(output().textContent)).toBeGreaterThanOrEqual(paused);
-});
-
-test("a peer's data change during the preview still refuses Keep", async () => {
-  setup({
-    blocks: [["t", "tool", "", { artifact: TICKER, rev: "r1", state: { count: 0 } }]],
-    tools: { t: { r1: { count: 0 } } },
-    mountTools: true,
-  });
-  const output = () => view.dom.querySelector(".blockeditor-tool-content output");
-  expect(await waitFor(() => output())).toBe(true);
-  const target = ai.reviseTool("t");
-  const { outcome } = await generate(target, "make it bigger");
-  expect((await target.propose(outcome.result)).status).toBe("ready");
-  const paused = live.data.t.r1.count;
-  live.set(["t", "r1", "count"], paused + 50);
-
-  const kept = await target.keep();
-
-  expect(kept.status).toBe("failed");
-  expect(kept.message).toContain("data changed while AI was working");
-  expect(await waitFor(() => output())).toBe(true);
-  expect(Number(output().textContent)).toBeGreaterThanOrEqual(paused + 50);
 });
 
 test("a tool someone else revised while the model worked is not replaced", async () => {

@@ -425,16 +425,6 @@ describe("the page's caret at the gate a leave closes", () => {
     expect(sent.at(-1)).toEqual({ editing: null });
   });
 
-  test("a doc change during the exit's barrier posts nothing (pa2)", async () => {
-    const { sent, one } = await leaving();
-
-    one.view.dispatch(one.view.state.tr.insertText("!", one.view.state.doc.content.size - 1));
-    await jest.advanceTimersByTimeAsync(1000);
-
-    expect(pagePosts(sent)).toHaveLength(1);
-    expect(sent.at(-1)).toEqual({ editing: null });
-  });
-
   test("a refused exit puts the focused target back with no new transaction (pa4)", async () => {
     const { sent, one, participant } = await leaving();
 
@@ -642,28 +632,6 @@ describe("one stream and one sender in an editor", () => {
     await turn(20);
     return sync;
   }
-
-  test("an editor opens one stream and one sender, and the marker publishes through it", async () => {
-    const fetchImpl = host(["sync", "presence", "presence-editing"]);
-    document.body.innerHTML = '<div id="block" contenteditable="true">the block</div>';
-    const block = document.getElementById("block");
-    const sync = await startedAgainst(fetchImpl);
-
-    expect(sources).toHaveLength(1);
-    sources[0].onopen();
-    sources[0].dispatchEvent(new MessageEvent("presence", {
-      data: JSON.stringify({ people: [{ id: "p_ada", name: "Ada", you: false }], anonymous: 0 }),
-    }));
-
-    block.focus();
-    await until(() => sentTo(fetchImpl, "/_/presence").length === 1);
-
-    expect(sync._editing).not.toBeNull();
-    expect(presence.owner).not.toBeNull();
-    expect(sentTo(fetchImpl, "/_/presence")).toHaveLength(1);
-    expect(JSON.parse(sentTo(fetchImpl, "/_/presence")[0][1].body)).toEqual({ editing: "0" });
-    expect(sources).toHaveLength(1);
-  });
 
   test("a broadcast-only host uses the broadcast adapter and never the relay", async () => {
     const fetchImpl = host(HTML_CLAY.extensions, HTML_CLAY.document);

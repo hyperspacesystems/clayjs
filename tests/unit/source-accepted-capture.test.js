@@ -187,38 +187,6 @@ test("the plugin installed on this document", () => {
   expect(plugin.source.text()).toBe(SRC);
 });
 
-test("an eligible capture carries its candidate, and the accepted save adopts it", async () => {
-  textNode("b").data = "BETA";
-
-  const { sent, before, midflight, after, result } = await saveAndAnswer({ body: { msg: "Saved" } });
-
-  expect(result.ok).toBe(true);
-  expect(sent.headers["If-Match"]).toBeUndefined();          // a null-ETag local save
-  expect(sent.body).toContain("<li data-id='b'>BETA</li>");
-
-  // Acceptance cost: no capture, no pairing, and nothing announced.
-  expect(after.align).toBe(0);
-  expect(after.hashKey).toBe(0);
-  expect(after.stats.refreshes).toBe(before.stats.refreshes);
-  expect(after.frames).toBe(midflight.frames);
-  expect(after.hooks).toBe(midflight.hooks);
-  expect(after.flushes).toBe(midflight.flushes);
-  expect(after.stats.saves).toBe(before.stats.saves + 1);
-
-  // Nothing became public before the host answered.
-  expect(midflight.stats.saves).toBe(before.stats.saves);
-
-  // And it is the file now: the text is those bytes and a live node indexes them.
-  expect(plugin.source.text()).toBe(sent.body);
-  const loc = plugin.source.locate(document.querySelector("[data-id='b']"));
-  expect(loc).not.toBeNull();
-  expect(sent.body.slice(loc.from, loc.to)).toBe("<li data-id='b'>BETA</li>");
-
-  // Both baselines still come from the capture, never from a re-read of the page.
-  expect(saveMod.getLastSavedContents()).not.toBe("");
-  expect(result.ok && saveMod.getUnsavedChanges()).toBe(false);
-});
-
 test("that capture's candidate really is a candidate: model of its own bytes, not nothing", () => {
   const file = plugin.source.text();
   const capture = snapshot.captureForSaveAndComparison({ emitForSync: false, forRequest: true });

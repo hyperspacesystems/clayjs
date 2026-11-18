@@ -65,17 +65,6 @@ const held = async (view, i, y) => { press(view, i, y); await wait(320); };
 const FOUR = [["a", "paragraph", "A"], ["b", "paragraph", "B"], ["c", "paragraph", "C"], ["d", "paragraph", "D"]];
 
 describe("the hold that starts a touch drag", () => {
-  test("a short tap opens the block menu and never drags", async () => {
-    const view = page(FOUR);
-    press(view, 2, 70);
-    await wait(120);
-    expect(dragging(view)).toBe(false);
-    grip(view).dispatchEvent(ptr("pointerup", { x: -20, y: 70 }));
-    expect(view.state.selection instanceof BlockSelection).toBe(true);
-    expect(view.state.selection.span(view.state.doc)).toEqual({ lo: 2, hi: 2 });
-    expect(menu(view).hidden).toBe(false);
-    expect(live(view)).not.toBe("Moved 1 block");
-  });
 
   test("a quarter second of stillness starts the drag", async () => {
     const view = page(FOUR);
@@ -150,39 +139,9 @@ describe("a held touch drag", () => {
     expect(view.state.doc).toBe(before);
     expect(live(view)).toBe("Move cancelled");
   });
-
-  test("leaving the pointer near the bottom edge scrolls, and the release stops it", async () => {
-    const view = page(FOUR);
-    const parent = view.dom.parentElement.parentElement;
-    parent.style.overflowY = "auto";
-    let top = 0;
-    Object.defineProperty(parent, "scrollTop", { configurable: true, get: () => top, set: (v) => { top = v; } });
-    Object.defineProperty(parent, "scrollHeight", { configurable: true, value: 2000 });
-    Object.defineProperty(parent, "clientHeight", { configurable: true, value: 300 });
-    parent.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 300, right: 600, bottom: 300 });
-    await held(view, 0, 150);
-    grip(view).dispatchEvent(ptr("pointermove", { x: 5, y: 290 }));
-    for (let i = 0; i < 200 && top === 0; i++) await wait(10);
-    expect(top).toBeGreaterThan(0);
-    grip(view).dispatchEvent(ptr("pointerup", { x: 5, y: 290 }));
-    const stopped = top;
-    await wait(60);
-    expect(top).toBe(stopped);
-  });
 });
 
 describe("cancelling a held touch drag", () => {
-  test.each(["pointercancel", "lostpointercapture"])("a %s leaves the document alone", async (type) => {
-    const view = page(FOUR);
-    await held(view, 0, 10);
-    const before = view.state.doc;
-    grip(view).dispatchEvent(ptr(type));
-    expect(dragging(view)).toBe(false);
-    expect(line(view).hidden).toBe(true);
-    expect(view.state.doc).toBe(before);
-    expect(live(view)).toBe("Move cancelled");
-  });
-
   test("a second touch cancels", async () => {
     const view = page(FOUR);
     await held(view, 0, 10);

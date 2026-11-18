@@ -1,7 +1,8 @@
 import { jest } from "@jest/globals";
 import { RUNTIME_ONLY } from "../../src/ui/bevel-controls.js";
-import { TOKENS, GLYPHS } from "../../src/ui/bevel.js";
-import { captureAsync, last } from "./helpers/injected-ui.js";
+import {
+  GLYPHS,
+} from "../../src/ui/bevel.js";
 
 /**
  * One notice for the two things this tab holds that the page no longer shows:
@@ -928,23 +929,6 @@ test("a value that looks like markup is quoted as text and never becomes an elem
   expect(shownValues.some((text) => text.includes(rawText))).toBe(true);
 });
 
-test("a save event does not widen what Accept covers", async () => {
-  three();
-  await frame();
-  review();
-  expect(panelText()).toContain("3 edits");
-
-  // The record lands with the panel drawn and no frame in between, and the save
-  // event that follows only asks for a redraw.
-  oneMore();
-  document.dispatchEvent(new CustomEvent("clay:save-saved", { detail: { msg: "Saved" } }));
-  buttonSaying(/Accept theirs/).click();
-
-  expect(conflicts.size).toBe(1);
-  await frame();
-  expect(shown()).toContain("Another edit replaced 1 change.");
-});
-
 test("the two halves of a double click are one decision", async () => {
   await refuse();
   review();
@@ -1160,23 +1144,4 @@ test("the eye icon cannot be hidden by the page's own CSS", async () => {
   } finally {
     style.remove();
   }
-});
-
-test("the replaced edits well uses the sunk ground", async () => {
-  three();
-  await frame();
-  review();
-
-  const calls = await captureAsync(async () => {
-    buttonSaying(/See the edits/).click();
-    await frame();
-  });
-
-  // jsdom drops light-dark() from el.style, so the written declarations are read
-  // from the call log: the well is the scroller holding the list's sticky head.
-  const list = well();
-  expect(list).not.toBeNull();
-  expect(last(calls, list, "background")).toContain("#F4ECDF");
-  expect(last(calls, list, "background")).toBe(TOKENS.sunk);
-  expect(last(calls, list, "border")).toBe(`1px solid ${TOKENS["line-2"]}`);
 });

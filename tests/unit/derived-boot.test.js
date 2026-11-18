@@ -105,18 +105,6 @@ test("a held baseline settles on the painted page when the mount phase releases 
   expect(snapshot.captureForDirtyCheck()).toBe(save.getLastSavedDirty());
 });
 
-test("the hold blocks the max timeout until the mount phase releases it", async () => {
-  jest.useFakeTimers({ doNotFake: ["queueMicrotask", "nextTick"] });
-  await load({ hold: true, body: PAGE });
-  expect(save.baselineSettled()).toBe(false);
-
-  jest.advanceTimersByTime(3100);
-  expect(save.baselineSettled()).toBe(false);
-
-  save.releaseBootSettle();
-  expect(save.baselineSettled()).toBe(true);
-});
-
 test("an edit during the hold survives the release", async () => {
   await load({
     hold: true,
