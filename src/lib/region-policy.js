@@ -46,6 +46,8 @@
 import { EXTENSION_NODE_SELECTOR } from './extension-noise.js';
 import { capabilitySelector, expandsTo, hasCapability, hasPolicyToken, POLICY_TOKENS } from './region-capabilities.js';
 import { own } from './owned-regions.js';
+import { stripEphemeral } from './ephemeral.js';
+import { ROUTE_ACTIVE_ATTR } from './root-attrs.js';
 
 export const PERSIST = { FULL: 'full', FROZEN: 'frozen', NONE: 'none' };
 
@@ -289,6 +291,23 @@ export function skipForPolicy(policy, require, skip) {
 // They had drifted into two shapes with different key spellings for the same
 // selectors, and both are documented, so this is an additive union rather than a
 // choice between them: every name either surface published still resolves.
+// The save domain's cleanup, for a detached copy a region owner writes itself (a capture
+// never walks inside an owned root): nodes no save keeps go, and so does the state that
+// describes this tab rather than the document (route-active, ephemeral state, sapjs's
+// sap-error beacon). Cleans `copy` in place; returns null when `copy` itself is not saved.
+export function cleanSaveCopy(copy) {
+  if (!copy || copy.nodeType !== 1) return copy;
+  const dropped = `${STRIP_FROM_SAVE}, ${SNAPSHOT_REMOVE_SELECTOR}`;
+  if (copy.matches(dropped)) return null;
+  for (const el of copy.querySelectorAll(dropped)) el.remove();
+  for (const el of [copy, ...copy.querySelectorAll(`[${ROUTE_ACTIVE_ATTR}], [sap-error]`)]) {
+    el.removeAttribute(ROUTE_ACTIVE_ATTR);
+    el.removeAttribute('sap-error');
+  }
+  stripEphemeral(copy);
+  return copy;
+}
+
 export const regionShape = {
   resolveRegionPolicy,
   isInert,
@@ -298,6 +317,7 @@ export const regionShape = {
   strictestPolicy,
   addRegionToken,
   own,
+  cleanSaveCopy,
   PERSIST,
   TOKENS,
   REGION_ATTRS,

@@ -66,6 +66,44 @@ describe("the sheet shell", () => {
     expect(win.geometry.rowCount).toBe(2);
   });
 
+  test("restart puts a window on a table that replaced the old one and keeps the window of a table that stayed", async () => {
+    document.body.innerHTML = `<main sap plugins="grid"><div items="sheets" sheet-workbook>${tab("s1")}${tab("s2")}</div></main>`;
+    const listeners = new Map();
+    window.Sap = {
+      grid: (table) => ({
+        on: (type, fn) => {
+          listeners.set(table, fn);
+          return () => listeners.delete(table);
+        },
+      }),
+    };
+    window.clay = { ready: Promise.resolve() };
+
+    let drops = 0;
+    const { windows, followed, restart } = startShell({ windowOptions: { ...windowOptions(), drop: () => { drops += 1; } } });
+    await followed;
+    const stayed = document.querySelector('section[data-id="s1"] table[grid]');
+    const gone = document.querySelector('section[data-id="s2"] table[grid]');
+    const kept = windows.get(stayed);
+
+    const fresh = document.createElement("table");
+    fresh.setAttribute("grid", "");
+    fresh.innerHTML = '<tbody><tr data-id="s2r1"></tr></tbody>';
+    gone.replaceWith(fresh);
+
+    // A rebuild makes new Grids: nothing listens to them until restart subscribes.
+    listeners.clear();
+    restart();
+
+    expect([...windows.keys()]).toEqual([stayed, fresh]);
+    expect(windows.get(stayed)).toBe(kept);
+    expect(windows.get(fresh).table).toBe(fresh);
+    expect(listeners.get(fresh)).toBe(windows.get(fresh).follow);
+    expect(listeners.has(gone)).toBe(false);
+    expect(listeners.get(stayed)).toBe(kept.follow);
+    expect(drops).toBe(1);
+  });
+
   test("a grid that arrives after the mount is still followed", async () => {
     document.body.innerHTML = `<main sap plugins="grid"><div items="sheets" sheet-workbook>${tab("s1")}</div></main>`;
     const listeners = new Map();

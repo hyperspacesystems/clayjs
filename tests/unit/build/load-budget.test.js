@@ -427,6 +427,7 @@ test("sheet edit: the blank sheet's exact module list", async () => {
     "src/sheet/row-window.js",
     "src/sheet/sheet.js",
     "src/sheet/shell.js",
+    "src/sheet/workbook.js",
     "src/vendor/sap-core.vendor.js",
     "src/vendor/sap-grid.vendor.js",
     "src/vendor/sap-ownership.vendor.js",
