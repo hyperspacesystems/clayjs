@@ -4,10 +4,11 @@
 import { afterAll, beforeAll, expect, test } from "@jest/globals";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { copyPackage } from "../helpers/package-copy.js";
 
 const run = promisify(execFile);
 const ROOT = path.resolve(new URL("../../..", import.meta.url).pathname);
@@ -77,7 +78,6 @@ const CSS = [...new Set(FAMILIES.map((family) => family.css))];
 const LICENSE = FAMILIES.map((family) => family.license);
 const SHIPPED = [...WOFF2, ...CSS, ...LICENSE].sort();
 
-const PACKAGE_FILES = ["build.js", "package.json", "packed-contract.json", "THIRD-PARTY-NOTICES.md"];
 const PACKAGE_DIRS = ["src", "entries", "scripts", "website", "docs", "fonts", "compat", "tool-generation", "tests/fixtures/offline-runtime"];
 
 let site;
@@ -111,9 +111,7 @@ const range = (text, file) => {
 
 beforeAll(async () => {
   site = await mkdtemp(path.join(os.tmpdir(), "clay-fonts-"));
-  for (const name of PACKAGE_FILES) await cp(path.join(ROOT, name), path.join(site, name));
-  for (const name of PACKAGE_DIRS) await cp(path.join(ROOT, name), path.join(site, name), { recursive: true });
-  await symlink(path.join(ROOT, "node_modules"), path.join(site, "node_modules"), "dir");
+  await copyPackage(site, PACKAGE_DIRS);
 
   // No published versions: one pin, the working tree's own, and /v1/ rolls to it,
   // so the build reads no registry and unpacks no tarball.

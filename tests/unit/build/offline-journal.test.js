@@ -4,19 +4,19 @@
 import { afterAll, beforeAll, expect, test } from "@jest/globals";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import vm from "node:vm";
 import { assertReleasePath } from "../../../scripts/build-offline-manifest.mjs";
 import { verifyOfflineJournal } from "../../../scripts/verify-offline-journal.mjs";
+import { copyPackage } from "../helpers/package-copy.js";
 
 const run = promisify(execFile);
 const ROOT = path.resolve(new URL("../../..", import.meta.url).pathname);
 const CLI = path.join(ROOT, "scripts/verify-offline-journal.mjs");
 
-const PACKAGE_FILES = ["build.js", "package.json", "packed-contract.json", "THIRD-PARTY-NOTICES.md"];
 const PACKAGE_DIRS = ["src", "entries", "scripts", "docs", "fonts", "compat"];
 
 // src/lib/assets.js, by the entry it imports: all nine IDs a Journal can ask for.
@@ -102,11 +102,7 @@ beforeAll(async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "clay-journal-build-"));
   scratch.push(dir);
   site = dir;
-  for (const name of PACKAGE_FILES) await cp(path.join(ROOT, name), path.join(site, name));
-  for (const name of PACKAGE_DIRS) {
-    await cp(path.join(ROOT, name), path.join(site, name), { recursive: true });
-  }
-  await symlink(path.join(ROOT, "node_modules"), path.join(site, "node_modules"), "dir");
+  await copyPackage(site, PACKAGE_DIRS);
   await run(process.execPath, ["build.js", "--standalone"], { cwd: site });
   index = JSON.parse(await readFile(path.join(site, "dist/offline-manifest.json"), "utf8"));
   chunks = JSON.parse(await readFile(path.join(site, "dist/m/manifest.json"), "utf8"));

@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, expect, test } from "@jest/globals";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink, unlink } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, unlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -12,6 +12,7 @@ import { emitChunks } from "../../../scripts/build-chunks.mjs";
 import { measureBuilt } from "../../../scripts/measure-load.mjs";
 import { verifyOfflineClosure } from "../../../scripts/verify-offline-closure.mjs";
 import { COMMAND_FEATURES } from "../../../src/page/features/registry.js";
+import { copyPackage } from "../helpers/package-copy.js";
 
 /**
  * The first switch from view to edit is an edit boot: setMode writes the receipt and reloads
@@ -36,7 +37,6 @@ const DEMAND_ONLY = [
 ];
 const FIXTURES = path.join(ROOT, "tests/fixtures/load");
 
-const PACKAGE_FILES = ["build.js", "package.json", "packed-contract.json", "THIRD-PARTY-NOTICES.md"];
 const PACKAGE_DIRS = ["src", "entries", "scripts", "website", "docs", "fonts", "compat"];
 
 let site;
@@ -73,9 +73,7 @@ const missing = (files, set) => [...set].filter((file) => !Object.hasOwn(files, 
 beforeAll(async () => {
   site = await mkdtemp(path.join(os.tmpdir(), "clay-mode-closure-"));
   scratch.push(site);
-  for (const name of PACKAGE_FILES) await cp(path.join(ROOT, name), path.join(site, name));
-  for (const name of PACKAGE_DIRS) await cp(path.join(ROOT, name), path.join(site, name), { recursive: true });
-  await symlink(path.join(ROOT, "node_modules"), path.join(site, "node_modules"), "dir");
+  await copyPackage(site, PACKAGE_DIRS);
   await run(process.execPath, ["build.js", "--standalone"], { cwd: site });
   index = JSON.parse(await readFile(path.join(site, "dist/offline-manifest.json"), "utf8"));
   chunks = JSON.parse(await readFile(path.join(site, "dist/m/manifest.json"), "utf8"));

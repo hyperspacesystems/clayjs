@@ -4,18 +4,18 @@
 import { afterAll, beforeAll, expect, test } from "@jest/globals";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { assertReleasePath, releaseFiles } from "../../../scripts/build-offline-manifest.mjs";
+import { copyPackage } from "../helpers/package-copy.js";
 
 const run = promisify(execFile);
 const ROOT = path.resolve(new URL("../../..", import.meta.url).pathname);
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
-const PACKAGE_FILES = ["build.js", "package.json", "packed-contract.json", "THIRD-PARTY-NOTICES.md"];
 const PACKAGE_DIRS = ["src", "entries", "scripts", "website", "docs", "fonts", "tool-generation"];
 
 const AUTOSAVE_DEBUG = "https://esm.sh/diff@5.2.0";
@@ -33,9 +33,7 @@ const sourceAt = (source) => path.join(site, source);
 
 beforeAll(async () => {
   site = await mkdtemp(path.join(os.tmpdir(), "clay-offline-"));
-  for (const name of PACKAGE_FILES) await cp(path.join(ROOT, name), path.join(site, name));
-  for (const name of PACKAGE_DIRS) await cp(path.join(ROOT, name), path.join(site, name), { recursive: true });
-  await symlink(path.join(ROOT, "node_modules"), path.join(site, "node_modules"), "dir");
+  await copyPackage(site, PACKAGE_DIRS);
 
   await build();
   index = JSON.parse(await readFile(path.join(site, "dist/offline-manifest.json"), "utf8"));

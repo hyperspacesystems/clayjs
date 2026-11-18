@@ -4,17 +4,17 @@
 import { afterAll, beforeAll, expect, test } from "@jest/globals";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { verifyOfflineClosure } from "../../../scripts/verify-offline-closure.mjs";
+import { copyPackage } from "../helpers/package-copy.js";
 
 const run = promisify(execFile);
 const ROOT = path.resolve(new URL("../../..", import.meta.url).pathname);
 const CLI = path.join(ROOT, "scripts/verify-offline-closure.mjs");
 
-const PACKAGE_FILES = ["build.js", "package.json", "packed-contract.json", "THIRD-PARTY-NOTICES.md"];
 const PACKAGE_DIRS = ["src", "entries", "scripts", "website", "docs", "fonts"];
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -59,9 +59,7 @@ const names = (result, target) => result.problems.some((problem) => problem.incl
 beforeAll(async () => {
   site = await mkdtemp(path.join(os.tmpdir(), "clay-closure-build-"));
   gitless.push(site);
-  for (const name of PACKAGE_FILES) await cp(path.join(ROOT, name), path.join(site, name));
-  for (const name of PACKAGE_DIRS) await cp(path.join(ROOT, name), path.join(site, name), { recursive: true });
-  await symlink(path.join(ROOT, "node_modules"), path.join(site, "node_modules"), "dir");
+  await copyPackage(site, PACKAGE_DIRS);
 
   await run(process.execPath, ["build.js", "--standalone"], { cwd: site });
   index = JSON.parse(await readFile(path.join(site, "dist/offline-manifest.json"), "utf8"));

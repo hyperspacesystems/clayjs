@@ -4,10 +4,11 @@
 import { afterAll, beforeAll, expect, test } from "@jest/globals";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { copyPackage } from "../helpers/package-copy.js";
 
 const run = promisify(execFile);
 const ROOT = path.resolve(new URL("../../..", import.meta.url).pathname);
@@ -45,7 +46,6 @@ const SHEETS = [
   { path: THEME, fonts: "../../fonts/" },
 ];
 
-const PACKAGE_FILES = ["build.js", "package.json", "packed-contract.json", "THIRD-PARTY-NOTICES.md"];
 const PACKAGE_DIRS = ["src", "entries", "scripts", "website", "docs", "fonts", "compat", "tool-generation", "tests/fixtures/offline-runtime"];
 
 let site;
@@ -91,9 +91,7 @@ const familyOf = (file) => FONTS.find((font) => font.subsets.some((subset) => fo
 
 beforeAll(async () => {
   site = await mkdtemp(path.join(os.tmpdir(), "clay-theme-"));
-  for (const name of PACKAGE_FILES) await cp(path.join(ROOT, name), path.join(site, name));
-  for (const name of PACKAGE_DIRS) await cp(path.join(ROOT, name), path.join(site, name), { recursive: true });
-  await symlink(path.join(ROOT, "node_modules"), path.join(site, "node_modules"), "dir");
+  await copyPackage(site, PACKAGE_DIRS);
 
   // No published versions: one pin, the working tree's own, and /v1/ rolls to it, so the
   // build serves this tree instead of unpacking a tarball.
@@ -228,9 +226,7 @@ test("every font the release manifest lists is inside the npm package", async ()
 test("a published version serves the compiled theme and its fonts from the tarball", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "clay-theme-published-"));
   extras.push(dir);
-  for (const name of PACKAGE_FILES) await cp(path.join(ROOT, name), path.join(dir, name));
-  for (const name of PACKAGE_DIRS) await cp(path.join(ROOT, name), path.join(dir, name), { recursive: true });
-  await symlink(path.join(ROOT, "node_modules"), path.join(dir, "node_modules"), "dir");
+  await copyPackage(dir, PACKAGE_DIRS);
   await mkdir(path.join(dir, "bin"));
 
   await run(process.execPath, ["build.js", "--standalone"], { cwd: dir });
