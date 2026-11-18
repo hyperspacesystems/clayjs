@@ -205,6 +205,8 @@ export const PLANTS = {
   "host-same-etag-not-learned": "a tab that reads a file whose commit it already has, with new bytes outside the tables, keeps the old ETag, so every save it makes is refused",
   "host-own-save-not-told": "the host's own final save of a room it keeps does not go through fileAccepted, so the kept room never learns that the file holds its edits",
   "host-same-ignores-tables": "the host classifies a write that keeps the commit record as same without comparing the tables, so a cell changed under a kept tag is erased by the room's next save",
+  "host-old-generation-reopens": "a file of an earlier generation of the room, put back by a sync, is taken as a new establishing commit, so the room reopens backwards and drops the newer generation's edits",
+  "host-commit-not-next": "the host counts any commit of the room's generation as the next one, so a sync that puts back an older commit counts as a save and the room drops the edits the newer commit held",
   "host-equal-tables-new-gen": "the outside write step does not stop when the incoming tables equal the current ones, so a title change starts a new generation",
   "wire-part-refusal-not-told": "the room refuses a paste for space when its last part lands but does not tell the author, whose answer came back for an older copy of that part, so the tab waits for its paste forever",
 };

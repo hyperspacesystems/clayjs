@@ -6,6 +6,7 @@ import { assemble } from "./frames.mjs";
 import { weigh, remember, counts, newMemory, positions, rowMayReturn } from "./recover.mjs";
 import { conflicts, fitsNow, stillOpen, unseenBy, removesOf } from "./conflict.mjs";
 import { clone } from "./lib.mjs";
+import { codec } from "./codec.mjs";
 
 export const stateReserve = (limits) => recordBudget(limits.ledgerCap, W);
 
@@ -274,6 +275,7 @@ function admitPart(env, room, part, by) {
   room.staging.delete(key);
   room.bytes.staged -= stage.size;
   const whole = assemble(stage.parts);
+  if (!(whole.k === "adopt" ? whole.items.map((item) => item.action) : [whole.action]).every((one) => codec().validate(one))) return "bad-action";
   const { action, saw, reviewed } = whole.k === "adopt" ? whole.items[0] : whole;
   if (frameBytes(action, { saw, reviewed }) !== stage.size) return "bad-size";
   const before = room.seq;

@@ -508,7 +508,7 @@ function learnFromFile(env, tab, file, snap) {
   } else env.hostMade && attached(env, tab) && file.record.commit === tab.base.commit && file.etag !== tab.base.etag && (tab.base = { ...tab.base, etag: file.etag });
 }
 function load(tab, file) {
-  tab.born === null && (tab.born = file.record.epoch), tab.gen = file.record.gen, tab.epoch = file.record.epoch, tab.state = clone(file.state), tab.a = file.record.through, tab.base = { commit: file.record.commit, etag: file.etag, through: file.record.through }, tab.tail = [], tab.pending = open(tab);
+  tab.born === null && (tab.born = file.record.epoch), tab.gen = file.record.gen, tab.epoch = file.record.epoch, tab.doc = file.record.doc, tab.state = clone(file.state), tab.a = file.record.through, tab.base = { commit: file.record.commit, etag: file.etag, through: file.record.through }, tab.tail = [], tab.pending = open(tab);
 }
 function startEstablish(env, tab, file) {
   if (tab.io) return !1;
@@ -593,7 +593,7 @@ function capture(env, tab) {
   if (!tab || !tab.alive || !tab.connected || tab.io || tab.wake || tab.fetched || ((tab.unknown || !attached(env, tab) || tab.base.etag === tab.refused) && sync(env, tab), tab.io || tab.fetched || !attached(env, tab) || tab.base.etag === tab.refused)) return !1;
   if (tab.a <= tab.base.through)
     return ledgerBytes(tab.state.seen) > ledgerMarks(env.limits.ledgerCap).rotate ? startEstablish(env, tab, env.port.read()) : !1;
-  const commit = nextCommit(env), record = { v: 2, doc: DOC, gen: tab.gen, epoch: tab.epoch, commit, parent: tab.base.commit, through: tab.a, room: tab.room.id }, state = tab.state;
+  const commit = nextCommit(env), record = { v: 2, doc: tab.doc ?? DOC, gen: tab.gen, epoch: tab.epoch, commit, parent: tab.base.commit, through: tab.a, room: tab.room.id }, state = tab.state;
   let body = () => serialize(record, state);
   return body = serialize(record, state), request(env, tab, { kind: "save", gen: tab.gen, commit, through: tab.a, etag: tab.base.etag, body, removals: env.removals ? heldRemovals(tab) : [] }), !0;
 }

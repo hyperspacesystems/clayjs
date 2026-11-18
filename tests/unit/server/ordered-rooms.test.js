@@ -1,0 +1,327 @@
+/**
+ * @jest-environment node
+ */
+// The ordered room type is what a host process calls: no I/O, the host reports every
+// accepted write. These tests drive it the way a host would, with the lab's small
+// workbook codec and a fake clock.
+import { createOrderedRooms, createRooms, LIVE_LIMITS } from "../../../src/server/rooms/index.js";
+import { serialize, parse } from "../../../src/live-room/core/record.js";
+import { useCodec } from "../../../src/live-room/core/codec.js";
+import { labLimits } from "../../../src/live-room/core/limits.js";
+import { explode } from "../../../src/live-room/core/frames.js";
+import { codec as tiny } from "../../live-room/lab/codec-tiny/reducer.mjs";
+
+const RECORD = { v: 2, doc: "doc0123456789abc", gen: "0.00000000", epoch: 0, commit: "c00000000000", parent: null, through: 0 };
+const START = { wb: { rows: { r1: { pos: "1", cells: { c1: "a" } }, r2: { pos: "2", cells: {} } } }, seen: {}, lineage: [], cut: null, floor: -1 };
+
+function setup(options = {}) {
+  let time = 1000;
+  let ids = 0;
+  const rooms = createOrderedRooms({ codecs: { tiny }, limits: labLimits(), now: () => time, newId: () => 1000 * ++ids, retainMs: 60_000, ...options });
+  useCodec(tiny);
+  const file = serialize(RECORD, START);
+  return { rooms, file, tick: (ms) => (time += ms) };
+}
+
+function opened(options) {
+  const s = setup(options);
+  const est = s.rooms.establish("doc", { bytes: s.file, etag: "e0", codec: "tiny" });
+  const room = s.rooms.open("doc", { bytes: est.bytes, etag: "e1" });
+  return { ...s, est, room, bytes: est.bytes };
+}
+
+function request(room, c, n, action) {
+  return { k: "req", gen: room.gen, c, n, p: n - 1, b: room.epoch, e: `${c}:${n}`, action, saw: tiny.seen(room.state.wb, action) };
+}
+
+function saved(room, bytes) {
+  useCodec(tiny);
+  const { record, state } = parse(bytes);
+  return serialize({ ...record, commit: "c99999999990", parent: room.base.commit, through: room.seq }, { ...state, wb: structuredClone(room.state.wb), seen: structuredClone(room.state.seen) });
+}
+
+const set = (row, col, value) => ({ t: "set", row, col, value });
+
+test("a session: the host establishes, opens after its write, admits frames and makes the receipt when it accepts the save", () => {
+  const { rooms, room, bytes, est } = opened();
+  expect(est.record.room).toBe(room.id);
+  expect(rooms.get("doc")).toBe(room);
+  const ana = rooms.attach(room, "ana", "conn-ana");
+  rooms.attach(room, "ben", "conn-ben");
+  expect(ana).toEqual({ gen: room.gen, base: room.base, tail: [] });
+  const sent = rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "ben")));
+  expect(sent.answer).toBe("ok");
+  expect(sent.send).toEqual([expect.objectContaining({ k: "act", seq: 1, c: "ben" })]);
+  expect(rooms.leave(room, "conn-ben")).toEqual({ empty: false, dirty: true, send: [] });
+  const file = saved(room, bytes);
+  const told = rooms.fileAccepted("doc", { bytes: file, etag: "e2" });
+  expect(told.answer).toBe("commit");
+  expect(told.send).toEqual([expect.objectContaining({ k: "receipt", through: 1, etag: "e2" })]);
+  expect(room.base).toEqual(expect.objectContaining({ through: 1, etag: "e2" }));
+  expect(rooms.leave(room, "conn-ana")).toEqual({ empty: true, dirty: false, send: [] });
+});
+
+test("no frame is admitted before the host opens the room, and open refuses bytes that do not name the room", () => {
+  const { rooms, file } = setup();
+  rooms.establish("doc", { bytes: file, etag: "e0", codec: "tiny" });
+  expect(rooms.get("doc")).toBeNull();
+  expect(rooms.open("doc", { bytes: file, etag: "e0" })).toBeNull();
+  expect(rooms.get("doc")).toBeNull();
+});
+
+test("a receipt a client reports is refused unless it names the commit the host accepted", () => {
+  const { rooms, room } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "ben")));
+  const claim = rooms.frame(room, "ben", { k: "receipt", gen: room.gen, commit: "c12345678901", etag: "e9", through: 1 });
+  expect(claim.answer).toBe("unseen");
+  expect(room.base.through).toBe(0);
+});
+
+test("malformed frames, invalid actions and frames of another generation are refused before they reach the room", () => {
+  const { rooms, room } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  expect(rooms.frame(room, "ben", { k: "req", gen: room.gen, c: "ben" }).answer).toBe("bad-frame");
+  expect(rooms.frame(room, "ben", { k: "nonsense", gen: room.gen }).answer).toBe("bad-frame");
+  expect(rooms.frame(room, "ben", request(room, "ben", 1, { t: "set", row: 7, col: "c1", value: "x" })).answer).toBe("bad-action");
+  expect(rooms.frame(room, "ben", { ...request(room, "ben", 1, set("r1", "c1", "x")), gen: "9.00000001" }).answer).toBe("stale");
+  expect(room.seq).toBe(0);
+});
+
+test("a room refuses a frame it has no space for", () => {
+  const { rooms, room } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  const answers = [];
+  for (let n = 1; n <= 40; n++) answers.push(rooms.frame(room, "ben", request(room, "ben", n, set("r1", "c1", "x".repeat(200)))).answer);
+  expect(answers).toContain("full");
+  expect(answers.indexOf("full")).toBeGreaterThan(0);
+});
+
+test("sweep never drops a room with unsaved edits, and drops a clean idle room only after retainMs", () => {
+  const { rooms, room, tick } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "ben")));
+  rooms.leave(room, "conn-ben");
+  tick(10 * 60_000);
+  expect(rooms.sweep()).toEqual([]);
+  expect(rooms.get("doc")).toBe(room);
+  const clean = opened();
+  clean.rooms.attach(clean.room, "ana", "conn-ana");
+  clean.rooms.leave(clean.room, "conn-ana");
+  clean.tick(30_000);
+  expect(clean.rooms.sweep()).toEqual([]);
+  clean.tick(31_000);
+  expect(clean.rooms.sweep()).toEqual(["doc"]);
+  expect(clean.rooms.get("doc")).toBeNull();
+});
+
+test("a write that changes only bytes outside the tables keeps the room; a changed table under a kept record ends it", () => {
+  const { rooms, room, bytes } = opened();
+  const titled = bytes.replace("<!doctype html>", "<!doctype html><title>t</title>");
+  expect(rooms.fileAccepted("doc", { bytes: titled, etag: "e5" }).answer).toBe("same");
+  expect(rooms.get("doc")).toBe(room);
+  expect(room.base.etag).toBe("e5");
+  useCodec(tiny);
+  const { record, state } = parse(bytes);
+  state.wb.rows.r2.cells.c2 = "agent";
+  expect(rooms.fileAccepted("doc", { bytes: serialize(record, state), etag: "e6" }).answer).toBe("outside");
+  expect(rooms.get("doc")).toBeNull();
+});
+
+test("only codecs on the allowed list are announced or established", () => {
+  const { rooms, file } = setup();
+  expect(rooms.capability("tiny")).toBe(true);
+  expect(rooms.capability("sheet")).toBe(false);
+  expect(rooms.establish("doc", { bytes: file, etag: "e0", codec: "sheet" })).toBeNull();
+});
+
+test("ordered rooms and live rooms charge one byte total and one room count", () => {
+  const full = setup({ liveBytes: 10_000, others: { used: () => 10_000, size: () => 0 } });
+  expect(full.rooms.establish("doc", { bytes: full.file, etag: "e0", codec: "tiny" })).toBeNull();
+  const counted = setup({ maxRooms: 3, others: { used: () => 0, size: () => 3 } });
+  expect(counted.rooms.establish("doc", { bytes: counted.file, etag: "e0", codec: "tiny" })).toBeNull();
+  const { rooms } = opened();
+  expect(rooms.used()).toBeGreaterThan(0);
+  expect(rooms.size()).toBe(1);
+  const live = createRooms({ others: { used: () => 0, size: () => LIVE_LIMITS.rooms } });
+  expect(live.open("page", "<!doctype html><html><body></body></html>", { nodeId: "n" })).toBeNull();
+  const roomy = createRooms({ others: { used: () => 0, size: () => 0 } });
+  expect(roomy.open("page", "<!doctype html><html><body></body></html>", { nodeId: "n" })).not.toBeNull();
+});
+
+const paste = (count) => ({ t: "paste", cells: Array.from({ length: count }, (_, i) => ["r1", `c${i}`, `v${i}`]) });
+
+function parts(room, c, n, action) {
+  useCodec(tiny);
+  return explode(request(room, c, n, action), `q:${c}:${n}`, labLimits());
+}
+
+test("a paste in parts is admitted when its last part lands, and parts that would hold memory the room does not count are refused", () => {
+  const { rooms, room } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  const pieces = parts(room, "ben", 1, paste(6));
+  expect(pieces.length).toBeGreaterThan(1);
+  for (const piece of pieces.slice(0, -1)) expect(rooms.frame(room, "ben", piece).answer).toBe("staged");
+  expect(rooms.frame(room, "ben", pieces.at(-1)).answer).toBe("ok");
+  expect(room.seq).toBe(1);
+  const tampered = parts(room, "ben", 2, paste(6));
+  for (const piece of tampered.slice(0, -1)) rooms.frame(room, "ben", piece);
+  expect(rooms.frame(room, "ben", { ...tampered.at(-1), cells: [[7, 8, 9]] }).answer).toBe("bad-action");
+  expect(room.seq).toBe(1);
+  const [first] = parts(room, "ben", 3, paste(6));
+  expect(rooms.frame(room, "ben", { ...first, m: 100_000_000 }).answer).toBe("bad-frame");
+  expect(rooms.frame(room, "ben", { ...first, order: undefined }).answer).toBe("bad-frame");
+  expect(rooms.frame(room, "ben", { ...first, key: "q:ben:9", size: 0, pad: "x".repeat(60_000) }).answer).toBe("bad-size");
+  expect(room.staging.size).toBe(0);
+  expect(rooms.frame(room, "ben", { ...first, size: 2 ** 40 }).answer).toBe("bad-size");
+});
+
+test("an adopt offer whose held frame was a duplicate is admitted with the rest of the offer", () => {
+  const { rooms, room } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  const from = RECORD.gen;
+  const offer = { k: "adopt", gen: room.gen, from, items: [
+    { n: 1, c: "ana", rn: 1, org: [from, 1], e: "ana:1", action: null, saw: null },
+    { n: 2, c: "ben", rn: 1, org: [from, 2], e: "ben:1", action: set("r1", "c1", "held"), saw: tiny.seen(room.state.wb, set("r1", "c1", "held")) },
+  ] };
+  expect(rooms.frame(room, "ben", offer).answer).toBe("ok");
+  expect(room.state.wb.rows.r1.cells.c1).toBe("held");
+});
+
+test("client frames that the core cannot read are refused, and none of them changes the room", () => {
+  const { rooms, room } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  const before = JSON.stringify(room.state);
+  expect(rooms.frame(room, "ben", { ...request(room, "ben", 1, set("r1", "c1", "x")), c: "__proto__" }).answer).toBe("bad-frame");
+  const copy = { k: "copy", gen: room.gen, job: "j1", copy: "x", i: 0, p: 0, n: 1, c: "ben", e: "ben:1", via: [] };
+  expect(rooms.frame(room, "ben", copy).answer).toBe("bad-action");
+  expect(rooms.frame(room, "ben", { ...copy, e: undefined, action: set("r1", "c1", "x") }).answer).toBe("bad-frame");
+  expect(rooms.frame(room, "ben", { ...request(room, "ben", 1, set("r1", "c1", "x")), c: "toString" }).answer).toBe("bad-frame");
+  const from = RECORD.gen;
+  const half = { k: "adopt", gen: room.gen, from, items: [
+    { n: 1, c: "ana", rn: 1, org: [from, 1], e: "ana:1", action: set("r1", "c1", "half"), saw: tiny.seen(room.state.wb, set("r1", "c1", "half")) },
+    { n: 2, c: "toString", rn: 1, org: [from, 2], e: "t:1", action: set("r1", "c1", "y"), saw: null },
+  ] };
+  expect(rooms.frame(room, "ben", half).answer).toBe("bad-frame");
+  expect(rooms.frame(room, "ben", { k: "copy", gen: room.gen, via: 5, action: set("r1", "c1", "x") }).answer).toBe("bad-frame");
+  expect(rooms.frame(room, "ben", { k: "adopt", gen: room.gen, from: "x", items: [{ n: 1, c: "ana", rn: "x", action: null }] }).answer).toBe("bad-frame");
+  expect(rooms.frame(room, "ben", { k: "adopt", gen: room.gen, from: "x", items: [{ n: 1, c: "ana", rn: 1, via: 5, action: null }] }).answer).toBe("bad-frame");
+  expect(JSON.stringify(room.state)).toBe(before);
+  expect(rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "x"))).answer).toBe("ok");
+});
+
+test("an older commit put back, or a file whose tag is gone or torn, ends the room and reports what was unsaved", () => {
+  const { rooms, room, bytes } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "one")));
+  const first = saved(room, bytes);
+  expect(rooms.fileAccepted("doc", { bytes: first, etag: "e2" }).answer).toBe("commit");
+  rooms.frame(room, "ben", request(room, "ben", 2, set("r1", "c1", "two")));
+  useCodec(tiny);
+  const second = serialize({ ...parse(first).record, commit: "c99999999991", parent: room.base.commit, through: 2 }, { ...room.state });
+  expect(rooms.fileAccepted("doc", { bytes: second, etag: "e3" }).answer).toBe("commit");
+  expect(rooms.fileAccepted("doc", { bytes: first, etag: "e4" })).toEqual({ answer: "outside", send: [], dirty: false });
+  expect(rooms.get("doc")).toBeNull();
+  for (const broken of [bytes.replace(/<script[^]*<\/script>/, ""), bytes.replace("</script>", "")]) {
+    const fresh = opened();
+    fresh.rooms.attach(fresh.room, "ben", "conn-ben");
+    fresh.rooms.frame(fresh.room, "ben", request(fresh.room, "ben", 1, set("r1", "c1", "x")));
+    expect(fresh.rooms.fileAccepted("doc", { bytes: broken, etag: "e9" })).toEqual({ answer: "outside", send: [], dirty: true });
+    expect(fresh.rooms.get("doc")).toBeNull();
+  }
+});
+
+test("frames are refused while the process is over its byte total, and the live rooms count the ordered rooms' bytes", () => {
+  let other = 0;
+  const { rooms, room } = opened({ liveBytes: 50_000, others: { used: () => other, size: () => 0 } });
+  rooms.attach(room, "ben", "conn-ben");
+  expect(rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "x"))).answer).toBe("ok");
+  other = 50_000 - rooms.used();
+  expect(rooms.frame(room, "ben", request(room, "ben", 2, set("r1", "c1", "y"))).answer).toBe("full");
+  const live = createRooms({ liveBytes: 1000, others: { used: () => 5000, size: () => 0 } });
+  expect(live.open("page", "<!doctype html><html><body><p>x</p></body></html>", { nodeId: "n" })).toBeNull();
+});
+
+test("leave finds the room by its connection, sweep keeps a room the host still has connections to, and drop reports unsaved edits", () => {
+  const { rooms, room, tick } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "x")));
+  expect(rooms.leave({}, "conn-ben")).toEqual({ empty: true, dirty: true, send: [] });
+  expect(room.gone?.has("ben")).toBe(true);
+  expect(rooms.drop("doc")).toEqual({ dirty: true });
+  const clean = opened();
+  clean.tick(10 * 60_000);
+  expect(clean.rooms.sweep(() => 1)).toEqual([]);
+  expect(clean.rooms.sweep(() => 0)).toEqual(["doc"]);
+});
+
+test("the host may report its establishing write before it opens the room, and open never ends a room that is already open", () => {
+  const { rooms, file } = setup();
+  const est = rooms.establish("doc", { bytes: file, etag: "e0", codec: "tiny" });
+  expect(rooms.fileAccepted("doc", { bytes: est.bytes, etag: "e1" }).answer).toBe("establishing");
+  const room = rooms.open("doc", { bytes: est.bytes, etag: "e1" });
+  expect(room).toBe(rooms.get("doc"));
+  rooms.attach(room, "ben", "conn-ben");
+  rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "x")));
+  expect(rooms.open("doc", { bytes: file, etag: "e0" })).toBeNull();
+  expect(rooms.get("doc")).toBe(room);
+  expect(rooms.leave(room, "conn-ben").dirty).toBe(true);
+});
+
+test("an earlier generation of the room put back by a sync ends the room instead of reopening it", () => {
+  const { rooms, room, bytes } = opened();
+  const turned = rooms.establish("doc", { bytes, etag: "e1", codec: "tiny" });
+  expect(rooms.fileAccepted("doc", { bytes: turned.bytes, etag: "e2" }).answer).toBe("establishing");
+  const newer = rooms.get("doc");
+  expect(newer.gen).not.toBe(room.gen);
+  rooms.attach(newer, "ben", "conn-ben");
+  rooms.frame(newer, "ben", request(newer, "ben", 1, set("r1", "c1", "x")));
+  expect(rooms.fileAccepted("doc", { bytes, etag: "e3" })).toEqual({ answer: "outside", send: [], dirty: true });
+});
+
+test("the host's commits keep the document's own id", () => {
+  const { rooms } = setup();
+  useCodec(tiny);
+  const mine = serialize({ ...RECORD, doc: "docZZZZZZZZZZZZZ" }, START);
+  const est = rooms.establish("doc", { bytes: mine, etag: "e0", codec: "tiny" });
+  expect(est.record.doc).toBe("docZZZZZZZZZZZZZ");
+});
+
+test("a paste over filled cells and a part sent again are admitted; establish on a file without a tag is refused without holding a room", () => {
+  const { rooms, room, file } = opened({ limits: labLimits({ roomBytes: 64 * 1024, storeBytes: 32 * 1024 }) });
+  rooms.attach(room, "ben", "conn-ben");
+  const pieces = parts(room, "ben", 1, paste(6));
+  for (let again = 0; again < 40; again++) expect(rooms.frame(room, "ben", pieces[0]).answer).toBe("staged");
+  for (const piece of pieces.slice(1, -1)) rooms.frame(room, "ben", piece);
+  expect(rooms.frame(room, "ben", pieces.at(-1)).answer).toBe("ok");
+  const wide = (v) => ({ t: "paste", cells: Array.from({ length: 6 }, (_, i) => ["r2", `c${i}`, v.repeat(120)]) });
+  for (const [n, v] of [[2, "a"], [3, "b"]]) {
+    const chunk = parts(room, "ben", n, wide(v));
+    if (n === 3) expect(chunk[0].size).toBeGreaterThan(labLimits().actionBytes);
+    let answer;
+    for (const piece of chunk) answer = rooms.frame(room, "ben", piece).answer;
+    expect(answer).toBe("ok");
+  }
+  const fresh = setup({ maxRooms: 1 });
+  expect(fresh.rooms.establish("doc", { bytes: "<!doctype html><p>no tag</p>", etag: "e0", codec: "tiny" })).toBeNull();
+  expect(fresh.rooms.size()).toBe(0);
+  expect(fresh.rooms.mayFit("other", file)).toBe(true);
+  expect(fresh.rooms.mayFit("other", 10 ** 9)).toBe(false);
+});
+
+test("a client that leaves with a staged paste frees its space and tells the others; a connection that moves rooms leaves the first", () => {
+  const { rooms, room } = opened();
+  rooms.attach(room, "ana", "conn-ana");
+  rooms.attach(room, "ben", "conn-ben");
+  const pieces = parts(room, "ana", 1, paste(6));
+  rooms.frame(room, "ana", pieces[0]);
+  expect(room.bytes.staged).toBeGreaterThan(0);
+  expect(rooms.leave(room, "conn-ana").send).toEqual([{ to: "*", k: "space" }]);
+  expect(room.bytes.staged).toBe(0);
+  const est = rooms.establish("doc2", { bytes: serialize(RECORD, START), etag: "f0", codec: "tiny" });
+  const second = rooms.open("doc2", { bytes: est.bytes, etag: "f1" });
+  const shared = { id: "socket" };
+  rooms.attach(room, "cy", shared);
+  expect(rooms.attach(second, "cy", shared)).not.toBeNull();
+  expect(rooms.leave(room, "conn-ben")).toEqual(expect.objectContaining({ empty: true }));
+});

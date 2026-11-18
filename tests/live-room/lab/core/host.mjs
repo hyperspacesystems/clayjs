@@ -12,7 +12,7 @@ export function establishing(env, file) {
   const epoch = file.record.epoch + 1;
   const gen = nextGen(env, epoch);
   const commit = nextCommit(env);
-  const record = { v: 2, doc: DOC, gen, epoch, commit, parent: file.record.commit, through: 0, room: room.id };
+  const record = { v: 2, doc: file.record.doc ?? DOC, gen, epoch, commit, parent: file.record.commit, through: 0, room: room.id };
   const [own, before] = file.state.opened ?? [file.record.epoch, file.record.epoch];
   const state = nextGeneration(file.state, file.record.gen, file.record.through, epoch, env.limits.ledgerCap, file.record.room === room.id ? [planted("ledger-turn-restarts-the-room") ? epoch : own, before] : [epoch, own]);
   return { gen, commit, record, state, body: serialize(record, state) };
@@ -29,7 +29,7 @@ export function fileAccepted(env, file, before) {
   const room = env.port.room();
   if (!room) return "none";
   const { record } = file;
-  if (record.room === room.id && record.gen !== room.gen) {
+  if (record.room === room.id && record.gen !== room.gen && (!room.gen || record.epoch > room.epoch || planted("host-old-generation-reopens"))) {
     openOn(env, record, file.etag, file.state);
     nudgeAll(env);
     return "establishing";
@@ -39,7 +39,7 @@ export function fileAccepted(env, file, before) {
     room.base = { ...room.base, etag: file.etag };
     return "same";
   }
-  if (record.gen === room.gen && record.room === room.id && record.commit !== room.base.commit) {
+  if (record.gen === room.gen && record.room === room.id && record.commit !== room.base.commit && (record.parent === room.base.commit || planted("host-commit-not-next"))) {
     room.accepted = { commit: record.commit, etag: file.etag, through: record.through };
     if (!planted("host-receipt-not-made")) hostReceipt(env, room, { k: "receipt", gen: room.gen, ...room.accepted });
     return "commit";

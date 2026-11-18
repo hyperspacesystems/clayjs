@@ -363,6 +363,47 @@ export const SCENARIOS = [
     },
   },
   {
+    name: "earlier-generation-put-back-ends-the-room",
+    about: "The room runs on its establishing commit. A sync puts back a file of an earlier generation of the same room. It names the room but not a newer generation, so the host treats it as an outside write and the room ends, instead of reopening on the older generation.",
+    plants: ["host-old-generation-reopens"],
+    run() {
+      const { s, world, tabs } = stage(2, { hostMade: true });
+      const [ana, ben] = tabs;
+      s.type(ben, "r1", "c1", "one");
+      s.send(ben);
+      s.recv(ana);
+      const now = s.file();
+      const earlier = { ...now, etag: "e-earlier", record: { ...now.record, gen: `${now.record.epoch - 1}.00000001`, epoch: now.record.epoch - 1 } };
+      const answer = fileAccepted(world, earlier, now);
+      expect(answer === "outside" && !world.room, `an earlier generation put back ends the room (answer ${answer})`);
+      s.end();
+    },
+  },
+  {
+    name: "older-commit-put-back-ends-the-room",
+    about: "Ben's two edits are saved in two commits. A sync puts back the file of the first commit. The host sees a commit that does not follow the room's base, so the write is an outside write and the room ends, instead of counting the room as saved and dropping the second commit's edit.",
+    plants: ["host-commit-not-next"],
+    run() {
+      const { s, world, tabs } = stage(2, { hostMade: true });
+      const [ana, ben] = tabs;
+      s.type(ben, "r1", "c1", "one");
+      s.send(ben);
+      s.recv(ana);
+      s.save(ana);
+      s.answer("ok");
+      const first = s.file();
+      s.type(ben, "r1", "c2", "two");
+      s.send(ben);
+      s.recv(ana);
+      s.save(ana);
+      s.answer("ok");
+      expect(world.room.base.through === 2, "the room counts both saves");
+      const answer = fileAccepted(world, { ...first, etag: "e-old" }, s.file());
+      expect(answer === "outside" && !world.room, `an older commit put back ends the room (answer ${answer})`);
+      s.end();
+    },
+  },
+  {
     name: "lost-receipt-is-sent-again",
     about: "Ben's write is in the room and Ana's tab saves the file. Ana's receipt for that save is lost on the wire. When her wait runs out she sends it again, so the room learns that the save landed and Ben's tab shows his edit as saved.",
     plants: ["wire-receipt-not-resent", "wire-never-resent"],

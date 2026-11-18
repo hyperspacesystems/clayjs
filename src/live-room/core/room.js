@@ -7,6 +7,7 @@ import { assemble } from "./frames.js";
 import { weigh, remember, counts, newMemory, positions, rowMayReturn } from "./recover.js";
 import { conflicts, fitsNow, stillOpen, unseenBy, removesOf } from "./conflict.js";
 import { clone } from "./lib.js";
+import { codec } from "./codec.js";
 const stateReserve = (limits) => recordBudget(limits.ledgerCap, W), tailBudget = (limits) => limits.storeBytes - stateReserve(limits), newInstance = (env) => ({ id: `i${env.port.next("instances")}`, gen: null, state: null, base: null, seq: 0, log: [], floor: 0, wait: /* @__PURE__ */ new Map(), staging: /* @__PURE__ */ new Map(), restores: /* @__PURE__ */ new Map(), answered: /* @__PURE__ */ new Map(), settled: /* @__PURE__ */ new Set(), bytes: { tail: 0, staged: 0, waiting: 0 } });
 function newRoom(record, etag, state, id) {
   return {
@@ -146,7 +147,9 @@ function admitPart(env, room, part, by) {
   }
   if (stage.parts[part.i] || (stage.parts[part.i] = part, ++stage.got < part.m)) return "staged";
   room.staging.delete(key), room.bytes.staged -= stage.size;
-  const whole = assemble(stage.parts), { action, saw, reviewed } = whole.k === "adopt" ? whole.items[0] : whole;
+  const whole = assemble(stage.parts);
+  if (!(whole.k === "adopt" ? whole.items.map((item) => item.action) : [whole.action]).every((one) => codec().validate(one))) return "bad-action";
+  const { action, saw, reviewed } = whole.k === "adopt" ? whole.items[0] : whole;
   if (frameBytes(action, { saw, reviewed }) !== stage.size) return "bad-size";
   const before = room.seq, result = admitWhole(env, room, whole, by);
   return (result === "full" || result === "ledger-full") && env.port.onFull(by), typeof result != "string" && room.seq === before && env.port.onSpace(), result;

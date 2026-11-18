@@ -2,3 +2,4 @@ tree 6fe1261fb9ff0d7daf764624f48621a239e4403ea32d9d6e0907effb9b9dbe52
 files 47
 frozen 2026-11-18 from ~/scratch/20261115-163950-lab-l1/step4-tree (L1 split, proved by l1sq-ta-172916 and the run-final.sh gate comparison)
 round L2b1 tree e2760acfdebe4b610d1bcbf5c8e3b5bbb1a0453a80dd37668858048da72c9bf7 (CONTRACT.md section 21, rules 143 to 145; boxes tb-20261118-1436 a and b, lab, conformance, unit, v10 20,000 per mode)
+round P3 tree 1d756db9214c09fe8365400e63ad0a5ebd4d16f3ec2611fbb8edd444ce36289b (CONTRACT.md rules 146 and 147, the host side of the ordered room registry; boxes tb-20261118-154938-29208 and tb-20261118-160325-21494)

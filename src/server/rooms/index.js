@@ -59,6 +59,8 @@ export { documentEtag, ifMatchSatisfied } from './spec-wire.js';
 
 export { LIVE_LIMITS, REFUSED_MS, COMPACTOR, createRooms, roomIsDirty, PersistentReservationError } from './live-data-rooms.js';
 
+export { createOrderedRooms } from './ordered-room.js';
+
 export { COMPACTION, ROOM_ERROR_STATUS } from '../../live/page-compaction.js';
 
 export { createPageCompactor, pageCompactionWorkerUrl } from './page-compactor.js';

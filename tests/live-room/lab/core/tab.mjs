@@ -861,6 +861,7 @@ function load(tab, file) {
   if (tab.born === null) tab.born = file.record.epoch;
   tab.gen = file.record.gen;
   tab.epoch = file.record.epoch;
+  tab.doc = file.record.doc;
   tab.state = clone(file.state);
   tab.a = file.record.through;
   tab.base = { commit: file.record.commit, etag: file.etag, through: file.record.through };
@@ -1033,7 +1034,7 @@ export function capture(env, tab) {
     return large && !planted("no-ledger-cap") ? startEstablish(env, tab, env.port.read()) : false;
   }
   const commit = nextCommit(env);
-  const record = { v: 2, doc: DOC, gen: tab.gen, epoch: tab.epoch, commit, parent: tab.base.commit, through: tab.a, room: tab.room.id };
+  const record = { v: 2, doc: tab.doc ?? DOC, gen: tab.gen, epoch: tab.epoch, commit, parent: tab.base.commit, through: tab.a, room: tab.room.id };
   const state = tab.state;
   let body = () => serialize(record, state);
   if (planted("capture-overlay")) body = serialize(record, { ...state, wb: view(tab) });

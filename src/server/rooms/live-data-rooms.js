@@ -169,7 +169,8 @@ function provenBy(room, name, tag, stamped) {
 }
 
 /**
- * @param {{ now?: () => number, newEpoch?: () => string, liveBytes?: number }} [options]
+ * @param {{ now?: () => number, newEpoch?: () => string, liveBytes?: number, others?: { used: () => number, size: () => number } | null }} [options]
+ * `others` is what the process's other room registries hold (the ordered rooms), so every kind charges one byte total and one room count.
  */
 // How long a document refused for the budget is refused again without its
 // file being read, while the rooms stay as full.
@@ -196,7 +197,7 @@ export class PersistentReservationError extends Error {
   }
 }
 
-export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes = LIVE_LIMITS.liveBytes, compaction = null } = {}) {
+export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes = LIVE_LIMITS.liveBytes, compaction = null, others = null } = {}) {
   const hostLimits = compaction ? Object.freeze({ ...COMPACTION, ...(typeof compaction === 'object' ? compaction : {}) }) : null;
   const jobs = new WeakMap();
   let onDue = () => {};
@@ -224,6 +225,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
   const releasedTokens = new WeakSet();
   // What every room holds, against LIVE_LIMITS.liveBytes.
   let used = 0;
+  const total = () => used + (others?.used() ?? 0);
   // Documents whose room did not fit the budget: key -> { held, at }.
   const refused = new Map();
 
@@ -378,7 +380,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       const replacedBytes = [...room.stores].filter(([name]) => PAGE.test(name))
         .reduce((sum, [, store]) => sum + store.bytes + store.logBytes, 0);
       const growth = details.source === 'replacement' ? budget - replacedBytes : budget;
-      if (details.source === 'replacement' ? growth > 0 && used + growth > liveBytes : used + budget > liveBytes) {
+      if (details.source === 'replacement' ? growth > 0 && total() + growth > liveBytes : total() + budget > liveBytes) {
         throw new PageConversionError('budget');
       }
       target = { stores, transition };
@@ -533,7 +535,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
     mayFit(key) {
       const last = refused.get(key);
       if (!last) return true;
-      if (now() - last.at > REFUSED_MS || used + last.held <= liveBytes) {
+      if (now() - last.at > REFUSED_MS || total() + last.held <= liveBytes) {
         refused.delete(key);
         return true;
       }
@@ -687,7 +689,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       }
       if (projectedRoomBytes > LIVE_LIMITS.roomBytes) throw new PersistentReservationError('budget');
       const projectedHeld = heldBy(projected);
-      if (used - currentHeld + projectedHeld > liveBytes) throw new PersistentReservationError('budget');
+      if (total() - currentHeld + projectedHeld > liveBytes) throw new PersistentReservationError('budget');
       const preclaim = Math.max(0, projectedHeld - currentHeld);
       used += preclaim;
       record.html = html;
@@ -758,10 +760,10 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
         room.emptySince = null;
         return room;
       }
-      if (pageReservations.has(key) || persistentReservations.has(key) || rooms.size >= LIVE_LIMITS.rooms) return null;
+      if (pageReservations.has(key) || persistentReservations.has(key) || rooms.size + (others?.size() ?? 0) >= LIVE_LIMITS.rooms) return null;
       room = build(key, html, nodeId);
       const held = heldBy(room);
-      if (used + held > liveBytes) {
+      if (total() + held > liveBytes) {
         refused.delete(key);
         refused.set(key, { held, at: now() });
         if (refused.size > LIVE_LIMITS.rooms) refused.delete(refused.keys().next().value);
@@ -781,7 +783,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       const room = build(key, html, nodeId === undefined ? previous.nodeId : nodeId);
       used -= heldBy(previous);
       const held = heldBy(room);
-      if (used + held > liveBytes) {
+      if (total() + held > liveBytes) {
         rooms.delete(key);
         return null;
       }
@@ -933,7 +935,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       const logged = done.length ? byteLength(JSON.stringify(ops)) : 0;
       const grows = done.length ? bytes - store.bytes + logAfter(store, logged) - store.logBytes : 0;
       const retiredBytes = victim === null ? 0 : receiptBytes(room.lastN.get(victim));
-      if (grows > 0 && used + grows - retiredBytes > liveBytes) {
+      if (grows > 0 && total() + grows - retiredBytes > liveBytes) {
         undo();
         return { busy: true, reason: 'budget' };
       }
@@ -1115,7 +1117,7 @@ export function createRooms({ now = Date.now, newEpoch = randomUUID, liveBytes =
       const plan = planCompaction(store.value.y, { overflow }, hostLimits);
       if (!plan) return null;
       const reserved = plan.sources.reduce((sum, [k, v]) => sum + k.length + v.length, 0);
-      if (used + reserved > liveBytes) return null;
+      if (total() + reserved > liveBytes) return null;
       state.fence += 1;
       const token = Object.freeze({ key: room.key, epoch: room.epoch, fence: state.fence });
       const job = { token, room, store, epoch: room.epoch, generation: room.blockeditorTransition?.id ?? null, kind: plan.kind,

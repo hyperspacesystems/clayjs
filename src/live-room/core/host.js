@@ -7,7 +7,7 @@ import { serialize, DOC } from "./record.js";
 import { nextGen, nextCommit, nudgeAll } from "./tab.js";
 const sameTables = (a, b) => codec().write(a.state.wb, {}) === codec().write(b.state.wb, {});
 function establishing(env, file) {
-  const room = env.port.room(), epoch = file.record.epoch + 1, gen = nextGen(env, epoch), commit = nextCommit(env), record = { v: 2, doc: DOC, gen, epoch, commit, parent: file.record.commit, through: 0, room: room.id }, [own, before] = file.state.opened ?? [file.record.epoch, file.record.epoch], state = nextGeneration(file.state, file.record.gen, file.record.through, epoch, env.limits.ledgerCap, file.record.room === room.id ? [own, before] : [epoch, own]);
+  const room = env.port.room(), epoch = file.record.epoch + 1, gen = nextGen(env, epoch), commit = nextCommit(env), record = { v: 2, doc: file.record.doc ?? DOC, gen, epoch, commit, parent: file.record.commit, through: 0, room: room.id }, [own, before] = file.state.opened ?? [file.record.epoch, file.record.epoch], state = nextGeneration(file.state, file.record.gen, file.record.through, epoch, env.limits.ledgerCap, file.record.room === room.id ? [own, before] : [epoch, own]);
   return { gen, commit, record, state, body: serialize(record, state) };
 }
 function openOn(env, record, etag, state) {
@@ -18,7 +18,7 @@ function fileAccepted(env, file, before) {
   const room = env.port.room();
   if (!room) return "none";
   const { record } = file;
-  return record.room === room.id && record.gen !== room.gen ? (openOn(env, record, file.etag, file.state), nudgeAll(env), "establishing") : room.gen ? record.gen === room.gen && record.commit === room.base.commit && sameTables(file, before) ? (room.base = { ...room.base, etag: file.etag }, "same") : record.gen === room.gen && record.room === room.id && record.commit !== room.base.commit ? (room.accepted = { commit: record.commit, etag: file.etag, through: record.through }, hostReceipt(env, room, { k: "receipt", gen: room.gen, ...room.accepted }), "commit") : (env.observer.onRoomLoss(env, room, "ended"), env.port.setRoom(null), "outside") : "none";
+  return record.room === room.id && record.gen !== room.gen && (!room.gen || record.epoch > room.epoch) ? (openOn(env, record, file.etag, file.state), nudgeAll(env), "establishing") : room.gen ? record.gen === room.gen && record.commit === room.base.commit && sameTables(file, before) ? (room.base = { ...room.base, etag: file.etag }, "same") : record.gen === room.gen && record.room === room.id && record.commit !== room.base.commit && record.parent === room.base.commit ? (room.accepted = { commit: record.commit, etag: file.etag, through: record.through }, hostReceipt(env, room, { k: "receipt", gen: room.gen, ...room.accepted }), "commit") : (env.observer.onRoomLoss(env, room, "ended"), env.port.setRoom(null), "outside") : "none";
 }
 export {
   establishing,
