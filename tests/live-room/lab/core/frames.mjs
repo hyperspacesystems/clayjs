@@ -1,5 +1,6 @@
 import { planted } from "./planted.mjs";
 import { opsOf, frameBytes } from "./limits.mjs";
+import { codec } from "./codec.mjs";
 
 const flat = (frame) => frame.k !== "adopt";
 
@@ -16,29 +17,18 @@ const withReviewed = (frame, reviewed) => (!reviewedOf(frame) ? frame : flat(fra
 export function explode(frame, key, limits) {
   const action = big(frame);
   if (!action || opsOf(action) <= limits.opsPerFrame || planted("oversize-frame")) return [frame];
-  const count = Math.ceil(action.cells.length / limits.opsPerFrame);
   const saw = sawOf(frame);
   const reviewed = reviewedOf(frame);
-  const bare = withReviewed(withAction(frame, { ...action, cells: [] }, saw && []), []);
-  return Array.from({ length: count }, (_, i) => ({
-    k: "part",
-    gen: frame.gen,
-    of: frame.k,
-    from: frame.from,
-    key,
-    order: flat(frame) ? { c: frame.c, p: frame.p } : { from: frame.from, n: frame.items[0].n },
-    i,
-    m: count,
-    size: frameBytes(action, { saw, reviewed }),
-    frame: i ? null : bare,
-    cells: action.cells.slice(i * limits.opsPerFrame, (i + 1) * limits.opsPerFrame),
-    saw: saw?.slice(i * limits.opsPerFrame, (i + 1) * limits.opsPerFrame),
-    reviewed: reviewed?.slice(i * limits.opsPerFrame, (i + 1) * limits.opsPerFrame),
-  }));
+  const { head, parts } = codec().split({ action, saw, reviewed }, limits);
+  const bare = withReviewed(withAction(frame, head.action, head.saw), head.reviewed);
+  const size = frameBytes(action, { saw, reviewed });
+  const order = () => (flat(frame) ? { c: frame.c, p: frame.p } : { from: frame.from, n: frame.items[0].n });
+  return parts.map((body, i) => ({ k: "part", gen: frame.gen, of: frame.k, from: frame.from, key, order: order(), i, m: parts.length, size, frame: i ? null : bare, ...body }));
 }
 
 export function assemble(parts) {
   const bare = parts.find((part) => part?.frame).frame;
-  const whole = withAction(bare, { ...big(bare), cells: parts.flatMap((part) => part?.cells ?? []) }, sawOf(bare) && parts.flatMap((part) => part?.saw ?? []));
-  return withReviewed(whole, parts.flatMap((part) => part?.reviewed ?? []));
+  const whole = codec().assemble({ action: big(bare), saw: sawOf(bare), reviewed: reviewedOf(bare) }, parts);
+  const merged = withAction(bare, whole.action, whole.saw);
+  return whole.reviewed == null ? merged : flat(merged) ? { ...merged, reviewed: whole.reviewed } : { ...merged, items: [{ ...merged.items[0], reviewed: whole.reviewed }] };
 }

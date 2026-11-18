@@ -1,3 +1,6 @@
+import { codec } from "./codec.mjs";
+import { utf8Bytes } from "./lib.mjs";
+
 const KIB = 1024;
 const MIB = KIB * KIB;
 
@@ -25,20 +28,18 @@ export function labLimits(over = {}) {
 
 export const FRAME_OVERHEAD = 64;
 
-export const actionBytes = (action) => Buffer.byteLength(JSON.stringify(action ?? null), "utf8");
+export const actionBytes = (action) => (action == null ? 4 : codec().size(action));
 
 const ACTION_ONLY = process.env.LAB_FRAME_COST === "action";
 
-const bytesOf = (value) => (value === undefined || value === null ? 0 : Buffer.byteLength(JSON.stringify(value), "utf8"));
+const bytesOf = (value) => (value === undefined || value === null ? 0 : utf8Bytes(JSON.stringify(value)));
 
 export const frameBytes = (action, { saw, b, org, via, reviewed } = {}) => actionBytes(action) + FRAME_OVERHEAD + (ACTION_ONLY ? 0 : bytesOf(saw) + bytesOf(b) + bytesOf(org) + bytesOf(via) + bytesOf(reviewed));
 
-export const cellsOf = (action) => (action?.t === "paste" ? action.cells : action?.t === "set" ? [[action.row, action.col, action.value]] : []);
-
-export const opsOf = (action) => (action?.t === "paste" ? Math.max(1, action.cells.length) : 1);
+export const opsOf = (action) => (action ? codec().ops(action) : 1);
 
 export const frameOps = (frame) => {
-  if (frame.k === "part") return frame.cells.length;
+  if (frame.k === "part") return codec().partOps(frame);
   if (frame.k === "req" || frame.k === "copy") return opsOf(frame.action);
   if (frame.k === "adopt") return frame.items.reduce((sum, item) => sum + opsOf(item.action), 0);
   return 1;

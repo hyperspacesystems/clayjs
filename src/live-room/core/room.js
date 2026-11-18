@@ -5,7 +5,7 @@ import { entryBytes, ledgerBytes, recordBudget } from "./record.js";
 import { frameBytes, opsOf } from "./limits.js";
 import { assemble } from "./frames.js";
 import { weigh, remember, counts, newMemory, positions, rowMayReturn } from "./recover.js";
-import { conflicts, fitsNow, stillOpen, unseenBy } from "./conflict.js";
+import { conflicts, fitsNow, stillOpen, unseenBy, removesOf } from "./conflict.js";
 import { clone } from "./lib.js";
 const stateReserve = (limits) => recordBudget(limits.ledgerCap, W), tailBudget = (limits) => limits.storeBytes - stateReserve(limits), newInstance = (env) => ({ id: `i${env.port.next("instances")}`, gen: null, state: null, base: null, seq: 0, log: [], floor: 0, wait: /* @__PURE__ */ new Map(), staging: /* @__PURE__ */ new Map(), restores: /* @__PURE__ */ new Map(), answered: /* @__PURE__ */ new Map(), settled: /* @__PURE__ */ new Set(), bytes: { tail: 0, staged: 0, waiting: 0 } });
 function newRoom(record, etag, state, id) {
@@ -47,7 +47,7 @@ function ledgerFull(env, room, client, n) {
 function append(env, room, frame, sent, by) {
   if (frame.no = room.log.length, room.log.push(frame), frame.k === "receipt") return;
   frame.bytes = frameBytes(frame.action, frame), frame.parts = Math.ceil(opsOf(frame.action) / env.limits.opsPerFrame), room.bytes.tail += frame.bytes;
-  const origin = env.removals && frame.action?.t === "del" && !frame.keep ? originOf(frame) : null, removed = origin ? unseenBy(room.state.wb, frame.action, frame.saw) : [], result = applyFrame(room.state, frame, room.epoch);
+  const origin = env.removals && removesOf(frame.action).length > 0 && !frame.keep ? originOf(frame) : null, removed = origin ? unseenBy(room.state.wb, frame.action, frame.saw) : [], result = applyFrame(room.state, frame, room.epoch);
   result.applied && removed.length && room.removals.push({ copy: origin[0], by: frame.e, at: [room.gen, frame.seq], cells: removed }), !frame.open && !result.dup && room.settled.add(frame.e), env.observer.onAdmit(env, room, frame, result, sent, by);
 }
 function park(room, frame, by, bytes) {
@@ -68,13 +68,10 @@ function admitRequest(env, room, frame, by) {
   const known = resolved(room.state, frame.c), body = { c: frame.c, n: frame.n, e: frame.e, action: frame.action, saw: frame.saw }, bytes = frameBytes(frame.action, body);
   return frame.n <= known ? "dup" : due(frame, known) ? full(env, room, bytes) ? "full" : ledgerFull(env, room, frame.c, frame.n) ? "ledger-full" : (frame.take && (body.take = frame.take, conflicts(room.state.wb, frame.action, frame.saw).length && (body.keep = !0)), append(env, room, { k: "act", seq: ++room.seq, ...body }, frame), wake(env, room, frame.c), "ok") : inRoom(env, room, bytes) ? (park(room, frame, by, bytes), "wait") : "full";
 }
-const returns = (room, item) => !!item.origin && !!item.action && !item.keep && resolved(room.state, item.c) < item.rn, firstCell = (action, saw) => (action.t === "paste" && Array.isArray(saw), [action, saw]);
+const returns = (room, item) => !!item.origin && !!item.action && !item.keep && resolved(room.state, item.c) < item.rn, firstCell = (action, saw) => [action, saw];
 function changedSince(room, item) {
   const { wb } = room.state;
-  return item.action.t, item.origin[1] !== item.e ? conflicts(wb, ...firstCell(item.action, item.saw)).length > 0 : fitsNow(wb, item.action) && stillOpen(wb, item.action, item.saw, item.reviewed ?? null).length > 0;
-}
-function firstHolder(room, id, by) {
-  return room.asked ??= /* @__PURE__ */ new Map(), room.asked.has(id) || room.asked.set(id, by), room.asked.get(id);
+  return item.origin[1] !== item.e ? conflicts(wb, ...firstCell(item.action, item.saw)).length > 0 : fitsNow(wb, item.action) && stillOpen(wb, item.action, item.saw, item.reviewed ?? null).length > 0;
 }
 function admitAdopt(env, room, frame, by) {
   const entry = covered(room.state, frame.from);

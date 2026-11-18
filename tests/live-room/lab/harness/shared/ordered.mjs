@@ -3,7 +3,7 @@ import { checkEnd, account } from "../oracle.mjs";
 import { parse } from "../../core/record.mjs";
 import { frameId } from "../../core/tab.mjs";
 import { readRecovery } from "../host.mjs";
-import { cellsOf as written } from "../../core/limits.mjs";
+import { cellsOf as written } from "../../codec-tiny/reducer.mjs";
 import * as S from "./oracle.mjs";
 import * as H from "./holder.mjs";
 

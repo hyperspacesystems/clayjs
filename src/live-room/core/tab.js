@@ -5,10 +5,11 @@ import { act } from "./codec.js";
 import { newRoom, newInstance, admit, retained, originOf } from "./room.js";
 import { serialize, DOC, page, parsePage, ledgerBytes } from "./record.js";
 import { clone } from "./lib.js";
-import { cellsOf, opsOf, actionBytes } from "./limits.js";
+import { opsOf, actionBytes } from "./limits.js";
 import { explode } from "./frames.js";
 import { COPY_VERSION, CLOSING, inFile, positions, preview, taken, markFor, madeFor } from "./recover.js";
-import { seenBy, reviewed, unseenBy, holds, rowsOf, marksOf } from "./conflict.js";
+import { seenBy, reviewed, unseenBy, holds, rowsOf, marksOf, createsOf, removesOf, has } from "./conflict.js";
+import { codec } from "./codec.js";
 function newTab(id) {
   return {
     id,
@@ -52,7 +53,7 @@ function newTab(id) {
     jobs: 0
   };
 }
-const editId = (client, n) => `${client}:${n}`, frameId = (frame) => frame.e, attached = (env, tab) => !!tab.room && tab.room === env.port.room(), nextCommit = (env) => `c${String(env.port.next("commits")).padStart(11, "0")}`, nextGen = (env, epoch) => `${epoch}.${String(env.port.next("nonce")).padStart(8, "0")}`, fits = (wb, action) => cellsOf(action).every(([row]) => wb.rows[row]), met = (wb, action) => action.t === "del" ? !wb.rows[action.row] || !1 : holds(wb, action), unsavedFor = (tab, action) => tab.tail.some((frame) => !frame.noop && (action.t === "del" ? frame.action.t === "del" && frame.action.row === action.row : marksOf(frame.action).some((key) => marksOf(action).includes(key)))), takeMet = (tab, basis, action) => met(basis.file.state.wb, action) && (basis.saved || !1 || !unsavedFor(tab, action)), inLineage = (state, frame) => frame.k === "adopt" && (covered(state, frame.from[0])?.[1] ?? -1) >= frame.from[1];
+const editId = (client, n) => `${client}:${n}`, frameId = (frame) => frame.e, attached = (env, tab) => !!tab.room && tab.room === env.port.room(), nextCommit = (env) => `c${String(env.port.next("commits")).padStart(11, "0")}`, nextGen = (env, epoch) => `${epoch}.${String(env.port.next("nonce")).padStart(8, "0")}`, fits = (wb, action) => rowsOf(action).every((row) => removesOf(action).includes(row) || has(wb, row)), met = (wb, action) => removesOf(action).length > 0 ? removesOf(action).every((row) => !has(wb, row)) || !1 : holds(wb, action), unsavedFor = (tab, action) => tab.tail.some((frame) => !frame.noop && (removesOf(action).length > 0 ? removesOf(frame.action).some((row) => removesOf(action).includes(row)) : marksOf(frame.action).some((key) => marksOf(action).includes(key)))), takeMet = (tab, basis, action) => met(basis.file.state.wb, action) && (basis.saved || !1 || !unsavedFor(tab, action)), inLineage = (state, frame) => frame.k === "adopt" && (covered(state, frame.from[0])?.[1] ?? -1) >= frame.from[1];
 function settledElsewhere(tab) {
   const settled = /* @__PURE__ */ new Set();
   for (const held of tab.held) {
@@ -270,7 +271,7 @@ function sift(env, tab, basis, entries) {
   }
   return stay;
 }
-const homeless = (tab, snap, id) => cellsOf(tab.edits.get(id).action).length > 0 && snap.unplaced.has(id);
+const homeless = (tab, snap, id) => codec().targets(tab.edits.get(id).action).length > 0 && snap.unplaced.has(id);
 function refuse(env, tab, id) {
   const one = tab.edits.get(id);
   one.state = "dropped", tab.notices.push({ kind: "refused", edits: [id], action: one.action }), env.observer.onHomeless(env, tab, id);
@@ -300,7 +301,7 @@ function giveUp(env, tab, basis, held, reason, from, epoch) {
   const entries = sift(env, tab, basis, [...inOrder(held), ...fresh]);
   entries.some(taken) && writeCopy(env, tab, newCopy(env, from, reason), basis, entries);
 }
-const settledFor = (tab) => settledElsewhere(tab), tookItsRow = (tab, basis, one) => !!one.take && one.action.t === "del" && !0 && takeMet(tab, basis, one.action);
+const settledFor = (tab) => settledElsewhere(tab), tookItsRow = (tab, basis, one) => !!one.take && removesOf(one.action).length > 0 && !0 && takeMet(tab, basis, one.action);
 function settleOwn(env, tab, frames, settled, basis) {
   for (const frame of frames) {
     const id = frameId(frame), one = tab.edits.get(id);
@@ -387,8 +388,9 @@ function pruneHeld(env, tab) {
 }
 const hidesRemoved = (frame, origin) => !1;
 function applyAction(env, tab, frame) {
-  const origin = frame.action?.t === "del" && !frame.keep ? originOf(frame) : null, removed = origin && !hidesRemoved(frame, origin) ? unseenBy(tab.state.wb, frame.action, frame.saw).slice(0, (frame.k, 1 / 0)) : [], result = applyFrame(tab.state, frame, tab.epoch);
-  if (result.applied && frame.action?.t === "ins" && (tab.inserts[frame.action.row] = { e: frame.e, c: frame.c, n: frame.n, b: frame.b ?? null, src: [tab.gen, frame.seq], org: frame.org ?? [tab.gen, frame.seq], via: frame.via ?? [] }), result.applied && origin && (removed.length && !(frame.k === "adopt" && !1) && tab.notices.push({ kind: "removed", copy: origin[0], by: frameId(frame), edits: [], cells: removed }), env.observer.onRemoved(tab, frame, removed), env.removals && removed.length && frame.seq > tab.base.through && tab.removals.push({ copy: origin[0], by: frameId(frame), at: [tab.gen, frame.seq], cells: removed }), env.removals && removed.length), tab.a = frame.seq, frame.seq > tab.base.through && tab.tail.push(result.applied ? frame : { ...frame, noop: !0, dup: result.dup }), !tab.clients.has(frame.c)) return;
+  const origin = removesOf(frame.action).length > 0 && !frame.keep ? originOf(frame) : null, removed = origin && !hidesRemoved(frame, origin) ? unseenBy(tab.state.wb, frame.action, frame.saw).slice(0, (frame.k, 1 / 0)) : [], result = applyFrame(tab.state, frame, tab.epoch);
+  if (result.applied) for (const row of createsOf(frame.action)) tab.inserts[row] = { e: frame.e, c: frame.c, n: frame.n, b: frame.b ?? null, src: [tab.gen, frame.seq], org: frame.org ?? [tab.gen, frame.seq], via: frame.via ?? [] };
+  if (result.applied && origin && (removed.length && !(frame.k === "adopt" && !1) && tab.notices.push({ kind: "removed", copy: origin[0], by: frameId(frame), edits: [], cells: removed }), env.observer.onRemoved(tab, frame, removed), env.removals && removed.length && frame.seq > tab.base.through && tab.removals.push({ copy: origin[0], by: frameId(frame), at: [tab.gen, frame.seq], cells: removed }), env.removals && removed.length), tab.a = frame.seq, frame.seq > tab.base.through && tab.tail.push(result.applied ? frame : { ...frame, noop: !0, dup: result.dup }), !tab.clients.has(frame.c)) return;
   const mine = tab.edits.get(frameId(frame)), kept2 = mine && inCopy(mine) && (frame.copy || frame.k === "adopt");
   frame.keep && !result.dup && env.observer.onKeepSeen(tab, frameId(frame)), mine?.take && result.applied && (mine.removed = removed);
   const inSave = frame.seq <= tab.base.through && !0;
@@ -471,7 +473,7 @@ function markReturned(env, tab, gen, { copy, e }) {
   for (const held of tab.held) held.gen === gen && (held.offered = !1);
   flush(env, tab);
 }
-const through = (file, gen) => file.record.gen === gen ? file.record.through : covered(file.state, gen)?.[1] ?? -1, returnedTake = (file, one) => !!one.take && one.gen !== file.record.gen && !0, lostMark = (env, file, one, id) => one.gen === file.record.gen || one.action.t === "paste" && !1 ? null : passedMark(env, id);
+const through = (file, gen) => file.record.gen === gen ? file.record.through : covered(file.state, gen)?.[1] ?? -1, returnedTake = (file, one) => !!one.take && one.gen !== file.record.gen && !0, lostMark = (env, file, one, id) => one.gen === file.record.gen ? null : passedMark(env, id);
 function passedMark(env, id) {
   const mark = env.port.verdict(id);
   return mark && mark.kind !== "taken" && mark.kind !== "saved" ? mark : null;

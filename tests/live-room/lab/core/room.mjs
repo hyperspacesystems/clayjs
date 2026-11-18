@@ -4,7 +4,7 @@ import { entryBytes, ledgerBytes, recordBudget } from "./record.mjs";
 import { frameBytes, opsOf } from "./limits.mjs";
 import { assemble } from "./frames.mjs";
 import { weigh, remember, counts, newMemory, positions, rowMayReturn } from "./recover.mjs";
-import { conflicts, fitsNow, stillOpen, unseenBy } from "./conflict.mjs";
+import { conflicts, fitsNow, stillOpen, unseenBy, removesOf } from "./conflict.mjs";
 import { clone } from "./lib.mjs";
 
 export const stateReserve = (limits) => recordBudget(limits.ledgerCap, W);
@@ -80,7 +80,7 @@ function append(env, room, frame, sent, by) {
   frame.bytes = frameBytes(frame.action, frame);
   frame.parts = Math.ceil(opsOf(frame.action) / env.limits.opsPerFrame);
   room.bytes.tail += frame.bytes;
-  const origin = env.removals && frame.action?.t === "del" && !frame.keep ? originOf(frame) : null;
+  const origin = env.removals && removesOf(frame.action).length > 0 && !frame.keep ? originOf(frame) : null;
   const removed = origin ? unseenBy(room.state.wb, frame.action, frame.saw) : [];
   const result = applyFrame(room.state, frame, room.epoch);
   if (result.applied && removed.length) room.removals.push({ copy: origin[0], by: frame.e, at: [room.gen, frame.seq], cells: removed });
@@ -136,11 +136,11 @@ function admitRequest(env, room, frame, by) {
 
 const returns = (room, item) => Boolean(item.origin) && Boolean(item.action) && !item.keep && resolved(room.state, item.c) < item.rn;
 
-const firstCell = (action, saw) => (action.t === "paste" && Array.isArray(saw) && planted("returned-take-of-a-paste-checks-one-cell") ? [{ ...action, cells: action.cells.slice(0, 1) }, saw.slice(0, 1)] : [action, saw]);
+const firstCell = (action, saw) => (planted("returned-take-of-a-paste-checks-one-cell") && action.t === "paste" && Array.isArray(saw) ? [{ ...action, cells: action.cells.slice(0, 1) }, saw.slice(0, 1)] : [action, saw]);
 
 function changedSince(room, item) {
   const { wb } = room.state;
-  if (item.action.t === "del" && planted("returned-delete-not-judged-again")) return false;
+  if (planted("returned-delete-not-judged-again") && removesOf(item.action).length > 0) return false;
   if (item.origin[1] !== item.e) return conflicts(wb, ...firstCell(item.action, item.saw)).length > 0;
   return fitsNow(wb, item.action) && stillOpen(wb, item.action, item.saw, item.reviewed ?? null).length > 0;
 }

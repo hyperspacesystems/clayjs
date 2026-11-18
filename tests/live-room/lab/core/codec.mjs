@@ -1,7 +1,9 @@
-let codec = null;
+let current = null;
 
 export function useCodec(next) {
-  codec = next;
+  current = next;
 }
 
-export const act = (wb, action) => codec.act(wb, action);
+export const codec = () => current;
+
+export const act = (wb, action) => current.apply(wb, action).out === "applied";

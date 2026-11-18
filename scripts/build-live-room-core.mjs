@@ -46,7 +46,7 @@ export function unplant(source, force = []) {
 export function generate(name, source, { force = [] } = {}) {
   const body = unplant(source.replace(/\r\n/g, "\n").replace(/^import \{ planted \} from "\.\/planted\.mjs";\n/m, ""), force);
   if (/\bplanted\b/.test(body)) throw new Error(`${name}: a planted reference survived`);
-  const code = transformSync(body, { loader: "js", format: "esm", minifySyntax: true, legalComments: "none", define: { "process.env": "{}" } }).code;
+  const code = transformSync(body, { loader: "js", format: "esm", minifySyntax: true, treeShaking: true, legalComments: "none", define: { "process.env": "{}" } }).code;
   const relinked = code.replace(/from "\.\/([\w-]+)\.mjs"/g, 'from "./$1.js"');
   if (/\.mjs"/.test(relinked)) throw new Error(`${name}: an import still names a .mjs file`);
   if (/\bprocess\b/.test(relinked)) throw new Error(`${name}: a process reference survived`);
@@ -66,9 +66,6 @@ export function corePlants() {
   return [...names].sort();
 }
 
-// Hand-written files that live beside the generated core (none yet; P2 adds check-codec.js).
-export const HAND_WRITTEN = new Set([]);
-
 export function writeCore(dir, files) {
   fs.mkdirSync(dir, { recursive: true });
   for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), text);
@@ -76,7 +73,7 @@ export function writeCore(dir, files) {
 
 export function strays(files) {
   if (!fs.existsSync(OUT)) return [];
-  return fs.readdirSync(OUT).filter((name) => !(name in files) && !HAND_WRITTEN.has(name));
+  return fs.readdirSync(OUT).filter((name) => !(name in files));
 }
 
 export function buildCore({ force = [] } = {}) {

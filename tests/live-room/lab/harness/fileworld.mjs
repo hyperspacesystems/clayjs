@@ -1,11 +1,11 @@
 import { planted } from "../core/planted.mjs";
 import { newHost, get, put, write, keepRecovery, fetchRecovery } from "./host.mjs";
 import { serialize, parse, DOC, ledgerBytes } from "../core/record.mjs";
-import { act } from "../codec-tiny/reducer.mjs";
+import { act, cellsOf } from "../codec-tiny/reducer.mjs";
 import { resolved, trimLedger } from "../core/ledger.mjs";
 import { preview, replay } from "../core/recover.mjs";
 import { readPage, parse as readFile } from "./reader.mjs";
-import { labLimits, cellsOf } from "../core/limits.mjs";
+import { labLimits } from "../core/limits.mjs";
 import { newTally, refStep as refFold } from "./oracle.mjs";
 import { canon, tinyWorkbook } from "./lib.mjs";
 import { nextCommit, nextGen, view, refresh, push, save, deliver } from "../core/fileonly.mjs";

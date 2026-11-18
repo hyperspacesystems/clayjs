@@ -4,10 +4,11 @@ import { act } from "./codec.mjs";
 import { newRoom, newInstance, admit, retained, originOf } from "./room.mjs";
 import { serialize, DOC, page, parsePage, ledgerBytes } from "./record.mjs";
 import { clone } from "./lib.mjs";
-import { cellsOf, opsOf, actionBytes } from "./limits.mjs";
+import { opsOf, actionBytes } from "./limits.mjs";
 import { explode } from "./frames.mjs";
 import { COPY_VERSION, CLOSING, inFile, positions, preview, taken, weigh, markFor, madeFor } from "./recover.mjs";
-import { seenBy, reviewed, unseenBy, holds, rowsOf, marksOf } from "./conflict.mjs";
+import { seenBy, reviewed, unseenBy, holds, rowsOf, marksOf, createsOf, removesOf, has } from "./conflict.mjs";
+import { codec } from "./codec.mjs";
 
 export function newTab(id) {
   return {
@@ -59,11 +60,11 @@ export const attached = (env, tab) => Boolean(tab.room) && tab.room === env.port
 export const nextCommit = (env) => `c${String(env.port.next("commits")).padStart(11, "0")}`;
 export const nextGen = (env, epoch) => `${epoch}.${String(env.port.next("nonce")).padStart(8, "0")}`;
 
-const fits = (wb, action) => cellsOf(action).every(([row]) => wb.rows[row]);
+const fits = (wb, action) => rowsOf(action).every((row) => removesOf(action).includes(row) || has(wb, row));
 
-const met = (wb, action) => (action.t === "del" && !planted("taken-delete-labelled-by-its-cells") ? !wb.rows[action.row] || planted("taken-delete-saved-while-its-row-stands") : holds(wb, action));
+const met = (wb, action) => (removesOf(action).length > 0 && !planted("taken-delete-labelled-by-its-cells") ? removesOf(action).every((row) => !has(wb, row)) || planted("taken-delete-saved-while-its-row-stands") : holds(wb, action));
 
-const unsavedFor = (tab, action) => tab.tail.some((frame) => !frame.noop && (action.t === "del" ? frame.action.t === "del" && frame.action.row === action.row : marksOf(frame.action).some((key) => marksOf(action).includes(key))));
+const unsavedFor = (tab, action) => tab.tail.some((frame) => !frame.noop && (removesOf(action).length > 0 ? removesOf(frame.action).some((row) => removesOf(action).includes(row)) : marksOf(frame.action).some((key) => marksOf(action).includes(key))));
 
 const takeMet = (tab, basis, action) => met(basis.file.state.wb, action) && (basis.saved || planted("given-up-take-settled-by-an-unsaved-value") || !unsavedFor(tab, action));
 
@@ -442,7 +443,7 @@ function sift(env, tab, basis, entries) {
   return stay;
 }
 
-const homeless = (tab, snap, id) => cellsOf(tab.edits.get(id).action).length > 0 && snap.unplaced.has(id);
+const homeless = (tab, snap, id) => codec().targets(tab.edits.get(id).action).length > 0 && snap.unplaced.has(id);
 
 function refuse(env, tab, id) {
   const one = tab.edits.get(id);
@@ -506,7 +507,7 @@ function giveUp(env, tab, basis, held, reason, from, epoch) {
 
 const settledFor = (tab) => (planted("listed-though-settled") ? new Set() : settledElsewhere(tab));
 
-const tookItsRow = (tab, basis, one) => Boolean(one.take) && one.action.t === "del" && !planted("skipped-take-of-a-delete-shown-as-refused") && takeMet(tab, basis, one.action);
+const tookItsRow = (tab, basis, one) => Boolean(one.take) && removesOf(one.action).length > 0 && !planted("skipped-take-of-a-delete-shown-as-refused") && takeMet(tab, basis, one.action);
 
 function settleOwn(env, tab, frames, settled, basis) {
   if (planted("settled-own-left-open")) return;
@@ -639,10 +640,10 @@ function pruneHeld(env, tab) {
 const hidesRemoved = (frame, origin) => planted(origin[1] === frame.e ? "restored-delete-hides-removed-values" : "taken-delete-hides-removed-values");
 
 function applyAction(env, tab, frame) {
-  const origin = frame.action?.t === "del" && !frame.keep ? originOf(frame) : null;
+  const origin = removesOf(frame.action).length > 0 && !frame.keep ? originOf(frame) : null;
   const removed = origin && !hidesRemoved(frame, origin) ? unseenBy(tab.state.wb, frame.action, frame.saw).slice(0, frame.k === "adopt" && planted("returned-delete-names-one-removed-value") ? 1 : Infinity) : [];
   const result = applyFrame(tab.state, frame, tab.epoch);
-  if (result.applied && frame.action?.t === "ins") tab.inserts[frame.action.row] = { e: frame.e, c: frame.c, n: frame.n, b: frame.b ?? null, src: [tab.gen, frame.seq], org: frame.org ?? [tab.gen, frame.seq], via: frame.via ?? [] };
+  if (result.applied) for (const row of createsOf(frame.action)) tab.inserts[row] = { e: frame.e, c: frame.c, n: frame.n, b: frame.b ?? null, src: [tab.gen, frame.seq], org: frame.org ?? [tab.gen, frame.seq], via: frame.via ?? [] };
   if (result.applied && origin) {
     if (removed.length && !(frame.k === "adopt" && planted("returned-delete-shows-no-removed-notice"))) tab.notices.push({ kind: "removed", copy: origin[0], by: frameId(frame), edits: [], cells: removed });
     env.observer.onRemoved(tab, frame, removed);
@@ -809,7 +810,7 @@ const through = (file, gen) => (file.record.gen === gen ? file.record.through : 
 
 const returnedTake = (file, one) => Boolean(one.take) && one.gen !== file.record.gen && !planted("returned-take-shown-as-saved");
 
-const lostMark = (env, file, one, id) => (one.gen === file.record.gen || planted("lost-room-position-means-saved") || (one.action.t === "paste" && planted("lost-room-position-means-a-paste-is-saved")) ? null : passedMark(env, id));
+const lostMark = (env, file, one, id) => (one.gen === file.record.gen || planted("lost-room-position-means-saved") || (planted("lost-room-position-means-a-paste-is-saved") && one.action.t === "paste") ? null : passedMark(env, id));
 
 function passedMark(env, id) {
   const mark = planted("label-ignores-record") ? null : env.port.verdict(id);

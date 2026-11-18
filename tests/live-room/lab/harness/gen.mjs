@@ -3,7 +3,7 @@ import { parse } from "../core/record.mjs";
 import { faultPlan } from "./host.mjs";
 import { keyBetween } from "./vendor/order-keys.mjs";
 import { rng, rowsInOrder, COLS } from "./lib.mjs";
-import { cellsOf } from "../core/limits.mjs";
+import { cellsOf } from "../codec-tiny/reducer.mjs";
 
 const pick = (rnd, list) => (list.length ? list[Math.floor(rnd() * list.length)] : null);
 const slow = (world, way, tab) => world.slow?.[way] === Number(tab.id.slice(1)) % 3;
