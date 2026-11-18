@@ -554,10 +554,16 @@ async function prove(flags) {
 // The sensitivity check: six defects, each planted in a runtime copy of its own, run
 // against the permanent corpus. A defect that no case feels is a gap in the corpus and is
 // named, never smoothed over: the checkout's `src/` is untouched, and the copies are made
-// under `--scratch` so the run leaves the evidence behind.
+// under `--scratch` so the run leaves the evidence behind. `--only` plants just the named
+// defects, so separate processes can share the six.
 async function selftest(flags) {
   if (typeof flags.scratch !== "string") fail("selftest: name the scratch directory, as --scratch <dir>");
+  if (flags.only === true) fail("selftest: name the defects, as --only <id>[,<id>]");
   const { MUTATIONS } = await import("../tests/mode-counterexamples/mutations.mjs");
+  const only = typeof flags.only === "string" ? flags.only.split(",") : null;
+  const unknown = (only ?? []).filter((id) => !MUTATIONS.some((mutation) => mutation.id === id));
+  if (unknown.length) fail(`selftest: no defect is called ${unknown.join(", ")}; the defects are ${MUTATIONS.map((mutation) => mutation.id).join(", ")}`);
+  const planted = only ? MUTATIONS.filter((mutation) => only.includes(mutation.id)) : MUTATIONS;
   const cases = typeof flags.cases === "string" ? flags.cases : CORPUS;
   const entries = readCases(cases);
   const scratch = path.resolve(flags.scratch);
@@ -575,7 +581,7 @@ async function selftest(flags) {
 
   const gaps = [];
   let caught = 0;
-  for (const mutation of MUTATIONS) {
+  for (const mutation of planted) {
     const dir = path.join(scratch, mutation.id);
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
@@ -600,7 +606,7 @@ async function selftest(flags) {
   }
 
   console.log("");
-  console.log(`${MUTATIONS.length} mutations: ${caught} caught, ${gaps.length} not caught`);
+  console.log(`${planted.length} mutations: ${caught} caught, ${gaps.length} not caught`);
   if (gaps.length) {
     console.log(`selftest: the corpus does not feel ${gaps.join(", ")}`);
     process.exitCode = 1;
@@ -899,7 +905,7 @@ if (!COMMANDS.has(command)) {
       "  check --cases <dir>   run every case and judge it",
       "  shrink --case <json> --out <json>   reduce a failing case to its smallest schedule",
       "  prove --case <json> --before <dir> --after <dir> [--reduced <json>] [--out <json>]",
-      "  selftest --scratch <dir> [--cases <dir>]   plant six defects in scratch runtime copies and say which cases catch each",
+      "  selftest --scratch <dir> [--cases <dir>] [--only <id>[,<id>]]   plant six defects (or the named ones) in scratch runtime copies and say which cases catch each",
       "  sweep --seed <integer> --schedules <integer> [--out <dir>] [--fixtures <names>]   draw fresh schedules and keep every failure",
       "  fence   not yet (a later step)",
     ].join("\n"),

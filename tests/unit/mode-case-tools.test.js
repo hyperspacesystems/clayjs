@@ -2,7 +2,7 @@
  * @jest-environment jsdom
  */
 
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
@@ -27,13 +27,6 @@ const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const CLI = path.join(ROOT, "scripts/mode-counterexamples.mjs");
 const CASES = path.join(ROOT, "tests/mode-counterexamples/cases");
 const CASE = path.join(CASES, "bytes-etag-pairing.json");
-// The cases a selftest of the whole corpus takes six minutes to reach. These five carry
-// four of the defects the corpus can feel — a write the exit never made, a view announced
-// before the save was accepted, a listener a cycle keeps and a flush that wrote inside a
-// later generation's exit — so one minute proves the planting and the verdict for those.
-// The two only the rest of the corpus feels are named below.
-const SUBSET = ["canonical-freeze", "cycles-no-growth", "cycles-one-write", "enter-leave-one-write", "stale-flush-generation"];
-const UNFELT = ["rebaseline-current-dom", "route-draft-to-host"];
 const REBASELINE = "rebaseline-current-dom";
 // The fixtures a sweep draws from when a seed must stay cheap: a host page boots in well
 // under a second, while a draft page and an edit-mode boot each spend a real timer.
@@ -207,30 +200,6 @@ test("every sensitivity mutation names code that occurs exactly once in the chec
     expect(mutation.why.startsWith(`${mutation.file}:`)).toBe(true);
   }
 });
-
-test("selftest plants each defect in a scratch runtime copy and says which cases feel it", async () => {
-  const { MUTATIONS } = await import("../mode-counterexamples/mutations.mjs");
-  const cases = path.join(scratch, "selftest-cases");
-  const runtime = path.join(scratch, "selftest");
-  mkdirSync(cases, { recursive: true });
-  for (const name of SUBSET) copyFileSync(path.join(CASES, `${name}.json`), path.join(cases, `${name}.json`));
-  const untouched = readFileSync(path.join(ROOT, "src/core/save.js"), "utf8");
-
-  const result = run(["selftest", "--scratch", runtime, "--cases", cases]);
-  const output = String(result.stdout ?? "");
-  const lineFor = (id) => output.split("\n").find((line) => line.startsWith(id)) ?? "";
-
-  for (const mutation of MUTATIONS) expect(lineFor(mutation.id)).not.toBe("");
-  for (const id of UNFELT) expect(lineFor(id)).toContain("NOT CAUGHT");
-  for (const mutation of MUTATIONS.filter((entry) => !UNFELT.includes(entry.id))) {
-    expect(lineFor(mutation.id)).toMatch(/ caught by \S+ (failed|invalid)/);
-  }
-  expect(output).toContain(`6 mutations: ${MUTATIONS.length - UNFELT.length} caught, ${UNFELT.length} not caught`);
-  expect(output).toContain(`selftest: the corpus does not feel ${UNFELT.join(", ")}`);
-  expect(result.status).toBe(1);
-  expect(readdirSync(runtime).sort()).toEqual(MUTATIONS.map((mutation) => mutation.id).sort());
-  expect(readFileSync(path.join(ROOT, "src/core/save.js"), "utf8")).toBe(untouched);
-}, 600000);
 
 test("a sweep draws the same schedules, byte for byte, from the same seed", async () => {
   const { validateCase } = await import("../mode-counterexamples/driver.mjs");

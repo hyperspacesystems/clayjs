@@ -1,13 +1,10 @@
-/**
- * @jest-environment jsdom
- */
-
 import { readdirSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { runCase } from "../mode-counterexamples/driver.mjs";
-import { judge } from "../mode-counterexamples/oracle.mjs";
+import shard from "../../helpers/shard.cjs";
+import { runCase } from "../../mode-counterexamples/driver.mjs";
+import { judge } from "../../mode-counterexamples/oracle.mjs";
 
 /**
  * The permanent corpus, run through the real switch and judged by the oracle.
@@ -17,10 +14,16 @@ import { judge } from "../mode-counterexamples/oracle.mjs";
  * page and the trace. A case that fails today's code stays in the corpus marked
  * `knownFailing`, and this file asserts the failure it is known for rather than passing it
  * silently.
+ *
+ * The tests are dealt across the mode-counterexamples-<n>.test.js files on disk, heaviest
+ * first, so Jest runs the three slow ones in separate workers. A weight is the seconds the
+ * test took alone on a Mac; a stale weight only balances worse, it never drops a test.
  */
 
-const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const DIR = new URL("../mode-counterexamples/cases/", import.meta.url);
+const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+const DIR = new URL("../../mode-counterexamples/cases/", import.meta.url);
+const TESTS = [];
+const define = (title, run, timeout, weight = 1) => TESTS.push({ title, run, timeout, weight });
 
 function loadCases() {
   const files = readdirSync(DIR).filter((name) => name.endsWith(".json")).sort();
@@ -49,7 +52,7 @@ const byId = new Map(cases.map((json) => [json.id, json]));
 
 // A case the fence files under the corpus command holds what only that runner can hold (a
 // lazy import parked where the module loads), so it is judged in a process of its own.
-const FENCE = JSON.parse(readFileSync(new URL("../mode-counterexamples/fence.json", import.meta.url), "utf8"));
+const FENCE = JSON.parse(readFileSync(new URL("../../mode-counterexamples/fence.json", import.meta.url), "utf8"));
 const CLI_ONLY = new Set(
   FENCE.cases
     .filter((entry) => entry.runner === "cli" && path.posix.dirname(entry.path) === "tests/mode-counterexamples/cases")
@@ -57,7 +60,7 @@ const CLI_ONLY = new Set(
 );
 const cliCase = (json) => CLI_ONLY.has(`${json.id}.json`);
 
-test("the corpus is not empty and every control it names is in it", () => {
+define("the corpus is not empty and every control it names is in it", () => {
   expect(cases.length).toBeGreaterThanOrEqual(7);
   for (const json of cases) {
     if (json.control === undefined) continue;
@@ -66,7 +69,7 @@ test("the corpus is not empty and every control it names is in it", () => {
   console.log(`mode-counterexamples: ${cases.length} cases`);
 });
 
-test("every case runs through the driver and the oracle, and holds up", async () => {
+define("every case runs through the driver and the oracle, and holds up", async () => {
   const runs = new Map();
   for (const json of cases) {
     if (!cliCase(json)) runs.set(json.id, await runCase(json));
@@ -99,9 +102,9 @@ test("every case runs through the driver and the oracle, and holds up", async ()
 
   console.log(lines.join("\n"));
   expect(new Set(cases.map((json) => json.id)).size).toBe(cases.length);
-}, 120000);
+}, 120000, 6);
 
-test("a positive control with its input removed fails the pair", async () => {
+define("a positive control with its input removed fails the pair", async () => {
   const json = byId.get("enter-leave-zero-writes");
   const control = byId.get(json.control);
   const withoutInput = { ...control, steps: control.steps.filter((step) => step.op !== "input") };
@@ -120,7 +123,7 @@ test("a positive control with its input removed fails the pair", async () => {
 // subfolder so the corpus above is read exactly as it was, and it is judged the way a
 // round is: one process per case, because a page's lifetime state is the process it runs
 // in and a case that leaves edit never hands it back.
-const ROUND3 = new URL("../mode-counterexamples/cases/round3/", import.meta.url);
+const ROUND3 = new URL("../../mode-counterexamples/cases/round3/", import.meta.url);
 const ROUND3_DIR = fileURLToPath(ROUND3);
 const CLI = path.join(ROOT, "scripts/mode-counterexamples.mjs");
 
@@ -186,7 +189,7 @@ const SETTLED = [
 // The two the driver cannot describe a person doing, which must now say so instead of
 // failing on what it typed into a page that was not there.
 const LIMITATIONS = ["ime-late-commit-after-view", "late-source-chunk-failed"];
-test("round 3\u0027s corpus is the round\u0027s own, in its own folder", () => {
+define("round 3\u0027s corpus is the round\u0027s own, in its own folder", () => {
   const files = round3Files();
   expect(files.length).toBe(21);
   const ids = files.map((name) => JSON.parse(readFileSync(new URL(name, ROUND3), "utf8")).id);
@@ -195,7 +198,7 @@ test("round 3\u0027s corpus is the round\u0027s own, in its own folder", () => {
   expect(readdirSync(DIR).filter((name) => name.endsWith(".json")).length).toBe(cases.length);
 });
 
-test("round 3\u0027s defect candidates pass now that both defects are fixed", () => {
+define("round 3\u0027s defect candidates pass now that both defects are fixed", () => {
   const lines = [];
   const failing = [];
   for (const id of DEFECTS) {
@@ -205,9 +208,9 @@ test("round 3\u0027s defect candidates pass now that both defects are fixed", ()
   }
   console.log(lines.join("\n"));
   expect(failing).toEqual([]);
-}, 300000);
+}, 300000, 6);
 
-test("round 3\u0027s oracle bugs and driver limitations no longer fail", () => {
+define("round 3\u0027s oracle bugs and driver limitations no longer fail", () => {
   const lines = [];
   const wrong = [];
   for (const id of SETTLED) {
@@ -222,4 +225,8 @@ test("round 3\u0027s oracle bugs and driver limitations no longer fail", () => {
   }
   console.log(lines.join("\n"));
   expect(wrong).toEqual([]);
-}, 300000);
+}, 300000, 7);
+
+export function defineShard(url) {
+  for (const { title, run, timeout } of shard.shardItems(fileURLToPath(url), TESTS, (entry) => entry.weight)) test(title, run, timeout);
+}
