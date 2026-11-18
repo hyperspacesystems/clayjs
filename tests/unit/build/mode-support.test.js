@@ -29,6 +29,8 @@ const UNSUPPORTED = {
   "plugins/message.js": "unreviewed",
   "plugins/like.js": "unreviewed",
   "live-room/client.js": "a stub until step C4 builds the room client and decides its lifecycle",
+  "sheet/sheet.js": "the sheet shell; its live-switch lifecycle is decided with its editing (C7)",
+  "sheet/sheet-view.js": "the sheet's reader half; decided with the editor's lifecycle (C7)",
   "plugins/demo.js": "its own destination, not a host edit session",
   "plugins/visitor-drafts.js": "the draft plan keeps its own startup",
   "plugins/visitor-menu.js": "the draft plan keeps its own startup",

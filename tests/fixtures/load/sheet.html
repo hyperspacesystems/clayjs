@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sheet</title>
+<script>{const s=new CSSStyleSheet();s.replaceSync("@media screen{table[grid]>tbody:nth-of-type(n+4){display:none}}");document.adoptedStyleSheets=[...document.adoptedStyleSheets,s];window.__sheetEarlyWindow=s;setTimeout(()=>{if(window.__sheetEarlyWindow===s){document.adoptedStyleSheets=document.adoptedStyleSheets.filter(x=>x!==s);delete window.__sheetEarlyWindow}},8000)}</script>
+<script src="https://clayjs.com/v1/clay.js?plugins=sheet&exclude=richclay"></script>
+</head>
+<body>
+<main sap plugins="grid">
+<div items="sheets" sheet-workbook>
+<section item data-id="s1" data-pos="V"><h2 bind="name">Sheet1</h2><table grid><colgroup><col data-id="c1" data-pos="V"><col data-id="c2" data-pos="l"><col data-id="c3" data-pos="t"></colgroup>
+<tbody>
+<tr data-id="r1" data-pos="V"></tr>
+<tr data-id="r2" data-pos="l"></tr>
+<tr data-id="r3" data-pos="t"></tr>
+</tbody></table></section>
+</div>
+</main>
+</body>
+</html>

@@ -384,6 +384,8 @@ function attachPluginMember(path, mod, namespaces = loaded) {
     clay.aiEdit = mod.aiEdit || mod.default;
   } else if (path === "plugins/demo.js") {
     clay.demo = mod.demo;
+  } else if (path === "sheet/sheet.js") {
+    clay.sheet = mod.sheet;
   } else if (path === "plugins/richclay.js") {
     clay.RichClay = mod.RichClay || mod.default;
   } else if (path === "plugins/quickcrop.js") {

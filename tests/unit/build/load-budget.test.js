@@ -412,3 +412,25 @@ describe("recovery stays out of readers", () => {
     }
   }, 300000);
 });
+
+// The blank sheet boots the sheet shell, the sapjs core and the grid, and none of the
+// sheet's optional features (ARCHITECTURE.md section 5).
+test("sheet edit: the blank sheet's exact module list", async () => {
+  const measured = await measure({ html: htmlOf("sheet.html"), mode: "edit" });
+  const paths = measured.js.files.map(({ path }) => path);
+  const sheetAndSap = paths.filter((path) => /\/sheet\/|sap-|derive/.test(path)).sort();
+
+  expect(sheetAndSap).toEqual([
+    "src/lib/derived.js",
+    "src/plugins/derive.js",
+    "src/sheet/geometry.js",
+    "src/sheet/row-window.js",
+    "src/sheet/sheet.js",
+    "src/sheet/shell.js",
+    "src/vendor/sap-core.vendor.js",
+    "src/vendor/sap-grid.vendor.js",
+    "src/vendor/sap-ownership.vendor.js",
+  ]);
+  expect(paths.filter((path) => /\/sheet\/features\//.test(path))).toEqual([]);
+  expect(paths.filter((path) => /yjs|prosemirror/.test(path))).toEqual([]);
+}, 180000);

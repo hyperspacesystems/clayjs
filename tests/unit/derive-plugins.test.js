@@ -256,3 +256,41 @@ test("boot: clay.ready and the first pass wait for a plugin the page asks for, a
   expect(painted()).toEqual({ total: "7", double: "14" });
   expect(document.querySelectorAll("[sap-error]")).toHaveLength(0);
 });
+
+const GRID = `<main sap plugins="grid"><table grid><tbody><tr data-id="r1"><td>{{ price }}</td></tr></tbody></table></main>`;
+
+test("a page that asks for the grid gets it from this release before the mount", async () => {
+  page(GRID);
+  const { derive } = await importDerive();
+  await derive.ready;
+
+  expect(typeof window.Sap.grid).toBe("function");
+  window.Sap.mount();
+  expect(document.querySelectorAll("[sap-error]")).toHaveLength(0);
+});
+
+// Last in the file: the held download stays mocked for the rest of the module registry.
+test("a grid still downloading when the engine stops waiting leaves its table alone, and takes it on arrival", async () => {
+  page(GRID);
+  const real = await import("../../src/vendor/sap-grid.vendor.js");
+  const download = deferred();
+  jest.unstable_mockModule("../../src/vendor/sap-grid.vendor.js", async () => {
+    await download.promise;
+    return real;
+  });
+  const Sap = await loadCore();
+  const ready = Sap.plugins.ready;
+  // The engine's own time limit, run out at once.
+  Sap.plugins.ready = (root) => ready(root, 0);
+  const { derive } = await importDerive();
+  await derive.ready;
+  expect(Sap.plugins.has("grid")).toBe(false);
+
+  Sap.mount();
+  expect(document.querySelectorAll("[sap-error]")).toHaveLength(0);
+
+  download.resolve();
+  await Sap.plugins.load("grid");
+  expect(Sap.plugins.has("grid")).toBe(true);
+  expect(document.querySelectorAll("[sap-error]")).toHaveLength(0);
+});

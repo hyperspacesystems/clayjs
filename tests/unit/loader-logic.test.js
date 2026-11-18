@@ -661,3 +661,34 @@ test("the shared site tracker loads only for an edit of a page that declares sha
   expect(resolveModules(none, false, { hasSite: true, canEdit: true }).core).not.toContain("core/site-edits.js");
   expect(resolveModules(none, true, { hasSite: true, isDraftMode: true }).core).not.toContain("core/site-edits.js");
 });
+
+describe("the sheet and its reader half", () => {
+  const plan = (mode) =>
+    resolveModules(new URLSearchParams("plugins=sheet"), mode !== "view", { isDraftMode: mode === "draft", hasSap: true });
+
+  test("view mode loads the reader half after derive, and no editor", () => {
+    const { plugins } = plan("view");
+    expect(plugins).toContain("sheet/sheet-view.js");
+    expect(plugins).not.toContain("sheet/sheet.js");
+    expect(plugins.indexOf("plugins/derive.js")).toBeLessThan(plugins.indexOf("sheet/sheet-view.js"));
+  });
+
+  test("edit mode loads the editor after derive, and no reader half", () => {
+    const { plugins } = plan("edit");
+    expect(plugins).toContain("sheet/sheet.js");
+    expect(plugins).not.toContain("sheet/sheet-view.js");
+    expect(plugins.indexOf("plugins/derive.js")).toBeLessThan(plugins.indexOf("sheet/sheet.js"));
+  });
+
+  test("a visitor's draft keeps the editor", () => {
+    expect(plan("draft").plugins).toContain("sheet/sheet.js");
+  });
+
+  test("the reader half cannot be named in a URL", () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { plugins } = resolveModules(new URLSearchParams("plugins=sheet-view"), false, { hasSap: true });
+    expect(plugins).not.toContain("sheet/sheet-view.js");
+    expect(warn).toHaveBeenCalledWith('clayjs: unknown plugin "sheet-view"');
+    warn.mockRestore();
+  });
+});

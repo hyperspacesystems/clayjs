@@ -95,6 +95,11 @@ export const PLUGIN_PATHS = {
   // The sapjs core. Loaded for any page with a [sap] root at boot (resolveModules'
   // hasSap), in view mode too: a reader's tab paints the same totals.
   derive:    { path: "plugins/derive.js",          editOnly: false, default: false },
+  // The spreadsheet editor. Edit only: a reader gets its reader half, sheet-view. A
+  // visitor's draft keeps it, since a sheet's edits are records like any other.
+  sheet:     { path: "sheet/sheet.js",            editOnly: true,  default: false },
+  // The reader half of `sheet`, added by resolveModules in view mode, never named in a URL.
+  "sheet-view": { path: "sheet/sheet-view.js",    editOnly: false, default: false, internal: true },
   // The update check a starter template copy gets from its own hyper-source meta.
   upgrade:   { path: "plugins/upgrade.js",         editOnly: false, default: false },
 };
@@ -158,13 +163,16 @@ export const MODULES = {
   "plugins/bind-text.js":       () => import("./plugins/bind-text.js"),
   "plugins/source.js":          () => import("./plugins/source.js"),
   "plugins/derive.js":          () => import("./plugins/derive.js"),
+  "sheet/sheet.js":             () => import("./sheet/sheet.js"),
+  "sheet/sheet-view.js":        () => import("./sheet/sheet-view.js"),
   "plugins/upgrade.js":         () => import("./plugins/upgrade.js"),
   "live-room/client.js":        () => import("./live-room/client.js"),
 };
 
 // `source` is last on purpose: its install captures a save clone, so it wants every
 // plugin that registers a document transform to have registered it first.
-const PLUGIN_ORDER = ["visitor-drafts", "visitor-menu", "richclay", "indicator", "sortable", "undo", "unsent", "quickcrop", "upload", "people", "menu", "upgrade", "cms", "blockeditor-view", "sync", "live", "live-room", "blockeditor", "message", "like", "wire", "ai-edit", "demo", "derive", "bind-text", "source"];
+// The sheet after derive: its windows follow the Grid that derive's grid plugin makes.
+const PLUGIN_ORDER = ["visitor-drafts", "visitor-menu", "richclay", "indicator", "sortable", "undo", "unsent", "quickcrop", "upload", "people", "menu", "upgrade", "cms", "blockeditor-view", "sync", "live", "live-room", "blockeditor", "message", "like", "wire", "ai-edit", "demo", "derive", "sheet-view", "sheet", "bind-text", "source"];
 
 // A plugin that cannot do its whole job alone. hypercms reads the cropper through
 // a capability lookup (`clay.quickcrop`) and silently uploads the raw file when it
@@ -199,6 +207,11 @@ const IMPLIES = { cms: ["quickcrop", "upload", "menu"], "ai-edit": ["wire"], blo
 // A Document's editor owns its article's rich text, so richclay (for [editable]) has
 // nothing to do there; plugins=blockeditor,richclay still loads it.
 const DISPLACES = { blockeditor: ["richclay"] };
+
+// An editor whose readers need a half of their own: a page in view mode that asks for
+// the editor loads the reader half instead (the editor is edit only).
+const READER_HALF = { blockeditor: "blockeditor-view", sheet: "sheet-view" };
+
 // No first paint or keystroke waits for these. source keeps the file's bytes outside
 // the edited parts stable; a save before it installs is the ordinary full serialization.
 // upgrade only asks the host for a newer version once `clay.ready` resolves.
@@ -257,7 +270,9 @@ export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap
   if (hasSap) enabled.add("derive");
   // Two or more looks need the dock's variant pill, and only someone who can edit sees it.
   if (hasVariants && (isEditMode || canEdit)) enabled.add("menu");
-  if (!isEditMode && !isDraftMode && enabled.has("blockeditor")) enabled.add("blockeditor-view");
+  for (const [owner, reader] of Object.entries(READER_HALF)) {
+    if (!isEditMode && !isDraftMode && enabled.has(owner)) enabled.add(reader);
+  }
   // A plugin this mode does not load brings nothing with it, whether a default put
   // it in the set or the tag named it. A page that wants what an edit-only plugin
   // implies in view mode names that plugin too. `blockeditor` is the case that matters

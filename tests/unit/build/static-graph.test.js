@@ -36,6 +36,7 @@ const FIXTURES = {
   kanban: { plugins: "sortable,people,upload,sync,visitor-drafts", exclude: "richclay", hasSap: true, forbidden: FORBIDDEN, forbiddenLabel: "the merge engine or parse5" },
   journal: { plugins: "sync,visitor-drafts", exclude: "richclay", hasSap: false, forbidden: FORBIDDEN, forbiddenLabel: "the merge engine or parse5" },
   document: { plugins: "blockeditor", exclude: "richclay", hasSap: false, modes: ["edit", "draft"], forbidden: FORBIDDEN, forbiddenLabel: "the merge engine or parse5" },
+  sheet: { plugins: "sheet", exclude: "richclay", hasSap: true, modes: ["edit", "draft"], forbidden: FORBIDDEN, forbiddenLabel: "the merge engine or parse5" },
 };
 
 const MODES = [
@@ -153,6 +154,25 @@ for (const [fixture, tag] of Object.entries(FIXTURES)) {
       }
     });
   }
+}
+
+// The sheet's optional features are fetched when a document or a command first needs
+// them, so no sheet plan may reach src/sheet/features/ through a static import. The
+// sheet's shell is in the walk: that is the control that the walk reaches the sheet's
+// code at all. The grid is the engine's to ask for, through derive.js.
+for (const { mode, isEditMode, isDraftMode } of MODES) {
+  test(`sheet ${mode}: no sheet feature and no grid bundle in the boot graph`, async () => {
+    const tag = FIXTURES.sheet;
+    const params = new URLSearchParams(`plugins=${tag.plugins}&exclude=${tag.exclude}`);
+    const plan = resolveModules(params, isEditMode, { isDraftMode, hasSap: tag.hasSap });
+    const entries = [...plan.core, ...plan.plugins].map((path) => `src/${path}`);
+    const graph = walk(await inputsFor(entries), ["src/loader.js", ...entries]);
+
+    expect(graph.has("src/sheet/shell.js")).toBe(true);
+    expect([...graph].filter((file) => file.startsWith("src/sheet/features/"))).toEqual([]);
+    expect(graph.has("src/vendor/sap-grid.vendor.js")).toBe(false);
+    expect([...graph].filter((file) => FORBIDDEN.includes(file))).toEqual([]);
+  });
 }
 
 // An owner editing the original reads the owner chip, not the draft store: the
