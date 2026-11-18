@@ -128,11 +128,12 @@ test('an owner that throws is replaced by the generic path in the same capture',
   expect(errors.length).toBe(1);
 });
 
-test('an owner that throws an error with a code refuses the capture', () => {
+test('an owner that throws an error with a code refuses a save request, and only a save request', () => {
   const own = owner();
   own.spec.serialize = () => { const error = new Error('edits are still pending'); error.code = 'sheet-pending'; throw error; };
   release = register(own.spec);
-  expect(() => snapshot.captureForSaveAndComparison({ emitForSync: false })).toThrow('edits are still pending');
+  expect(() => snapshot.captureForSaveAndComparison({ emitForSync: false, forRequest: true })).toThrow('edits are still pending');
+  expect(() => snapshot.captureForSaveAndComparison({ emitForSync: false })).not.toThrow();
   expect(() => snapshot.captureForDirtyCheck()).not.toThrow();
 });
 

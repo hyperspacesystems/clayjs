@@ -207,6 +207,7 @@ document.addEventListener("clay:sync-applied", (event) => {
   if (!isEditMode) return;
   if (event.detail?.source !== "disk") return;
   if (typeof event.detail.etag === "string" && event.detail.etag) return;
+  if (event.detail.ownedFailed) return;
   forgetEtag();
   seedEtag({ fresh: true });
 });

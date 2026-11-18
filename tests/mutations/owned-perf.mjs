@@ -7,7 +7,7 @@ mutate({
   "comparison-serializes": {
     what: "a comparison capture asks the owner for its bytes",
     file: "src/core/snapshot.js",
-    edits: [["  const pins = pinOwnedRegions(owned, purpose);", "  const pins = pinOwnedRegions('bytes', purpose);"]],
+    edits: [["  const pins = pinOwnedRegions(owned, purpose, context !== null);", "  const pins = pinOwnedRegions('bytes', purpose, context !== null);"]],
     test: "tests/perf/owned-region-save.test.js",
     jestArgs: ["--testMatch", "**/tests/perf/**/*.test.js"],
     name: "an owned region of 20,000 cells saves and compares in the time of an empty one",

@@ -31,7 +31,7 @@ import { captureForComparisonAndDirty, captureForSaveAndComparison, captureForDi
 import { saveLimit, saveLimits, inspectSaveSize } from "./save-size.js";
 import { SLICED_SAVE_MIN_BYTES } from "./save-slices.js";
 import { paintSignature } from "../lib/derived.js";
-import { ownedConflictHandlers, withoutQuietRevisions } from "../lib/owned-regions.js";
+import { onOwnedRegister, ownedConflictHandlers, withoutQuietRevisions } from "../lib/owned-regions.js";
 import { NO_TRIGGER_AUTOSAVE_SELECTOR } from "../lib/region-policy.js";
 import { seedEtag, learnConditionalSaves, lastSeenEtag, recordEtag } from "./etag.js";
 import { startDirtyGate, gateCaptureToken, gateClearIfUnchanged, gateRevision, pageMaybeDirty } from "../lib/dirty-gate.js";
@@ -168,7 +168,9 @@ function setOfflineStateQuiet() {
  * Only shows 'saving' if the save takes longer than 500ms.
  * This prevents UI flicker on fast saves.
  */
+let statusBeforeSaving = null;
 function setSavingState() {
+  statusBeforeSaving = document.documentElement.getAttribute('savestatus');
   savingTimeout = setTimeout(() => {
     setSaveState('saving');
   }, 500);
@@ -622,6 +624,7 @@ let conflictEtag = null;
 let ownedMergeHold = false;
 
 function holdForConflict(etag) {
+  ownedMergeHold = false;
   conflictEtag = etag ?? null;
   if (conflictHold) return;
   conflictHold = true;
@@ -643,8 +646,8 @@ function releaseConflictHold() {
  */
 export function holdForOwnedMerge(etag = null) {
   const first = !ownedMergeHold;
-  ownedMergeHold = true;
   holdForConflict(etag);
+  ownedMergeHold = true;
   if (!first) return;
   setSaveState('conflict', 'A newer version of this document could not be merged into this tab', 'conflict', {
     hadTimeout: false,
@@ -865,6 +868,10 @@ function applySaveResult(result, forComparison, forDirty, label, gateToken, forS
         clearTimeout(savingTimeout);
         savingTimeout = null;
       }
+      if (document.documentElement.getAttribute('savestatus') === 'saving') {
+        if (statusBeforeSaving === null) document.documentElement.removeAttribute('savestatus');
+        else document.documentElement.setAttribute('savestatus', statusBeforeSaving);
+      }
       const detail = { etag: result.conflictEtag ?? null, changedBy: result.changedBy ?? null, captureId };
       for (const handle of ownedConflictHandlers()) {
         try {
@@ -873,6 +880,7 @@ function applySaveResult(result, forComparison, forDirty, label, gateToken, forS
           console.error('clayjs: an owned region conflict handler failed', err);
         }
       }
+      document.dispatchEvent(new CustomEvent('clay:save-owned-conflict', { detail }));
       return;
     }
     holdForConflict(result.conflictEtag);
@@ -970,6 +978,17 @@ export function setLastSavedBaselines(forComparison, forDirty) {
 export function setLastSavedContents(val) {
   setLastSavedBaselines(val, val);
 }
+
+// An owner that registers after the boot settle changes how its region reads in every
+// comparison, so a page that is still clean takes its baselines again; otherwise an
+// untouched page reads as unsaved. Before the settle, its capture already includes the
+// owner. A page with unsaved work keeps its baselines.
+onOwnedRegister(() => {
+  if (!isEditMode || !baselineSettledAt || pageMaybeDirty()) return;
+  const { forComparison, forDirty } = captureForComparisonAndDirty({ flushUndo: false });
+  setLastSavedBaselines(forComparison, forDirty);
+  baselineContents = forComparison;
+});
 
 const monotonic = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 
@@ -1228,7 +1247,8 @@ async function runSlicedSave(ctx, lane) {
       } catch (err) {
         console.error(`${ctx.explicit ? 'savePage' : 'savePageThrottled'}: preparing the save failed`, err);
         job.drop();
-        const result = { msg: err && err.message ? err.message : 'Save failed', msgType: 'error', code: err?.code ?? null, etag: null };
+        if (ctx.explicit) clearExplicitSave();
+        const result = { ok: false, msg: err && err.message ? err.message : 'Save failed', msgType: 'error', code: err?.code ?? null, etag: null };
         setSaveState('error', result.msg, '', { sent: false, code: result.code });
         settleRecoveryCapture(job.captureId, result);
         if (typeof ctx.callback === 'function') ctx.callback(result);
@@ -1300,7 +1320,8 @@ function startSlicedSave(ctx) {
   if (!lane) return false;
   const task = runSlicedSave(ctx, lane).catch((err) => {
     console.error('save: preparing the save failed', err);
-    const result = { msg: err && err.message ? err.message : 'Save failed', msgType: 'error', code: err?.code ?? null, etag: null };
+    if (ctx.explicit) clearExplicitSave();
+    const result = { ok: false, msg: err && err.message ? err.message : 'Save failed', msgType: 'error', code: err?.code ?? null, etag: null };
     setSaveState('error', result.msg, '', { sent: false, code: result.code });
     if (typeof ctx.callback === 'function') ctx.callback(result);
     return { result, dispatched: false };
@@ -1744,7 +1765,7 @@ setExitSave((permit) => savePageForce(() => {}, { permit }));
 // Every settled state is one, not just success: a save that failed is an answer about
 // the page's bytes too, and the caller decides what to do with it.
 function settled(deadline) {
-  const events = ['clay:save-saved', 'clay:save-error', 'clay:save-offline', 'clay:save-conflict'];
+  const events = ['clay:save-saved', 'clay:save-error', 'clay:save-offline', 'clay:save-conflict', 'clay:save-owned-conflict'];
   return new Promise((resolve, reject) => {
     let timer = null;
     const cleanup = () => {
@@ -1913,7 +1934,17 @@ export function replacePageWith(url) {
 
 // The automatic lane's own throttle. It is the floor under the scheduler: a call
 // that arrives inside the window rides the trailing attempt instead of capturing.
-const throttledAutomatic = throttle(callback => attemptSave({ kind: 'automatic' }, callback), 1200);
+// A trailing attempt fires up to the window's length after it was queued, so it checks
+// the suspension again: a conflict hold placed in between keeps it off the wire.
+const throttledAutomatic = throttle((callback) => {
+  if (autosaveSuspended > 0) {
+    autosaveMissed = true;
+    const skipped = skipped_('Autosave suspended');
+    if (typeof callback === 'function') callback(skipped);
+    return Promise.resolve(skipped);
+  }
+  return attemptSave({ kind: 'automatic' }, callback);
+}, 1200);
 
 const SOON_MS = 250;
 const SOON_MAX_MS = 1000;

@@ -74,7 +74,7 @@ import { isEphemeralAttr } from './ephemeral.js';
 import { isDerivedChange } from './derived.js';
 
 import { isUserDrivenNow, markUserDriven } from './user-gesture.js';
-import { hasOwnedRegions, isOwnedRoot, matchOwnedRoot, onOwnedChange, ownedRevisionMoved } from './owned-regions.js';
+import { hasOwnedRegions, isOwnedRoot, matchOwnedRoot, onOwnedChange, ownedRevisionMoved, ownedRootsMoved } from './owned-regions.js';
 
 function outermostOwned(node, memo) {
   let root = memo.get(node);
@@ -262,6 +262,7 @@ const localMutation = {
     if (this._pauseDepth === 0 && this._observer) {
       this._drainBrowserQueue(this);
     }
+    if (this._pauseDepth === 0) this._announceOwnedMoves();
     if (typeof window !== 'undefined' && window.clay?.undo?.resume) {
       window.clay.undo.resume();
     }
@@ -742,7 +743,7 @@ const localMutation = {
     }
 
     for (const root of ownedTouched) {
-      if (!isInert(root) && ownedRevisionMoved(root)) changes.push({ type: 'owned', element: root });
+      if (!isInert(root) && ownedRevisionMoved(root, !onlyNonPausable)) changes.push({ type: 'owned', element: root });
     }
 
     if (changes.length) {
@@ -792,8 +793,19 @@ const localMutation = {
     const paused = this._pauseDepth > 0;
     if (paused && !this._hasNonPausable) return;
     const changes = [];
-    for (const root of roots) if (!isInert(root)) changes.push({ type: 'owned', element: root });
+    for (const root of roots) if (!isInert(root) && ownedRevisionMoved(root, !paused)) changes.push({ type: 'owned', element: root });
     if (changes.length) this._announce(changes, paused);
+  },
+
+  // A revision that moved while the hub was paused is announced to every subscriber once
+  // the last pause ends: paused drains only look, so the move is still there to find. Live
+  // sync records the revisions a merge brought (syncOwnedRevisions), so a merge is never
+  // announced as an edit.
+  _announceOwnedMoves() {
+    if (!hasOwnedRegions()) return;
+    const changes = [];
+    for (const root of ownedRootsMoved()) if (!isInert(root)) changes.push({ type: 'owned', element: root });
+    if (changes.length) this._announce(changes, false);
   },
 
   _observer: null,

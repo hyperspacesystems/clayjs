@@ -20,7 +20,7 @@ mutate({
   "comparison-serializes": {
     what: "a comparison capture asks the owner for its bytes",
     file: SNAPSHOT,
-    edits: [["  const pins = pinOwnedRegions(owned, purpose);", "  const pins = pinOwnedRegions('bytes', purpose);"]],
+    edits: [["  const pins = pinOwnedRegions(owned, purpose, context !== null);", "  const pins = pinOwnedRegions('bytes', purpose, context !== null);"]],
     test: TEST,
     name: "a save capture calls serialize once per region and a comparison capture never calls it",
     expects: /-\s+0,\n\+\s+6,/,

@@ -3,6 +3,7 @@ const knownRoots = new WeakMap()
 const lastRevision = new WeakMap()
 const reported = new WeakMap()
 const listeners = new Set()
+const registerListeners = new Set()
 
 const NONCE = `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
 const HOLE = `clay-owned:${NONCE}:`
@@ -43,7 +44,8 @@ export function own(selector, { serialize, revision, merge = null, conflict = nu
   document.createDocumentFragment().querySelector(selector)
   const region = { selector, serialize, revision, merge, conflict }
   regions.add(region)
-  for (const root of document.querySelectorAll(selector)) know(root, region)
+  for (const root of document.querySelectorAll(selector)) know(root, region, true)
+  for (const listener of registerListeners) listener()
   return {
     dispose() { regions.delete(region) },
     notify(root = null) { if (regions.has(region)) ownedChanged(region, root) },
@@ -58,10 +60,16 @@ function eligible(root) {
   return root.localName !== 'body' && !!root.parentElement?.closest('body') && !root.closest(OWNED_FROZEN_SELECTOR)
 }
 
-function know(root, region) {
+// A root's revision is recorded as saved only where its content is known to be saved:
+// the roots present when the owner registers, and every root after a merge
+// (syncOwnedRevisions). A root first seen anywhere else holds new content, so its first
+// check counts as a move.
+function know(root, region, seed = false) {
   if (knownRoots.get(root) === region || !eligible(root)) return
   knownRoots.set(root, region)
-  try { lastRevision.set(root, revisionText(region, root)) } catch (_) {}
+  if (seed) {
+    try { lastRevision.set(root, revisionText(region, root)) } catch (_) {}
+  }
 }
 
 function regionFor(root) {
@@ -132,7 +140,7 @@ function holeData(kind, region, revision, bytes) {
   return `${HOLE}${kind}${region.conflict ? 'q' : 'n'}:${revision.length}:${bytes.length}:${revision}${bytes}`
 }
 
-export function pinOwnedRegions(mode = 'bytes', purpose = 'save') {
+export function pinOwnedRegions(mode = 'bytes', purpose = 'save', refuse = false) {
   if (!regions.size) return null
   const pins = new Map()
   for (const [root, region] of liveRoots()) {
@@ -146,8 +154,8 @@ export function pinOwnedRegions(mode = 'bytes', purpose = 'save') {
       if (typeof bytes !== 'string') throw new TypeError('serialize must return a string')
       pins.set(root, holeData('b', region, revision, bytes))
     } catch (error) {
-      if (typeof error?.code === 'string') throw error
-      report(region, 'serialize', error)
+      if (typeof error?.code !== 'string') report(region, 'serialize', error)
+      else if (refuse) throw error
     }
   }
   if (!pins.size) return null
@@ -265,7 +273,15 @@ export function onOwnedChange(listener) {
   return () => { listeners.delete(listener) }
 }
 
-export function ownedRevisionMoved(root) {
+/** Called after every clay.region.own registration. */
+export function onOwnedRegister(listener) {
+  registerListeners.add(listener)
+  return () => { registerListeners.delete(listener) }
+}
+
+// consume = false only looks: a paused drain must leave a move for the subscribers that
+// cannot hear it yet, which Mutation announces when the last pause ends.
+export function ownedRevisionMoved(root, consume = true) {
   const region = regionFor(root)
   if (!region || !root.isConnected) return false
   let revision
@@ -276,17 +292,49 @@ export function ownedRevisionMoved(root) {
     return true
   }
   if (lastRevision.get(root) === revision) return false
-  lastRevision.set(root, revision)
+  if (consume) lastRevision.set(root, revision)
   return true
 }
 
-function ownedChanged(region, only) {
+/** Every live owned root whose revision moved since it was last announced, now announced. */
+export function ownedRootsMoved() {
   const moved = []
+  for (const root of liveRoots().keys()) if (ownedRevisionMoved(root)) moved.push(root)
+  return moved
+}
+
+/** A merge brought these revisions: record them as nobody's edit, and return them. */
+export function syncOwnedRevisions() {
+  const at = new Map()
+  for (const [root, region] of liveRoots()) {
+    let revision = null
+    try { revision = revisionText(region, root) } catch (_) {}
+    if (revision === null) lastRevision.delete(root)
+    else lastRevision.set(root, revision)
+    at.set(root, revision)
+  }
+  return at
+}
+
+/** True when any root recorded by syncOwnedRevisions now has another revision. */
+export function ownedMovedSince(at) {
+  for (const [root, revision] of at) {
+    const region = regionFor(root)
+    if (!region || !root.isConnected) continue
+    let now = null
+    try { now = revisionText(region, root) } catch (_) {}
+    if (now !== revision) return true
+  }
+  return false
+}
+
+function ownedChanged(region, only) {
+  const roots = []
   for (const root of only ? [only] : document.querySelectorAll(region.selector)) {
     know(root, region)
-    if (regionFor(root) === region && ownedRevisionMoved(root)) moved.push(root)
+    if (regionFor(root) === region) roots.push(root)
   }
-  if (moved.length) for (const listener of listeners) listener(moved)
+  if (roots.length) for (const listener of listeners) listener(roots)
 }
 
 export function ownedRootsIn(tree) {
@@ -322,12 +370,12 @@ export function beginOwnedMerge(incoming) {
   const steps = []
   let diverged = false
   let failed = false
+  const active = new Set([...ownedRootsIn(document), ...ownedRootsIn(incoming.document)].map(({ region }) => region))
   for (const region of regions) {
+    if (!active.has(region)) continue
     if (!region.merge) {
-      if (incoming.document.querySelector(region.selector) || document.querySelector(region.selector)) {
-        report(region, 'merge', new Error('clay.region.own was given no merge function'))
-        if (incoming.dirty) diverged = true
-      }
+      report(region, 'merge', new Error('clay.region.own was given no merge function'))
+      if (incoming.dirty) diverged = true
       continue
     }
     try {

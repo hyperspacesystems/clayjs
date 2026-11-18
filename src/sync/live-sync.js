@@ -35,7 +35,7 @@
  * INTEGRATES WITH: snapshot.js (receives snapshot-ready events)
  */
 
-import { beginOwnedMerge, hasOwnedRegions, matchesOwnedSelector, ownedBodies, ownedRootOf, ownedRootsIn, withoutOwnedBodies } from '../lib/owned-regions.js';
+import { beginOwnedMerge, hasOwnedRegions, matchesOwnedSelector, ownedBodies, ownedMovedSince, ownedRootOf, ownedRootsIn, syncOwnedRevisions, withoutOwnedBodies } from '../lib/owned-regions.js';
 import { createIdentityStore } from "../vendor/hyper-morph-identity.vendor.js";
 import { pageRelay } from "./page-relay.js";
 import { loadedEngine, mergeEngine } from "./merge-engine.js";
@@ -715,6 +715,7 @@ class LiveSync {
       loadPresence().then((store) => this._startPresence(store, gen), () => {});
       this._saveSavedHandler = (event) => {
         this._saveEpoch++;
+        this._ownedUnmerged.clear();
         // The file now holds what this save wrote: the disk lane's new base,
         // dated at the save's capture, which is when the document held these
         // bytes. A frame that applied after that capture is newer and keeps
@@ -735,7 +736,7 @@ class LiveSync {
       // bar before this hides it.
       this._saveConflictHandler = (event) => {
         const refusedBy = event.detail && event.detail.etag;
-        if (!refusedBy) return;
+        if (!refusedBy || event.detail.code === 'owned-merge-failed') return;
         queueMicrotask(() => {
           if (this.isDestroyed) return;
           if (refusedBy !== lastSeenEtag()) return;
@@ -2201,8 +2202,9 @@ class LiveSync {
       if (unmergedBase === null && typeof base === 'string') this._ownedUnmerged.set(source, base);
       edit?.holdForOwnedMerge(etag);
     } else if (owned) {
-      this._ownedUnmerged.delete(source);
+      this._ownedUnmerged.clear();
     }
+    const ownedAt = owned && !owned.failed ? syncOwnedRevisions() : null;
     const ticket = this._ticket();
     this._morphTicket = ticket;
     let report;
@@ -2218,6 +2220,7 @@ class LiveSync {
       }
       throw err;
     }
+    if (ownedAt && ownedMovedSince(ownedAt)) gateMarkDirty();
     const typedDuringWait = gateCaptureToken().gen !== token.gen;
 
     // What the frame won over this tab's unsaved edits goes to the ledger with
@@ -2630,6 +2633,7 @@ class LiveSync {
           seq,
           source: 'disk',
           etag: typeof etag === 'string' && etag ? etag : null,
+          ownedFailed: ownedFailed === true,
           by: by || null,
           // The bytes now on disk, exactly as they arrived. The source map models them
           // so this tab's next save copies from the file somebody else just wrote.

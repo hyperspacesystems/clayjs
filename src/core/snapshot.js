@@ -510,7 +510,7 @@ export function captureSnapshot({ flushUndo = true, authored = true, forSave = f
   // The view records each clone node's live original straight into the provenance
   // map as it clones, including the nodes inside a <template>'s content fragment,
   // so the source map can ask which live node any clone node came from.
-  const pins = pinOwnedRegions(owned, purpose);
+  const pins = pinOwnedRegions(owned, purpose, context !== null);
   const view = createContentView(document.documentElement, { capability: 'snapshot', provenance: snapshotProvenance, holes: pins });
   const clone = view.root;
   for (const hole of view.holes) hole.copy.appendChild(view.document.createComment(pins.get(hole.live)));
