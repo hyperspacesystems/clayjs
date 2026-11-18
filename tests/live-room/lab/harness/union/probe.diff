@@ -1,0 +1,73 @@
+--- /Users/davidmiranda/big/20261112-sheet-impl/coedit-replan/fable-scratch/union-probe.mjs	2026-11-12 19:16:45
++++ union/union-probe.mjs	2026-11-12 22:31:00
+@@ -337,7 +337,7 @@
+       const per = Object.values(revs).map((r) => r.stamps.length);
+       world.maxStamps = Math.max(world.maxStamps || 0, per.reduce((a, b) => a + b, 0));
+     }
+-    for (const x of file.recs.at(-1).stamps) world.durable.add(x);
++    for (const x of file.recs.at(-1).stamps) { world.durable.add(x); world.hooks?.durable(x); }
+     note("accepted", tab.id, file.rev, "alive", tab.alive);
+     if (!tab.alive) return;
+     tab.known = world.host.version;
+@@ -367,7 +367,7 @@
+   tab.sent.push(ops);
+   for (const op of ops) {
+     applyOp(world.room.S, op);
+-    if (op.k === "set" && op.p[0] === "patches") { world.acked.add(op.p[1]); world.pending?.delete(op.p[1]); }
++    if (op.k === "set" && op.p[0] === "patches") { world.acked.add(op.p[1]); world.pending?.delete(op.p[1]); world.hooks?.shared(op.p[1]); }
+     if (WATCH && op.p[1] === WATCH) note("room", op.k, WATCH, "from", tab.id, "tab rev", tab.rev, "S base", baseOf(world.room.S));
+     if (WATCH && op.k === "set" && op.p[0] === "revs") note("room rev", op.p[1], "from", tab.id, "stamps", op.v.stamps.length);
+   }
+@@ -409,6 +409,7 @@
+ function roomLoss(world) {
+   note("roomloss", "file", world.host.file.rev, "tag base", baseOf(world.host.file.tag), "S base", baseOf(world.room.S));
+   world.room = { S: clone(world.host.file.tag), log: [] };
++  world.hooks?.roomGone(Object.keys(world.room.S.patches));
+   if (WATCH) note("restart has", WATCH, WATCH in world.room.S.patches, "revs", Object.keys(world.room.S.revs).join(","));
+   const held = new Map();
+   if (STRICT_ACK) for (const t of world.tabs) if (t.alive && t.connected) for (const s of t.applied.keys()) { if (!held.has(s)) held.set(s, new Set()); held.get(s).add(t); }
+@@ -460,6 +461,13 @@
+     else if (x < 0.99) roomLoss(world);
+     for (const t of world.tabs) checkOne(world, t, `step ${i}`);
+   }
++  settle(world);
++  return verdict(world);
++}
++
++function settle(world) {
++  const live = () => world.tabs.filter((t) => t.alive);
++  const writer = () => live().find((t) => t.connected) || null;
+   if (!live().length) { if (world.room) world.acked = new Set([...world.durable, ...Object.keys(world.host.file.tag.patches)]); world.room = null; join(world); }
+   for (const t of live()) if (!t.connected) { t.connected = true; resync(world, t); }
+   const drain = () => { let moved = true; while (moved) { moved = false; for (const t of live()) { while (toRoom(world, t)) moved = true; } for (const t of live()) { while (toTab(world, t)) moved = true; } } };
+@@ -475,6 +483,10 @@
+   drain();
+   while (world.inflight.length) hostAnswer(world, world.inflight.shift());
+   drain();
++}
++
++function verdict(world) {
++  const live = () => world.tabs.filter((t) => t.alive);
+   const tabs = live();
+   for (const [s, holders] of world.pending || []) if (![...holders].some((t) => t.alive)) world.acked.delete(s);
+   for (const t of tabs) if (t.stuck) throw new Error(`I8 stuck ${t.id} rev ${t.rev} base ${baseOf(t.local)} file ${world.host.file.rev}`);
+@@ -497,18 +509,4 @@
+   return world;
+ }
+ 
+-const [from, to] = (process.argv[2] || "1..200").split("..").map(Number);
+-const steps = Number(process.argv[3] || 400);
+-let failures = 0;
+-const totals = { refetches: 0, accepted: 0, refused: 0, losses: 0, edits: 0 };
+-for (let seed = from; seed <= to; seed++) {
+-  try {
+-    const w = run(seed, steps);
+-    totals.maxMeta = Math.max(totals.maxMeta || 0, w.maxMeta || 0); totals.maxMetaPadded = Math.max(totals.maxMetaPadded || 0, w.maxMetaPadded || 0); totals.maxStamps = Math.max(totals.maxStamps || 0, w.maxStamps || 0); totals.maxCompactPadded = Math.max(totals.maxCompactPadded || 0, w.maxCompact || 0); totals.meanEditsPerSeed = 0;
+-    totals.refetches += w.refetches; totals.accepted += w.accepted; totals.refused += w.refused; totals.losses += w.losses; totals.edits += w.edits.size;
+-  } catch (error) {
+-    failures++;
+-    if (failures <= 6) console.log(`seed ${seed}: ${error.message.slice(0, 300)}`);
+-  }
+-}
+-console.log(`${to - from + 1} seeds, ${failures} failures`, JSON.stringify(totals));
++export { rng, FIELDS, ZERO, UNION, STRICT_ACK, clone, same, emptyStore, baseOf, doneStamps, edit, toRoom, toTab, resync, checkpoint, hostAnswer, join, roomLoss, checkOne, run, settle, verdict };

@@ -90,6 +90,8 @@
     "build:yjs": "node scripts/build-yjs-vendor.mjs",
     "build:bevel": "node scripts/build-bevel-subset.mjs",
     "check:bevel": "node scripts/build-bevel-subset.mjs --check",
+    "build:live-room-core": "node scripts/build-live-room-core.mjs",
+    "check:live-room-core": "node scripts/build-live-room-core.mjs --check",
     "build:skins": "node scripts/build-vendor-skins.mjs",
     "check:skins": "node scripts/build-vendor-skins.mjs --check",
     "vendor:optional": "node scripts/vendor-optional.mjs",

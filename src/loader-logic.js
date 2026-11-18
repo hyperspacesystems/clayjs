@@ -39,6 +39,9 @@ export const PLUGIN_PATHS = {
   // A live JSON tag as an in-memory object (clay.live). Not editOnly: a reader's
   // tab still shows the game, and its writes stay in that tab.
   live:      { path: "plugins/live.js",           editOnly: false, default: false },
+  // The ordered live room's client (clay.liveRoom). Only an editing tab joins a room;
+  // a reader follows the saved file.
+  "live-room": { path: "live-room/client.js",      editOnly: true,  default: false },
   blockeditor: { path: "plugins/page.js",          editOnly: true,  default: false },
   // The reader half of `blockeditor`, added by resolveModules for a Document in view mode
   // and never named in a URL: the reader's article follows each saved file.
@@ -156,11 +159,12 @@ export const MODULES = {
   "plugins/source.js":          () => import("./plugins/source.js"),
   "plugins/derive.js":          () => import("./plugins/derive.js"),
   "plugins/upgrade.js":         () => import("./plugins/upgrade.js"),
+  "live-room/client.js":        () => import("./live-room/client.js"),
 };
 
 // `source` is last on purpose: its install captures a save clone, so it wants every
 // plugin that registers a document transform to have registered it first.
-const PLUGIN_ORDER = ["visitor-drafts", "visitor-menu", "richclay", "indicator", "sortable", "undo", "unsent", "quickcrop", "upload", "people", "menu", "upgrade", "cms", "blockeditor-view", "sync", "live", "blockeditor", "message", "like", "wire", "ai-edit", "demo", "derive", "bind-text", "source"];
+const PLUGIN_ORDER = ["visitor-drafts", "visitor-menu", "richclay", "indicator", "sortable", "undo", "unsent", "quickcrop", "upload", "people", "menu", "upgrade", "cms", "blockeditor-view", "sync", "live", "live-room", "blockeditor", "message", "like", "wire", "ai-edit", "demo", "derive", "bind-text", "source"];
 
 // A plugin that cannot do its whole job alone. hypercms reads the cropper through
 // a capability lookup (`clay.quickcrop`) and silently uploads the raw file when it
@@ -220,7 +224,7 @@ function parseCsv(params, key, enabled, apply) {
 // Each of these talks to the host or writes outside the visitor's own record, so a
 // page that keeps its edits in this browser cannot carry them. A page document keeps
 // page and live: the editor runs on a store this browser keeps.
-const DRAFT_DROPS = ["sync", "live", "blockeditor", "upload", "quickcrop", "cms", "people", "menu", "upgrade", "wire", "ai-edit", "demo", "source"];
+const DRAFT_DROPS = ["sync", "live", "live-room", "blockeditor", "upload", "quickcrop", "cms", "people", "menu", "upgrade", "wire", "ai-edit", "demo", "source"];
 
 // The one core module a document asks for by what it declares: shared site values are
 // tracked only on a page whose rules tag names them, and only where a save reaches the

@@ -28,6 +28,7 @@ const UNSUPPORTED = {
   "plugins/quickcrop.js": "reached through cms and unreviewed",
   "plugins/message.js": "unreviewed",
   "plugins/like.js": "unreviewed",
+  "live-room/client.js": "a stub until step C4 builds the room client and decides its lifecycle",
   "plugins/demo.js": "its own destination, not a host edit session",
   "plugins/visitor-drafts.js": "the draft plan keeps its own startup",
   "plugins/visitor-menu.js": "the draft plan keeps its own startup",
