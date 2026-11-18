@@ -2,9 +2,11 @@
  * @jest-environment jsdom
  */
 
-import { jest } from "@jest/globals";
+import { afterEach, jest } from "@jest/globals";
 
 jest.setTimeout(120000);
+// A test that times out skips its finally; the next test must not inherit its fake timers.
+afterEach(() => jest.useRealTimers());
 
 /**
  * D1: a controlled attribute the author did not write last on its element made a no-input
@@ -179,11 +181,17 @@ test.each(CASES)("$name: one typed edit writes once and keeps the authored attri
   }
 });
 
+// The quiet wait is 5,000 ms of fake time: a write the edit should not owe fires at the
+// autosave idle bound (1,500 ms), well inside it, without the test sleeping for real.
 test.each(CASES)("$name: an autosave page waiting in edit writes nothing", async (kase) => {
   const clay = await bootPage(page(kase.element), { autosave: true });
+  jest.useFakeTimers();
   try {
-    await enter(clay);
-    await sleep(5000);
+    const entering = clay.setMode("edit");
+    await jest.advanceTimersByTimeAsync(100);
+    expect(await entering).toEqual({ ok: true, mode: "edit", changed: true });
+    await jest.advanceTimersByTimeAsync(5000);
+    jest.useRealTimers();
     await flush();
     expect(written).toHaveLength(0);
 
@@ -193,6 +201,7 @@ test.each(CASES)("$name: an autosave page waiting in edit writes nothing", async
     await enter(clay);
     expect(clay.mode).toBe("edit");
   } finally {
+    jest.useRealTimers();
     if (clay.mode === "edit") await leave(clay);
   }
 });

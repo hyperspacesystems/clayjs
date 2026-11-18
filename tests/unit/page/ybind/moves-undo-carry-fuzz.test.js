@@ -7,23 +7,21 @@ import { state as pmState, view as pmView } from "../../../../src/vendor/prosemi
 import { createPageDoc, createBridge, keepViewPos, seedFrom, docOf, walk, authorKey } from "../../../../src/page/ybind/index.js";
 import { NET } from "../../../../src/page/ybind/layout.js";
 import { createOriginIndex } from "../../../../src/page/ybind/origins.js";
+import seedWindowHelpers from "../../../helpers/seed-window.cjs";
 
 // Four tabs with delayed, one-way delivery: A and B move, undo and redo; C and D type unique
 // tokens and delete seed letters, and never undo. After a full settle every tab must hold the
 // same text, no token may show twice, and no token may be gone from both the page and the
-// recovery list. CARRY_FUZZ_SEEDS sets the seed count (default 20), CARRY_FUZZ_START the first
-// seed, CARRY_FUZZ_MOVERS=A for one mover, CARRY_FUZZ_CYCLE=0 drops the undo-all/redo-all tail,
+// recovery list. The seeds come from tests/helpers/seed-window.cjs (all 20 on a box or in CI, a
+// daily window of 5 locally, TEST_SEEDS=7 or 3-9 for chosen ones), CARRY_FUZZ_MOVERS=A for one mover, CARRY_FUZZ_CYCLE=0 drops the undo-all/redo-all tail,
 // CARRY_FUZZ_SYNC_MOVES=1 syncs every move, CARRY_FUZZ_REPLAY=<file> replays saved operations,
 // CARRY_FUZZ_SHRINK=1 with CARRY_FUZZ_DUMP=<file> shrinks a failure, CARRY_FUZZ_TRACE=1 logs tabs.
 
 const env = process.env;
-const SEEDS = Number(env.CARRY_FUZZ_SEEDS ?? 20);
-const START_SEED = Number(env.CARRY_FUZZ_START ?? 1);
 const STEPS = Number(env.CARRY_FUZZ_STEPS ?? 40);
 const MOVERS = (env.CARRY_FUZZ_MOVERS ?? "A,B").split(",");
 const CYCLE = env.CARRY_FUZZ_CYCLE !== "0";
 const VERBOSE = env.CARRY_FUZZ_VERBOSE === "1";
-const ONLY = env.CARRY_FUZZ_ONLY ? Number(env.CARRY_FUZZ_ONLY) : null;
 const SYNC_MOVES = env.CARRY_FUZZ_SYNC_MOVES === "1";
 const REPLAY = env.CARRY_FUZZ_REPLAY ? JSON.parse(fs.readFileSync(env.CARRY_FUZZ_REPLAY, "utf8")) : null;
 const DUMP = env.CARRY_FUZZ_DUMP ?? null;
@@ -270,7 +268,7 @@ if (REPLAY) {
       if (out.failure) throw new Error(`${out.failure.kind}: ${out.failure.message}\n  ${out.log.join("\n  ")}`);
     });
   }
-  const seeds = ONLY ? [ONLY] : Array.from({ length: SEEDS }, (_, i) => START_SEED + i);
+  const { seeds, label } = seedWindowHelpers.seedWindow({ name: "moves undo carry fuzz", full: 20, routine: 5 });
   for (const seed of seeds) {
     test(`seed ${seed}`, () => {
       let out = run({ seed });
@@ -281,7 +279,7 @@ if (REPLAY) {
         console.log(`seed ${seed} shrunk to ${small.length} ops:\n  ${out.log.join("\n  ")}\n${out.failure?.message}`);
       } else if (DUMP && out.failure) fs.writeFileSync(DUMP, JSON.stringify(out.ops, null, 1));
       if (VERBOSE) console.log(`seed ${seed}\n  ${out.log.join("\n  ")}`);
-      if (out.failure) throw new Error(`seed ${seed}: ${out.failure.kind}: ${out.failure.message}`);
+      if (out.failure) throw new Error(`seed ${seed}: ${out.failure.kind}: ${out.failure.message} (rerun: TEST_SEEDS=${seed}; ${label})`);
     }, 120000);
   }
 }

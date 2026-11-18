@@ -9,7 +9,7 @@ import seedWindowHelpers from "../helpers/seed-window.cjs";
 import shardHelpers from "../helpers/shard.cjs";
 import DurationSequencer from "../duration-sequencer.cjs";
 
-const { seedWindow, depthOf } = seedWindowHelpers;
+const { seedWindow, countOf, depthOf } = seedWindowHelpers;
 const { shardItems } = shardHelpers;
 
 describe("seed depth", () => {
@@ -40,10 +40,14 @@ describe("seed depth", () => {
     try {
       seedWindow({ name: "race harness", full: 60, routine: 6, env: { TESTBOX: "1", TESTBOX_OUT: out } });
       seedWindow({ name: "race harness", full: 60, routine: 6, env: { TEST_SEED_DAY: "2026-11-17", TESTBOX_OUT: out } });
+      expect(countOf({ name: "long session", full: 200, routine: 60, env: { CI: "true", TESTBOX_OUT: out } }).count).toBe(200);
+      expect(countOf({ name: "long session", full: 200, routine: 60, env: { TESTBOX_OUT: out } }).count).toBe(60);
       const lines = fs.readFileSync(path.join(out, "seed-windows.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
       expect(lines).toEqual([
         { name: "race harness", depth: "full", count: 60 },
         { name: "race harness", depth: "routine", count: 6, day: "2026-11-17" },
+        { name: "long session", depth: "full", count: 200 },
+        { name: "long session", depth: "routine", count: 60 },
       ]);
     } finally {
       fs.rmSync(out, { recursive: true, force: true });

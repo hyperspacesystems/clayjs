@@ -25,6 +25,7 @@ import { join } from "node:path";
 import { jest } from "@jest/globals";
 import { parse } from "../../src/vendor/parse5.vendor.js";
 import { parseAll, parseInSteps } from "../../src/source/parse-steps.js";
+import seedWindowHelpers from "../helpers/seed-window.cjs";
 
 jest.setTimeout(60000);
 
@@ -54,7 +55,7 @@ const CORPUS = [
 const MODEL_OPTIONS = () => ({ sourceCodeLocationInfo: true });
 const VERIFY_OPTIONS = () => ({});
 
-const CHUNKS = [1, 2, 7, 16, 4096];
+const CHUNKS = [1, ...seedWindowHelpers.windowOf([2, 7, 16], { name: "source-parse-steps chunks", routine: 1 }).items, 4096];
 
 let comparedNodes = 0;
 let comparedErrors = 0;

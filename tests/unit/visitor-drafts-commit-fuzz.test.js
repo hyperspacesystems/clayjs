@@ -1,6 +1,7 @@
 /** @jest-environment node */
 import { expect, test } from "@jest/globals";
 import { openTab, stored, world } from "./helpers/visitor-drafts-tabs.js";
+import seedWindowHelpers from "../helpers/seed-window.cjs";
 
 // Random schedules over three tabs: edits, saves, failed transactions, blind rows, closed tabs.
 // One tab in three has no journal slot (a draft too large for it) and leaves a blind row when
@@ -10,6 +11,7 @@ import { openTab, stored, world } from "./helpers/visitor-drafts-tabs.js";
 // Ported from the design pass prototype (fable-scratch/fuzz.test.mjs).
 const SERVED = { title: "owner title", cards: [{ id: "base", text: "one" }] };
 const random = (seed) => () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+const { seeds, label } = seedWindowHelpers.seedWindow({ name: "visitor drafts commit fuzz", full: 400, routine: 40 });
 
 async function schedule(seed, steps = 40) {
   const next = random(seed);
@@ -54,10 +56,11 @@ async function schedule(seed, steps = 40) {
   return { saved, meta, record, conflict, tabs };
 }
 
-test("400 random schedules: every saved operation applied exactly once, every saved row stored, all tabs agree", async () => {
+test("random schedules: every saved operation applied exactly once, every saved row stored, all tabs agree", async () => {
   let ops = 0;
-  for (let seed = 1; seed <= 400; seed++) {
-    const { saved, meta, record, conflict, tabs } = await schedule(seed);
+  for (const n of seeds) {
+    const seed = `${n} (rerun: TEST_SEEDS=${n})`;
+    const { saved, meta, record, conflict, tabs } = await schedule(n);
     ops += saved.ops;
     expect({ seed, applied: meta.rev }).toEqual({ seed, applied: saved.ops });
     expect({ seed, conflict }).toEqual({ seed, conflict: null });
@@ -66,5 +69,5 @@ test("400 random schedules: every saved operation applied exactly once, every sa
     for (const [name, value] of saved.last) expect({ seed, name, value: record.data[name] }).toEqual({ seed, name, value });
     for (const tab of tabs) expect({ seed, tab: tab.id, page: tab.page }).toEqual({ seed, tab: tab.id, page: record ? record.data : SERVED });
   }
-  expect(ops).toBeGreaterThan(3000);
+  expect({ label, ops: ops > Math.floor((3000 * seeds.length) / 400) }).toEqual({ label, ops: true });
 }, 120000);

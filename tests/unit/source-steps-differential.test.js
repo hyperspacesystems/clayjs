@@ -214,41 +214,47 @@ describe("an abort at the Nth yield leaves no partial state", () => {
   const root = doc.documentElement;
   const today = "<!DOCTYPE html>" + root.outerHTML;
   const N = [1, 2, 3, 5];
+  let errors, expectedPair, expectedVerdict, expectedModel, left, right;
+
+  // The whole walk of each form, once: none of them changes src, root or the pair below.
+  beforeAll(() => {
+    errors = model(src).parseErrors;
+    expectedPair = pairShape(root, pairCaptured(root, model(src), (k) => k));
+    expectedVerdict = verdictShape(verifyForSave(src, today, doc, root, errors));
+    expectedModel = modelShape(model(src));
+    left = parseDoc(src).documentElement;
+    right = parseDoc(src).documentElement;
+  });
 
   test("the document is big enough to abort inside every walk", () => {
     expect(src.length).toBeGreaterThan(300_000);
   });
 
   test.each(N)("pairCapturedSteps at yield %i", async (n) => {
-    const expected = pairShape(root, pairCaptured(root, model(src), (k) => k));
     const m = model(src);
     const { result, yields } = await abortAt(pairCapturedSteps(root, m, (k) => k), n);
     expect(result).toEqual({ aborted: true });
     expect(yields).toBe(n);
     // The model carries no pairing token and no locations bound by the walk that stopped.
     expect(m.gen).toBeUndefined();
-    expect(pairShape(root, pairCaptured(root, m, (k) => k))).toEqual(expected);
+    expect(pairShape(root, pairCaptured(root, m, (k) => k))).toEqual(expectedPair);
   });
 
   test.each(N)("verifyForSaveSteps at yield %i", async (n) => {
-    const errors = model(src).parseErrors;
-    const expected = verdictShape(verifyForSave(src, today, doc, root, errors));
     const { result, yields } = await abortAt(verifyForSaveSteps(src, today, doc, root, errors), n);
     expect(result).toEqual({ aborted: true });
     expect(yields).toBe(n);
-    expect(verdictShape(verifyForSave(src, today, doc, root, errors))).toEqual(expected);
+    expect(verdictShape(verifyForSave(src, today, doc, root, errors))).toEqual(expectedVerdict);
   });
 
   test.each(N)("modelSteps at yield %i", async (n) => {
-    const expected = modelShape(model(src));
     const { result, yields } = await abortAt(modelSteps(src), n);
     expect(result).toEqual({ aborted: true });
     expect(yields).toBe(n);
-    expect(modelShape(model(src))).toEqual(expected);
+    expect(modelShape(model(src))).toEqual(expectedModel);
   });
 
   test.each(N)("vDiffSteps at yield %i", async (n) => {
-    const left = parseDoc(src).documentElement, right = parseDoc(src).documentElement;
     const { result, yields } = await abortAt(vDiffSteps(left, right, "html"), n);
     expect(result).toEqual({ aborted: true });
     expect(yields).toBe(n);

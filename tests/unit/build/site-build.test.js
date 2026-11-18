@@ -4,10 +4,11 @@
 import { afterAll, beforeAll, expect, test } from "@jest/globals";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { copyPackage } from "../helpers/package-copy.js";
 
 const run = promisify(execFile);
 const ROOT = path.resolve(new URL("../../..", import.meta.url).pathname);
@@ -19,7 +20,6 @@ const CURRENT = "1.15.3";
 const PREVIOUS = "1.15.0";
 const PREVIOUS_ONLY = "clay-previous-AAAAAAA.js";
 
-const COPIED_FILES = ["build.js", "package.json", "packed-contract.json", "THIRD-PARTY-NOTICES.md"];
 const COPIED_DIRS = ["src", "entries", "scripts", "website", "docs", "fonts", "compat", "tool-generation", "tests/fixtures/offline-runtime"];
 
 // A string that exists nowhere in the tree, so the only way it reaches public/ is if
@@ -28,6 +28,9 @@ const SEED_MARKER = "seeded-from-the-tested-tarball-b7e1";
 const PACK_ATTEMPTS = "pack-attempts.log";
 
 let site;
+// One guarded site for every refused seed below. A refusal must leave its cache untouched, so a
+// test that wrongly unpacked a seed here also fails every refusal after it.
+let refused;
 
 function embedded(code) {
   const start = code.indexOf("})({");
@@ -53,9 +56,7 @@ async function bootstrapFiles() {
 
 async function makeSite({ guardedPack = false } = {}) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "clay-site-"));
-  for (const name of COPIED_FILES) await cp(path.join(ROOT, name), path.join(dir, name));
-  for (const name of COPIED_DIRS) await cp(path.join(ROOT, name), path.join(dir, name), { recursive: true });
-  await symlink(path.join(ROOT, "node_modules"), path.join(dir, "node_modules"), "dir");
+  await copyPackage(dir, COPIED_DIRS);
 
   const pkg = JSON.parse(await readFile(path.join(dir, "package.json"), "utf8"));
   pkg.version = CURRENT;
@@ -135,10 +136,12 @@ async function expectNoSeededCache(dir) {
 beforeAll(async () => {
   site = await makeSite();
   await build();
+  refused = await makeSite({ guardedPack: true });
 }, 300000);
 
 afterAll(async () => {
   await rm(site, { recursive: true, force: true });
+  if (refused) await rm(refused, { recursive: true, force: true });
 });
 
 test("the rolling prefix's bootstraps load m/ under the rolling prefix itself", async () => {
@@ -229,85 +232,67 @@ test.each([
 }, 300000);
 
 test("a seed whose integrity does not match is refused, naming both values", async () => {
-  const dir = await makeSite({ guardedPack: true });
-  const seed = await seedTarball(dir);
+  const seed = await seedTarball(refused);
   try {
     const wrong = `sha512-${createHash("sha512").update("not the seed").digest("base64")}`;
-    await expect(build(dir, { CLAYJS_SEED_RELEASE: seed.tarball, CLAYJS_SEED_INTEGRITY: wrong })).rejects.toMatchObject({
+    await expect(build(refused, { CLAYJS_SEED_RELEASE: seed.tarball, CLAYJS_SEED_INTEGRITY: wrong })).rejects.toMatchObject({
       stderr: expect.stringContaining(`CLAYJS_SEED_INTEGRITY mismatch: expected ${wrong}, got ${seed.integrity}`),
     });
-    await expectNoSeededCache(dir);
+    await expectNoSeededCache(refused);
   } finally {
-    await rm(dir, { recursive: true, force: true });
     await seed.cleanup();
   }
 }, 300000);
 
 test("a seed of a different version is refused", async () => {
-  const dir = await makeSite({ guardedPack: true });
-  const name = JSON.parse(await readFile(path.join(dir, "package.json"), "utf8")).name;
-  const seed = await seedTarball(dir, { version: "9.9.9" });
+  const name = JSON.parse(await readFile(path.join(refused, "package.json"), "utf8")).name;
+  const seed = await seedTarball(refused, { version: "9.9.9" });
   try {
-    await expect(build(dir, { CLAYJS_SEED_RELEASE: seed.tarball })).rejects.toMatchObject({
+    await expect(build(refused, { CLAYJS_SEED_RELEASE: seed.tarball })).rejects.toMatchObject({
       stderr: expect.stringContaining(`CLAYJS_SEED_RELEASE package mismatch: expected ${name}@${CURRENT}, got ${name}@9.9.9`),
     });
-    await expectNoSeededCache(dir);
+    await expectNoSeededCache(refused);
   } finally {
-    await rm(dir, { recursive: true, force: true });
     await seed.cleanup();
   }
 }, 300000);
 
 test("a seed of a different package is refused", async () => {
-  const dir = await makeSite({ guardedPack: true });
-  const name = JSON.parse(await readFile(path.join(dir, "package.json"), "utf8")).name;
-  const seed = await seedTarball(dir, { name: "not-clayjs" });
+  const name = JSON.parse(await readFile(path.join(refused, "package.json"), "utf8")).name;
+  const seed = await seedTarball(refused, { name: "not-clayjs" });
   try {
-    await expect(build(dir, { CLAYJS_SEED_RELEASE: seed.tarball })).rejects.toMatchObject({
+    await expect(build(refused, { CLAYJS_SEED_RELEASE: seed.tarball })).rejects.toMatchObject({
       stderr: expect.stringContaining(`CLAYJS_SEED_RELEASE package mismatch: expected ${name}@${CURRENT}, got not-clayjs@${CURRENT}`),
     });
-    await expectNoSeededCache(dir);
+    await expectNoSeededCache(refused);
   } finally {
-    await rm(dir, { recursive: true, force: true });
     await seed.cleanup();
   }
 }, 300000);
 
 test("a relative seed path is refused", async () => {
-  const dir = await makeSite({ guardedPack: true });
-  try {
-    await expect(build(dir, { CLAYJS_SEED_RELEASE: "clayjs-seed.tgz" })).rejects.toMatchObject({
-      stderr: expect.stringContaining("CLAYJS_SEED_RELEASE must be an absolute path: clayjs-seed.tgz"),
-    });
-    await expectNoSeededCache(dir);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  await expect(build(refused, { CLAYJS_SEED_RELEASE: "clayjs-seed.tgz" })).rejects.toMatchObject({
+    stderr: expect.stringContaining("CLAYJS_SEED_RELEASE must be an absolute path: clayjs-seed.tgz"),
+  });
+  await expectNoSeededCache(refused);
 }, 300000);
 
 test("a missing seed path is refused", async () => {
-  const dir = await makeSite({ guardedPack: true });
-  const missing = path.join(dir, "no-such-seed.tgz");
-  try {
-    await expect(build(dir, { CLAYJS_SEED_RELEASE: missing })).rejects.toMatchObject({
-      stderr: expect.stringContaining(`CLAYJS_SEED_RELEASE must be a regular file: ${missing}`),
-    });
-    await expectNoSeededCache(dir);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  const missing = path.join(refused, "no-such-seed.tgz");
+  await expect(build(refused, { CLAYJS_SEED_RELEASE: missing })).rejects.toMatchObject({
+    stderr: expect.stringContaining(`CLAYJS_SEED_RELEASE must be a regular file: ${missing}`),
+  });
+  await expectNoSeededCache(refused);
 }, 300000);
 
 test("a directory seed path is refused", async () => {
-  const dir = await makeSite({ guardedPack: true });
-  const seed = await seedTarball(dir);
+  const seed = await seedTarball(refused);
   try {
-    await expect(build(dir, { CLAYJS_SEED_RELEASE: path.dirname(seed.tarball) })).rejects.toMatchObject({
+    await expect(build(refused, { CLAYJS_SEED_RELEASE: path.dirname(seed.tarball) })).rejects.toMatchObject({
       stderr: expect.stringContaining(`CLAYJS_SEED_RELEASE must be a regular file: ${path.dirname(seed.tarball)}`),
     });
-    await expectNoSeededCache(dir);
+    await expectNoSeededCache(refused);
   } finally {
-    await rm(dir, { recursive: true, force: true });
     await seed.cleanup();
   }
 }, 300000);

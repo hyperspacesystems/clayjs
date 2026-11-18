@@ -73,4 +73,11 @@ function seedWindow({ name, full, routine, keep = [], env = process.env, now = D
   };
 }
 
-module.exports = { seedWindow, windowOf, depthOf, parsePinned };
+function countOf({ name, full, routine, env = process.env }) {
+  const depth = depthOf(env) === 'full' || routine >= full ? 'full' : 'routine';
+  const count = depth === 'full' ? full : routine;
+  record(env, { name, depth, count });
+  return { count, depth, label: depth === 'full' ? `${name}: all ${full}` : `${name}: ${routine} of ${full}; TEST_DEPTH=full runs all` };
+}
+
+module.exports = { seedWindow, windowOf, countOf, depthOf, parsePinned };

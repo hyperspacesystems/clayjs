@@ -4,12 +4,14 @@ import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import shard from "../../helpers/shard.cjs";
+import seedWindowHelpers from "../../helpers/seed-window.cjs";
 import { MUTATIONS } from "../../mode-counterexamples/mutations.mjs";
 
 /**
  * The corpus selftest, split by defect: each mode-case-selftest-<n>.test.js file runs one
- * `selftest --only` over the defects dealt to it, so a run still plants all six, in
- * separate workers. Each defect's own line must say whether the corpus feels it.
+ * `selftest --only` over the defects dealt to it, so a full run still plants all six, in
+ * separate workers, and a local run plants one per shard from the daily window
+ * (tests/helpers/seed-window.cjs). Each defect's own line must say whether the corpus feels it.
  */
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
@@ -24,7 +26,8 @@ const SUBSET = ["canonical-freeze", "cycles-no-growth", "cycles-one-write", "ent
 const UNFELT = ["rebaseline-current-dom", "route-draft-to-host"];
 
 export function defineShard(url) {
-  const ids = shard.shardItems(fileURLToPath(url), MUTATIONS).map((mutation) => mutation.id);
+  const dealt = shard.shardItems(fileURLToPath(url), MUTATIONS).map((mutation) => mutation.id);
+  const ids = seedWindowHelpers.windowOf(dealt, { name: "mode-case selftest", routine: 1 }).items;
   const gaps = ids.filter((id) => UNFELT.includes(id));
   let scratch = null;
   let runtime = null;

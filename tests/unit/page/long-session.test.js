@@ -13,15 +13,16 @@ globalThis.ClipboardEvent ??= class ClipboardEvent extends Event { constructor(t
 import { jest } from "@jest/globals";
 import { webcrypto } from "node:crypto";
 import { runLongSession } from "./helpers/long-session.js";
+import seedWindowHelpers from "../../helpers/seed-window.cjs";
 
 Object.defineProperty(globalThis, "crypto", { value: webcrypto, configurable: true, writable: true });
 
-const OPERATIONS = Number(process.env.CLAY_LONG_SESSION_OPERATIONS ?? 200);
+const { count: OPERATIONS, label } = seedWindowHelpers.countOf({ name: "long session operations", full: 200, routine: 60 });
 
-test(`a seeded ${OPERATIONS}-operation session on ${2000} blocks with two real editors converges after every batch`, async () => {
+test("a seeded session on 2000 blocks with two real editors converges after every batch", async () => {
   try {
     const report = await runLongSession({ operations: OPERATIONS, expect });
-    console.log(JSON.stringify(report));
+    console.log(`${label}: ${JSON.stringify(report)}`);
   } finally {
     jest.restoreAllMocks();
   }
