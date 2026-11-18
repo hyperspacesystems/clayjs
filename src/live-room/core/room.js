@@ -143,7 +143,7 @@ function admitPart(env, room, part, by) {
   const whole = assemble(stage.parts), { action, saw, reviewed } = whole.k === "adopt" ? whole.items[0] : whole;
   if (frameBytes(action, { saw, reviewed }) !== stage.size) return "bad-size";
   const before = room.seq, result = admitWhole(env, room, whole, by);
-  return typeof result != "string" && room.seq === before && env.port.onSpace(), result;
+  return (result === "full" || result === "ledger-full") && env.port.onFull(by), typeof result != "string" && room.seq === before && env.port.onSpace(), result;
 }
 function rejoin(room, by) {
   room?.gone?.delete(by);

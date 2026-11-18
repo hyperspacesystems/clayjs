@@ -340,11 +340,13 @@ export function decide(env, tab, jobId, picks) {
 }
 
 function resend(env, tab) {
+  const receipts = [...tab.flight].filter((frame) => frame.k === "receipt" && frame.gen === tab.gen);
   tab.flight.clear();
   for (const request of tab.pending) request.queued = false;
   for (const held of tab.held) held.offered = false;
   if (tab.job) tab.job.queued = false;
   flush(env, tab);
+  if (!planted("wire-receipt-not-resent")) tab.out.push(...receipts);
 }
 
 const fileBasis = (file) => ({ file, onto: file.record.commit, saved: true });
@@ -775,13 +777,11 @@ export function answered(env, tab, frame, result) {
 
 export function waited(env, tab) {
   if (!tab.alive || !tab.connected || !tab.flight.size) return false;
-  const receipts = [...tab.flight].filter((frame) => frame.k === "receipt" && frame.gen === tab.gen);
   if (planted("wire-never-resent")) {
     tab.flight.clear();
     return true;
   }
   resend(env, tab);
-  if (!planted("wire-receipt-not-resent")) tab.out.push(...receipts);
   return true;
 }
 

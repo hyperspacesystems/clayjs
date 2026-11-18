@@ -197,7 +197,8 @@ export const PLANTS = {
   "wire-never-resent": "a tab whose wait for room answers runs out forgets the frames it sent and sends nothing again",
   "wire-late-part-staged": "the room stages a part that lands after its connection ended, and holds its bytes until the room ends",
   "wire-offer-judged-again": "the room keeps no answer for a restore offer it admitted, so the same offer sent again after a lost answer is judged again and answered as already counted",
-  "wire-receipt-not-resent": "a tab whose wait runs out sends its requests again but not a receipt whose answer it never got, so the room never learns of the save",
+  "wire-receipt-not-resent": "a tab that sends its frames again (its wait ran out, or it linked to its room again) does not send a receipt whose answer it never got, so the room never learns of the save",
+  "wire-part-refusal-not-told": "the room refuses a paste for space when its last part lands but does not tell the author, whose answer came back for an older copy of that part, so the tab waits for its paste forever",
 };
 
 let active = "";

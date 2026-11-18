@@ -210,10 +210,11 @@ function decide(env, tab, jobId, picks) {
   return env.observer.onDecide(env, tab, job.id, jobId, picks), flush(env, tab), !0;
 }
 function resend(env, tab) {
+  const receipts = [...tab.flight].filter((frame) => frame.k === "receipt" && frame.gen === tab.gen);
   tab.flight.clear();
   for (const request2 of tab.pending) request2.queued = !1;
   for (const held of tab.held) held.offered = !1;
-  tab.job && (tab.job.queued = !1), flush(env, tab);
+  tab.job && (tab.job.queued = !1), flush(env, tab), tab.out.push(...receipts);
 }
 const fileBasis = (file) => ({ file, onto: file.record.commit, saved: !0 }), stateBasis = (tab) => ({ file: { record: { gen: tab.gen, through: tab.a, epoch: tab.epoch }, state: tab.state }, onto: tab.base.commit, saved: !1 }), kept = (action) => action, heldEntry = (gen, frame) => ({ e: frame.e, c: frame.c, n: frame.n, b: frame.b ?? null, src: [gen, frame.seq], org: frame.org ?? [gen, frame.seq], via: frame.via ?? [], out: frame.noop ? "refused" : "applied", action: kept(frame.action), saw: frame.saw ?? null });
 function ownEntry(tab, id, out, src = null) {
@@ -459,9 +460,7 @@ function answered(env, tab, frame, result) {
   return !tab.flight.delete(frame) || !tab.alive || !tab.connected ? !1 : (hear(env, tab, frame, result), !0);
 }
 function waited(env, tab) {
-  if (!tab.alive || !tab.connected || !tab.flight.size) return !1;
-  const receipts = [...tab.flight].filter((frame) => frame.k === "receipt" && frame.gen === tab.gen);
-  return resend(env, tab), tab.out.push(...receipts), !0;
+  return !tab.alive || !tab.connected || !tab.flight.size ? !1 : (resend(env, tab), !0);
 }
 function hear(env, tab, frame, result) {
   if (frame.gen !== tab.gen) return;

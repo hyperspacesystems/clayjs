@@ -268,6 +268,7 @@ function admitPart(env, room, part, by) {
   if (frameBytes(action, { saw, reviewed }) !== stage.size) return "bad-size";
   const before = room.seq;
   const result = admitWhole(env, room, whole, by);
+  if ((result === "full" || result === "ledger-full") && !planted("wire-part-refusal-not-told")) env.port.onFull(by);
   if (typeof result !== "string" && room.seq === before && !planted("restore-frees-space-silently")) env.port.onSpace();
   return result;
 }
