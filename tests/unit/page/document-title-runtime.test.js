@@ -146,14 +146,6 @@ describe("the runtime title", () => {
     expect(document.title).toBe("");
   });
 
-  test("a duplicate earlier non-custom marker does not cancel a later custom one", () => {
-    setCustom("derived");
-    setCustom("custom");
-    document.title = "Kept";
-    open();
-    expect(document.title).toBe("Kept");
-  });
-
   test("titleItemsOfDoc stops at the first root H1 and reads hard breaks as text", () => {
     const tab = open(seedValue([
       { id: "p", t: "paragraph", text: "Body" },

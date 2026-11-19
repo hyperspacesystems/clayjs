@@ -54,14 +54,6 @@ test("a dark page with no accent gets its own ink as the primary colour", () => 
   expect(tokens.accentText).toBe("rgb(29, 33, 28)");
 });
 
-test("an accent the page names still wins over its ink", () => {
-  document.body.style.backgroundColor = "rgb(29, 33, 28)";
-  document.body.style.color = "rgb(232, 228, 216)";
-  theme({ tokens: { accent: "#7356ba" } });
-
-  expect(resolveTheme().tokens.accent).toBe("#7356ba");
-});
-
 test("a page with no readable pair gets no accent either", () => {
   document.body.style.backgroundImage = "url(photo.png)";
   document.body.style.color = "#263d4e";

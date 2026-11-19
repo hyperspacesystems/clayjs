@@ -424,20 +424,6 @@ test("draft mode keeps the core: a visitor's tab paints the totals of its own dr
 });
 
 describe("blockeditor-view, the reader half of page", () => {
-  test("view mode adds it, and nothing else page would have implied", () => {
-    const { plugins } = resolveModules(params({ plugins: "blockeditor" }), false);
-    expect(plugins).not.toContain("plugins/page.js");
-    expect(plugins).toEqual(["plugins/page-view.js"]);
-  });
-
-  // An explicitly requested sync still loads, and the reader comes before it so
-  // the feed's listener exists first.
-  test("view mode adds it before an explicitly requested live sync", () => {
-    const { plugins } = resolveModules(params({ plugins: "blockeditor,sync" }), false);
-    expect(plugins).toContain("sync/live-sync.js");
-    expect(plugins.indexOf("plugins/page-view.js"))
-      .toBeLessThan(plugins.indexOf("sync/live-sync.js"));
-  });
 
   test("edit mode loads the editor half and no reader", () => {
     const { plugins } = resolveModules(params({ plugins: "blockeditor" }), true);

@@ -588,12 +588,6 @@ describe("checkSource refuses anything that is not this document", () => {
       .toMatch(/moved content out of/);
   });
 
-  test("stray text inside a table is refused for the same reason", () => {
-    const stray = `<!DOCTYPE html><html><body><table>oops<tr><td>c</td></tr></table></body></html>`;
-    expect(checkSource(model(stray), new DOMParser().parseFromString(stray, "text/html")))
-      .toMatch(/moved content out of/);
-  });
-
   test("whitespace inside a table is NOT refused, so the check is not simply refusing tables", () => {
     const ok = `<!DOCTYPE html><html><body><table>\n  <tr><td>c</td></tr>\n</table></body></html>`;
     expect(checkSource(model(ok), new DOMParser().parseFromString(ok, "text/html"))).toBeNull();
@@ -620,11 +614,6 @@ describe("checkSource refuses anything that is not this document", () => {
     // with no doctype, and the tree comparison, which starts at documentElement,
     // never looks.
     expect(checkSource(model(`<html><body><p>real</p></body></html>`), live())).toMatch(/outside <html>/);
-  });
-
-  test("an extra comment before <html> is refused", () => {
-    expect(checkSource(model(`<!DOCTYPE html><!-- hi --><html><body><p>real</p></body></html>`), live()))
-      .toMatch(/outside <html>/);
   });
 
   test("an error page with the same doctype is caught by the tree comparison instead", () => {

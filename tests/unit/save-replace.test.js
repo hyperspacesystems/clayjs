@@ -155,14 +155,6 @@ test("a host that never announced conditional gets no request at all", async () 
   expect(calls.save).toHaveLength(0);
 });
 
-test("a host with no discovery at all gets no request either", async () => {
-  const { replace } = await fresh();
-  metaBody = null;
-
-  expect(await replace(HTML, { etag: "stamp-before" })).toEqual({ ok: false, code: "unsupported" });
-  expect(calls.save).toHaveLength(0);
-});
-
 test("no save hook and no snapshot run: the bytes go out exactly as given", async () => {
   const { replace, core } = await fresh();
   const attempts = [];

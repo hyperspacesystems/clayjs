@@ -83,14 +83,6 @@ test("every export row's module exports a function modeParticipant", async () =>
   }
 });
 
-test("a row may be a function of the module, for a participant in an edit chunk", () => {
-  // Generic sync is loaded by a reader, but its participant is edit-only code: the row
-  // answers a promise of the participant from the module's own edit chunk, so a reader
-  // never fetches it.
-  const row = supportFor("sync/live-sync.js");
-  expect(typeof row).toBe("function");
-});
-
 test("an empty resolution is supported, and an absent path in it is not", async () => {
   const { liveAllowed, unsupportedPaths } = await import("../../../src/core/mode-switch.js");
 

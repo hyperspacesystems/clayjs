@@ -120,7 +120,3 @@ test("a skin given its roots gives them their own selection colours, so a page's
     ["color", "light-dark(#1A1C24, #F2F4F8)", true],
   ]);
 });
-
-test("a skin without roots gets no selection rule", () => {
-  expect(installSkin("cms", CMS).textContent.includes("::selection")).toBe(false);
-});

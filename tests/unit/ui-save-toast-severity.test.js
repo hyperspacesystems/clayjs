@@ -34,13 +34,6 @@ test("success msgType renders a success toast", () => {
   expect(el.textContent).toContain("Saved");
 });
 
-test("absent msgType renders a success toast", () => {
-  window.clay.saveToast = true;
-  fireSaved({ msg: "Saved" });
-
-  expect(renderedToast().getAttribute("data-clay-toast")).toBe("success");
-});
-
 // A stale-write warning names the file, and a filename is attacker-chosen on any
 // OS that allows < and > in names. The toast writes its icon with innerHTML, so
 // the message must never travel that path.

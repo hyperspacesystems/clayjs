@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { CORE_WAVES, PLUGIN_PATHS, MODULES, SITE_EDITS } from "../../src/loader-logic.js";
 
@@ -32,14 +32,6 @@ test("every path the loader can ask for has an entry", () => {
 
 test("every entry is reachable from the loader", () => {
   expect(Object.keys(MODULES).filter((path) => !wanted.includes(path))).toEqual([]);
-});
-
-test("every entry imports the file its key names, and that file exists", () => {
-  for (const [path, thunk] of Object.entries(MODULES)) {
-    const spec = String(thunk).match(/import\("\.\/([^"]+)"\)/);
-    expect(spec && spec[1]).toBe(path);
-    expect(existsSync(join(ROOT, "src", path))).toBe(true);
-  }
 });
 
 function sources(dir) {

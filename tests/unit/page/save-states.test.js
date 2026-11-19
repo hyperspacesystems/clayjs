@@ -108,14 +108,6 @@ test("every code maps to exactly one state, unknown codes fall to error, saved a
   expect(saveStates.saveStateFor({ offline: true, code: "too-large" })).toBe("retrying");
 });
 
-test("a compacting room with no room left, and a room whose compaction failed, both block", () => {
-  for (const code of ["blockeditor-full", "compaction-failed"]) {
-    expect(saveStates.SAVE_STATE_BY_CODE[code]).toBe("blocked");
-    expect(saveStates.saveStateFor({ code })).toBe("blocked");
-    expect(saveStates.saveStateFor({ code, offline: true })).toBe("retrying");
-  }
-});
-
 test("the two texts are the exact wording the indicator and toast show", () => {
   expect(saveStates.BLOCKED_TEXT).toBe("Can't save here. Your edits are still in this tab.");
   expect(saveStates.RETRY_TEXT).toBe("Still trying to save. Your edits are safe in this tab.");

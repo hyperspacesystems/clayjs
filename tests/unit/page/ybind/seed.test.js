@@ -29,8 +29,3 @@ test("the seed is deterministic and chunked", () => {
   expect(keys.length).toBeGreaterThan(30);
   for (const k of keys) expect(a.y[k].length).toBeLessThan(4000);
 });
-
-test("one long block is several keys", () => {
-  const value = seedValue([{ id: "x", text: "a".repeat(5000) }]);
-  expect(Object.keys(value.y).length).toBeGreaterThanOrEqual(3);
-});

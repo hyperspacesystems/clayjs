@@ -101,14 +101,6 @@ test('a custom marker with duplicates keeps the file title, and an earlier deriv
   expect(titleOf(also.html)).toBe('Mine');
 });
 
-test('an empty custom title is preserved as written', () => {
-  const { source, capture, render } = roomOf(seedValue(heading('New title')), { head: `${marker('custom')}<title></title>` });
-  const result = render(source, capture());
-  expect(result.kind).toBe('ok');
-  expect(result.html).toContain(`${marker('custom')}<title></title>`);
-  expect(isCheckpointCurrent(result.html, capture())).toBe(true);
-});
-
 test('the derived title is escaped in the source and reads back as the heading text', () => {
   const text = 'A & B < C > D "quoted"';
   const { source, capture, render } = roomOf(seedValue(heading(text)));

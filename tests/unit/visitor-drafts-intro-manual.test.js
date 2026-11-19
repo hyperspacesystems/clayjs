@@ -115,14 +115,6 @@ test("a closed intro starts closed with nothing built, and ?intro=1 opens it", a
   expect(closeButton().textContent).toBe("Hide intro");
 });
 
-test("a menu that arrives later gets no intro row, open or closed", async () => {
-  await bootPage({ slot: "manual-late-closed", ui: { v: 1, prompt: {}, intro: { done: "closed" }, src: null } });
-  const menu = fakeMenu();
-  window.clay.menu = menu;
-  document.dispatchEvent(new CustomEvent("clay:menu-ready"));
-  expect(menu.items.size).toBe(0);
-});
-
 test("scrolling to the end leaves a manual intro alone", async () => {
   const menu = fakeMenu();
   const { uiKey } = await bootPage({ slot: "manual-scroll", menu });

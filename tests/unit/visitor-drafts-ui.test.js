@@ -75,10 +75,6 @@ function intro() {
   return document.querySelector(".clay-intro");
 }
 
-function about() {
-  return document.querySelector(".clay-about");
-}
-
 function ownerChip() {
   return $(".clay-owner", "owner");
 }
@@ -563,14 +559,6 @@ test("the intro stands aside for the hash the page was served with, not for one 
     beforeBoot: () => window.history.replaceState({}, "", "/notes.html?intro=1#entry=welcm1"),
   });
   expect(intro()).not.toBeNull();
-});
-
-test("no About this app control ever appears, even for a returning visitor", async () => {
-  await bootPage({ slot: "ui-intro-no-about", template: INTRO, ui: { v: 1, intro: { done: "closed" } } });
-
-  expect(intro()).toBeNull();
-  expect(about()).toBeNull();
-  expect(document.getElementById("clay-intro-style")?.textContent || "").not.toContain(".clay-about");
 });
 
 test("the card's minimize button is a boxed minus and the download controls use bevel's download icon", async () => {

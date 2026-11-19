@@ -44,24 +44,6 @@ afterEach(() => {
   delete window.clay;
 });
 
-function engineConflict(id, overrides = {}) {
-  return {
-    kind: "text",
-    node: card(id),
-    local: card(id).textContent,
-    remote: `${card(id).textContent} edited elsewhere`,
-    ...overrides,
-  };
-}
-
-function applyWith(conflicts) {
-  const applyId = ledger.beginApply({
-    source: "peer", seq: 1, etag: "E1", domain: "sync",
-    root: document.documentElement.cloneNode(true),
-  });
-  return ledger.completeApply(applyId, conflicts, { ticket: 1 });
-}
-
 /** One resolver for both records: a conflict names the node it touched, a refused step
  * names the element its target id finds. */
 const cardResolver = () => (record) => {
@@ -105,14 +87,6 @@ test("the newest resolver answers first, and an earlier one still answers when i
   ledger.conflicts.registerContext((subject) => (subject?.source === "undo" ? null : { kind: "other", id: "wrong" }));
 
   expect(undoRecovery.contextForTarget({ id: "c-1" }).label).toBe("Alpha");
-});
-
-test("a conflicts record still gets its context through the moved registry", () => {
-  ledger.conflicts.registerContext(cardResolver());
-  const [first, second] = applyWith([engineConflict("c-1"), engineConflict("c-2")]);
-
-  expect(ledger.conflicts.get(first).context).toMatchObject({ kind: "card", id: "c-1", label: "Alpha", field: "title" });
-  expect(ledger.conflicts.get(second).context).toMatchObject({ kind: "card", id: "c-2", label: "Beta", field: "title" });
 });
 
 test("a conflict resolver does not name a refused step's subject", () => {

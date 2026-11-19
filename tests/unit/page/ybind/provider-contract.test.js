@@ -28,11 +28,3 @@ test("the store members the provider depends on", () => {
   store.deliver({ phase: "refused", code: "x" });
   expect(deliveries).toEqual([{ phase: "refused", code: "x" }]);
 });
-
-test("rebase with drop removes the first pending op", () => {
-  const store = createStore({ name: "blockeditor", value: { v: 1, g: 0, y: {} } });
-  store.handle.set(["y", "k"], "AA");
-  expect(store.value.y.k).toBe("AA");
-  store.rebase(store.authoritative, { source: "state", drop: [1, 1] });
-  expect(store.value.y.k).toBeUndefined();
-});

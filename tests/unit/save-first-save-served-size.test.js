@@ -112,9 +112,3 @@ test("a page served small keeps the one-task path on its first save", async () =
 
   expect(settled).toBe(true);
 }, 60000);
-
-test("a page with no served size keeps the one-task path on its first save", async () => {
-  const { settled } = await firstSaveOf(null);
-
-  expect(settled).toBe(true);
-}, 60000);

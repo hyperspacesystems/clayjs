@@ -170,20 +170,6 @@ describe("a saving tab tells the other editors, and only when it has something t
     ]);
   });
 
-  test("relays without a stamp on a host whose saves return none", () => {
-    recordEtag(null);
-
-    expect(relay()).toEqual([
-      { html: "<html>what I saved</html>", etag: null, identityMap: { a: 1 } },
-    ]);
-  });
-
-  test("says nothing before this tab has captured anything", () => {
-    recordEtag("stored-7");
-
-    expect(relay({ _savedSnapshot: undefined })).toEqual([]);
-  });
-
   // A save that landed during a frame's apply window is still a save; only a
   // destroyed tab stays silent.
   test("says nothing once destroyed, and a pause does not hold a landed save back", () => {

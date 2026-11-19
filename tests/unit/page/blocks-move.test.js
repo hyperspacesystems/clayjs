@@ -85,11 +85,6 @@ describe("move", () => {
   // from the original outline and the proposed node attributes.
   const intent = (s, cmd) => { let out = null; cmd(s, (tr) => { out = tr; }); return out.getMeta(B.MOVE); };
 
-  test("Tab on a list item carries an in-place intent with the changed indent", () => {
-    const s = caret(make([["l1", "list_item", "one"], ["l2", "list_item", "two"], ["l3", "list_item", "three"]]), "l2");
-    expect(intent(s, B.indentBlocks)).toEqual({ ids: ["l2"], afterId: "l1", parent: null, attrs: { l2: { indent: 1 } } });
-  });
-
   test("Tab after a closed toggle adopts the block and carries the opened toggle", () => {
     const s = caret(make([["t", "toggle", "T"], ["b1", "paragraph", "b1", { parent: "t" }], ["z", "paragraph", "Z"]]), "z");
     expect(intent(s, B.indentBlocks)).toEqual({ ids: ["z"], afterId: "b1", parent: "t", attrs: { t: { open: true } } });

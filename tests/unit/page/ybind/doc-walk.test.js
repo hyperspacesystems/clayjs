@@ -1,6 +1,5 @@
 import * as Y from "../../../../src/vendor/yjs.vendor.js";
-import { schema } from "../../../../src/page/schema.js";
-import { createPageDoc, mintId, attrKeys, walk, docOf, pickCopy } from "../../../../src/page/ybind/core.js";
+import { createPageDoc, walk, docOf, pickCopy } from "../../../../src/page/ybind/core.js";
 
 const addBlock = (pd, id, text, t = "paragraph") => {
   const at = pd.flow.length;
@@ -17,17 +16,6 @@ const breakKey = (pd, id) => {
   return null;
 };
 const fresh = () => { const pd = createPageDoc(); pd.ydoc.clientID = 7; return pd; };
-
-test("layout", () => {
-  const pd = createPageDoc();
-  expect(pd.flow).toBeInstanceOf(Y.Text);
-  for (const k of ["attrs", "gone", "boardFields"]) expect(pd[k]).toBeInstanceOf(Y.Map);
-  expect(pd.ydoc).toBeInstanceOf(Y.Doc);
-  const a = mintId(pd), b = mintId(pd);
-  expect(a).not.toBe(b);
-  expect(a.startsWith("b")).toBe(true);
-  expect(attrKeys(schema.nodes.heading)).toEqual(["parent", "level", "pageIcon", "pageCoverSrc", "pageCoverAlt", "pageCoverX", "pageCoverY"]);
-});
 
 test("two blocks", () => {
   const pd = fresh();

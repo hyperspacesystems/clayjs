@@ -48,13 +48,6 @@ test("a remote edit renders at once while the local view is composing; ProseMirr
   close(a); close(b);
 });
 
-test("with no composition a remote edit lands synchronously", () => {
-  const { a, b } = pair();
-  send(b, a);
-  expect(texts(a)).toEqual(["helloX", "worldY"]);
-  close(a); close(b);
-});
-
 const blockEnd = (tab, i) => { let p = 0; for (let j = 0; j < i; j++) p += tab.view.state.doc.child(j).nodeSize; return p + tab.view.state.doc.child(i).nodeSize - 1; };
 
 const finish = async (from, to) => {

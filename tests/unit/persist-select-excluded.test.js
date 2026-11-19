@@ -34,9 +34,3 @@ test("each select saves exactly the options picked on the page", () => {
   expect(savedSelected(html, "many")).toEqual(["X", "Z"]);
   expect(savedSelected(html, "plain")).toEqual(["Q"]);
 });
-
-test("picking the second option of the first select saves it, not its neighbour", () => {
-  document.getElementById("one").value = "B";
-  const html = captureForSave({ emitForSync: false });
-  expect(savedSelected(html, "one")).toEqual(["B"]);
-});

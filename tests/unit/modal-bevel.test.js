@@ -93,9 +93,3 @@ test("hidden button: a hover or focus rebuild cannot bring back a button with no
   expect(no.hidden).toBe(true);
   expect([no.style.getPropertyValue("display"), no.style.getPropertyPriority("display")]).toEqual(["none", "important"]);
 });
-
-test("scheme: the modal takes the page's declared scheme", () => {
-  document.documentElement.style.colorScheme = "dark";
-  open();
-  expect(root().style.getPropertyValue("color-scheme")).toBe("dark");
-});

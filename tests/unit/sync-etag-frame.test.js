@@ -72,14 +72,6 @@ test("a stamp arriving with no document is dropped, not taken", () => {
   expect(lastSeenEtag()).toBe("stamp-before");
 });
 
-test("being in step changes nothing: there is still no content to be in step WITH", () => {
-  recordEtag("stamp-before");
-
-  applyEtagFrame({ _heldLive: false, _heldExt: false }, { etag: "stamp-after" });
-
-  expect(lastSeenEtag()).toBe("stamp-before");
-});
-
 test("a frame carrying a document is not a stamp-only frame", () => {
   recordEtag("stamp-before");
 

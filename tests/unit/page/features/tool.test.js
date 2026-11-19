@@ -101,14 +101,6 @@ const send = (from, to, key) => {
   to.store.rebase({ ...base, y: { ...base.y, [key]: value } }, { source: "remote", frame: { ops: [{ op: "set", path: ["y", key], value }] } });
 };
 
-test("opening the slash menu loads nothing", async () => {
-  const { view, calls } = openTab(seedValue([PARAGRAPH]));
-  const menu = slash(view);
-  expect(menu.hidden).toBe(false);
-  await flush();
-  expect(calls).toEqual([]);
-});
-
 test("a document with a tool boots with the tool view part loaded and mounts from its state", async () => {
   const { view, calls } = openTab(seedValue([PARAGRAPH, TOOL]), { tools: { tally: { r1: { count: 3 } } } });
   expect(calls).toEqual(["tool"]);

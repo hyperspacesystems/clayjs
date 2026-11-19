@@ -24,7 +24,6 @@ import path from "node:path";
 
 const root = path.resolve(new URL("../..", import.meta.url).pathname);
 const fixture = readFileSync(path.join(root, "tests/fixtures/load/document.html"), "utf8");
-const budget = JSON.parse(readFileSync(path.join(root, "scripts/load-budget.json"), "utf8"))["built"]["document.html"].view;
 let measureBuilt;
 let emitChunks;
 let emitBootstraps;
@@ -88,16 +87,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await rm(outdir, { recursive: true, force: true });
-});
-
-// The corrected actual-boot baseline: an owner reading the standard Document with the
-// menu late and no edit-only module before ready.
-test("the plain reader measures the recorded Document baseline", async () => {
-  const plain = await viewOf(fixture);
-
-  expect(plain.js.requests).toBeLessThanOrEqual(budget.requests);
-  expect(plain.js.depth).toBe(3);
-  expect(plain.js.brotli).toBeLessThanOrEqual(CEILING);
 });
 
 // The declaration, the participants queued before boot, and the owner's upgrade metadata

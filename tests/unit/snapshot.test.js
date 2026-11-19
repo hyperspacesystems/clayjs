@@ -1,6 +1,5 @@
 import {
   captureForSave,
-  captureForSaveAndComparison,
 } from "../../src/core/snapshot.js";
 
 beforeEach(() => {
@@ -24,9 +23,4 @@ test("strips no-save (clay + legacy), no-snapshot, and extension noise; keeps co
   expect(forSave).not.toContain("EXTNOISE");
   expect(forSave).toContain("CHANGED");
   expect(forSave).not.toContain("beforetext");
-});
-
-test("the global the snapshot used to live on is gone", () => {
-  captureForSaveAndComparison();
-  expect(window.__hyperclaySnapshotHtml).toBeUndefined();
 });

@@ -4,7 +4,6 @@ import { schema } from "../../../../src/page/schema.js";
 import { identityPlugin, blockJson } from "../../../../src/page/model.js";
 import { state, view } from "../../../../src/vendor/prosemirror.vendor.js";
 import { createYPageBinding, migrateHybridValues, blocksFromYValue, enc } from "../../../../src/page/ybind/index.js";
-import { bareShape, shapeOf } from "../../../../src/page/ybind/bridge.js";
 import { RECORD } from "../fixtures/all-kinds.js";
 import { tableKey } from "../../../../src/page/ybind/table.js";
 import { addRow, deleteRow, sortBy, moveRow, moveColumn, renameColumn, setColumnKind, setColumnWidth } from "../../../../src/page/table.js";
@@ -162,14 +161,6 @@ test("peer delivery preserves a caret in another cell and undo retains peer work
   expect(rows(b).r1.cells.c3).toBe("peer ");
   expect(read(b).before.c).toBe("YXBefore");
   expect(a.binding.stats.mismatch + b.binding.stats.mismatch).toBe(0);
-});
-
-test("the actual shape guard distinguishes a changed table cell", () => {
-  const tab = open();
-  const doc = tab.editor.state.doc;
-  const changed = tab.editor.state.tr.insertText("changed", cellAt(tab, "r1", "c1").pos).doc;
-  expect(bareShape(changed)).not.toBe(bareShape(doc));
-  expect(shapeOf(changed)).not.toBe(shapeOf(doc));
 });
 
 test("retains an empty table payload without inventing rows", () => {

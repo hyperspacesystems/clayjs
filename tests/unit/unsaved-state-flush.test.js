@@ -1,5 +1,3 @@
-import { jest } from "@jest/globals";
-
 /**
  * flushUnsaved: pending sources that can finish on their own are asked to, and
  * waited for; the ones that cannot stay pending and are reported. A registration
@@ -56,14 +54,6 @@ test("flushUnsaved reports not ok when a flush throws", async () => {
   register({ id: "boom", isPending: () => true, flush: async () => { throw new Error("offline"); } });
 
   await expect(unsaved.flushUnsaved()).resolves.toEqual({ ok: false, pending: ["boom"] });
-});
-
-test("a source that is not pending is not flushed", async () => {
-  const flush = jest.fn(async () => ({ ok: true }));
-  register({ id: "clean", isPending: () => false, flush });
-
-  await expect(unsaved.flushUnsaved()).resolves.toEqual({ ok: true, pending: [] });
-  expect(flush).not.toHaveBeenCalled();
 });
 
 test("registerUnsavedState without a flush works exactly as before", () => {

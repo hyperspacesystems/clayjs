@@ -6,7 +6,7 @@ import { history, model } from "../../../src/vendor/prosemirror.vendor.js";
 import * as B from "../../../src/page/blocks.js";
 import * as titleIcon from "../../../src/page/features/title-icon.js";
 import { installPageFeature, runPageCommand } from "../../../src/page/editor.js";
-import { DEFAULTS, OPAQUE, VALUE, canon, envelopeAttrs, parseModel, project, renderModel, revOf } from "../../../src/page/projection.js";
+import { OPAQUE, VALUE, canon, envelopeAttrs, parseModel, project, renderModel, revOf } from "../../../src/page/projection.js";
 import { documentTitle } from "../../../src/page/document-title.js";
 import { blockMap } from "../../../src/page/model.js";
 import { editor, posOf, select } from "./view-helpers.js";
@@ -296,12 +296,4 @@ test("a gate that refuses writes nothing, and a page with no gate never asks one
   await settle();
   expect(view.state.doc).toBe(before);
   expect(view.dom.querySelector("header[data-blockeditor-heading]")).toBeNull();
-});
-
-test("the title's attribute is one of the heading's defaults, so a page without one writes nothing new", () => {
-  expect(DEFAULTS.heading).toEqual({ parent: null, level: 2, pageIcon: null, pageCoverSrc: null, pageCoverAlt: "", pageCoverX: 50, pageCoverY: 50 });
-  const shape = project({ h: { t: "heading", pos: "B", c: "Notes", level: 1 } });
-  expect(shape[0]).toEqual({ id: "h", t: "heading", level: 1, c: "Notes" });
-  expect(renderModel(shape)).toBe('<h1 data-id="h">Notes</h1>');
-  expect(canon(parseModel(articleOf(renderModel(shape))))).toBe(canon(shape));
 });

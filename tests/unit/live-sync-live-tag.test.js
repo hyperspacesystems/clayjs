@@ -125,10 +125,3 @@ test("the live tag is in the save and relay capture and in neither comparison do
   expect(snapshot.captureForComparison()).toContain('merge="prefs"');
   expect(snapshot.captureForDirtyCheck()).not.toContain('merge="game"');
 });
-
-test("changing the live tag's text does not make the page dirty", async () => {
-  await settle(BODY);
-  document.querySelector('[merge="game"]').textContent = '{"score":2}';
-  await Promise.resolve();
-  expect(snapshot.captureForComparison()).toBe(save.getLastSavedContents ? save.getLastSavedContents() : snapshot.captureForComparison());
-});

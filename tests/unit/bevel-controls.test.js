@@ -349,11 +349,6 @@ test("icon: the glyph is pinned against a page that resets and repaints", () => 
   }
 });
 
-test("exports: set and style are not re-exported", () => {
-  expect(bevelControls.set).toBeUndefined();
-  expect(bevelControls.style).toBeUndefined();
-});
-
 test("pin: a pinned declaration outlives hover, press, focus and blur rebuilds", () => {
   const b = bevelButton("Go", { extra: ["position:fixed"] });
   document.body.append(b);

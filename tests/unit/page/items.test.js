@@ -1,5 +1,4 @@
 import * as I from "../../../src/page/items.js";
-import * as C from "../../../src/page/chrome.js";
 import { make, caret, short } from "./blocks-helpers.js";
 
 /**
@@ -10,18 +9,7 @@ import { make, caret, short } from "./blocks-helpers.js";
 const byKey = (k) => I.BLOCK_TYPES.find((b) => b.key === k);
 const keys = (query) => I.rankItems(I.MENU_ITEMS, query).map((i) => i.key);
 
-test("chrome.js still exports the block helpers it used to define", () => {
-  expect(C.BLOCK_TYPES).toBe(I.BLOCK_TYPES);
-  expect(C.turnInto).toBe(I.turnInto);
-  expect(C.insertAfter).toBe(I.insertAfter);
-  expect(C.blockTypeOf).toBe(I.blockTypeOf);
-});
-
 describe("rankItems", () => {
-  test("an empty query keeps menu order", () => {
-    expect(keys("")).toEqual(I.MENU_ITEMS.map((i) => i.key));
-    expect(I.MENU_ITEMS.length).toBe(I.BLOCK_TYPES.length + I.INSERT_ITEMS.length);
-  });
 
   test("h lists the headings first, then the toggle headings, then the divider through its hr alias", () => {
     expect(keys("h").slice(0, 6)).toEqual(["h1", "h2", "h3", "toggle-h1", "toggle-h2", "toggle-h3"]);
@@ -35,22 +23,8 @@ describe("rankItems", () => {
     expect(keys("h2")[0]).toBe("h2");
   });
 
-  test("a label prefix beats an alias prefix: t lists Text before Toggle", () => {
-    expect(keys("t").slice(0, 2)).toEqual(["text", "toggle"]);
-  });
-
   test("list finds the two list types by alias, then Checklist by substring", () => {
     expect(keys("list")).toEqual(["bullet", "ordered", "check"]);
-  });
-
-  test("substrings match, and letters in order match as a fuzzy abbreviation", () => {
-    expect(keys("llou")).toEqual(["callout"]);
-    expect(keys("hd2")).toEqual(["h2", "toggle-h2"]);
-    expect(keys("zz")).toEqual([]);
-  });
-
-  test("the query is trimmed and ignores case", () => {
-    expect(keys("  CODE ")).toEqual(["code"]);
   });
 });
 

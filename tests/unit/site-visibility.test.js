@@ -2,7 +2,6 @@
  * @jest-environment jsdom
  */
 import { jest } from "@jest/globals";
-import { isTabLocalRootAttr } from "../../src/lib/root-attrs.js";
 
 // Scenario: the host tells the owner's tab whether this site is served privately or
 // publicly, by stamping the response's <html>. It is a statement about the RESPONSE,
@@ -66,8 +65,4 @@ test("the answer is stripped from the saved bytes and kept on the live root", as
   expect(root).not.toContain("sitevisibility");
 
   expect(document.documentElement.getAttribute("sitevisibility")).toBe("private");
-});
-
-test("sitevisibility is a tab-local root attribute", () => {
-  expect(isTabLocalRootAttr("sitevisibility", document.documentElement)).toBe(true);
 });

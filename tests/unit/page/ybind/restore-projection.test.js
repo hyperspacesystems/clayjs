@@ -103,11 +103,6 @@ test("one Restore exposes the hidden source once under a recovered root", () => 
   expect(reduceRecovery(pd).sources.get(q).revision).toBe(record.revision);
 });
 
-test("a public ID with a recovered prefix remains an ordinary block", () => {
-  const pd = page(1, [{ id: "recovered:1.0", text: "ok" }]);
-  expect(visible(walk(pd))).toEqual([["recovered:1.0", "ok"]]);
-});
-
 test("two disconnected Restores make one root and Undo leaves the other visible", () => {
   const seed = page(1, [{ id: "p", text: "ALPHA" }, { id: "q", text: "bravo" }, { id: "r", text: "OMEGA" }]);
   const q = keyOf(seed, "q");

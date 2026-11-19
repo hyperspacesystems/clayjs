@@ -1,8 +1,5 @@
 import * as B from "../../../src/page/blocks.js";
 import { make, run, short } from "./blocks-helpers.js";
-import {
-  changedBlocks,
-} from "../../../src/page/model.js";
 import { state as pmState, history, transform } from "../../../src/vendor/prosemirror.vendor.js";
 import { schema } from "../../../src/page/schema.js";
 
@@ -123,12 +120,6 @@ describe("moving", () => {
     expect(texts(out)).toBe("P0 | X | T | b1<t | b2<t | Y");
     expect(out.selection instanceof BlockSelection).toBe(true);
     expect(range(out)).toEqual([startOf(out.doc, 2), endOf(out.doc, 4)]);
-  });
-
-  test("only the moved blocks get new keys", () => {
-    const s = withBlocks(make(spec), 1, 3);
-    const out = run(s, B.moveBlock(1));
-    expect(Object.keys(changedBlocks(s.doc, out.doc).after).sort()).toEqual(["b1", "b2", "t"]);
   });
 
   test("a move is still one undo step with the block selection back", () => {

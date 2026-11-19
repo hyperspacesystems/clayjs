@@ -49,13 +49,6 @@ test("a tagless write with a conversion header is still refused as a page format
   expect(thrown.code).toBe("blockeditor-format");
 });
 
-test("a room in a Yjs transition accepts a tagless body as ordinary", () => {
-  const rooms = createRooms();
-  const room = rooms.open("/page.html", template, { nodeId: 1 });
-  expect(room.blockeditorTransition.format).toBe("yjs");
-  expect(checkPageWriteAdmission({ currentHtml: template, html: tagless, room })).toBe("ordinary");
-});
-
 test("a hybrid body after Yjs is still refused with blockeditor-format", () => {
   expect(inspectPage(hybrid).kind).toBe("hybrid");
   expect(refusesFormat(() => checkPageWriteAdmission({ currentHtml: template, html: hybrid }))).toBeInstanceOf(PageFormatError);

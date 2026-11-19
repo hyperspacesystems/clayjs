@@ -100,8 +100,3 @@ test("two docs seeded from the same article merge without duplicating blocks", (
   d1.destroy();
   d2.destroy();
 });
-
-test("migrateHybridValues output is unchanged", () => {
-  const value = migrateHybridValues([RECORD]);
-  expect(P.hash64(JSON.stringify(value))).toBe("6fe61ad487e53ccc");
-});

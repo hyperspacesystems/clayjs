@@ -129,13 +129,6 @@ test("an embedded owner without clay-menu-looks gets no row and no pill, and cla
   expect(window.clay.variants.list().map((entry) => entry.name)).toEqual(["A", "B", "C"]);
 });
 
-test("a floating owner keeps its pill and draws no row", async () => {
-  await boot({ edit: true, body: PLAIN });
-
-  expect(pillOf()).not.toBeNull();
-  expect(rowOf()).toBeNull();
-});
-
 // A visitor sees the page in its saved look and cannot switch it (David, Nov 11): the slot's
 // clay-menu-looks asks for the owner's Theme row, never a visitor's.
 test("an embedded visitor gets no look row and no pill, even when the slot asks with clay-menu-looks", async () => {

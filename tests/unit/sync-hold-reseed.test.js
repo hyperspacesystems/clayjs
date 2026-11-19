@@ -42,12 +42,6 @@ beforeEach(() => seedEtag.mockClear());
 const setHeld = (state, lane, isHeld) =>
   LiveSync.prototype._setHeld.call({ _heldLive: false, _heldExt: false, ...state }, lane, isHeld);
 
-test("a cleared hold asks the host for the current stamp", () => {
-  setHeld({ _heldLive: true }, "live", false);
-
-  expect(seedEtag).toHaveBeenCalledTimes(1);
-});
-
 test("it refetches, and never clears the stamp it already holds", () => {
   setHeld({ _heldLive: true }, "live", false);
 

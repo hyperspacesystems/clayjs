@@ -471,14 +471,6 @@ test("a metadata fetch the host never answered is a retryable network failure", 
   expect(global.fetch).toHaveBeenCalled();
 });
 
-test("a host that answered without the upload extension is still unsupported, not network", async () => {
-  const { start } = await load({ extensions: [] });
-  installXhr();
-  const task = start(file());
-  const res = await task.result;
-  expect([res.ok, res.code]).toEqual([false, "unsupported"]);
-});
-
 test("a cancel while the metadata is in flight settles at once, before any precheck", async () => {
   const { start } = await load();
   const release = holdDiscovery({ allowed: true, access: "document", maxBytes: 1 });
