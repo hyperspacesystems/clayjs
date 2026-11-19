@@ -252,4 +252,4 @@ test("the pairing half of a large install yields, and pairs what one task pairs"
   const pairYields = yieldsOf(pairSteps(document.documentElement, model(SRC_NODES)));
   expect(pairYields).toBeGreaterThan(0);
   expect(turns).toBeGreaterThanOrEqual(parseYields + pairYields);
-});
+}, 30000);

@@ -427,12 +427,10 @@ test("sheet edit: the blank sheet's exact module list", async () => {
     "src/sheet/clipboard.js",
     "src/sheet/commit.js",
     "src/sheet/editor.js",
-    "src/sheet/format-commands.js",
     "src/sheet/geometry.js",
     "src/sheet/history.js",
     "src/sheet/interface.js",
     "src/sheet/keys.js",
-    "src/sheet/menu.js",
     "src/sheet/overlays.js",
     "src/sheet/refs.js",
     "src/sheet/row-window.js",
@@ -444,6 +442,13 @@ test("sheet edit: the blank sheet's exact module list", async () => {
     "src/vendor/sap-core.vendor.js",
     "src/vendor/sap-grid.vendor.js",
     "src/vendor/sap-ownership.vendor.js",
+  ]);
+  expect(measured.lazy.filter((path) => path.startsWith("src/sheet/")).sort()).toEqual([
+    "src/sheet/csv.js",
+    "src/sheet/fill.js",
+    "src/sheet/find.js",
+    "src/sheet/format-commands.js",
+    "src/sheet/sheet-view.js",
   ]);
   expect(paths.filter((path) => /\/sheet\/features\//.test(path))).toEqual([]);
   expect(paths.filter((path) => /yjs|prosemirror/.test(path))).toEqual([]);

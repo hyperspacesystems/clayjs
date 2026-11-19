@@ -24,6 +24,7 @@ export function keyIntent(event, { platform = "", editing = false, picking = fal
     if (key === "Escape" && plain && !shift) return { type: "cancel" };
     if (key === "Enter") {
       if (alt && !ctrl && !meta) return { type: "newline" };
+      if (mod && !alt && !shift) return { type: "commitAll" };
       if (plain) return { type: "commit", dr: shift ? -1 : 1, dc: 0 };
       return null;
     }
@@ -73,6 +74,10 @@ export function keyIntent(event, { platform = "", editing = false, picking = fal
   if ((key === "z" || key === "Z") && mod && !alt) return shift ? { type: "redo" } : { type: "undo" };
   if ((key === "y" || key === "Y") && mod && !alt && !shift) return { type: "redo" };
   if ((key === "v" || key === "V") && mod && !alt && shift) return { type: "pasteValues" };
+  if ((key === "d" || key === "D") && mod && !alt && !shift) return { type: "fillDown" };
+  if ((key === "r" || key === "R") && mod && !alt && !shift) return { type: "fillRight" };
+  if ((key === "f" || key === "F") && mod && !alt && !shift) return { type: "find" };
+  if ((key === "j" || key === "J") && mod && !alt && !shift) return { type: "goto" };
 
   if ((key === "b" || key === "B") && mod && !alt && !shift) return { type: "bold" };
   if ((key === "i" || key === "I") && mod && !alt && !shift) return { type: "italic" };

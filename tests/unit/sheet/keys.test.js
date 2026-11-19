@@ -102,16 +102,14 @@ describe("sheet keyboard map", () => {
     expect(keyIntent({ key: "ArrowDown" }, { editing: true, picking: true, composing: true })).toBeNull();
   });
 
-  // Bug: the sheet intercepted browser/page shortcuts (Ctrl+S, Ctrl+P) or C7/C8 shortcuts (Ctrl+Z, Ctrl+Enter, Ctrl+D, Ctrl+R) or plain typing.
+  // Bug: the sheet intercepted browser/page shortcuts (Ctrl+S, Ctrl+P, Ctrl+G) or plain typing.
   test("keys the sheet does not own return null so preventDefault is never called on them", () => {
     for (const [event, opts] of [
       [{ key: "s", ctrlKey: true }, { platform: "Win32", editing: false }],
       [{ key: "s", metaKey: true }, { platform: "MacIntel", editing: true }],
       [{ key: "p", ctrlKey: true }, { platform: "Win32", editing: false }],
-      [{ key: "Enter", ctrlKey: true }, { platform: "Win32", editing: true }],
-      [{ key: "d", ctrlKey: true }, { platform: "Win32", editing: false }],
-      [{ key: "r", ctrlKey: true }, { platform: "Win32", editing: false }],
-      [{ key: "f", metaKey: true }, { platform: "MacIntel", editing: false }],
+      [{ key: "g", ctrlKey: true }, { platform: "Win32", editing: false }],
+      [{ key: "g", metaKey: true }, { platform: "MacIntel", editing: false }],
       [{ key: "x" }, { platform: "Win32", editing: false }],
       [{ key: " ", shiftKey: true }, { platform: "Win32", editing: true }],
       [{ key: "Escape" }, { platform: "Win32", editing: false }],
@@ -222,6 +220,33 @@ describe("sheet keyboard map", () => {
       [{ key: "=", ctrlKey: true, altKey: true }, { platform: "Win32", editing: true }],
       [{ key: "-", ctrlKey: true, altKey: true }, { platform: "Win32", editing: true }],
       [{ key: "F10", shiftKey: true }, { platform: "Win32", editing: true }],
+    ]) {
+      expect(keyIntent(event, opts)).toBeNull();
+    }
+  });
+
+  // Bug: fill, find, go-to and Ctrl+Enter shortcuts fired in the wrong mode, stole Ctrl+G from the browser, or confused Ctrl+Shift+R align-right with Ctrl+R fill-right.
+  test("maps Ctrl+D, Ctrl+R, Ctrl+F and Ctrl+J in ready mode, Ctrl+Enter as commitAll in edit mode, and leaves Ctrl+G to the browser", () => {
+    expect(keyIntent({ key: "d", ctrlKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "fillDown" });
+    expect(keyIntent({ key: "d", metaKey: true }, { platform: "MacIntel", editing: false })).toEqual({ type: "fillDown" });
+    expect(keyIntent({ key: "r", ctrlKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "fillRight" });
+    expect(keyIntent({ key: "r", metaKey: true }, { platform: "MacIntel", editing: false })).toEqual({ type: "fillRight" });
+    expect(keyIntent({ key: "f", ctrlKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "find" });
+    expect(keyIntent({ key: "f", metaKey: true }, { platform: "MacIntel", editing: false })).toEqual({ type: "find" });
+    expect(keyIntent({ key: "j", ctrlKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "goto" });
+    expect(keyIntent({ key: "j", metaKey: true }, { platform: "MacIntel", editing: false })).toEqual({ type: "goto" });
+
+    expect(keyIntent({ key: "Enter", ctrlKey: true }, { platform: "Win32", editing: true })).toEqual({ type: "commitAll" });
+    expect(keyIntent({ key: "Enter", metaKey: true }, { platform: "MacIntel", editing: true })).toEqual({ type: "commitAll" });
+    expect(keyIntent({ key: "Enter", ctrlKey: true }, { platform: "Win32", editing: false })).toBeNull();
+
+    for (const [event, opts] of [
+      [{ key: "d", ctrlKey: true }, { platform: "Win32", editing: true }],
+      [{ key: "r", metaKey: true }, { platform: "MacIntel", editing: true }],
+      [{ key: "f", ctrlKey: true }, { platform: "Win32", editing: true }],
+      [{ key: "j", metaKey: true }, { platform: "MacIntel", editing: true }],
+      [{ key: "g", ctrlKey: true }, { platform: "Win32", editing: false }],
+      [{ key: "g", metaKey: true }, { platform: "MacIntel", editing: false }],
     ]) {
       expect(keyIntent(event, opts)).toBeNull();
     }

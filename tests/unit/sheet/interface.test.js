@@ -216,12 +216,12 @@ test("the tab strip lists the tabs in page order and switching tabs changes only
 test("buttons for commands that cannot act or land in later milestones are drawn and disabled with aria-disabled", async () => {
   const { ui, inst } = await start();
 
-  for (const id of ["undo", "redo", "merge", "filter", "sort", "checkbox", "chart", "find", "import"]) {
+  for (const id of ["undo", "redo", "merge", "filter", "sort", "checkbox", "chart"]) {
     const btn = inst.chrome.topShadow.querySelector(`[data-command="${id}"]`);
     expect(btn).not.toBeNull();
     expect(btn.getAttribute("aria-disabled")).toBe("true");
   }
-  for (const id of ["number-format", "currency", "bold", "borders"]) {
+  for (const id of ["number-format", "currency", "bold", "borders", "find", "import"]) {
     const btn = inst.chrome.topShadow.querySelector(`[data-command="${id}"]`);
     expect(btn).not.toBeNull();
     expect(btn.getAttribute("aria-disabled")).toBeNull();
@@ -908,6 +908,7 @@ test("slice: format B2:C3 bold, currency, outer border and merge, insert row abo
   expect(inst.chrome.nameBox.textContent).toBe("B2:C3");
 
   press(textarea, "b", { metaKey: true });
+  await turn();
   expect(grid().cell("B2").style).toContain("font-weight:bold");
   expect(grid().cell("C3").style).toContain("font-weight:bold");
 
@@ -1006,6 +1007,7 @@ test("header menus, Shift+F10 and Ctrl+Alt+=/Ctrl+Alt+- insert with neighbour fo
 
   inst.overlays.shadow.querySelector('[data-col="1"]').dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
   inst.chrome.topShadow.querySelector('[data-command="currency"]').click();
+  await turn();
   expect(tableOf("s1").querySelector('col[data-id="c2"]').getAttribute("fmt")).toBe("$#,##0.00");
 
   inst.overlays.shadow.querySelector('[data-col="2"]').dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
@@ -1062,6 +1064,7 @@ test("header drag resizes all selected columns or rows with 8px/12px floors, and
   await frame();
 
   inst.overlays.shadow.querySelector('[data-col-resize="1"]').dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+  await turn();
   expect(tableOf("s1").querySelector('col[data-id="c2"]').getAttribute("style")).toBe("width:112px");
 
   inst.overlays.shadow.querySelector('[data-col-resize="2"]').dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
@@ -1098,6 +1101,7 @@ test("freezing rows and columns preserves the other axis count, unfreezes cleanl
   const table = tableOf("s1");
 
   inst.overlays.shadow.querySelector('[data-row="1"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 20, clientY: 60 }));
+  await turn();
   inst.chrome.topShadow.querySelector('[data-menu-item="freeze-rows"]').click();
   expect(table.tHead?.rows.length).toBe(2);
 
@@ -1114,6 +1118,7 @@ test("freezing rows and columns preserves the other axis count, unfreezes cleanl
   Sap.grid(table).merge("B2:B3");
   await frame();
   inst.overlays.shadow.querySelector('[data-row="1"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 20, clientY: 60 }));
+  await turn();
   inst.chrome.topShadow.querySelector('[data-menu-item="freeze-rows"]').click();
   expect(table.tHead).toBeNull();
   expect(inst.chrome.noticeBar.hidden).toBe(false);
@@ -1128,6 +1133,7 @@ test("tabs duplicate with preserved record ids right after the source tab, move 
   const tabBtns = () => [...inst.chrome.bottomShadow.querySelectorAll('[role="tab"]')];
 
   tabBtns()[0].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 400 }));
+  await turn();
   inst.chrome.topShadow.querySelector('[data-menu-item="duplicate-tab"]').click();
 
   expect(tabBtns().map((b) => b.textContent)).toEqual(["Budget", "Copy of Budget", "Totals"]);
@@ -1187,6 +1193,7 @@ test("toolbar tracks active-cell pressed states, format label and Merge/Unmerge 
   expect(cmd("number-format").textContent).toBe("Custom");
 
   press(textarea, "b", { metaKey: true });
+  await turn();
   press(textarea, "i", { metaKey: true });
   press(textarea, "X", { metaKey: true, shiftKey: true });
   cmd("wrap").click();
@@ -1263,6 +1270,7 @@ test("a column header click under a merged title selects only that column for it
   expect(inst.chrome.nameBox.textContent).toBe("C1:C3");
 
   press(textarea, "b", { metaKey: true });
+  await turn();
   expect(grid().cell("A2").style).toBeNull();
   expect(grid().cell("B2").style).toBeNull();
   expect(grid().cell("C2").style).toContain("font-weight:bold");
@@ -1293,6 +1301,7 @@ test("a column header menu closes when the Grid gains a column outside the inter
   const grid = () => Sap.grid(tableOf("s1"));
 
   inst.overlays.shadow.querySelector('[data-col="3"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 10 }));
+  await turn();
   expect(inst.chrome.topShadow.querySelector('[role="menu"]')).not.toBeNull();
 
   grid().insertCols("A", 1);
@@ -1324,6 +1333,7 @@ test("the merge dialog closes when the Grid changes outside the interface", asyn
 
   selectB2ToC3(inst.editor.textarea);
   inst.chrome.topShadow.querySelector('[data-command="merge"]').click();
+  await turn();
   expect(inst.chrome.topShadow.querySelector('[role="dialog"]')).not.toBeNull();
 
   grid().set("A1", "peer");
@@ -1340,6 +1350,7 @@ test("a tab rename commits on blur and on a cell click, and never opens over a c
   const tabBtn = (id) => inst.chrome.bottomShadow.querySelector(`[data-tab-id="${id}"]`);
 
   tabBtn("s1").dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+  await turn();
   renameInput().value = "Q1";
   renameInput().dispatchEvent(new FocusEvent("blur"));
   expect(renameInput()).toBeNull();
@@ -1360,6 +1371,7 @@ test("a tab rename commits on blur and on a cell click, and never opens over a c
   press(brokenTextarea, "Enter");
   expect(broken.inst.editor.editing).toBe(true);
   broken.inst.chrome.bottomShadow.querySelector('[data-tab-id="s2"]').dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+  await turn();
   expect(broken.inst.chrome.bottomShadow.querySelector("[data-tab-rename]")).toBeNull();
 
   broken.ui.dispose();
@@ -1376,6 +1388,7 @@ test("a cell context menu inside a whole-column selection opens the column menu,
   inst.overlays.shadow.querySelector('[data-col="2"]').dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
   expect(inst.chrome.nameBox.textContent).toBe("C1:C6");
   cells()[5].children[2].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 100, clientY: 200 }));
+  await turn();
   expect(inst.chrome.topShadow.querySelector('[data-menu-item="delete-row"]')).toBeNull();
   expect(inst.chrome.topShadow.querySelector('[data-menu-item="delete-cols"]')).not.toBeNull();
   inst.chrome.topShadow.querySelector('[data-menu-item="delete-cols"]').click();
@@ -1411,10 +1424,12 @@ test("a header menu and resize drag do nothing while picking a reference on anot
   expect(inst.editor.editing).toBe(true);
 
   inst.overlays.shadow.querySelector('[data-row="0"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 20, clientY: 60 }));
+  await turn();
   expect(inst.chrome.topShadow.querySelector('[role="menu"]')).toBeNull();
   inst.overlays.shadow.querySelector('[data-col-resize="1"]').dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 200 }));
   window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 260 }));
   window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 260 }));
+  await turn();
 
   expect(inst.editor.editing).toBe(true);
   expect(inst.tabs.activeId).toBe("s2");
@@ -1439,6 +1454,7 @@ test("the merge dialog's choices are shadow-root controls that Enter picks under
 
   selectB2ToC3(inst.editor.textarea);
   inst.chrome.topShadow.querySelector('[data-command="merge"]').click();
+  await turn();
   const dialog = inst.chrome.topShadow.querySelector('[role="dialog"]');
   expect(dialog).not.toBeNull();
 
@@ -1462,6 +1478,7 @@ test("Shift+F10 and the ContextMenu key on a focused tab button open that tab's 
   const tabBtn = (id) => inst.chrome.bottomShadow.querySelector(`[data-tab-id="${id}"]`);
 
   tabBtn("s2").dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true, cancelable: true }));
+  await turn();
   expect(inst.chrome.topShadow.querySelector('[data-menu-item="duplicate-tab"]')).not.toBeNull();
   expect(inst.chrome.topShadow.querySelector('[role="menu"]').getAttribute("aria-label")).toContain("Totals");
   inst.menu.close();
@@ -1477,12 +1494,14 @@ test("duplicating the first tab places the copy second and moving the second tab
   const first = await start(NO_POS_BOOK());
   expect(tabLabels(first.inst)).toEqual(["One", "Two", "Three"]);
   openTabMenu(first.inst, 0);
+  await turn();
   first.inst.chrome.topShadow.querySelector('[data-menu-item="duplicate-tab"]').click();
   expect(tabLabels(first.inst)).toEqual(["One", "Copy of One", "Two", "Three"]);
   first.ui.dispose();
 
   const second = await start(NO_POS_BOOK());
   openTabMenu(second.inst, 1);
+  await turn();
   second.inst.chrome.topShadow.querySelector('[data-menu-item="move-tab-left"]').click();
   expect(tabLabels(second.inst)).toEqual(["Two", "One", "Three"]);
   second.ui.dispose();
@@ -1530,6 +1549,7 @@ test("typing into the selection an undo leaves beside a vertical merge commits w
   expect(inst.chrome.nameBox.textContent).toBe("A1:B3");
 
   press(textarea, "b", { metaKey: true });
+  await turn();
   press(textarea, "z", { metaKey: true });
   expect(inst.chrome.noticeBar.hidden).toBe(true);
 
@@ -1537,6 +1557,604 @@ test("typing into the selection an undo leaves beside a vertical merge commits w
   press(textarea, "Enter");
   expect(inst.chrome.noticeBar.hidden).toBe(true);
   expect(grid().get("A1:B3").flat()).toContain("hello");
+
+  ui.dispose();
+});
+
+const C8B_SLICE_BOOK = () => `<main sap plugins="grid"><div id="scroller" style="position:relative;overflow:auto"><div items="sheets" sheet-workbook>
+<section item data-id="s1" data-pos="V"><h2 bind="name">Budget</h2><table grid><colgroup><col data-id="c1" data-pos="V"><col data-id="c2" data-pos="l"><col data-id="c3" data-pos="t"><col data-id="c4" data-pos="x"></colgroup>
+<tbody>
+<tr data-id="r1" data-pos="V"><td></td><td></td><td></td><td></td></tr>
+<tr data-id="r2" data-pos="l"><td></td><td n v="1">1</td><td n f="=B2*2" v="2">2</td><td></td></tr>
+<tr data-id="r3" data-pos="t"><td></td><td n v="2">2</td><td></td><td></td></tr>
+<tr data-id="r4" data-pos="v"><td></td><td></td><td></td><td></td></tr>
+<tr data-id="r5" data-pos="x"><td></td><td></td><td></td><td></td></tr>
+<tr data-id="r6" data-pos="z"><td></td><td></td><td></td><td></td></tr>
+</tbody></table></section>
+<script type="application/json" sheet-commit">{"rev":1}</script>
+</div></div></main>`;
+
+function readBlobText(blob) {
+  if (typeof blob.text === "function") return blob.text();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
+
+// Bug: fill-handle drag or double-click missed series/formula shifting, find missed evaluated matches, status bar miscalculated aggregates, CSV import evaluated formulas, or multi-cell writes split across undo steps.
+test("c8b slice: drag fill B2:B3 to B6, double-click fill C2 formulas, find '4', check status bar on B2:B6, import and export CSV, and undo each write in one step", async () => {
+  const { Sap, ui, inst } = await start(C8B_SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const budget = () => Sap.grid(tableOf("s1"));
+  const rows = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+
+  // Select B2:B3 and drag the fill handle down to B6 -> 3, 4, 5.
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.value).toBe("B2:B3");
+
+  const fillHandle = inst.overlays.shadow.querySelector("[data-fill-handle]");
+  const fillPreview = inst.overlays.shadow.querySelector("[data-fill-preview]");
+  expect(fillHandle.hidden).toBe(false);
+
+  fillHandle.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 150, clientY: 70 }));
+  await turn();
+  rows()[5].children[1].dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 152, clientY: 160 }));
+  expect(fillPreview.hidden).toBe(false);
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 152, clientY: 160 }));
+  await turn();
+
+  expect(fillPreview.hidden).toBe(true);
+  expect(budget().get("B2:B6")).toEqual([[1], [2], [3], [4], [5]]);
+  expect(inst.chrome.nameBox.value).toBe("B2:B6");
+
+  // Select C2 (=B2*2) and double-click its fill handle -> C3:C6 hold =B3*2 .. =B6*2.
+  rows()[1].children[2].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.nameBox.value).toBe("C2");
+  fillHandle.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+  await turn();
+
+  expect([3, 4, 5, 6].map((r) => budget().input(`C${r}`))).toEqual(["=B3*2", "=B4*2", "=B5*2", "=B6*2"]);
+  expect(budget().get("C2:C6")).toEqual([[2], [4], [6], [8], [10]]);
+
+  // Cmd+F "4" finds C3 (shown 4) then Enter steps to B5 (4), Escape closes and returns focus.
+  press(textarea, "f", { metaKey: true });
+  await turn();
+  const findBar = inst.chrome.topShadow.querySelector("[data-sheet-find]");
+  const findInput = findBar.querySelector("[data-find-input]");
+  const findCount = findBar.querySelector("[data-find-count]");
+  expect(findBar.hidden).toBe(false);
+
+  typeInto(findInput, "4");
+  expect(findCount.textContent).toBe("1 of 2");
+  expect(inst.chrome.nameBox.value).toBe("C3");
+  press(findInput, "Enter");
+  expect(findCount.textContent).toBe("2 of 2");
+  expect(inst.chrome.nameBox.value).toBe("B5");
+  press(findInput, "Escape");
+  expect(findBar.hidden).toBe(true);
+
+  // Select B2:B6 -> status bar shows "Sum 15 · Average 3 · Count 5".
+  rows()[1].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  rows()[5].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.nameBox.value).toBe("B2:B6");
+  expect(inst.chrome.statusText.textContent).toBe("Sum 15 · Average 3 · Count 5");
+
+  // Import a CSV into a new tab through the preview dialog.
+  inst.chrome.topShadow.querySelector('[data-command="import"]').click();
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="import-delimited"]').click();
+  const fileInput = inst.chrome.topShadow.querySelector("[data-csv-file-input]");
+  expect(fileInput).not.toBeNull();
+  const csvFile = new File(["Item,Qty\nApples,12\nPears,=1+1"], "Inventory.csv", { type: "text/csv" });
+  Object.defineProperty(fileInput, "files", { configurable: true, value: [csvFile] });
+  fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+  await turn();
+  await turn();
+
+  const importDlg = inst.chrome.topShadow.querySelector('[role="dialog"]');
+  expect(importDlg).not.toBeNull();
+  importDlg.querySelector('button[type="submit"]').click();
+
+  expect(tabLabels(inst)).toEqual(["Budget", "Inventory"]);
+  const invId = inst.tabs.activeId;
+  const invGrid = () => Sap.grid(tableOf(invId));
+  expect(invGrid().get("A1:B3")).toEqual([
+    ["Item", "Qty"],
+    ["Apples", 12],
+    ["Pears", "=1+1"],
+  ]);
+
+  // Export that tab as CSV with formula-injection protection and Blob URL revocation.
+  const prevCreateObj = window.URL.createObjectURL;
+  const prevRevokeObj = window.URL.revokeObjectURL;
+  let exportedBlob = null;
+  let downloadName = "";
+  window.URL.createObjectURL = jest.fn((b) => {
+    exportedBlob = b;
+    return "blob:https://example.com/inventory";
+  });
+  window.URL.revokeObjectURL = jest.fn();
+  const clickSpy = jest.spyOn(window.HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+    downloadName = this.download;
+  });
+
+  try {
+    // Safari aborts the download when the Blob URL is revoked before WebKit reads the Blob.
+    const scheduled = [];
+    const timerSpy = jest.spyOn(globalThis, "setTimeout").mockImplementation((fn, ms) => {
+      scheduled.push({ fn, ms });
+      return 0;
+    });
+    inst.chrome.topShadow.querySelector('[data-command="import"]').click();
+    inst.chrome.topShadow.querySelector('[data-menu-item="export-csv"]').click();
+    timerSpy.mockRestore();
+    expect(downloadName).toBe("Inventory.csv");
+    expect(window.URL.revokeObjectURL).not.toHaveBeenCalled();
+    const revoke = scheduled.find((t) => t.ms === 40000);
+    expect(revoke).toBeTruthy();
+    revoke.fn();
+    expect(window.URL.revokeObjectURL).toHaveBeenCalledWith("blob:https://example.com/inventory");
+    const exportedText = await readBlobText(exportedBlob);
+    expect(exportedText.split("\r\n").slice(0, 3)).toEqual(
+      ["Item,Qty", "Apples,12", "Pears,'=1+1"].map((row) => `${row}${",".repeat(24)}`),
+    );
+  } finally {
+    clickSpy.mockRestore();
+    window.URL.createObjectURL = prevCreateObj;
+    window.URL.revokeObjectURL = prevRevokeObj;
+  }
+
+  // Each write (CSV import on Inventory, autofill C3:C6 on Budget, drag fill B4:B6 on Budget) is one undo step.
+  press(textarea, "z", { metaKey: true });
+  expect(invGrid().get("A1:B3")).toEqual([
+    [null, null],
+    [null, null],
+    [null, null],
+  ]);
+
+  inst.chrome.bottomShadow.querySelector('[data-tab-id="s1"]').click();
+  press(textarea, "z", { metaKey: true });
+  expect(budget().get("C2:C6")).toEqual([[2], [null], [null], [null], [null]]);
+
+  press(textarea, "z", { metaKey: true });
+  expect(budget().get("B2:B6")).toEqual([[1], [2], [null], [null], [null]]);
+
+  ui.dispose();
+});
+
+// Bug: Ctrl+D/Ctrl+R stepped numbers as a series instead of copying with shifted formulas, Ctrl+Enter wrote only the active cell, fill handle stayed visible while editing or on whole-axis selection, or cutting a merge threw instead of showing sapjs's notice.
+test("Ctrl+D, Ctrl+R, context-menu Fill and Ctrl+Enter each write shifted formulas in one undo step, hide the fill handle on whole-axis or edit states, and show sapjs's notice when fill cuts a merge", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = () => Sap.grid(tableOf("s1"));
+  const fillHandle = inst.overlays.shadow.querySelector("[data-fill-handle]");
+
+  grid().set("A2", 10);
+  grid().set("A3", 20);
+  grid().set("A4", 30);
+  grid().set("B2", "=A2+1");
+  grid().set("C2", 7);
+  await frame();
+
+  // Select B2:C4 and press Cmd+D -> plain copy (7 stays 7, no series) with formulas shifted per row, 1 undo step.
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  press(textarea, "ArrowRight", { shiftKey: true });
+  press(textarea, "ArrowDown", { shiftKey: true });
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.value).toBe("B2:C4");
+
+  press(textarea, "d", { metaKey: true });
+  await turn();
+  expect([2, 3, 4].map((r) => grid().input(`B${r}`))).toEqual(["=A2+1", "=A3+1", "=A4+1"]);
+  expect(grid().get("B2:C4")).toEqual([
+    [11, 7],
+    [21, 7],
+    [31, 7],
+  ]);
+  press(textarea, "z", { metaKey: true });
+  expect(grid().get("B3:C4")).toEqual([
+    [5, 10],
+    [null, null],
+  ]);
+
+  // Select B2:D2 and press Cmd+R -> shifts formula horizontally in 1 undo step.
+  const rows = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+  rows()[1].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  rows()[1].children[3].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.nameBox.value).toBe("B2:D2");
+  press(textarea, "r", { metaKey: true });
+  expect(["B2", "C2", "D2"].map((ref) => grid().input(ref))).toEqual(["=A2+1", "=B2+1", "=C2+1"]);
+  press(textarea, "z", { metaKey: true });
+  expect(grid().get("C2:D2")).toEqual([[7, null]]);
+
+  // Cell context menu exposes Fill down and Fill right.
+  rows()[1].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  rows()[2].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  rows()[2].children[1].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 80, clientY: 80 }));
+  await turn();
+  expect(inst.chrome.topShadow.querySelector('[data-menu-item="fill-right"]')).not.toBeNull();
+  inst.chrome.topShadow.querySelector('[data-menu-item="fill-down"]').click();
+  expect(grid().input("B3")).toBe("=A3+1");
+  press(textarea, "z", { metaKey: true });
+
+  // Select B2:C3, start editing "=A2*10", verify fill handle hides while editing, and press Cmd+Enter -> 1 undo step.
+  rows()[1].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  rows()[2].children[2].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(fillHandle.hidden).toBe(false);
+
+  typeInto(textarea, "=A2*10");
+  expect(fillHandle.hidden).toBe(true);
+  press(textarea, "Enter", { metaKey: true });
+  expect(grid().input("B2")).toBe("=A2*10");
+  expect(grid().input("C2")).toBe("=B2*10");
+  expect(grid().input("B3")).toBe("=A3*10");
+  expect(grid().input("C3")).toBe("=B3*10");
+  expect(grid().get("B2:C3")).toEqual([
+    [100, 1000],
+    [200, 2000],
+  ]);
+
+  press(textarea, "z", { metaKey: true });
+  expect(grid().input("B2")).toBe("=A2+1");
+  expect(grid().get("C2")).toBe(7);
+
+  // Fill handle hides on whole-column selection.
+  inst.overlays.shadow.querySelector('[data-col="1"]').dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  expect(fillHandle.hidden).toBe(true);
+
+  // Dragging fill into a partial merge is refused with sapjs's covered-cell notice.
+  grid().merge("B4:C4");
+  await frame();
+  rows()[2].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.nameBox.value).toBe("B3");
+  fillHandle.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 150, clientY: 90 }));
+  rows()[3].children[1].dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 150, clientY: 120 }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 150, clientY: 120 }));
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(inst.chrome.noticeBar.textContent).toContain(
+    "Fill can't cover only part of a merged cell. Unmerge it, or fill a range that holds all of it.",
+  );
+
+  ui.dispose();
+});
+
+// Bug: status bar formatted sums as dates when the active cell had a date format, failed to count text-only selections, showed aggregates on single cells or merges, or scanned over 100,000 cells.
+test("status bar formats numeric aggregates in the active cell's number format, shows Count on text-only selections, and stays blank on single cells, single merges, or >100,000 cells", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  // Single cell shows nothing.
+  expect(inst.chrome.statusText.textContent).toBe("");
+
+  // Currency active cell formats Sum and Average as currency.
+  grid.format("B2", { fmt: "$#,##0.00" });
+  await frame();
+  selectB2ToC3(textarea);
+  expect(inst.chrome.statusText.textContent).toBe("Sum $22.00 · Average $5.50 · Count 4");
+
+  // Date active cell falls back to automatic number formatting for Sum and Average.
+  grid.format("B2", { fmt: "m/d/yyyy" });
+  await frame();
+  expect(inst.chrome.statusText.textContent).toBe("Sum 22 · Average 5.5 · Count 4");
+
+  // Single merged range shows nothing.
+  grid.merge("B2:C3", { keep: "top-left" });
+  await frame();
+  expect(inst.chrome.statusText.textContent).toBe("");
+
+  // Text-only multi-cell selection shows "Count N", and empty selection shows "".
+  grid.set("D1", "Alpha");
+  grid.set("E1", "Beta");
+  await frame();
+  const rows = [...tableOf("s1").querySelectorAll("tbody tr")];
+  rows[0].children[3].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  rows[0].children[5].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.statusText.textContent).toBe("Count 2");
+
+  rows[5].children[3].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  rows[5].children[5].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.statusText.textContent).toBe("");
+
+  // Selection over 100,000 cells (1001 rows x 100 cols = 100,100 cells) shows nothing without scanning cells.
+  grid.insertRows(6, 995, "after");
+  grid.insertCols("F", 94, "after");
+  await frame();
+  const cellSpy = jest.spyOn(grid, "cell");
+  press(textarea, "a", { metaKey: true });
+  expect(inst.chrome.nameBox.value).toBe("A1:CV1001");
+  expect(inst.chrome.statusText.textContent).toBe("");
+  expect(cellSpy.mock.calls.length).toBeLessThan(20);
+
+  ui.dispose();
+}, 30000);
+
+// Bug: nameBox stayed a static label or Ctrl+J failed to focus it, Enter failed to switch tabs or select ranges, or Escape lost the current coordinate.
+test("Cmd+J focuses the name box input, Enter navigates to cells, ranges and other tabs, Escape restores the coordinate, and invalid refs show a notice", async () => {
+  const { ui, inst } = await start();
+  const textarea = inst.editor.textarea;
+  const nameBox = inst.chrome.nameBox;
+
+  expect(nameBox.localName).toBe("input");
+  press(textarea, "j", { metaKey: true });
+  expect(inst.chrome.topShadow.activeElement).toBe(nameBox);
+
+  nameBox.value = "C2";
+  press(nameBox, "Enter");
+  await turn();
+  expect(ui.selection).toEqual({
+    tab: "s1",
+    anchor: { row: "r2", col: "c3" },
+    focus: { row: "r2", col: "c3" },
+  });
+  expect(nameBox.value).toBe("C2");
+
+  nameBox.focus();
+  nameBox.value = "Totals!A1:B1";
+  press(nameBox, "Enter");
+  expect(inst.tabs.activeId).toBe("s2");
+  expect(nameBox.value).toBe("A1:B1");
+
+  nameBox.focus();
+  nameBox.value = "typed-draft";
+  press(nameBox, "Escape");
+  expect(nameBox.value).toBe("A1:B1");
+  expect(inst.chrome.noticeBar.hidden).toBe(true);
+
+  nameBox.focus();
+  nameBox.value = "Missing!A1";
+  press(nameBox, "Enter");
+  expect(inst.tabs.activeId).toBe("s2");
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+
+  ui.dispose();
+});
+
+// Bug: link chip or Cmd+click opened javascript:/data: schemes, failed on HYPERLINK literals or mailto:, left >60-char URLs untruncated, or wrote <a> nodes into [sheet-workbook].
+test("link chip and Cmd+click open only http, https and mailto URLs or HYPERLINK string literals, truncate the chip text to 60 chars, and never write links into [sheet-workbook]", async () => {
+  const { Sap, root, ui, inst } = await start(SLICE_BOOK());
+  const grid = Sap.grid(tableOf("s1"));
+  const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+
+  const longHttps = "https://example.com/documentation/spreadsheets/reference/functions/lookup-and-index";
+  grid.set("A1", longHttps);
+  grid.set("A2", "mailto:team@example.com");
+  grid.set("A3", '=HYPERLINK("http://example.org/guide", "Guide")');
+  grid.set("B1", "javascript:alert(1)");
+  grid.set("B2", '=HYPERLINK("javascript:alert(1)", "Click")');
+  grid.set("B3", "data:text/html,<script>alert(1)</script>");
+  await frame();
+
+  const chip = inst.overlays.shadow.querySelector("[data-sheet-link-chip]");
+  const chipUrl = chip.querySelector("[data-link-url]");
+  const chipOpen = chip.querySelector("[data-link-open]");
+  const rows = [...tableOf("s1").querySelectorAll("tbody tr")];
+
+  // Active cell A1: >60-char https URL shows truncated 60-char chip label and safe Open link, with zero <a> inside [sheet-workbook].
+  expect(chip.hidden).toBe(false);
+  expect(chipUrl.textContent).toHaveLength(60);
+  expect(chipOpen.getAttribute("href")).toBe(longHttps);
+  expect(chipOpen.getAttribute("target")).toBe("_blank");
+  expect(chipOpen.getAttribute("rel")).toBe("noopener noreferrer");
+  expect(root.querySelectorAll("a")).toHaveLength(0);
+
+  // Cmd+click on A2 (mailto:) and A3 (HYPERLINK string literal) opens each URL.
+  rows[1].children[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, metaKey: true }));
+  expect(openSpy).toHaveBeenLastCalledWith("mailto:team@example.com", "_blank", "noopener,noreferrer");
+  expect(chip.hidden).toBe(false);
+  expect(chipUrl.textContent).toBe("mailto:team@example.com");
+
+  rows[2].children[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, metaKey: true }));
+  expect(openSpy).toHaveBeenLastCalledWith("http://example.org/guide", "_blank", "noopener,noreferrer");
+  expect(chip.hidden).toBe(false);
+  expect(chipUrl.textContent).toBe("http://example.org/guide");
+
+  // Unsafe schemes (javascript:, HYPERLINK("javascript:..."), data:) never show the chip and never open on Cmd+click.
+  openSpy.mockClear();
+  for (const r of [0, 1, 2]) {
+    rows[r].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, metaKey: true }));
+    expect(chip.hidden).toBe(true);
+  }
+  expect(openSpy).not.toHaveBeenCalled();
+
+  ui.dispose();
+});
+
+// Bug: one failed lazy import() left the cached promise rejected for the life of the page, so the tool stayed dead forever.
+test("lazyModule resets its cache on a failed load, reports the failure once, and succeeds on the next try", async () => {
+  const { lazyModule } = await import("../../../src/sheet/interface.js");
+  const failures = [];
+  let attempt = 0;
+  const tool = lazyModule(
+    () => {
+      attempt += 1;
+      return attempt === 1 ? Promise.reject(new Error("offline")) : Promise.resolve({ ready: true });
+    },
+    () => failures.push("notice"),
+  );
+
+  expect(await tool.load()).toBeNull();
+  expect(failures).toEqual(["notice"]);
+  expect(tool.peek()).toBeNull();
+
+  expect(await tool.load()).toEqual({ ready: true });
+  expect(tool.peek()).toEqual({ ready: true });
+  expect(await tool.load()).toEqual({ ready: true });
+  expect(failures).toEqual(["notice"]);
+});
+
+// Bug: a formatting key pressed before its module arrived applied to whatever cell was selected when the module landed.
+test("a lazy formatting shortcut that lands after the selection moved drops the action instead of bolding the new cell", async () => {
+  const { Sap, ui, inst } = await start();
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.value).toBe("A1:A2");
+
+  press(textarea, "b", { metaKey: true });
+  press(textarea, "ArrowRight");
+  await turn();
+
+  expect(grid.cell("A1").style ?? null).toBeNull();
+  expect(grid.cell("B1").style ?? null).toBeNull();
+
+  press(textarea, "b", { metaKey: true });
+  expect(grid.cell("B1").style).toContain("font-weight:bold");
+
+  ui.dispose();
+});
+
+// Bug: two Import clicks before the CSV module arrived opened the menu and immediately closed it again.
+test("clicking Import twice before the CSV module arrives leaves the menu open once", async () => {
+  const { ui, inst } = await start();
+  const importBtn = inst.chrome.topShadow.querySelector('[data-command="import"]');
+
+  importBtn.click();
+  importBtn.click();
+  await turn();
+
+  expect(inst.chrome.topShadow.querySelector('[data-menu-item="import-delimited"]')).not.toBeNull();
+  importBtn.click();
+  expect(inst.chrome.topShadow.querySelector('[data-menu-item="import-delimited"]')).toBeNull();
+
+  ui.dispose();
+});
+
+const FIND_EDIT_BOOK = () => `<main sap plugins="grid"><div id="scroller" style="position:relative;overflow:auto"><div items="sheets" sheet-workbook>
+<section item data-id="s1" data-pos="V"><h2 bind="name">Budget</h2><table grid><colgroup><col data-id="c1" data-pos="V"><col data-id="c2" data-pos="l"></colgroup>
+<tbody>
+<tr data-id="r1" data-pos="V"><td></td><td></td></tr>
+<tr data-id="r2" data-pos="l"><td></td><td></td></tr>
+</tbody></table></section>
+<section item data-id="s2" data-pos="l"><h2 bind="name">Totals</h2><table grid><colgroup><col data-id="c1" data-pos="V"><col data-id="c2" data-pos="l"></colgroup>
+<tbody>
+<tr data-id="r1" data-pos="V"><td>match</td><td></td></tr>
+<tr data-id="r2" data-pos="l"><td></td><td></td></tr>
+</tbody></table></section>
+<script type="application/json" sheet-commit">{"rev":1}</script>
+</div></div></main>`;
+
+// Bug: clicking a Find match while editing left the editor bound to the old tab and the old cell.
+test("stepping Find while editing commits the edit into the cell being edited before the jump", async () => {
+  const { Sap, ui, inst } = await start(FIND_EDIT_BOOK());
+  const textarea = inst.editor.textarea;
+  const budget = Sap.grid(tableOf("s1"));
+
+  press(textarea, "f", { metaKey: true });
+  await turn();
+  const findBar = inst.chrome.topShadow.querySelector("[data-sheet-find]");
+  const findInput = findBar.querySelector("[data-find-input]");
+  typeInto(findInput, "match");
+  expect(inst.tabs.activeId).toBe("s2");
+
+  inst.chrome.bottomShadow.querySelector('[data-tab-id="s1"]').click();
+  expect(inst.tabs.activeId).toBe("s1");
+  typeInto(textarea, "draft");
+  expect(inst.editor.editing).toBe(true);
+
+  findBar.querySelector("[data-find-next]").click();
+  expect(budget.get("A1")).toBe("draft");
+  expect(inst.editor.editing).toBe(false);
+  expect(inst.tabs.activeId).toBe("s2");
+
+  ui.dispose();
+});
+
+// Bug: the status bar rounded a sum to 12 significant digits, showing cents that were never in the cells.
+test("the status bar keeps every cent of a sum past 12 significant digits", async () => {
+  const { Sap, ui, inst } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+  grid.set("A1", 10000000000.12);
+  grid.set("A2", 0.05);
+  grid.format("A1:A2", { fmt: "$#,##0.00" });
+  await frame();
+
+  const rows = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+  rows()[0].children[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  rows()[1].children[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+
+  expect(inst.chrome.nameBox.value).toBe("A1:A2");
+  expect(inst.chrome.statusText.textContent).toContain("Sum $10,000,000,000.17");
+
+  ui.dispose();
+});
+
+// Bug: delegating the tab long-press cancel to pointerout cancelled the press when the finger crossed onto the tab's label.
+test("a touch long-press on a tab that slides onto its own label still opens the tab menu", async () => {
+  const { ui, inst } = await start();
+  const tabBtn = inst.chrome.bottomShadow.querySelector('[role="tab"]');
+  const label = tabBtn.querySelector("span");
+
+  tabBtn.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, clientX: 12, clientY: 400 }));
+  tabBtn.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, cancelable: true, relatedTarget: label }));
+  await new Promise((resolve) => setTimeout(resolve, 480));
+  await turn();
+
+  expect(inst.chrome.topShadow.querySelector('[data-menu-item="rename-tab"]')).not.toBeNull();
+
+  ui.dispose();
+});
+
+// Bug: the name box kept the old coordinate when toolbar Undo moved the selection while the box had focus.
+test("the name box follows the selection after a toolbar Undo while it has focus", async () => {
+  const { Sap, ui, inst } = await start();
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.value).toBe("B2");
+  typeInto(textarea, "5");
+  press(textarea, "Enter");
+  expect(grid.get("B2")).toBe(5);
+  await frame();
+  expect(inst.chrome.nameBox.value).toBe("B3");
+
+  inst.chrome.nameBox.focus();
+  inst.chrome.topShadow.querySelector('[data-command="undo"]').click();
+  expect(grid.get("B2")).toBe(8);
+  expect(inst.chrome.nameBox.value).toBe("B2");
+
+  ui.dispose();
+});
+
+// Bug: lazy command and fill modules either loaded eagerly at boot or swallowed the first shortcut key that triggered import().
+test("pressing a lazy fill or formatting shortcut as the first action loads its module on demand and applies the key once loaded", async () => {
+  const { Sap, ui, inst } = await start();
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.value).toBe("A1:A2");
+  expect(grid.get("A1:A2")).toEqual([[3], [4]]);
+
+  // First Cmd+D triggers import("./fill.js") asynchronously, then applies Fill Down once loaded.
+  press(textarea, "d", { metaKey: true });
+  expect(grid.get("A2")).toBe(4);
+  await turn();
+  expect(grid.get("A2")).toBe(3);
+
+  // First Cmd+I triggers import("./format-commands.js") asynchronously, then applies Italic once loaded.
+  press(textarea, "i", { metaKey: true });
+  expect(grid.cell("A1").style).toBeNull();
+  await turn();
+  expect(grid.cell("A1").style).toContain("font-style:italic");
 
   ui.dispose();
 });

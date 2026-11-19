@@ -1,6 +1,18 @@
-import { a1 } from "./commit.js";
-import { SWATCHES } from "./menu.js";
-import { commandArea, ownerOf, selectionArea, selectionBox } from "./selection.js";
+import { a1, colName, tabTable } from "./commit.js";
+import { SWATCHES, createMenu, openDeleteTabDialog, openMergeKeepDialog } from "./menu.js";
+export { createMenu };
+import {
+  axisSpan,
+  commandArea,
+  createSelection,
+  ownerOf,
+  selectColsAt,
+  selectionArea,
+  selectionBox,
+  selectRowsAt,
+} from "./selection.js";
+import { bevelInput } from "../ui/bevel-controls.js";
+import { FONT_SANS } from "../ui/bevel.js";
 
 export const BORDER_LINE = "1px solid #5F6368";
 
@@ -359,4 +371,844 @@ export function runMergeCommand({ grid, view, sel, history, runWrite, promptKeep
     runWrite(() => mergeKeepingChoice(grid, state.box, state.area, chosen, history, sel.tab));
   });
   return true;
+}
+
+const DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const VALID_KEY = /^[0-9A-Za-z]*[1-9A-Za-z]$/;
+const MAX_COUNT = 9999999;
+
+export const isKey = (key) => typeof key === "string" && VALID_KEY.test(key);
+
+function midpoint(a, b) {
+  if (b !== null) {
+    let n = 0;
+    while ((a[n] || "0") === b[n]) n++;
+    if (n > 0) return b.slice(0, n) + midpoint(a.slice(n), b.slice(n));
+  }
+  const da = a ? DIGITS.indexOf(a[0]) : 0;
+  const db = b !== null ? DIGITS.indexOf(b[0]) : DIGITS.length;
+  if (db - da > 1) return DIGITS[Math.round((da + db) / 2)];
+  if (b !== null && b.length > 1) return b.slice(0, 1);
+  return DIGITS[da] + midpoint(a.slice(1), null);
+}
+
+export function keyBetween(a = null, b = null) {
+  const low = a && isKey(a) ? a : null;
+  const high = b && isKey(b) && (!low || low < b) ? b : null;
+  return midpoint(low ?? "", high);
+}
+
+export function keysBetween(a, b, n) {
+  if (n <= 0) return [];
+  if (n === 1) return [keyBetween(a, b)];
+  const mid = keyBetween(a, b);
+  const half = Math.floor(n / 2);
+  return [...keysBetween(a, mid, half), mid, ...keysBetween(mid, b, n - half - 1)];
+}
+
+export function nextSheetName(tabs) {
+  const taken = new Set(tabs.map((t) => t.name.toLowerCase()));
+  for (let n = 1; ; n++) {
+    const candidate = `Sheet ${n}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+}
+
+export function nextCopyName(baseName, tabs) {
+  const taken = new Set(tabs.map((t) => t.name.toLowerCase()));
+  const first = `Copy of ${baseName}`;
+  if (!taken.has(first.toLowerCase())) return first;
+  for (let n = 2; ; n++) {
+    const candidate = `Copy of ${baseName} ${n}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+}
+
+export function mintTabId(tabs, newId) {
+  const taken = new Set(tabs.map((t) => t.id));
+  for (let tries = 0; tries < 100; tries++) {
+    const id = typeof newId === "function" ? newId("s") : `s${Date.now().toString(36)}${tries}`;
+    if (id && !taken.has(id)) return id;
+  }
+  return `s${Date.now().toString(36)}`;
+}
+
+const cleanText = (text) => String(text ?? "").replace(/\r\n?/g, "\n").replace(/\0/g, "");
+
+function parseCount(raw, min) {
+  if (raw === null || !/^[0-9]{1,7}$/.test(raw.trim())) return undefined;
+  const n = Number(raw.trim());
+  return n >= min && n <= MAX_COUNT ? n : undefined;
+}
+
+function readDomCell(td) {
+  const cell = { text: cleanText(td.textContent) };
+  let bare = true;
+  const set = (key, value) => {
+    if (value === undefined || value === null || value === false) return;
+    cell[key] = value;
+    bare = false;
+  };
+  set("n", td.hasAttribute("n"));
+  set("t", td.hasAttribute("t"));
+  for (const key of ["f", "v", "fmt"]) {
+    const val = td.getAttribute(key);
+    set(key, val === null ? undefined : cleanText(val));
+  }
+  set("colspan", parseCount(td.getAttribute("colspan"), 2));
+  set("rowspan", parseCount(td.getAttribute("rowspan"), 2));
+  if (td.hasAttribute("hidden")) {
+    set("hidden", true);
+    cell.text = "";
+  }
+  const style = td.getAttribute("style");
+  set("style", style === null ? undefined : cleanText(style));
+  return bare && cell.text === "" ? null : cell;
+}
+
+function readDomRow(tr, frozen) {
+  const row = {
+    id: cleanText(tr.getAttribute("data-id") ?? ""),
+    pos: cleanText(tr.getAttribute("data-pos") ?? ""),
+  };
+  if (frozen) row.frozen = true;
+  if (tr.hasAttribute("hidden")) row.hidden = true;
+  const style = tr.getAttribute("style");
+  if (style !== null) row.style = cleanText(style);
+  row.cells = [...tr.children]
+    .filter((el) => el.localName === "td" || el.localName === "th")
+    .map(readDomCell);
+  return row;
+}
+
+function readDomCol(colEl) {
+  const col = {
+    id: cleanText(colEl.getAttribute("data-id") ?? ""),
+    pos: cleanText(colEl.getAttribute("data-pos") ?? ""),
+  };
+  const fmt = colEl.getAttribute("fmt");
+  if (fmt !== null) col.fmt = cleanText(fmt);
+  if (colEl.hasAttribute("hidden")) col.hidden = true;
+  const width = /width:\s*([0-9]{1,7})px/.exec(colEl.getAttribute("style") ?? "");
+  if (width) col.width = Number(width[1]);
+  return col;
+}
+
+export function emptyTableHtml(tabId, sapGrid, { colsCount = 26, rowsCount = 100 } = {}) {
+  const taken = new Set();
+  const mint = (prefix) => {
+    for (let i = 0; i < 100; i++) {
+      const id = sapGrid.newId(prefix);
+      if (!taken.has(id)) {
+        taken.add(id);
+        return id;
+      }
+    }
+    return `${prefix}${taken.size + 1}`;
+  };
+  const cols = keysBetween(null, null, colsCount).map((pos) => ({ id: mint("c"), pos }));
+  const rows = keysBetween(null, null, rowsCount).map((pos) => ({ id: mint("r"), pos, cells: [] }));
+  return sapGrid.createSheetWriter().table(tabId, { cols, rows });
+}
+
+export function duplicateTableHtml(tabId, table, sapGrid) {
+  const sheet = { cols: [], rows: [] };
+  const freezeCols = parseCount(table.getAttribute("freeze-cols"), 1);
+  if (freezeCols !== undefined) sheet.freezeCols = freezeCols;
+  if (table.hasAttribute("stale")) sheet.stale = true;
+  const frozen = [];
+  const data = [];
+  for (const part of table.children) {
+    const name = part.localName;
+    if (name === "colgroup") {
+      for (const col of part.children) if (col.localName === "col") sheet.cols.push(readDomCol(col));
+    } else if (name === "col") {
+      sheet.cols.push(readDomCol(part));
+    } else if (name === "thead" || name === "tbody" || name === "tfoot") {
+      const into = name === "thead" ? frozen : data;
+      for (const tr of part.children) if (tr.localName === "tr") into.push(readDomRow(tr, name === "thead"));
+    } else if (name === "tr") {
+      data.push(readDomRow(part, false));
+    }
+  }
+  sheet.rows = [...frozen, ...data];
+  return sapGrid.createSheetWriter().table(tabId, sheet);
+}
+
+function frozenOf(table) {
+  const rows = table?.tHead?.rows.length ?? 0;
+  const rawCols = Number.parseInt(table?.getAttribute("freeze-cols") ?? "", 10);
+  const cols = Number.isInteger(rawCols) && rawCols > 0 ? rawCols : 0;
+  return { rows, cols };
+}
+
+export function appendBlankTab({ tabs, sapGrid, gridOf, runTabStep, customName = null, rowsCount = 100, colsCount = 26 }) {
+  const list = tabs.list();
+  const grid = gridOf(list[0]?.table);
+  if (!grid || typeof sapGrid?.createSheetWriter !== "function") return null;
+  let maxPos = null;
+  for (const t of list) {
+    if (isKey(t.pos) && (maxPos === null || maxPos < t.pos)) maxPos = t.pos;
+  }
+  const pos = keyBetween(maxPos, null);
+  const id = mintTabId(list, sapGrid.newId);
+  const name = customName ?? nextSheetName(list);
+  const html = emptyTableHtml(id, sapGrid, { colsCount, rowsCount });
+  if (!runTabStep(() => grid.apply({ v: 1, t: "insertSheet", sheet: { id, name, pos, html } }))) return null;
+  return { id, name };
+}
+
+export function createCommandActions({
+  doc,
+  win,
+  workbook,
+  chrome,
+  overlays,
+  editor,
+  tabs,
+  history,
+  menu,
+  getSel,
+  viewOf,
+  gridOf,
+  windowOf,
+  activeCellInfo,
+  ensureReadyForAction,
+  runFormat,
+  writeGrid,
+  runTabStep,
+  syncUI,
+  applySelection,
+  applyMove,
+  subscribeGrids,
+  restart,
+  showDialog,
+  clearDialog,
+  onFillShortcut,
+  measureText: customMeasure = null,
+}) {
+  let canvasCtx = null;
+  let canvasTried = false;
+  const measure = customMeasure ?? ((text, font) => {
+    if (!canvasTried) {
+      canvasTried = true;
+      try {
+        canvasCtx = doc.createElement("canvas").getContext?.("2d") ?? null;
+      } catch {
+        canvasCtx = null;
+      }
+    }
+    if (!canvasCtx || typeof canvasCtx.measureText !== "function") return text.length * 8;
+    if (font) canvasCtx.font = font;
+    return canvasCtx.measureText(text).width;
+  });
+
+  function fitColumnWidth(table, rw, view, c) {
+    if (!table || !view || c < 0 || c >= view.cols.length) return null;
+    const cs = win.getComputedStyle(table);
+    const font = cs.font || `${cs.fontWeight || "400"} ${cs.fontSize || "13px"} ${cs.fontFamily || "sans-serif"}`.trim();
+    const visRows = overlays.visibleRows(table, rw, view.rows.length);
+    let maxText = 0;
+    let found = false;
+    for (const r of visRows) {
+      if (view.rowHidden?.(r)) continue;
+      const cell = view.cell(r, c);
+      if (!cell || cell.covered || (cell.span?.cols ?? 1) > 1 || !cell.text) continue;
+      found = true;
+      for (const line of cell.text.split("\n")) maxText = Math.max(maxText, measure(line, font) || 0);
+    }
+    return found ? Math.min(600, Math.max(8, Math.ceil(maxText + 12))) : null;
+  }
+  function insertRowsAt(insertIndex, count, likeRow, wholeRows) {
+    const sel = getSel();
+    if (!sel) return;
+    const prevView = viewOf(sel.tab);
+    const prevBox = selectionBox(prevView, sel);
+    if (!prevBox) return;
+    if (!runFormat((grid) => grid.insertRows(insertIndex + 1, count, { like: likeRow }))) return;
+    const nextView = viewOf(sel.tab);
+    if (nextView.rows.length === 0 || nextView.cols.length === 0) return;
+    const top = Math.min(insertIndex, nextView.rows.length - 1);
+    const bottom = Math.min(insertIndex + count - 1, nextView.rows.length - 1);
+    const nextSel = wholeRows
+      ? {
+          tab: sel.tab,
+          anchor: { row: nextView.rows[top], col: nextView.cols[0] },
+          focus: { row: nextView.rows[bottom], col: nextView.cols[nextView.cols.length - 1] },
+          whole: "rows",
+        }
+      : (() => {
+          const own = ownerOf(nextView, top, Math.min(prevBox.left, nextView.cols.length - 1));
+          return {
+            tab: sel.tab,
+            anchor: { row: nextView.rows[own.r], col: nextView.cols[own.c] },
+            focus: { row: nextView.rows[bottom], col: nextView.cols[Math.min(prevBox.right, nextView.cols.length - 1)] },
+          };
+        })();
+    applyMove(nextSel);
+  }
+
+  function insertColsAt(insertIndex, count, likeCol, wholeCols) {
+    const sel = getSel();
+    if (!sel) return;
+    const prevView = viewOf(sel.tab);
+    const prevBox = selectionBox(prevView, sel);
+    if (!prevBox) return;
+    if (!runFormat((grid) => grid.insertCols(colName(insertIndex), count, { like: likeCol }))) return;
+    const nextView = viewOf(sel.tab);
+    if (nextView.rows.length === 0 || nextView.cols.length === 0) return;
+    const left = Math.min(insertIndex, nextView.cols.length - 1);
+    const right = Math.min(insertIndex + count - 1, nextView.cols.length - 1);
+    const nextSel = wholeCols
+      ? {
+          tab: sel.tab,
+          anchor: { row: nextView.rows[0], col: nextView.cols[left] },
+          focus: { row: nextView.rows[nextView.rows.length - 1], col: nextView.cols[right] },
+          whole: "cols",
+        }
+      : (() => {
+          const own = ownerOf(nextView, Math.min(prevBox.top, nextView.rows.length - 1), left);
+          return {
+            tab: sel.tab,
+            anchor: { row: nextView.rows[own.r], col: nextView.cols[own.c] },
+            focus: { row: nextView.rows[Math.min(prevBox.bottom, nextView.rows.length - 1)], col: nextView.cols[right] },
+          };
+        })();
+    applyMove(nextSel);
+  }
+
+  const deleteRowsAt = (top, bottom) => runFormat((grid) => grid.deleteRows(`${top + 1}:${bottom + 1}`));
+  const deleteColsAt = (left, right) => runFormat((grid) => grid.deleteCols(`${colName(left)}:${colName(right)}`));
+
+  function openRowHeaderMenu(r, anchor, x, y) {
+    if (editor.editing && editor.canPick()) return editor.focus();
+    if (!ensureReadyForAction() || !getSel()) return;
+    const sel = getSel();
+    const view = viewOf(sel.tab);
+    const curSpan = axisSpan(view, sel);
+    if (curSpan?.axis !== "rows" || r < curSpan.first || r > curSpan.last) {
+      applySelection(selectRowsAt(view, sel, r));
+    }
+    const span = axisSpan(viewOf(getSel().tab), getSel());
+    if (!span) return;
+    const count = span.last - span.first + 1;
+    const frozen = frozenOf(tabTable(workbook, getSel().tab));
+    menu.open({
+      anchor: x === null ? anchor : null,
+      x: x ?? 0,
+      y: y ?? 0,
+      label: `Row ${r + 1} options`,
+      items: [
+        { id: "insert-above", label: `Insert ${count} above`, onSelect: () => insertRowsAt(span.first, count, span.first + 1, true) },
+        { id: "insert-below", label: `Insert ${count} below`, onSelect: () => insertRowsAt(span.last + 1, count, span.last + 1, true) },
+        { id: "delete-rows", label: "Delete rows", onSelect: () => deleteRowsAt(span.first, span.last) },
+        { type: "separator" },
+        { id: "freeze-rows", label: `Freeze up to row ${r + 1}`, onSelect: () => runFormat((g) => g.freeze({ rows: r + 1, cols: frozen.cols })) },
+        { id: "unfreeze-rows", label: "Unfreeze rows", disabled: frozen.rows === 0, onSelect: () => runFormat((g) => g.freeze({ rows: 0, cols: frozen.cols })) },
+      ],
+    });
+  }
+
+  function openColHeaderMenu(c, anchor, x, y) {
+    if (editor.editing && editor.canPick()) return editor.focus();
+    if (!ensureReadyForAction() || !getSel()) return;
+    const sel = getSel();
+    const view = viewOf(sel.tab);
+    const curSpan = axisSpan(view, sel);
+    if (curSpan?.axis !== "cols" || c < curSpan.first || c > curSpan.last) {
+      applySelection(selectColsAt(view, sel, c));
+    }
+    const span = axisSpan(viewOf(getSel().tab), getSel());
+    if (!span) return;
+    const count = span.last - span.first + 1;
+    const frozen = frozenOf(tabTable(workbook, getSel().tab));
+    const letter = colName(c);
+    menu.open({
+      anchor: x === null ? anchor : null,
+      x: x ?? 0,
+      y: y ?? 0,
+      label: `Column ${letter} options`,
+      items: [
+        { id: "insert-left", label: `Insert ${count} left`, onSelect: () => insertColsAt(span.first, count, colName(span.first), true) },
+        { id: "insert-right", label: `Insert ${count} right`, onSelect: () => insertColsAt(span.last + 1, count, colName(span.last), true) },
+        { id: "delete-cols", label: "Delete columns", onSelect: () => deleteColsAt(span.first, span.last) },
+        { type: "separator" },
+        { id: "freeze-cols", label: `Freeze up to column ${letter}`, onSelect: () => runFormat((g) => g.freeze({ rows: frozen.rows, cols: c + 1 })) },
+        { id: "unfreeze-cols", label: "Unfreeze columns", disabled: frozen.cols === 0, onSelect: () => runFormat((g) => g.freeze({ rows: frozen.rows, cols: 0 })) },
+      ],
+    });
+  }
+
+  function openCellContextMenu(r, c, x, y) {
+    const sel = getSel();
+    if (!sel) return;
+    const view = viewOf(sel.tab);
+    const box = selectionBox(view, sel);
+    let sourceBottom = box ? box.top : 0;
+    let sourceRight = box ? box.left : 0;
+    if (box) {
+      for (let col = box.left; col <= box.right; col++) {
+        const own = ownerOf(view, box.top, col);
+        sourceBottom = Math.max(sourceBottom, own.r + own.rows - 1);
+      }
+      for (let row = box.top; row <= box.bottom; row++) {
+        const own = ownerOf(view, row, box.left);
+        sourceRight = Math.max(sourceRight, own.c + own.cols - 1);
+      }
+    }
+    const canFillDown = Boolean(box && box.bottom > sourceBottom);
+    const canFillRight = Boolean(box && box.right > sourceRight);
+    menu.open({
+      x,
+      y,
+      label: "Cell options",
+      items: [
+        { id: "fill-down", label: "Fill down", disabled: !canFillDown, onSelect: () => onFillShortcut?.("down") },
+        { id: "fill-right", label: "Fill right", disabled: !canFillRight, onSelect: () => onFillShortcut?.("right") },
+        { type: "separator" },
+        { id: "insert-row-above", label: "Insert row above", onSelect: () => insertRowsAt(r, 1, r + 1, false) },
+        { id: "insert-col-left", label: "Insert column left", onSelect: () => insertColsAt(c, 1, colName(c), false) },
+        { type: "separator" },
+        { id: "delete-row", label: "Delete row", onSelect: () => deleteRowsAt(r, r) },
+        { id: "delete-col", label: "Delete column", onSelect: () => deleteColsAt(c, c) },
+      ],
+    });
+  }
+
+  function handleAddTab() {
+    if (!ensureReadyForAction()) return;
+    const added = appendBlankTab({ tabs, sapGrid: win.Sap?.grid, gridOf, runTabStep });
+    if (!added) return;
+    subscribeGrids();
+    const view = viewOf(added.id);
+    tabs.show(added.id);
+    applySelection(createSelection(view, added.id), { announce: true, enteredTab: true });
+    editor.focus();
+  }
+
+  function handleDuplicateTab(tabId) {
+    if (!ensureReadyForAction()) return;
+    const list = tabs.list();
+    const idx = list.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    const srcTab = list[idx];
+    const sapGrid = win.Sap?.grid;
+    const grid = gridOf(srcTab.table);
+    if (!grid || typeof sapGrid?.createSheetWriter !== "function") return;
+    const low = isKey(srcTab.pos) ? srcTab.pos : null;
+    let end = idx + 1;
+    while (end < list.length && (!isKey(list[end].pos) || (low !== null && list[end].pos <= low))) end += 1;
+    const high = end < list.length && isKey(list[end].pos) ? list[end].pos : null;
+    const keys = keysBetween(low, high, 1 + (end - (idx + 1)));
+    const newId = mintTabId(list, sapGrid.newId);
+    const name = nextCopyName(srcTab.name, list);
+    const html = duplicateTableHtml(newId, srcTab.table, sapGrid);
+    const ok = runTabStep(() => {
+      for (let k = idx + 1; k < end; k++) {
+        grid.apply({ v: 1, t: "moveSheet", sheet: list[k].id, pos: keys[1 + (k - (idx + 1))] });
+      }
+      grid.apply({ v: 1, t: "insertSheet", sheet: { id: newId, name, pos: keys[0], html } });
+    });
+    if (!ok) return;
+    subscribeGrids();
+    const view = viewOf(newId);
+    tabs.show(newId);
+    applySelection(createSelection(view, newId), { announce: true, enteredTab: true });
+    editor.focus();
+  }
+
+  function handleMoveTab(tabId, delta) {
+    if (!ensureReadyForAction()) return;
+    const list = tabs.list();
+    const idx = list.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    const targetIdx = idx + delta;
+    if (targetIdx < 0 || targetIdx >= list.length) return;
+    const grid = gridOf(list[idx].table);
+    if (!grid) return;
+    const others = list.filter((_, i) => i !== idx);
+    const low = targetIdx > 0 && isKey(others[targetIdx - 1].pos) ? others[targetIdx - 1].pos : null;
+    let end = targetIdx;
+    while (end < others.length && (!isKey(others[end].pos) || (low !== null && others[end].pos <= low))) end += 1;
+    const high = end < others.length && isKey(others[end].pos) ? others[end].pos : null;
+    const keys = keysBetween(low, high, 1 + (end - targetIdx));
+    const ok = runTabStep(() => {
+      for (let k = targetIdx; k < end; k++) {
+        grid.apply({ v: 1, t: "moveSheet", sheet: others[k].id, pos: keys[1 + (k - targetIdx)] });
+      }
+      grid.apply({ v: 1, t: "moveSheet", sheet: tabId, pos: keys[0] });
+    });
+    if (!ok) return;
+    syncUI();
+    editor.focus();
+  }
+
+  function handleDeleteTab(tabId) {
+    if (!ensureReadyForAction()) return;
+    const tab = tabs.list().find((t) => t.id === tabId);
+    if (!tab) return;
+    showDialog(tabId, openDeleteTabDialog({
+      doc,
+      theme: chrome.theme,
+      container: chrome.topRoot,
+      tabName: tab.name,
+      getReturnFocus: () => editor.textarea,
+      onConfirm: () => {
+        clearDialog();
+        const freshTab = tabs.list().find((t) => t.id === tabId);
+        const grid = gridOf(freshTab?.table ?? tabs.list()[0]?.table);
+        if (!grid) return;
+        if (!runTabStep(() => grid.apply({ v: 1, t: "deleteSheet", sheet: tabId }))) return;
+        restart();
+      },
+      onCancel: () => {
+        clearDialog();
+      },
+    }));
+  }
+
+  function openTabContextMenu(tabId, btn, x, y) {
+    if (!ensureReadyForAction()) return;
+    const list = tabs.list();
+    const idx = list.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    const rect = btn?.getBoundingClientRect?.();
+    const menuX = x || rect?.left || 0;
+    const menuY = y || (rect ? rect.top - 4 : 0);
+    menu.open({
+      x: menuX,
+      y: menuY,
+      label: `Sheet ${list[idx].name} options`,
+      items: [
+        { id: "rename-tab", label: "Rename", onSelect: () => startTabRename(tabId) },
+        { id: "duplicate-tab", label: "Duplicate", onSelect: () => handleDuplicateTab(tabId) },
+        { type: "separator" },
+        { id: "move-tab-left", label: "Move left", disabled: idx <= 0, onSelect: () => handleMoveTab(tabId, -1) },
+        { id: "move-tab-right", label: "Move right", disabled: idx >= list.length - 1, onSelect: () => handleMoveTab(tabId, 1) },
+        { type: "separator" },
+        { id: "delete-tab", label: "Delete", danger: true, onSelect: () => handleDeleteTab(tabId) },
+      ],
+    });
+  }
+
+  function openNumberFormatMenu() {
+    const info = activeCellInfo();
+    menu.open({
+      anchor: chrome.getButton("number-format"),
+      label: "Number format",
+      items: numberFormatMenuItems({
+        activeValue: info?.cell?.value ?? null,
+        activeFmt: info?.effectiveFmt ?? null,
+        formatValue: win.Sap?.grid?.formatValue,
+        onPick: (fmt) => runFormat((g, v) => applyNumberFormat(g, v, getSel(), fmt)),
+      }),
+    });
+  }
+
+  function openColorMenu(kind) {
+    const info = activeCellInfo();
+    const st = cellStyleState(info?.cell);
+    const isText = kind === "text";
+    menu.open({
+      anchor: chrome.getButton(isText ? "text-color" : "fill-color"),
+      label: isText ? "Text color" : "Fill color",
+      items: colorMenuItems({
+        current: isText ? st.color : st.fillColor,
+        onPick: (hex) => runFormat((g, v) => (isText ? applyTextColor(g, v, getSel(), hex) : applyFillColor(g, v, getSel(), hex))),
+      }),
+    });
+  }
+
+  function openBordersMenu() {
+    menu.open({
+      anchor: chrome.getButton("borders"),
+      label: "Borders",
+      items: borderMenuItems({
+        onPick: (preset) => runFormat((g, v) => applyBorder(g, v, getSel(), preset)),
+      }),
+    });
+  }
+
+  function openAlignMenu() {
+    const info = activeCellInfo();
+    const st = cellStyleState(info?.cell);
+    menu.open({
+      anchor: chrome.getButton("align"),
+      label: "Horizontal align",
+      items: alignMenuItems({
+        current: st.align,
+        onPick: (align) => runFormat((g, v) => applyAlign(g, v, getSel(), align)),
+      }),
+    });
+  }
+
+  function triggerMerge() {
+    const sel = getSel();
+    if (editor.editing || !sel) return;
+    const table = tabTable(workbook, sel.tab);
+    const grid = gridOf(table);
+    if (!grid) return;
+    const view = viewOf(sel.tab);
+    runMergeCommand({
+      grid,
+      view,
+      sel,
+      history,
+      runWrite: (fn) => {
+        const ok = writeGrid(fn);
+        if (ok) syncUI({ announce: true });
+        return ok;
+      },
+      promptKeep: (filled, onChoose) => {
+        showDialog(sel.tab, openMergeKeepDialog({
+          doc,
+          theme: chrome.theme,
+          container: chrome.topRoot,
+          items: filled,
+          totalCount: filled.length,
+          getReturnFocus: () => editor.textarea,
+          onConfirm: (chosen) => {
+            clearDialog();
+            onChoose(chosen);
+          },
+          onCancel: () => {
+            clearDialog();
+          },
+        }));
+      },
+    });
+  }
+
+  function handleInsertAxisShortcut() {
+    const sel = getSel();
+    if (!sel) return;
+    const view = viewOf(sel.tab);
+    const span = axisSpan(view, sel);
+    if (span?.axis === "cols") {
+      insertColsAt(span.first, span.last - span.first + 1, colName(span.first), true);
+      return;
+    }
+    if (span?.axis === "rows") {
+      insertRowsAt(span.first, span.last - span.first + 1, span.first + 1, true);
+      return;
+    }
+    const box = selectionBox(view, sel);
+    if (box) insertRowsAt(box.top, 1, box.top + 1, false);
+  }
+
+  function handleDeleteAxisShortcut() {
+    const sel = getSel();
+    if (!sel) return;
+    const span = axisSpan(viewOf(sel.tab), sel);
+    if (span?.axis === "rows") deleteRowsAt(span.first, span.last);
+    else if (span?.axis === "cols") deleteColsAt(span.first, span.last);
+  }
+
+  function handleContextMenuShortcut() {
+    const sel = getSel();
+    if (!sel) return;
+    const view = viewOf(sel.tab);
+    const span = axisSpan(view, sel);
+    if (span?.axis === "rows") {
+      const hdr = overlays.shadow.querySelector(`[data-row="${span.first}"]`);
+      openRowHeaderMenu(span.first, hdr, null, null);
+      return;
+    }
+    if (span?.axis === "cols") {
+      const hdr = overlays.shadow.querySelector(`[data-col="${span.first}"]`);
+      openColHeaderMenu(span.first, hdr, null, null);
+      return;
+    }
+    const box = selectionBox(view, sel);
+    if (!box) return;
+    const table = tabTable(workbook, sel.tab);
+    const cb = overlays.cellBox(table, windowOf(table), box.active.r, box.active.c);
+    openCellContextMenu(box.active.r, box.active.c, cb?.left ?? 0, (cb?.top ?? 0) + (cb?.height ?? 0));
+  }
+
+  function handleResizeCol(c, px) {
+    if (editor.editing && editor.canPick()) return editor.focus();
+    if (!ensureReadyForAction() || !getSel()) return;
+    const sel = getSel();
+    const span = axisSpan(viewOf(sel.tab), sel);
+    const multi = span?.axis === "cols" && c >= span.first && c <= span.last;
+    const area = multi ? `${colName(span.first)}:${colName(span.last)}` : `${colName(c)}:${colName(c)}`;
+    runFormat((grid) => grid.setColWidth(area, Math.max(8, Math.round(px))));
+    editor.focus();
+  }
+
+  function handleResizeRow(r, px) {
+    if (editor.editing && editor.canPick()) return editor.focus();
+    if (!ensureReadyForAction() || !getSel()) return;
+    const sel = getSel();
+    const span = axisSpan(viewOf(sel.tab), sel);
+    const multi = span?.axis === "rows" && r >= span.first && r <= span.last;
+    const first = multi ? span.first : r;
+    const last = multi ? span.last : r;
+    runFormat((grid) => grid.setRowHeight(`${first + 1}:${last + 1}`, Math.max(12, Math.round(px))));
+    editor.focus();
+  }
+
+  function handleFitCol(c) {
+    if (editor.editing && editor.canPick()) return editor.focus();
+    if (!ensureReadyForAction() || !getSel()) return;
+    const sel = getSel();
+    const table = tabTable(workbook, sel.tab);
+    const view = viewOf(sel.tab);
+    const span = axisSpan(view, sel);
+    const rw = windowOf(table);
+    const cols = span?.axis === "cols" && c >= span.first && c <= span.last
+      ? Array.from({ length: span.last - span.first + 1 }, (_, i) => span.first + i)
+      : [c];
+    runFormat((grid) => {
+      if (cols.length === 1) {
+        const px = fitColumnWidth(table, rw, view, cols[0]);
+        if (px !== null) grid.setColWidth(`${colName(cols[0])}:${colName(cols[0])}`, px);
+        return;
+      }
+      history.group(sel.tab, () => {
+        for (const col of cols) {
+          const px = fitColumnWidth(table, rw, view, col);
+          if (px !== null) grid.setColWidth(`${colName(col)}:${colName(col)}`, px);
+        }
+      });
+    });
+    editor.focus();
+  }
+
+  function startTabRename(tabId) {
+    return chrome.mountTabRename(tabId, ({ tab, theme, isCurrent, finish }) => {
+      const input = bevelInput("input", {
+        theme,
+        rules: [
+          "display:inline-block",
+          "width:116px",
+          "height:26px",
+          "block-size:26px",
+          "min-block-size:26px",
+          "padding:0 8px",
+          `font:500 12px/24px ${FONT_SANS}`,
+        ],
+      });
+      input.value = tab.name;
+      input.setAttribute("aria-label", "Rename sheet");
+      input.setAttribute("data-tab-rename", tabId);
+      let settled = false;
+      const commit = () => {
+        if (settled || !isCurrent(input)) return false;
+        settled = true;
+        if (handleRenameTab(tabId, input.value) === false) {
+          settled = false;
+          input.focus();
+          return false;
+        }
+        finish();
+        return true;
+      };
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.stopPropagation();
+          commit();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          settled = true;
+          finish();
+          handleRenameTab(tabId, null);
+        }
+      });
+      input.addEventListener("blur", commit);
+      return { input, commit };
+    });
+  }
+
+  function handleRenameTab(tabId, nextName) {
+    if (nextName === null) {
+      chrome.hideNotice();
+      editor.focus();
+      return true;
+    }
+    const tab = tabs.list().find((t) => t.id === tabId);
+    if (!tab) return true;
+    if (nextName === tab.name) {
+      chrome.hideNotice();
+      editor.focus();
+      return true;
+    }
+    const grid = gridOf(tab.table);
+    if (!grid) return true;
+    const ok = runTabStep(() => grid.apply({ v: 1, t: "renameSheet", sheet: tabId, name: nextName }));
+    if (!ok) return false;
+    syncUI();
+    editor.focus();
+    return true;
+  }
+
+  function runToolbarCommand(id) {
+    const sel = getSel();
+    switch (id) {
+      case "number-format":
+        openNumberFormatMenu();
+        break;
+      case "currency":
+        runFormat((g, v) => applyNumberFormat(g, v, sel, "$#,##0.00"));
+        break;
+      case "percent":
+        runFormat((g, v) => applyNumberFormat(g, v, sel, "0.00%"));
+        break;
+      case "decimals-less":
+        runFormat((g, v) => applyDecimals(g, v, sel, history, -1, win.Sap?.grid?.adjustDecimals));
+        break;
+      case "decimals-more":
+        runFormat((g, v) => applyDecimals(g, v, sel, history, 1, win.Sap?.grid?.adjustDecimals));
+        break;
+      case "bold":
+      case "italic":
+      case "strikethrough":
+      case "wrap":
+        runFormat((g, v) => applyStyleToggle(g, v, sel, history, id));
+        break;
+      case "text-color":
+        openColorMenu("text");
+        break;
+      case "fill-color":
+        openColorMenu("fill");
+        break;
+      case "borders":
+        openBordersMenu();
+        break;
+      case "merge":
+        triggerMerge();
+        break;
+      case "align":
+        openAlignMenu();
+        break;
+      case "add-tab":
+        handleAddTab();
+        break;
+    }
+  }
+
+  return {
+    openRowHeaderMenu,
+    openColHeaderMenu,
+    openCellContextMenu,
+    handleAddTab,
+    openTabContextMenu,
+    openNumberFormatMenu,
+    openColorMenu,
+    openBordersMenu,
+    openAlignMenu,
+    triggerMerge,
+    handleResizeCol,
+    handleResizeRow,
+    handleFitCol,
+    startTabRename,
+    handleRenameTab,
+    runToolbarCommand,
+    handleInsertAxisShortcut,
+    handleDeleteAxisShortcut,
+    handleContextMenuShortcut,
+  };
 }

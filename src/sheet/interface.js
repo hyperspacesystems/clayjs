@@ -1,31 +1,15 @@
-import { a1, colIndex, colName, rowIndex, tabTable } from "./commit.js";
+import { a1, colIndex, rowIndex, tabTable } from "./commit.js";
 import { createChrome } from "./chrome.js";
 import { copyParts, fillBlock, fillFormula, pasteBlock } from "./clipboard.js";
 import { createEditor } from "./editor.js";
-import {
-  alignMenuItems,
-  applyAlign,
-  applyBorder,
-  applyClearFormatting,
-  applyDecimals,
-  applyFillColor,
-  applyNumberFormat,
-  applyStyleToggle,
-  applyTextColor,
-  borderMenuItems,
-  cellStyleState,
-  colorMenuItems,
-  inspectMerge,
-  numberFormatMenuItems,
-  runMergeCommand,
-} from "./format-commands.js";
+import { ROW_ESTIMATE } from "./geometry.js";
 import { createHistory } from "./history.js";
 import { keyIntent } from "./keys.js";
-import { createMenu, openDeleteTabDialog, openMergeKeepDialog } from "./menu.js";
 import { createOverlays } from "./overlays.js";
 import {
   axisSpan,
   clipSelection,
+  commandArea,
   createSelection,
   edgeSelection,
   moveSelection,
@@ -37,7 +21,6 @@ import {
   selectCell,
   selectCols,
   selectColsAt,
-  commandArea,
   selectionArea,
   selectionBox,
   selectRows,
@@ -45,19 +28,87 @@ import {
   sheetCornerSelection,
   writeSelection,
 } from "./selection.js";
-import {
-  createTabs,
-  duplicateTableHtml,
-  emptyTableHtml,
-  isKey,
-  keyBetween,
-  keysBetween,
-  mintTabId,
-  nextCopyName,
-  nextSheetName,
-} from "./tabs.js";
-import { ROW_ESTIMATE } from "./geometry.js";
-import { WORKBOOK } from "./workbook.js";
+import { createTabs } from "./tabs.js";
+
+const WORKBOOK = "[sheet-workbook]";
+const STATUS_CELL_CAP = 100_000;
+const CHANGED_MSG = "Those cells changed since, so that step was not undone.";
+const REDONE_MSG = "Those cells changed since, so that step was not redone.";
+
+const FORMAT_LABELS = new Map([
+  [null, "Automatic"],
+  ["@", "Plain text"],
+  ["#,##0.00", "Number"],
+  ["#,##0", "Thousands"],
+  ["0.00%", "Percent"],
+  ["$#,##0.00", "Currency"],
+  ["m/d/yyyy", "Date"],
+  ["mmmm d, yyyy", "Long date"],
+  ["h:mm AM/PM", "Time"],
+  ["m/d/yyyy h:mm", "Date and time"],
+]);
+
+const LAZY_TOOLBAR_IDS = [
+  "number-format",
+  "currency",
+  "percent",
+  "decimals-less",
+  "decimals-more",
+  "bold",
+  "italic",
+  "strikethrough",
+  "text-color",
+  "fill-color",
+  "borders",
+  "merge",
+  "align",
+  "wrap",
+  "add-tab",
+];
+
+let importChain = Promise.resolve();
+const queueImport = (loader) => {
+  const next = importChain.then(loader);
+  importChain = next.catch(() => {});
+  return next;
+};
+
+const LAZY_FAIL_MESSAGE = "That tool could not load. Check your connection and try again.";
+
+export function lazyModule(loader, onFail) {
+  let promise = null;
+  let value = null;
+  return {
+    peek: () => value,
+    put: (mod) => {
+      value = mod;
+      return mod;
+    },
+    load: () => {
+      if (promise) return promise;
+      promise = queueImport(loader).then(
+        (mod) => {
+          value = mod;
+          return mod;
+        },
+        () => {
+          promise = null;
+          onFail?.();
+          return null;
+        },
+      );
+      return promise;
+    },
+  };
+}
+
+const samePoint = (a, b) => a?.row === b?.row && a?.col === b?.col;
+
+function sameSelection(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.tab === b.tab && samePoint(a.anchor, b.anchor) && samePoint(a.focus, b.focus);
+}
 
 function scrollerOf(el) {
   const doc = el.ownerDocument ?? document;
@@ -97,19 +148,103 @@ function columnOfCell(td) {
   return c;
 }
 
-function frozenOf(table) {
-  const rows = table?.tHead?.rows.length ?? 0;
-  const rawCols = Number.parseInt(table?.getAttribute("freeze-cols") ?? "", 10);
-  const cols = Number.isInteger(rawCols) && rawCols > 0 ? rawCols : 0;
-  return { rows, cols };
+const formatCount = (n, singular, plural) => `${n.toLocaleString("en-US")} ${n === 1 ? singular : plural}`;
+
+function quickToolbarStyle(cell) {
+  const css = typeof cell?.style === "string" ? cell.style : "";
+  let fw = "";
+  let fs = "";
+  let td = "";
+  let ws = "";
+  if (css) {
+    for (const part of css.split(";")) {
+      const colon = part.indexOf(":");
+      if (colon === -1) continue;
+      const k = part.slice(0, colon).trim().toLowerCase();
+      const v = part.slice(colon + 1).trim().toLowerCase();
+      if (k === "font-weight") fw = v;
+      else if (k === "font-style") fs = v;
+      else if (k === "text-decoration") td = v;
+      else if (k === "white-space") ws = v;
+    }
+  }
+  const rawFmt = cell?.effectiveFmt;
+  const normFmt = rawFmt === "" || rawFmt === undefined ? null : rawFmt;
+  return {
+    bold: fw === "bold" || fw === "bolder" || (/^\d+$/.test(fw) && Number(fw) >= 700),
+    italic: fs === "italic" || fs === "oblique",
+    strikethrough: /\bline-through\b/.test(td),
+    wrap: ws === "pre-wrap",
+    formatLabel: FORMAT_LABELS.get(normFmt) ?? "Custom",
+  };
 }
 
-function formatCount(n, singular, plural) {
-  return `${n.toLocaleString("en-US")} ${n === 1 ? singular : plural}`;
+function quickMergeState(grid, view, sel) {
+  const box = selectionBox(view, sel);
+  if (!box || !grid) return { canAct: false, isSingleMerge: false };
+  if ((box.bottom - box.top + 1) * (box.right - box.left + 1) < 2) return { canAct: false, isSingleMerge: false };
+  const tl = ownerOf(view, box.top, box.left);
+  return {
+    canAct: true,
+    isSingleMerge:
+      tl.r === box.top &&
+      tl.c === box.left &&
+      tl.rows === box.bottom - box.top + 1 &&
+      tl.cols === box.right - box.left + 1,
+  };
 }
 
-const CHANGED_MSG = "Those cells changed since, so that step was not undone.";
-const REDONE_MSG = "Those cells changed since, so that step was not redone.";
+function safeLinkUrl(raw) {
+  if (typeof raw !== "string") return null;
+  const str = raw.trim();
+  if (!str || /\s/.test(str) || !/^(?:https?:\/\/|mailto:)/i.test(str)) return null;
+  let parsed;
+  try {
+    parsed = new URL(str);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.hostname ? str : null;
+  if (parsed.protocol === "mailto:") return parsed.pathname.trim() ? str : null;
+  return null;
+}
+
+function extractHyperlinkLiteral(formula, tokenize) {
+  if (typeof tokenize !== "function") return null;
+  const tokens = tokenize(formula);
+  if (
+    tokens.length < 5 ||
+    tokens[0]?.value !== "=" ||
+    tokens[1]?.type !== "name" ||
+    tokens[1]?.value !== "HYPERLINK" ||
+    tokens[2]?.type !== "punct" ||
+    tokens[2]?.value !== "(" ||
+    tokens[3]?.type !== "str" ||
+    tokens[4]?.type !== "punct" ||
+    (tokens[4].value !== "," && tokens[4].value !== ")")
+  ) {
+    return null;
+  }
+  let depth = 0;
+  for (let i = 2; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.type === "punct" && t.value === "(") depth += 1;
+    else if (t.type === "punct" && t.value === ")") {
+      depth -= 1;
+      if (depth === 0) return i === tokens.length - 1 ? { literal: tokens[3].value } : null;
+    }
+  }
+  return null;
+}
+
+export function extractCellLink(cell, tokenize) {
+  if (!cell) return null;
+  if (cell.content !== null && typeof cell.content === "object" && typeof cell.content.f === "string") {
+    const hl = extractHyperlinkLiteral(cell.content.f, tokenize);
+    if (hl) return safeLinkUrl(hl.literal);
+  }
+  return safeLinkUrl(cell.text);
+}
 
 function createWorkbookInterface(workbook, { shell, storage, tabOptions, commands, platform, measureText }) {
   const doc = workbook.ownerDocument ?? document;
@@ -129,9 +264,44 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   let valuesNext = false;
   let activeDialog = null;
   let dialogTab = "";
+  let liveMenu = null;
+  let cmdActions = null;
+  let findCtrl = null;
+  let fillDrag = null;
+  let statusCache = "";
 
+  const alive = () => !disposed;
+  const onLazyFail = () => {
+    if (alive()) chrome.showNotice(LAZY_FAIL_MESSAGE);
+  };
+  const cmdTool = lazyModule(() => import("./format-commands.js"), onLazyFail);
+  const fillTool = lazyModule(() => import("./fill.js"), onLazyFail);
+  const findTool = lazyModule(() => import("./find.js"), onLazyFail);
+  const csvTool = lazyModule(async () => {
+    if (!cmdTool.peek()) cmdTool.put(await import("./format-commands.js"));
+    return import("./csv.js");
+  }, onLazyFail);
+  let pendingLazy = null;
+
+  function runLazy(holder, fn, { guardSel = false } = {}) {
+    const snap = sel;
+    const ready = holder.peek();
+    if (ready) {
+      pendingLazy = null;
+      if (!guardSel || sameSelection(sel, snap)) fn(ready);
+      return;
+    }
+    pendingLazy = fn;
+    holder.load().then((mod) => {
+      if (!alive() || !mod || pendingLazy !== fn) return;
+      pendingLazy = null;
+      if (guardSel && !sameSelection(sel, snap)) return;
+      fn(mod);
+    });
+  }
   const gridOf = (table) => (table && typeof win.Sap?.grid === "function" ? win.Sap.grid(table) : null);
   const history = createHistory(workbook, gridOf);
+  const isMac = () => /mac|iphone|ipad|ipod/i.test(String(platform ?? win.navigator?.platform ?? ""));
 
   function withMine(fn) {
     mine = true;
@@ -185,12 +355,12 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   function closeTransient() {
-    if (menu.isOpen) menu.close({ restoreFocus: false });
+    if (liveMenu?.isOpen) liveMenu.close({ restoreFocus: false });
     closeDialog();
   }
 
   function onForeignChange(tabId) {
-    if (menu.isOpen && tabId === sel?.tab) menu.close({ restoreFocus: false });
+    if (liveMenu?.isOpen && tabId === sel?.tab) liveMenu.close({ restoreFocus: false });
     if (activeDialog && dialogTab === tabId) closeDialog();
   }
 
@@ -223,6 +393,55 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     }
   }
 
+  function computeStatusText() {
+    if (!sel || tabs.activeId !== sel.tab) return "";
+    const grid = gridOf(tabTable(workbook, sel.tab));
+    if (!grid) return "";
+    const box = selectionBox(viewOf(sel.tab), sel);
+    if (!box) return "";
+    const spanCount = (box.bottom - box.top + 1) * (box.right - box.left + 1);
+    if (spanCount < 2 || spanCount > STATUS_CELL_CAP) return "";
+    if (
+      box.top === box.active.r &&
+      box.left === box.active.c &&
+      box.bottom === box.active.r + box.active.rows - 1 &&
+      box.right === box.active.c + box.active.cols - 1
+    ) {
+      return "";
+    }
+    let uncovered = 0;
+    let filled = 0;
+    let nums = 0;
+    let sum = 0;
+    for (let r = box.top; r <= box.bottom; r++) {
+      for (let c = box.left; c <= box.right; c++) {
+        const cell = grid.cell(a1(r, c));
+        if (!cell || cell.covered) continue;
+        uncovered += 1;
+        if (cell.content !== null && cell.content !== "") filled += 1;
+        if (typeof cell.value === "number" && Number.isFinite(cell.value)) {
+          nums += 1;
+          sum += cell.value;
+        }
+      }
+    }
+    if (uncovered < 2) return "";
+    if (nums > 0) {
+      const activeFmt = grid.cell(a1(box.active.r, box.active.c))?.effectiveFmt ?? null;
+      const sap = win.Sap?.grid;
+      const kind = typeof sap?.fmtKind === "function" ? sap.fmtKind(activeFmt) : "auto";
+      const numFmt = kind === "number" || kind === "currency" || kind === "percent" ? activeFmt : null;
+      const fmtNum = (n) =>
+        typeof sap?.formatValue === "function" ? (sap.formatValue(n, numFmt) ?? sap.formatValue(n, null) ?? String(n)) : String(n);
+      return `Sum ${fmtNum(Number(sum.toPrecision(15)))} · Average ${fmtNum(Number((sum / nums).toPrecision(15)))} · Count ${nums}`;
+    }
+    return filled > 0 ? `Count ${filled}` : "";
+  }
+
+  const refreshStatus = () => {
+    statusCache = computeStatusText();
+  };
+
   function activeCellInfo(overrideTarget = null) {
     const point = overrideTarget ?? (sel ? { tab: sel.tab, row: sel.anchor.row, col: sel.anchor.col } : null);
     if (!point?.tab) return null;
@@ -234,7 +453,6 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     const ref = a1(r, c);
     const grid = gridOf(table);
     const cell = grid ? grid.cell(ref) : null;
-    const input = grid ? grid.input(ref) : "";
     return {
       tab: point.tab,
       row: point.row,
@@ -243,7 +461,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       c,
       ref,
       text: cell?.text ?? "",
-      input,
+      input: grid ? grid.input(ref) : "",
       effectiveFmt: cell?.effectiveFmt ?? null,
       cell,
     };
@@ -256,8 +474,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (!enteredTab) return valuePart;
     const tab = tabs.list().find((t) => t.id === info.tab);
     const view = viewOf(info.tab);
-    const prefix = `${tab?.name || info.tab}, ${formatCount(view.rows.length, "row", "rows")}, ${formatCount(view.cols.length, "column", "columns")}`;
-    return `${prefix}, ${valuePart}`;
+    return `${tab?.name || info.tab}, ${formatCount(view.rows.length, "row", "rows")}, ${formatCount(view.cols.length, "column", "columns")}, ${valuePart}`;
   }
 
   function ensureReadyForAction() {
@@ -274,348 +491,64 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     const view = viewOf(sel.tab);
     if (view.rows.length === 0 || view.cols.length === 0) return false;
     if (!writeGrid(() => fn(grid, view, table))) return false;
+    refreshStatus();
     syncUI({ announce: true });
     return true;
   }
 
-  function insertRowsAt(insertIndex, count, likeRow, wholeRows) {
-    if (!sel) return;
-    const prevView = viewOf(sel.tab);
-    const prevBox = selectionBox(prevView, sel);
-    if (!prevBox) return;
-    if (!runFormat((grid) => grid.insertRows(insertIndex + 1, count, { like: likeRow }))) return;
-    const nextView = viewOf(sel.tab);
-    if (nextView.rows.length === 0 || nextView.cols.length === 0) return;
-    const top = Math.min(insertIndex, nextView.rows.length - 1);
-    const bottom = Math.min(insertIndex + count - 1, nextView.rows.length - 1);
-    const nextSel = wholeRows
-      ? {
-          tab: sel.tab,
-          anchor: { row: nextView.rows[top], col: nextView.cols[0] },
-          focus: { row: nextView.rows[bottom], col: nextView.cols[nextView.cols.length - 1] },
-          whole: "rows",
-        }
-      : (() => {
-          const own = ownerOf(nextView, top, Math.min(prevBox.left, nextView.cols.length - 1));
-          return {
-            tab: sel.tab,
-            anchor: { row: nextView.rows[own.r], col: nextView.cols[own.c] },
-            focus: { row: nextView.rows[bottom], col: nextView.cols[Math.min(prevBox.right, nextView.cols.length - 1)] },
-          };
-        })();
-    applyMove(nextSel);
-  }
+  const sharedCtx = () => ({
+    doc,
+    win,
+    workbook,
+    chrome,
+    overlays,
+    editor,
+    tabs,
+    history,
+    getSel: () => sel,
+    setSel: (next) => {
+      sel = next;
+    },
+    viewOf,
+    gridOf,
+    windowOf,
+    activeCellInfo,
+    ensureReadyForAction,
+    runFormat,
+    writeGrid,
+    withMine,
+    commitEdit,
+    runTabStep,
+    syncUI,
+    refreshStatus,
+    applySelection,
+    applyMove,
+    subscribeGrids,
+    restart,
+    showDialog,
+    clearDialog,
+    measureText,
+  });
 
-  function insertColsAt(insertIndex, count, likeCol, wholeCols) {
-    if (!sel) return;
-    const prevView = viewOf(sel.tab);
-    const prevBox = selectionBox(prevView, sel);
-    if (!prevBox) return;
-    if (!runFormat((grid) => grid.insertCols(colName(insertIndex), count, { like: likeCol }))) return;
-    const nextView = viewOf(sel.tab);
-    if (nextView.rows.length === 0 || nextView.cols.length === 0) return;
-    const left = Math.min(insertIndex, nextView.cols.length - 1);
-    const right = Math.min(insertIndex + count - 1, nextView.cols.length - 1);
-    const nextSel = wholeCols
-      ? {
-          tab: sel.tab,
-          anchor: { row: nextView.rows[0], col: nextView.cols[left] },
-          focus: { row: nextView.rows[nextView.rows.length - 1], col: nextView.cols[right] },
-          whole: "cols",
-        }
-      : (() => {
-          const own = ownerOf(nextView, Math.min(prevBox.top, nextView.rows.length - 1), left);
-          return {
-            tab: sel.tab,
-            anchor: { row: nextView.rows[own.r], col: nextView.cols[own.c] },
-            focus: { row: nextView.rows[Math.min(prevBox.bottom, nextView.rows.length - 1)], col: nextView.cols[right] },
-          };
-        })();
-    applyMove(nextSel);
-  }
+  const triggerFillShortcut = (axis) => runLazy(fillTool, (f) => f.runShortcutFill(sharedCtx(), axis), { guardSel: true });
 
-  function deleteRowsAt(top, bottom) {
-    runFormat((grid) => grid.deleteRows(`${top + 1}:${bottom + 1}`));
-  }
-
-  function deleteColsAt(left, right) {
-    runFormat((grid) => grid.deleteCols(`${colName(left)}:${colName(right)}`));
-  }
-
-  function handleResizeCol(c, px) {
-    if (editor.editing && editor.canPick()) return editor.focus();
-    if (!ensureReadyForAction() || !sel) return;
-    const span = axisSpan(viewOf(sel.tab), sel);
-    const multi = span?.axis === "cols" && c >= span.first && c <= span.last;
-    const area = multi ? `${colName(span.first)}:${colName(span.last)}` : `${colName(c)}:${colName(c)}`;
-    runFormat((grid) => grid.setColWidth(area, Math.max(8, Math.round(px))));
-    editor.focus();
-  }
-
-  function handleResizeRow(r, px) {
-    if (editor.editing && editor.canPick()) return editor.focus();
-    if (!ensureReadyForAction() || !sel) return;
-    const span = axisSpan(viewOf(sel.tab), sel);
-    const multi = span?.axis === "rows" && r >= span.first && r <= span.last;
-    const first = multi ? span.first : r;
-    const last = multi ? span.last : r;
-    runFormat((grid) => grid.setRowHeight(`${first + 1}:${last + 1}`, Math.max(12, Math.round(px))));
-    editor.focus();
-  }
-
-  function handleFitCol(c) {
-    if (editor.editing && editor.canPick()) return editor.focus();
-    if (!ensureReadyForAction() || !sel) return;
-    const table = tabTable(workbook, sel.tab);
-    const view = viewOf(sel.tab);
-    const span = axisSpan(view, sel);
-    const rw = windowOf(table);
-    const cols = span?.axis === "cols" && c >= span.first && c <= span.last
-      ? Array.from({ length: span.last - span.first + 1 }, (_, i) => span.first + i)
-      : [c];
-    runFormat((grid) => {
-      if (cols.length === 1) {
-        const px = overlays.fitColumnWidth(table, rw, view, cols[0]);
-        if (px !== null) grid.setColWidth(`${colName(cols[0])}:${colName(cols[0])}`, px);
-        return;
-      }
-      history.group(sel.tab, () => {
-        for (const col of cols) {
-          const px = overlays.fitColumnWidth(table, rw, view, col);
-          if (px !== null) grid.setColWidth(`${colName(col)}:${colName(col)}`, px);
-        }
-      });
-    });
-    editor.focus();
-  }
-
-  function openRowHeaderMenu(r, anchor, x, y) {
-    if (editor.editing && editor.canPick()) return editor.focus();
-    if (!ensureReadyForAction() || !sel) return;
-    const view = viewOf(sel.tab);
-    const curSpan = axisSpan(view, sel);
-    if (curSpan?.axis !== "rows" || r < curSpan.first || r > curSpan.last) {
-      applySelection(selectRowsAt(view, sel, r));
-    }
-    const span = axisSpan(viewOf(sel.tab), sel);
-    if (!span) return;
-    const count = span.last - span.first + 1;
-    const table = tabTable(workbook, sel.tab);
-    const frozen = frozenOf(table);
-    menu.open({
-      anchor: x === null ? anchor : null,
-      x: x ?? 0,
-      y: y ?? 0,
-      label: `Row ${r + 1} options`,
-      items: [
-        { id: "insert-above", label: `Insert ${count} above`, onSelect: () => insertRowsAt(span.first, count, span.first + 1, true) },
-        { id: "insert-below", label: `Insert ${count} below`, onSelect: () => insertRowsAt(span.last + 1, count, span.last + 1, true) },
-        { id: "delete-rows", label: "Delete rows", onSelect: () => deleteRowsAt(span.first, span.last) },
-        { type: "separator" },
-        { id: "freeze-rows", label: `Freeze up to row ${r + 1}`, onSelect: () => runFormat((g) => g.freeze({ rows: r + 1, cols: frozen.cols })) },
-        { id: "unfreeze-rows", label: "Unfreeze rows", disabled: frozen.rows === 0, onSelect: () => runFormat((g) => g.freeze({ rows: 0, cols: frozen.cols })) },
-      ],
-    });
-  }
-
-  function openColHeaderMenu(c, anchor, x, y) {
-    if (editor.editing && editor.canPick()) return editor.focus();
-    if (!ensureReadyForAction() || !sel) return;
-    const view = viewOf(sel.tab);
-    const curSpan = axisSpan(view, sel);
-    if (curSpan?.axis !== "cols" || c < curSpan.first || c > curSpan.last) {
-      applySelection(selectColsAt(view, sel, c));
-    }
-    const span = axisSpan(viewOf(sel.tab), sel);
-    if (!span) return;
-    const count = span.last - span.first + 1;
-    const table = tabTable(workbook, sel.tab);
-    const frozen = frozenOf(table);
-    const letter = colName(c);
-    menu.open({
-      anchor: x === null ? anchor : null,
-      x: x ?? 0,
-      y: y ?? 0,
-      label: `Column ${letter} options`,
-      items: [
-        { id: "insert-left", label: `Insert ${count} left`, onSelect: () => insertColsAt(span.first, count, colName(span.first), true) },
-        { id: "insert-right", label: `Insert ${count} right`, onSelect: () => insertColsAt(span.last + 1, count, colName(span.last), true) },
-        { id: "delete-cols", label: "Delete columns", onSelect: () => deleteColsAt(span.first, span.last) },
-        { type: "separator" },
-        { id: "freeze-cols", label: `Freeze up to column ${letter}`, onSelect: () => runFormat((g) => g.freeze({ rows: frozen.rows, cols: c + 1 })) },
-        { id: "unfreeze-cols", label: "Unfreeze columns", disabled: frozen.cols === 0, onSelect: () => runFormat((g) => g.freeze({ rows: frozen.rows, cols: 0 })) },
-      ],
-    });
-  }
-
-  function openCellContextMenu(r, c, x, y) {
-    if (!sel) return;
-    menu.open({
-      x,
-      y,
-      label: "Cell options",
-      items: [
-        { id: "insert-row-above", label: "Insert row above", onSelect: () => insertRowsAt(r, 1, r + 1, false) },
-        { id: "insert-col-left", label: "Insert column left", onSelect: () => insertColsAt(c, 1, colName(c), false) },
-        { type: "separator" },
-        { id: "delete-row", label: "Delete row", onSelect: () => deleteRowsAt(r, r) },
-        { id: "delete-col", label: "Delete column", onSelect: () => deleteColsAt(c, c) },
-      ],
-    });
-  }
-
-  function handleAddTab() {
-    if (!ensureReadyForAction()) return;
-    const list = tabs.list();
-    const sapGrid = win.Sap?.grid;
-    const grid = gridOf(list[0]?.table);
-    if (!grid || typeof sapGrid?.createSheetWriter !== "function") return;
-    let maxPos = null;
-    for (const t of list) {
-      if (isKey(t.pos) && (maxPos === null || maxPos < t.pos)) maxPos = t.pos;
-    }
-    const pos = keyBetween(maxPos, null);
-    const newId = mintTabId(list, sapGrid.newId);
-    const name = nextSheetName(list);
-    const html = emptyTableHtml(newId, sapGrid);
-    if (!runTabStep(() => grid.apply({ v: 1, t: "insertSheet", sheet: { id: newId, name, pos, html } }))) return;
-    subscribeGrids();
-    const view = viewOf(newId);
-    tabs.show(newId);
-    applySelection(createSelection(view, newId), { announce: true, enteredTab: true });
-    editor.focus();
-  }
-
-  function handleDuplicateTab(tabId) {
-    if (!ensureReadyForAction()) return;
-    const list = tabs.list();
-    const idx = list.findIndex((t) => t.id === tabId);
-    if (idx === -1) return;
-    const srcTab = list[idx];
-    const sapGrid = win.Sap?.grid;
-    const grid = gridOf(srcTab.table);
-    if (!grid || typeof sapGrid?.createSheetWriter !== "function") return;
-    const low = isKey(srcTab.pos) ? srcTab.pos : null;
-    let end = idx + 1;
-    while (end < list.length && (!isKey(list[end].pos) || (low !== null && list[end].pos <= low))) end += 1;
-    const high = end < list.length && isKey(list[end].pos) ? list[end].pos : null;
-    const keys = keysBetween(low, high, 1 + (end - (idx + 1)));
-    const newId = mintTabId(list, sapGrid.newId);
-    const name = nextCopyName(srcTab.name, list);
-    const html = duplicateTableHtml(newId, srcTab.table, sapGrid);
-    const ok = runTabStep(() => {
-      for (let k = idx + 1; k < end; k++) {
-        grid.apply({ v: 1, t: "moveSheet", sheet: list[k].id, pos: keys[1 + (k - (idx + 1))] });
-      }
-      grid.apply({ v: 1, t: "insertSheet", sheet: { id: newId, name, pos: keys[0], html } });
-    });
-    if (!ok) return;
-    subscribeGrids();
-    const view = viewOf(newId);
-    tabs.show(newId);
-    applySelection(createSelection(view, newId), { announce: true, enteredTab: true });
-    editor.focus();
-  }
-
-  function handleMoveTab(tabId, delta) {
-    if (!ensureReadyForAction()) return;
-    const list = tabs.list();
-    const idx = list.findIndex((t) => t.id === tabId);
-    if (idx === -1) return;
-    const targetIdx = idx + delta;
-    if (targetIdx < 0 || targetIdx >= list.length) return;
-    const grid = gridOf(list[idx].table);
-    if (!grid) return;
-    const others = list.filter((_, i) => i !== idx);
-    const low = targetIdx > 0 && isKey(others[targetIdx - 1].pos) ? others[targetIdx - 1].pos : null;
-    let end = targetIdx;
-    while (end < others.length && (!isKey(others[end].pos) || (low !== null && others[end].pos <= low))) end += 1;
-    const high = end < others.length && isKey(others[end].pos) ? others[end].pos : null;
-    const keys = keysBetween(low, high, 1 + (end - targetIdx));
-    const ok = runTabStep(() => {
-      for (let k = targetIdx; k < end; k++) {
-        grid.apply({ v: 1, t: "moveSheet", sheet: others[k].id, pos: keys[1 + (k - targetIdx)] });
-      }
-      grid.apply({ v: 1, t: "moveSheet", sheet: tabId, pos: keys[0] });
-    });
-    if (!ok) return;
-    syncUI();
-    editor.focus();
-  }
-
-  function handleDeleteTab(tabId) {
-    if (!ensureReadyForAction()) return;
-    const list = tabs.list();
-    const tab = list.find((t) => t.id === tabId);
-    if (!tab) return;
-    activeDialog = showDialog(tabId, openDeleteTabDialog({
-      doc,
-      theme: chrome.theme,
+  function ensureCommands(b) {
+    liveMenu ??= b.createMenu({
       container: chrome.topRoot,
-      tabName: tab.name,
+      theme: chrome.theme,
       getReturnFocus: () => editor.textarea,
-      onConfirm: () => {
-        clearDialog();
-        const freshTab = tabs.list().find((t) => t.id === tabId);
-        const grid = gridOf(freshTab?.table ?? tabs.list()[0]?.table);
-        if (!grid) return;
-        if (!runTabStep(() => grid.apply({ v: 1, t: "deleteSheet", sheet: tabId }))) return;
-        restart();
-      },
-      onCancel: () => {
-        clearDialog();
-      },
-    }));
-  }
-
-  function handleRenameTab(tabId, nextName) {
-    if (nextName === null) {
-      chrome.hideNotice();
-      editor.focus();
-      return true;
-    }
-    const tab = tabs.list().find((t) => t.id === tabId);
-    if (!tab) return true;
-    if (nextName === tab.name) {
-      chrome.hideNotice();
-      editor.focus();
-      return true;
-    }
-    const grid = gridOf(tab.table);
-    if (!grid) return true;
-    const ok = runTabStep(() => grid.apply({ v: 1, t: "renameSheet", sheet: tabId, name: nextName }));
-    if (!ok) return false;
-    syncUI();
-    editor.focus();
-    return true;
-  }
-
-  function openTabContextMenu(tabId, btn, x, y) {
-    if (!ensureReadyForAction()) return;
-    const list = tabs.list();
-    const idx = list.findIndex((t) => t.id === tabId);
-    if (idx === -1) return;
-    const rect = btn?.getBoundingClientRect?.();
-    const menuX = x || rect?.left || 0;
-    const menuY = y || (rect ? rect.top - 4 : 0);
-    menu.open({
-      x: menuX,
-      y: menuY,
-      label: `Sheet ${list[idx].name} options`,
-      items: [
-        { id: "rename-tab", label: "Rename", onSelect: () => chrome.startRenameTab(tabId) },
-        { id: "duplicate-tab", label: "Duplicate", onSelect: () => handleDuplicateTab(tabId) },
-        { type: "separator" },
-        { id: "move-tab-left", label: "Move left", disabled: idx <= 0, onSelect: () => handleMoveTab(tabId, -1) },
-        { id: "move-tab-right", label: "Move right", disabled: idx >= list.length - 1, onSelect: () => handleMoveTab(tabId, 1) },
-        { type: "separator" },
-        { id: "delete-tab", label: "Delete", danger: true, onSelect: () => handleDeleteTab(tabId) },
-      ],
     });
+    cmdActions ??= b.createCommandActions({
+      ...sharedCtx(),
+      menu: liveMenu,
+      onFillShortcut: triggerFillShortcut,
+    });
+    return { menu: liveMenu, actions: cmdActions };
   }
+
+  const ensureFind = (f) => (findCtrl ??= f.createFindController(sharedCtx()));
 
   const overlays = createOverlays(workbook, {
-    measureText,
     onSelectCol(c, extend) {
       editor.settle();
       if (editor.editing && editor.canPick()) return editor.focus();
@@ -637,25 +570,52 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       applySelection(selectAll(viewOf(sel.tab), sel));
       editor.focus();
     },
-    onResizeCol: handleResizeCol,
-    onResizeRow: handleResizeRow,
-    onFitCol: handleFitCol,
-    onColMenu: openColHeaderMenu,
-    onRowMenu: openRowHeaderMenu,
+    onResizeCol: (c, px) => runLazy(cmdTool, (b) => ensureCommands(b).actions.handleResizeCol(c, px)),
+    onResizeRow: (r, px) => runLazy(cmdTool, (b) => ensureCommands(b).actions.handleResizeRow(r, px)),
+    onFitCol: (c) => runLazy(cmdTool, (b) => ensureCommands(b).actions.handleFitCol(c)),
+    onColMenu: (c, hdr, x, y) => runLazy(cmdTool, (b) => ensureCommands(b).actions.openColHeaderMenu(c, hdr, x, y)),
+    onRowMenu: (r, hdr, x, y) => runLazy(cmdTool, (b) => ensureCommands(b).actions.openRowHeaderMenu(r, hdr, x, y)),
+    onFillHandleDown(e) {
+      if (editor.editing || !sel || sel.whole) return;
+      const box = selectionBox(viewOf(sel.tab), sel);
+      if (!box) return;
+      fillDrag = {
+        tab: sel.tab,
+        sourceBox: { top: box.top, left: box.left, bottom: box.bottom, right: box.right },
+        startX: e.clientX ?? 0,
+        startY: e.clientY ?? 0,
+        hasCoords: (e.clientX ?? 0) !== 0 || (e.clientY ?? 0) !== 0,
+        lastHit: null,
+        lastDx: 0,
+        lastDy: 0,
+        targetBox: null,
+      };
+      fillTool.load();
+    },
+    onFillHandleDblClick: () => runLazy(fillTool, (f) => f.runAutoFillDown(sharedCtx()), { guardSel: true }),
   });
 
   const chrome = createChrome({
     scrollBox,
     commands: externalCommands,
-    onSelectTab(tabId) {
-      handleTabClick(tabId);
+    onSelectTab: handleTabClick,
+    onTabMenu: (tabId, btn, x, y) => runLazy(cmdTool, (b) => ensureCommands(b).actions.openTabContextMenu(tabId, btn, x, y)),
+    onRenameTab(tabId, nextName) {
+      const ready = cmdTool.peek();
+      if (ready) return ensureCommands(ready).actions.handleRenameTab(tabId, nextName);
+      runLazy(cmdTool, (b) => ensureCommands(b).actions.handleRenameTab(tabId, nextName));
+      return true;
     },
-    onTabMenu: openTabContextMenu,
-    onRenameTab: handleRenameTab,
     onRenameTabStart(tabId) {
       if (!ensureReadyForAction()) return;
-      chrome.startRenameTab(tabId);
+      runLazy(cmdTool, (b) => ensureCommands(b).actions.startTabRename(tabId));
     },
+    onGoTo(raw) {
+      if (!ensureReadyForAction()) return false;
+      runLazy(findTool, (f) => ensureFind(f).goTo(raw));
+      return true;
+    },
+    onCancelGoTo: () => editor.focus(),
     onCommit() {
       if (!editor.editing) return;
       const res = commitEdit();
@@ -665,15 +625,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
         editor.focus();
       }
     },
-    onCancel() {
-      editor.cancel();
-    },
-  });
-
-  const menu = createMenu({
-    container: chrome.topRoot,
-    theme: chrome.theme,
-    getReturnFocus: () => editor.textarea,
+    onCancel: () => editor.cancel(),
   });
 
   const editor = createEditor({
@@ -690,108 +642,20 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     onClearNotice: () => chrome.hideNotice(),
   });
 
-  function openNumberFormatMenu() {
-    const info = activeCellInfo();
-    menu.open({
-      anchor: chrome.getButton("number-format"),
-      label: "Number format",
-      items: numberFormatMenuItems({
-        activeValue: info?.cell?.value ?? null,
-        activeFmt: info?.effectiveFmt ?? null,
-        formatValue: win.Sap?.grid?.formatValue,
-        onPick: (fmt) => runFormat((g, v) => applyNumberFormat(g, v, sel, fmt)),
-      }),
-    });
-  }
-
-  function openColorMenu(kind) {
-    const info = activeCellInfo();
-    const st = cellStyleState(info?.cell);
-    const isText = kind === "text";
-    menu.open({
-      anchor: chrome.getButton(isText ? "text-color" : "fill-color"),
-      label: isText ? "Text color" : "Fill color",
-      items: colorMenuItems({
-        current: isText ? st.color : st.fillColor,
-        onPick: (hex) => runFormat((g, v) => (isText ? applyTextColor(g, v, sel, hex) : applyFillColor(g, v, sel, hex))),
-      }),
-    });
-  }
-
-  function openBordersMenu() {
-    menu.open({
-      anchor: chrome.getButton("borders"),
-      label: "Borders",
-      items: borderMenuItems({
-        onPick: (preset) => runFormat((g, v) => applyBorder(g, v, sel, preset)),
-      }),
-    });
-  }
-
-  function openAlignMenu() {
-    const info = activeCellInfo();
-    const st = cellStyleState(info?.cell);
-    menu.open({
-      anchor: chrome.getButton("align"),
-      label: "Horizontal align",
-      items: alignMenuItems({
-        current: st.align,
-        onPick: (align) => runFormat((g, v) => applyAlign(g, v, sel, align)),
-      }),
-    });
-  }
-
-  function triggerMerge() {
-    if (editor.editing || !sel) return;
-    const table = tabTable(workbook, sel.tab);
-    const grid = gridOf(table);
-    if (!grid) return;
-    const view = viewOf(sel.tab);
-    runMergeCommand({
-      grid,
-      view,
-      sel,
-      history,
-      runWrite: (fn) => {
-        const ok = writeGrid(fn);
-        if (ok) syncUI({ announce: true });
-        return ok;
-      },
-      promptKeep: (filled, onChoose) => {
-        activeDialog = showDialog(sel.tab, openMergeKeepDialog({
-          doc,
-          theme: chrome.theme,
-          container: chrome.topRoot,
-          items: filled,
-          totalCount: filled.length,
-          getReturnFocus: () => editor.textarea,
-          onConfirm: (chosen) => {
-            clearDialog();
-            onChoose(chosen);
-          },
-          onCancel: () => {
-            clearDialog();
-          },
-        }));
-      },
-    });
-  }
-
   function syncToolbar(selView) {
-    const selTable = tabTable(workbook, sel.tab);
-    const selGrid = gridOf(selTable);
+    const selGrid = gridOf(tabTable(workbook, sel.tab));
     const canEdit = !editor.editing && Boolean(selGrid);
-    if (editor.editing && menu.isOpen) menu.close({ restoreFocus: false });
+    if (editor.editing && liveMenu?.isOpen) liveMenu.close({ restoreFocus: false });
 
     const info = activeCellInfo();
-    const st = cellStyleState(info?.cell);
+    const st = quickToolbarStyle(info?.cell);
     chrome.setButtonPressed("bold", st.bold);
     chrome.setButtonPressed("italic", st.italic);
     chrome.setButtonPressed("strikethrough", st.strikethrough);
     chrome.setButtonPressed("wrap", st.wrap);
     chrome.setButtonText("number-format", st.formatLabel);
 
-    const mState = canEdit ? inspectMerge(selGrid, selView, sel, { scan: false }) : { canAct: false, isSingleMerge: false };
+    const mState = canEdit ? quickMergeState(selGrid, selView, sel) : { canAct: false, isSingleMerge: false };
     chrome.setButtonText(
       "merge",
       mState.isSingleMerge ? "Unmerge" : "Merge",
@@ -800,23 +664,29 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
     chrome.registerCommand("undo", canEdit && history.canUndo(sel.tab) ? () => replayStep("undo") : null);
     chrome.registerCommand("redo", canEdit && history.canRedo(sel.tab) ? () => replayStep("redo") : null);
-    chrome.registerCommand("number-format", canEdit ? openNumberFormatMenu : null);
-    chrome.registerCommand("currency", canEdit ? () => runFormat((g, v) => applyNumberFormat(g, v, sel, "$#,##0.00")) : null);
-    chrome.registerCommand("percent", canEdit ? () => runFormat((g, v) => applyNumberFormat(g, v, sel, "0.00%")) : null);
-    chrome.registerCommand("decimals-less", canEdit ? () => runFormat((g, v) => applyDecimals(g, v, sel, history, -1, win.Sap?.grid?.adjustDecimals)) : null);
-    chrome.registerCommand("decimals-more", canEdit ? () => runFormat((g, v) => applyDecimals(g, v, sel, history, 1, win.Sap?.grid?.adjustDecimals)) : null);
-    chrome.registerCommand("bold", canEdit ? () => runFormat((g, v) => applyStyleToggle(g, v, sel, history, "bold")) : null);
-    chrome.registerCommand("italic", canEdit ? () => runFormat((g, v) => applyStyleToggle(g, v, sel, history, "italic")) : null);
-    chrome.registerCommand("strikethrough", canEdit ? () => runFormat((g, v) => applyStyleToggle(g, v, sel, history, "strikethrough")) : null);
-    chrome.registerCommand("text-color", canEdit ? () => openColorMenu("text") : null);
-    chrome.registerCommand("fill-color", canEdit ? () => openColorMenu("fill") : null);
-    chrome.registerCommand("borders", canEdit ? openBordersMenu : null);
-    chrome.registerCommand("merge", canEdit && mState.canAct ? triggerMerge : null);
-    chrome.registerCommand("align", canEdit ? openAlignMenu : null);
-    chrome.registerCommand("wrap", canEdit ? () => runFormat((g, v) => applyStyleToggle(g, v, sel, history, "wrap")) : null);
-    chrome.registerCommand("add-tab", canEdit ? handleAddTab : null);
+    for (const id of LAZY_TOOLBAR_IDS) {
+      const ok = canEdit && (id !== "merge" || mState.canAct);
+      chrome.registerCommand(id, ok ? () => runLazy(cmdTool, (b) => ensureCommands(b).actions.runToolbarCommand(id)) : null);
+    }
 
-    for (const extraId of ["filter", "sort", "checkbox", "chart", "find", "import"]) {
+    const extFind = externalCommands.find;
+    chrome.registerCommand(
+      "find",
+      !editor.editing ? (typeof extFind === "function" ? extFind : (canEdit ? () => ensureReadyForAction() && runLazy(findTool, (f) => ensureFind(f).open()) : null)) : null,
+    );
+    const extImport = externalCommands.import;
+    chrome.registerCommand(
+      "import",
+      !editor.editing
+        ? typeof extImport === "function"
+          ? extImport
+          : canEdit
+            ? () => ensureReadyForAction() && sel && runLazy(csvTool, (c) => c.openCsvMenu(sharedCtx(), ensureCommands(cmdTool.peek()).menu))
+            : null
+        : null,
+    );
+
+    for (const extraId of ["filter", "sort", "checkbox", "chart"]) {
       const ext = externalCommands[extraId];
       chrome.registerCommand(extraId, !editor.editing && typeof ext === "function" ? ext : null);
     }
@@ -833,6 +703,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     chrome.setEditing(editor.editing);
     syncToolbar(selView);
     chrome.setCoord(selectionArea(selView, sel));
+    chrome.setStatus(statusCache);
     chrome.renderTabs(tabs.list(), shownId);
     if (!editor.editing) editor.refreshReady();
 
@@ -840,14 +711,20 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     editor.setAriaLabel(speech);
     if (announce) overlays.announce(speech);
 
+    const activeInfo = shownId === sel.tab && !editor.editing ? activeCellInfo() : null;
+    const linkUrl = activeInfo ? extractCellLink(activeInfo.cell, win.Sap?.grid?.tokenize) : null;
+
     overlays.render({
       table,
       win: windowOf(table),
       view,
       box,
+      whole: shownId === sel.tab ? (sel.whole ?? null) : null,
       editing: editor.editing && shownId === sel.tab,
       refs: editor.refs(),
       shownTab: shownId,
+      fillPreviewBox: fillDrag?.tab === shownId ? fillDrag.targetBox : null,
+      linkUrl,
     });
   }
 
@@ -892,6 +769,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (!editor.editing && tabs.activeId !== sel.tab) tabs.show(sel.tab);
     writeSelection(storage, path, sel);
     snapshotViews();
+    refreshStatus();
     syncUI({ announce, enteredTab });
   }
 
@@ -907,34 +785,31 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     tabs.show(sel.tab);
     writeSelection(storage, path, sel);
     snapshotViews();
+    refreshStatus();
     syncUI({ announce: true, enteredTab: true });
   }
 
   function handleTabClick(tabId) {
     editor.settle();
-    const list = tabs.list();
-    const targetTab = list.find((t) => t.id === tabId);
+    const targetTab = tabs.list().find((t) => t.id === tabId);
     if (!targetTab) return;
 
     if (editor.editing && editor.canPick()) {
       if (tabId === tabs.activeId) return editor.focus();
       tabs.show(tabId);
       editor.pickCell({ tab: tabId, tabName: targetTab.name, r: 0, c: 0, extend: false });
+      refreshStatus();
       syncUI({ announce: false });
       return;
     }
 
     if (editor.editing && !commitEdit().ok) return;
-    if (tabId === sel.tab && tabs.activeId === tabId) {
-      editor.focus();
-      return;
-    }
+    if (tabId === sel.tab && tabs.activeId === tabId) return editor.focus();
 
     closeTransient();
     const view = viewOf(tabId);
-    const nextSel = createSelection(view, tabId);
     tabs.show(tabId);
-    applySelection(nextSel, { announce: true, enteredTab: true });
+    applySelection(createSelection(view, tabId), { announce: true, enteredTab: true });
     editor.focus();
   }
 
@@ -945,12 +820,12 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   function clearSelectedCells() {
-    const table = tabTable(workbook, sel.tab);
-    const grid = gridOf(table);
+    const grid = gridOf(tabTable(workbook, sel.tab));
     if (!grid) return;
     const view = viewOf(sel.tab);
     if (view.rows.length === 0 || view.cols.length === 0) return;
     if (!writeGrid(() => grid.clear(commandArea(view, sel)))) return;
+    refreshStatus();
     syncUI({ announce: true });
   }
 
@@ -996,12 +871,14 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       if (r >= 0 && c >= 0) coords.push({ r, c });
     }
     if (coords.length > 0) applyMove(boxSelection(viewOf(sel.tab), sel, coords));
-    else syncUI({ announce: true });
+    else {
+      refreshStatus();
+      syncUI({ announce: true });
+    }
   }
 
   function copySelection(cut = false) {
-    const table = tabTable(workbook, sel.tab);
-    const grid = gridOf(table);
+    const grid = gridOf(tabTable(workbook, sel.tab));
     if (!grid) return null;
     const view = viewOf(sel.tab);
     if (view.rows.length === 0 || view.cols.length === 0) return null;
@@ -1036,8 +913,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (disposed || editor.editing || !sel) return;
     event.preventDefault();
     try {
-      const table = tabTable(workbook, sel.tab);
-      const grid = gridOf(table);
+      const grid = gridOf(tabTable(workbook, sel.tab));
       if (!grid) return;
       const view = viewOf(sel.tab);
       if (view.rows.length === 0 || view.cols.length === 0) return;
@@ -1117,54 +993,12 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     }
   }
 
-  function handleInsertAxisShortcut() {
-    const view = viewOf(sel.tab);
-    const span = axisSpan(view, sel);
-    if (span?.axis === "cols") {
-      insertColsAt(span.first, span.last - span.first + 1, colName(span.first), true);
-      return;
-    }
-    if (span?.axis === "rows") {
-      insertRowsAt(span.first, span.last - span.first + 1, span.first + 1, true);
-      return;
-    }
-    const box = selectionBox(view, sel);
-    if (box) insertRowsAt(box.top, 1, box.top + 1, false);
-  }
-
-  function handleDeleteAxisShortcut() {
-    const span = axisSpan(viewOf(sel.tab), sel);
-    if (span?.axis === "rows") deleteRowsAt(span.first, span.last);
-    else if (span?.axis === "cols") deleteColsAt(span.first, span.last);
-  }
-
-  function handleContextMenuShortcut() {
-    const view = viewOf(sel.tab);
-    const span = axisSpan(view, sel);
-    if (span?.axis === "rows") {
-      const hdr = overlays.shadow.querySelector(`[data-row="${span.first}"]`);
-      openRowHeaderMenu(span.first, hdr, null, null);
-      return;
-    }
-    if (span?.axis === "cols") {
-      const hdr = overlays.shadow.querySelector(`[data-col="${span.first}"]`);
-      openColHeaderMenu(span.first, hdr, null, null);
-      return;
-    }
-    const box = selectionBox(view, sel);
-    if (!box) return;
-    const table = tabTable(workbook, sel.tab);
-    const cb = overlays.cellBox(table, windowOf(table), box.active.r, box.active.c);
-    openCellContextMenu(box.active.r, box.active.c, cb?.left ?? 0, (cb?.top ?? 0) + (cb?.height ?? 0));
-  }
-
   function runKey(event) {
     if (disposed || seenKeys.has(event)) return;
     seenKeys.add(event);
 
-    const effectivePlatform = platform ?? win.navigator?.platform ?? "";
     const intent = keyIntent(event, {
-      platform: effectivePlatform,
+      platform: platform ?? win.navigator?.platform ?? "",
       editing: editor.editing,
       picking: editor.canPick({ keyboard: true }),
       composing: editor.composing,
@@ -1208,8 +1042,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
         const list = tabs.list();
         if (list.length < 2) break;
         const idx = list.findIndex((t) => t.id === sel.tab);
-        const nextIdx = (idx + intent.delta + list.length) % list.length;
-        handleTabClick(list[nextIdx].id);
+        handleTabClick(list[(idx + intent.delta + list.length) % list.length].id);
         break;
       }
       case "clear":
@@ -1221,29 +1054,41 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       case "redo":
         replayStep("redo");
         break;
+      case "fillDown":
+        triggerFillShortcut("down");
+        break;
+      case "fillRight":
+        triggerFillShortcut("right");
+        break;
+      case "find":
+        if (ensureReadyForAction()) runLazy(findTool, (f) => ensureFind(f).open());
+        break;
+      case "goto":
+        chrome.focusNameBox();
+        break;
       case "bold":
       case "italic":
       case "underline":
       case "strikethrough":
-        runFormat((g, v) => applyStyleToggle(g, v, sel, history, intent.type));
+        runLazy(cmdTool, (b) => runFormat((g, v) => b.applyStyleToggle(g, v, sel, history, intent.type)), { guardSel: true });
         break;
       case "align":
-        runFormat((g, v) => applyAlign(g, v, sel, intent.align));
+        runLazy(cmdTool, (b) => runFormat((g, v) => b.applyAlign(g, v, sel, intent.align)), { guardSel: true });
         break;
       case "numberFormat":
-        runFormat((g, v) => applyNumberFormat(g, v, sel, intent.fmt));
+        runLazy(cmdTool, (b) => runFormat((g, v) => b.applyNumberFormat(g, v, sel, intent.fmt)), { guardSel: true });
         break;
       case "clearFormat":
-        runFormat((g, v) => applyClearFormatting(g, v, sel, history));
+        runLazy(cmdTool, (b) => runFormat((g, v) => b.applyClearFormatting(g, v, sel, history)), { guardSel: true });
         break;
       case "insertAxis":
-        handleInsertAxisShortcut();
+        runLazy(cmdTool, (b) => ensureCommands(b).actions.handleInsertAxisShortcut());
         break;
       case "deleteAxis":
-        handleDeleteAxisShortcut();
+        runLazy(cmdTool, (b) => ensureCommands(b).actions.handleDeleteAxisShortcut());
         break;
       case "contextMenu":
-        handleContextMenuShortcut();
+        runLazy(cmdTool, (b) => ensureCommands(b).actions.handleContextMenuShortcut());
         break;
       case "edit":
         editor.openWithInput(editor.textarea);
@@ -1259,6 +1104,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
         break;
       case "pick":
         editor.pickMove(intent);
+        break;
+      case "commitAll":
+        runLazy(fillTool, (f) => f.runCommitAll(sharedCtx()), { guardSel: true });
         break;
       case "commit": {
         const res = commitEdit();
@@ -1279,17 +1127,17 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   function locateCellEvent(event) {
     const el = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
-    if (!el) return null;
-    const cellEl = el.closest?.("td, th");
-    if (cellEl && workbook.contains(cellEl)) {
-      const table = cellEl.closest("table[grid]");
-      const section = table?.parentElement;
-      const tr = cellEl.parentElement;
-      if (table && section?.matches("section[item]") && tr?.localName === "tr") {
-        const tab = section.getAttribute("data-id") ?? "";
-        const r = tableRows(table).indexOf(tr);
-        const c = columnOfCell(cellEl);
-        if (r !== -1) return { tab, r, c };
+    if (el) {
+      const cellEl = el.closest?.("td, th");
+      if (cellEl && workbook.contains(cellEl)) {
+        const table = cellEl.closest("table[grid]");
+        const section = table?.parentElement;
+        const tr = cellEl.parentElement;
+        if (table && section?.matches("section[item]") && tr?.localName === "tr") {
+          const tab = section.getAttribute("data-id") ?? "";
+          const r = tableRows(table).indexOf(tr);
+          if (r !== -1) return { tab, r, c: columnOfCell(cellEl) };
+        }
       }
     }
     const shownId = tabs.activeId;
@@ -1307,16 +1155,29 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
         editor.pickCell({ tab: hit.tab, tabName: tabInfo?.name ?? "", r: hit.r, c: hit.c, extend });
         return;
       }
-      const res = commitEdit();
-      if (!res.ok) return;
+      if (!commitEdit().ok) return;
     }
     const view = viewOf(hit.tab);
     const entered = hit.tab !== sel.tab;
     if (entered) tabs.show(hit.tab);
     const baseSel = entered ? createSelection(view, hit.tab) : sel;
-    const nextSel = selectCell(view, baseSel, hit.r, hit.c, { extend: !entered && extend });
-    applySelection(nextSel, { announce: true, enteredTab: entered });
+    applySelection(selectCell(view, baseSel, hit.r, hit.c, { extend: !entered && extend }), {
+      announce: true,
+      enteredTab: entered,
+    });
     editor.focus();
+  }
+
+  function openCellLinkIfMod(event, hit) {
+    if (editor.editing || event.shiftKey || event.altKey) return false;
+    const modClick = isMac() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+    if (!modClick) return false;
+    const view = viewOf(hit.tab);
+    const own = ownerOf(view, hit.r, hit.c);
+    const link = extractCellLink(view.cell(own.r, own.c), win.Sap?.grid?.tokenize);
+    if (!link) return false;
+    win.open?.(link, "_blank", "noopener,noreferrer");
+    return true;
   }
 
   let handledPointerDown = false;
@@ -1329,11 +1190,33 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     chrome.commitRename();
     event.preventDefault();
     handledPointerDown = true;
-    dragging = true;
+    const wasPicking = editor.editing && editor.canPick();
     actOnCellPointer(hit, { extend: event.shiftKey });
+    if (!wasPicking && openCellLinkIfMod(event, hit)) {
+      dragging = false;
+      return;
+    }
+    dragging = true;
   }
 
   function onMouseMove(event) {
+    if (fillDrag) {
+      const hit = locateCellEvent(event);
+      if (!hit || hit.tab !== fillDrag.tab) return;
+      fillDrag.lastHit = hit;
+      fillDrag.lastDx = fillDrag.hasCoords ? (event.clientX ?? 0) - fillDrag.startX : 0;
+      fillDrag.lastDy = fillDrag.hasCoords ? (event.clientY ?? 0) - fillDrag.startY : 0;
+      const fillMod = fillTool.peek();
+      if (fillMod) {
+        fillDrag.targetBox = fillMod.dragFillTarget(fillDrag.sourceBox, hit, {
+          dx: fillDrag.lastDx,
+          dy: fillDrag.lastDy,
+          view: viewOf(hit.tab),
+        });
+        syncUI({ announce: false });
+      }
+      return;
+    }
     if (!dragging) return;
     const hit = locateCellEvent(event);
     if (!hit) return;
@@ -1343,11 +1226,34 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       return;
     }
     if (!editor.editing && hit.tab === sel.tab) {
-      applySelection(selectCell(viewOf(sel.tab), sel, hit.r, hit.c, { extend: true }), { announce: false });
+      const nextSel = selectCell(viewOf(sel.tab), sel, hit.r, hit.c, { extend: true });
+      if (nextSel.focus.row !== sel.focus.row || nextSel.focus.col !== sel.focus.col || nextSel.whole !== sel.whole) {
+        applySelection(nextSel, { announce: false });
+      }
     }
   }
 
   function onMouseUp() {
+    if (fillDrag) {
+      const done = fillDrag;
+      fillDrag = null;
+      if (done.lastHit) {
+        runLazy(fillTool, (f) => {
+          const target =
+            done.targetBox ??
+            f.dragFillTarget(done.sourceBox, done.lastHit, {
+              dx: done.lastDx,
+              dy: done.lastDy,
+              view: viewOf(done.tab),
+            });
+          if (target) f.applyFillAction(sharedCtx(), done.sourceBox, target);
+          else syncUI({ announce: false });
+          editor.focus();
+        }, { guardSel: true });
+      } else {
+        syncUI({ announce: false });
+      }
+    }
     dragging = false;
   }
 
@@ -1358,7 +1264,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     }
     const hit = locateCellEvent(event);
     if (!hit) return;
+    const wasPicking = editor.editing && editor.canPick();
     actOnCellPointer(hit, { extend: event.shiftKey });
+    if (!wasPicking) openCellLinkIfMod(event, hit);
   }
 
   function onDblClick(event) {
@@ -1366,8 +1274,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     const hit = locateCellEvent(event);
     if (hit) {
       if (editor.editing && !commitEdit().ok) return;
-      const view = viewOf(hit.tab);
-      applySelection(selectCell(view, { ...sel, tab: hit.tab }, hit.r, hit.c, { extend: false }));
+      applySelection(selectCell(viewOf(hit.tab), { ...sel, tab: hit.tab }, hit.r, hit.c, { extend: false }));
     }
     if (!editor.editing) editor.openWithInput(editor.textarea);
   }
@@ -1383,9 +1290,14 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       actOnCellPointer(hit, { extend: false });
     }
     const span = hit.tab === sel.tab ? axisSpan(viewOf(sel.tab), sel) : null;
-    if (span?.axis === "rows") return openRowHeaderMenu(hit.r, null, event.clientX ?? 0, event.clientY ?? 0);
-    if (span?.axis === "cols") return openColHeaderMenu(hit.c, null, event.clientX ?? 0, event.clientY ?? 0);
-    openCellContextMenu(hit.r, hit.c, event.clientX ?? 0, event.clientY ?? 0);
+    const cx = event.clientX ?? 0;
+    const cy = event.clientY ?? 0;
+    runLazy(cmdTool, (b) => {
+      const { actions } = ensureCommands(b);
+      if (span?.axis === "rows") actions.openRowHeaderMenu(hit.r, null, cx, cy);
+      else if (span?.axis === "cols") actions.openColHeaderMenu(hit.c, null, cx, cy);
+      else actions.openCellContextMenu(hit.r, hit.c, cx, cy);
+    });
   }
 
   function subscribeGrids() {
@@ -1414,10 +1326,11 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
             }
           }
           if (tab.id === sel?.tab) {
-            const view = viewOf(sel.tab);
-            sel = clipSelection(view, sel, lastViews.get(sel.tab) ?? null);
+            sel = clipSelection(viewOf(sel.tab), sel, lastViews.get(sel.tab) ?? null);
             writeSelection(storage, path, sel);
           }
+          if (tab.id === tabs.activeId) refreshStatus();
+          findCtrl?.refresh();
           snapshotViews();
           redraw();
         }),
@@ -1441,19 +1354,17 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     writeSelection(storage, path, sel);
     snapshotViews();
     subscribeGrids();
+    refreshStatus();
+    findCtrl?.refresh();
     syncUI({ announce: entered, enteredTab: entered });
   }
 
   const raf = typeof win.requestAnimationFrame === "function" ? win.requestAnimationFrame.bind(win) : null;
   let framePending = false;
 
-  // One redraw per frame: rows the window measured, a scroll and a grid change all repaint.
   function redraw() {
     if (disposed || framePending) return;
-    if (!raf) {
-      syncUI({ announce: false });
-      return;
-    }
+    if (!raf) return syncUI({ announce: false });
     framePending = true;
     raf(() => {
       framePending = false;
@@ -1463,49 +1374,53 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   const resizeObserver = typeof win.ResizeObserver === "function" ? new win.ResizeObserver(() => redraw()) : null;
   const onViewportMove = () => redraw();
+  const cleanups = [];
+  const listen = (el, evt, fn, opts) => {
+    el.addEventListener(evt, fn, opts);
+    cleanups.push(() => el.removeEventListener(evt, fn, opts));
+  };
 
-  win.addEventListener("keydown", onWindowKeyDown, true);
-  editor.textarea.addEventListener("keydown", runKey);
-  editor.textarea.addEventListener("beforecopy", onBeforeClipboard);
-  editor.textarea.addEventListener("beforecut", onBeforeClipboard);
-  editor.textarea.addEventListener("copy", onCopy);
-  editor.textarea.addEventListener("cut", onCut);
-  editor.textarea.addEventListener("paste", onPaste);
-  chrome.formulaInput.addEventListener("keydown", runKey);
-  workbook.addEventListener("mousedown", onMouseDown);
-  win.addEventListener("mousemove", onMouseMove);
-  win.addEventListener("mouseup", onMouseUp);
-  workbook.addEventListener("click", onClick);
-  workbook.addEventListener("dblclick", onDblClick);
-  workbook.addEventListener("contextmenu", onContextMenu);
-  scrollTarget.addEventListener("scroll", onViewportMove, { passive: true });
-  win.addEventListener("resize", onViewportMove);
+  listen(win, "keydown", onWindowKeyDown, true);
+  listen(editor.textarea, "keydown", runKey);
+  listen(editor.textarea, "beforecopy", onBeforeClipboard);
+  listen(editor.textarea, "beforecut", onBeforeClipboard);
+  listen(editor.textarea, "copy", onCopy);
+  listen(editor.textarea, "cut", onCut);
+  listen(editor.textarea, "paste", onPaste);
+  listen(chrome.formulaInput, "keydown", runKey);
+  listen(workbook, "mousedown", onMouseDown);
+  listen(win, "mousemove", onMouseMove);
+  listen(win, "mouseup", onMouseUp);
+  listen(workbook, "click", onClick);
+  listen(workbook, "dblclick", onDblClick);
+  listen(workbook, "contextmenu", onContextMenu);
+  listen(scrollTarget, "scroll", onViewportMove, { passive: true });
+  listen(win, "resize", onViewportMove);
 
   initSelection();
   subscribeGrids();
 
+  const menuProxy = {
+    open: (opts) => runLazy(cmdTool, (b) => ensureCommands(b).menu.open(opts)),
+    close: (opts) => liveMenu?.close(opts),
+    get isOpen() {
+      return Boolean(liveMenu?.isOpen);
+    },
+    get surface() {
+      return liveMenu?.surface ?? null;
+    },
+    dispose: () => liveMenu?.dispose(),
+  };
+
   function dispose() {
     if (disposed) return;
     disposed = true;
+    fillDrag = null;
     closeDialog();
-    menu.dispose();
+    liveMenu?.dispose();
+    findCtrl?.dispose();
     for (const off of unsubGrids.splice(0)) off();
-    win.removeEventListener("keydown", onWindowKeyDown, true);
-    editor.textarea.removeEventListener("keydown", runKey);
-    editor.textarea.removeEventListener("beforecopy", onBeforeClipboard);
-    editor.textarea.removeEventListener("beforecut", onBeforeClipboard);
-    editor.textarea.removeEventListener("copy", onCopy);
-    editor.textarea.removeEventListener("cut", onCut);
-    editor.textarea.removeEventListener("paste", onPaste);
-    chrome.formulaInput.removeEventListener("keydown", runKey);
-    workbook.removeEventListener("mousedown", onMouseDown);
-    win.removeEventListener("mousemove", onMouseMove);
-    win.removeEventListener("mouseup", onMouseUp);
-    workbook.removeEventListener("click", onClick);
-    workbook.removeEventListener("dblclick", onDblClick);
-    workbook.removeEventListener("contextmenu", onContextMenu);
-    scrollTarget.removeEventListener("scroll", onViewportMove);
-    win.removeEventListener("resize", onViewportMove);
+    for (const off of cleanups.splice(0)) off();
     resizeObserver?.disconnect();
     tabs.dispose();
     overlays.dispose();
@@ -1518,7 +1433,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     overlays,
     editor,
     tabs,
-    menu,
+    menu: menuProxy,
     get selection() {
       return sel ? { tab: sel.tab, anchor: { ...sel.anchor }, focus: { ...sel.focus } } : null;
     },

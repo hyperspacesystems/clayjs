@@ -347,7 +347,7 @@ export function createMenu({ container, theme = resolveTheme(), getReturnFocus =
   };
 }
 
-function mountSheetDialog(doc, shell, { title, confirmLabel, confirmVariant = "primary", onConfirm, onCancel, getReturnFocus, container = null }) {
+export function mountSheetDialog(doc, shell, { title, confirmLabel, confirmVariant = "primary", onConfirm, onCancel, getReturnFocus, container = null }) {
   shell.root.setAttribute("sap-ignore", "");
   shell.heading.textContent = title;
   shell.panel.setAttribute("aria-label", title);
@@ -362,7 +362,7 @@ function mountSheetDialog(doc, shell, { title, confirmLabel, confirmVariant = "p
   let pressedBackdrop = false;
 
   const focusables = () =>
-    [...shell.panel.querySelectorAll('input:not([disabled]), button:not([disabled])')].filter(
+    [...shell.panel.querySelectorAll('input:not([disabled]), select:not([disabled]), button:not([disabled])')].filter(
       (el) => !el.hidden && el.getAttribute("aria-disabled") !== "true",
     );
 

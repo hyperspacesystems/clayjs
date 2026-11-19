@@ -300,6 +300,21 @@ export function createEditor({
     return result;
   }
 
+  function commitWith(runner) {
+    if (!editing || !target) return { ok: true, changed: false };
+    const result = runner({ target, text: buffer, isText: isTextCell() });
+    if (!result.ok) {
+      if (result.why === "gone") onNotice?.(GONE_MESSAGE);
+      else onNotice?.(result.error?.message || "That value could not be saved in this cell.");
+      activeField.focus();
+      return result;
+    }
+    finishEdit();
+    refreshReady();
+    onStateChange?.();
+    return result;
+  }
+
   function cancel() {
     if (!editing) return;
     finishEdit();
@@ -382,6 +397,7 @@ export function createEditor({
     insertNewline,
     cycleRef,
     commit,
+    commitWith,
     cancel,
     refreshReady,
     setAriaLabel(label) {
