@@ -113,6 +113,28 @@ describe("the row window", () => {
     expect(sheet.writes).toBe(writes);
     expect(dropped).toEqual([sheet]);
   });
+
+  test("cellBox and cellAt place cells from the geometry and the hidden margin above, never from DOM row layout", () => {
+    let n = 0;
+    const bodies = Array.from({ length: 4 }, () => {
+      let rows = "";
+      for (let i = 0; i < 50; i++, n++) rows += `<tr data-id="r${n}"><td>${n}</td></tr>`;
+      return `<tbody>${rows}</tbody>`;
+    }).join("");
+    document.body.innerHTML = `<main sap plugins="grid"><div items="sheets" sheet-workbook><section item data-id="s1" data-pos="V"><h2 bind="name">Budget</h2><table grid><colgroup><col><col><col></colgroup>${bodies}</table></section></div></main>`;
+    const table = document.querySelector("table");
+    table.getBoundingClientRect = () => ({ top: -1400, left: 10 });
+    const sheet = fakeSheet();
+    const win = createRowWindow(table, { sheet, adopt: () => {}, drop: () => {}, schedule: sync, overscan: 0 });
+    expect(win.shown.before).toBe(1300);
+
+    table.getBoundingClientRect = () => ({ top: 100, left: 10 });
+    const box = win.cellBox(60, 2);
+    expect(box).toEqual({ left: 10 + 200, top: 100 - 1300 + 60 * 26, width: 100, height: 26 });
+    expect(win.cellAt(box.left + box.width / 2, box.top + box.height / 2)).toEqual({ r: 60, c: 2 });
+    expect(win.cellAt(box.left - 250, box.top + 10)).toBeNull();
+    win.dispose();
+  });
 });
 
 // A jsdom stand-in for a browser's layout, the way the coherence check's runs stub it: the

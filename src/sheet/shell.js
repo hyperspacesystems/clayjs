@@ -57,7 +57,7 @@ export function startShell({ root = document, windowOptions = {} } = {}) {
     if (typeof window.Sap?.grid === "function") subscribe(window.Sap.grid);
   }
 
-  return { windows, followed, restart };
+  return { windows, windowOf: (table) => windows.get(table) ?? null, followed, restart };
 }
 
 function dropEarly() {

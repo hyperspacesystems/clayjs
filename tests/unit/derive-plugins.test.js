@@ -265,6 +265,10 @@ test("a page that asks for the grid gets it from this release before the mount",
   await derive.ready;
 
   expect(typeof window.Sap.grid).toBe("function");
+  expect(typeof window.Sap.grid.tokenize).toBe("function");
+  expect(window.Sap.grid.tokenize("=SUM(A1:B2)")).toContainEqual(
+    expect.objectContaining({ type: "cell", col: "A", row: 1, start: 5, end: 7 }),
+  );
   window.Sap.mount();
   expect(document.querySelectorAll("[sap-error]")).toHaveLength(0);
 });

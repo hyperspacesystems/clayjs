@@ -213,6 +213,21 @@ export function createRowWindow(table, {
     get shown() {
       return current;
     },
+    // Where cell (r, c) is on screen, in client coordinates, from the geometry: the rows the
+    // window hides have no layout, so a box is never measured from the DOM. The table's top is
+    // moved down by the margin the rule gives it, which stands for the hidden rows above.
+    cellBox(r, c) {
+      const box = table.getBoundingClientRect();
+      const top = box.top - appliedBefore + (table.tHead?.offsetHeight ?? 0) + geometry.rowTop(r);
+      return { left: box.left + geometry.colLeft(c), top, width: geometry.colWidth(c), height: geometry.rowHeight(r) };
+    },
+    // The row and column under a client point, or null outside the table's body.
+    cellAt(x, y) {
+      const box = table.getBoundingClientRect();
+      const top = box.top - appliedBefore + (table.tHead?.offsetHeight ?? 0);
+      if (x < box.left || x >= box.left + geometry.width || y < top || y >= top + geometry.total()) return null;
+      return { r: geometry.rowAt(y - top), c: geometry.colAt(x - box.left) };
+    },
     refresh,
     follow,
     dispose() {
