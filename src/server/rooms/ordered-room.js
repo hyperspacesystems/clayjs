@@ -6,12 +6,16 @@ import { admit, dropConnection, newInstance, rejoin, retained, stateReserve } fr
 import { establishing, fileAccepted as accepted } from '../../live-room/core/host.js';
 import { parse } from '../../live-room/core/record.js';
 import { useCodec } from '../../live-room/core/codec.js';
-import { REAL_LIMITS } from '../../live-room/core/limits.js';
+import { REAL_LIMITS, ROOM_HEAP } from '../../live-room/core/limits.js';
 import { LIVE_LIMITS } from './live-data-rooms.js';
 
 const silent = new Proxy({}, { get: () => () => {} });
-const ID = /^[A-Za-z0-9_.:/-]{1,128}$/;
+const ID = /^[A-Za-z0-9_.:/#-]{1,128}$/;
 const PART_SLACK = 512;
+const STAGE_COST = 1024;
+const SLOT_COST = 64;
+const STAGES_PER_CLIENT = 8;
+const BYTES_PER_OP = 8;
 const whole = (n) => Number.isSafeInteger(n) && n >= 0;
 const id = (text) => typeof text === 'string' && ID.test(text) && !(text in Object.prototype);
 const list = (value) => value === undefined || value === null || Array.isArray(value);
@@ -22,9 +26,10 @@ const NOBODY = Object.freeze({ used: () => 0, size: () => 0 });
 
 /**
  * @param {{ codecs: Record<string, object>, limits?: object, now?: () => number, newId?: () => number,
- *   liveBytes?: number, maxRooms?: number, retainMs?: number, others?: { used: () => number, size: () => number } }} options
+ *   liveBytes?: number, maxRooms?: number, retainMs?: number, heap?: { doc: number, tail: number }, onSpace?: (key: string) => void,
+ *   others?: { used: () => number, size: () => number } }} options
  */
-export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.now, newId = () => randomInt(2 ** 40), liveBytes = LIVE_LIMITS.liveBytes, maxRooms = LIVE_LIMITS.rooms, retainMs = LIVE_LIMITS.retainMs, others = NOBODY } = {}) {
+export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.now, newId = () => randomInt(2 ** 40), liveBytes = LIVE_LIMITS.liveBytes, maxRooms = LIVE_LIMITS.rooms, retainMs = LIVE_LIMITS.retainMs, heap = ROOM_HEAP, onSpace = () => {}, others = NOBODY } = {}) {
   if (!codecs || !Object.keys(codecs).length) throw new Error('createOrderedRooms needs at least one codec');
   const slots = new Map();
   const byConn = new Map();
@@ -55,13 +60,26 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
   }
 
   const open = (slot) => (slot?.room?.gen ? slot.room : null);
-  const stageBytes = (stage) => [...stage.values()].reduce((sum, bytes) => sum + bytes, 0);
-  const partBytes = (slot) => [...slot.parts.values()].reduce((sum, stage) => sum + stageBytes(stage), 0);
+  const stageBytes = (stage) => [...stage.got.values()].reduce((sum, bytes) => sum + bytes, 0);
+  const stageCost = (stage) => heap.tail * stageBytes(stage) + SLOT_COST * stage.m + STAGE_COST;
+  const partBytes = (slot) => [...slot.parts.values()].reduce((sum, stage) => sum + stageCost(stage), 0);
   const roomBytes = (room) => (room?.gen ? room.bytes.tail + room.bytes.staged + room.bytes.waiting : 0);
-  const held = (slot) => (slot?.room ? slot.docBytes + stateReserve(limits) + roomBytes(slot.room) + partBytes(slot) : 0);
+  const copyBytes = (slot) => (slot.room?.restores?.size ? slot.copyBytes : 0);
+  const held = (slot) => (slot?.room ? Math.ceil(heap.doc * slot.docBytes + stateReserve(limits) + heap.tail * (roomBytes(slot.room) + copyBytes(slot)) + partBytes(slot)) : 0);
   const used = () => [...slots.values()].reduce((sum, slot) => sum + held(slot), 0);
   const dirty = (room) => Boolean(room?.gen) && room.seq > room.base.through;
   const slotOf = (room) => [...slots.values()].find((slot) => slot.room === room) ?? null;
+
+  // A room refused for the process total hears nothing from its own room when another room frees
+  // space, so the registry tells the host which rooms may send again; the host sends their tabs
+  // `space`. The host also calls wake() when the live rooms free space.
+  function wake() {
+    for (const [key, slot] of slots) {
+      if (!slot.starved || used() + others.used() >= liveBytes) continue;
+      slot.starved = false;
+      onSpace(key);
+    }
+  }
 
   function forget(key) {
     const slot = slots.get(key);
@@ -118,6 +136,7 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
     if (frame.k !== 'part') return validWhole(codec, frame, true);
     if (!whole(frame.i) || !whole(frame.m) || frame.i >= frame.m || frame.m > maxParts || !id(frame.key) || !validOrder(frame.order)) return 'bad-frame';
     if (!whole(frame.size) || frame.size > limits.roomBytes) return 'bad-size';
+    if (frame.m > Math.ceil(frame.size / (limits.opsPerFrame * BYTES_PER_OP)) + 1) return 'bad-frame';
     if (frame.i > 0) return frame.frame === null || frame.frame === undefined ? null : 'bad-frame';
     const head = frame.frame;
     if (!head || (head.k === 'adopt' && head.items?.length !== 1)) return 'bad-frame';
@@ -126,8 +145,11 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
 
   function admitPart(slot, room, clientId, frame) {
     const key = `${clientId}/${frame.key}`;
-    const stage = new Map(slot.parts.get(key));
-    stage.set(frame.i, sizeOf(frame));
+    const before = slot.parts.get(key);
+    if (!before && [...slot.parts.keys()].filter((staged) => staged.startsWith(`${clientId}/`)).length >= STAGES_PER_CLIENT) return 'full';
+    if (before && before.m !== frame.m) return 'bad-frame';
+    const stage = { m: frame.m, got: new Map(before?.got) };
+    stage.got.set(frame.i, sizeOf(frame));
     if (stageBytes(stage) > 2 * frame.size + frame.m * PART_SLACK) return 'bad-size';
     slot.parts.set(key, stage);
     const answer = admit(envOf(slot), room, frame, clientId);
@@ -143,14 +165,14 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
     mayFit(key, bytes) {
       if (!slots.has(key) && slots.size + others.size() >= maxRooms) return false;
       const size = typeof bytes === 'string' ? utf8(bytes) : bytes;
-      return used() - held(slots.get(key)) + others.used() + size + stateReserve(limits) <= liveBytes;
+      return used() - held(slots.get(key)) + others.used() + heap.doc * size + stateReserve(limits) <= liveBytes;
     },
 
     establish(key, { bytes, etag, codec }) {
       if (!Object.hasOwn(codecs, codec) || !this.mayFit(key, bytes)) return null;
       let slot = slots.get(key);
       const fresh = !slot || slot.codec !== codec;
-      const candidate = fresh ? { codec, room: null, bytes: null, docBytes: 0, parts: new Map(), notices: [], idle: now() } : slot;
+      const candidate = fresh ? { codec, room: null, bytes: null, docBytes: 0, copyBytes: 0, parts: new Map(), notices: [], idle: now() } : slot;
       let file;
       try {
         file = read(candidate, bytes, etag);
@@ -204,9 +226,15 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       if (!slot || !open(slot)) return { answer: 'closed', send: [] };
       const bad = validFrame(codecs[slot.codec], frame);
       if (bad) return { answer: bad, send: [] };
-      const adds = frame.k === 'receipt' ? 0 : sizeOf(frame) + (frame.k === 'part' && !slot.parts.has(`${clientId}/${frame.key}`) ? frame.size : 0);
-      if (adds && used() + others.used() + adds > liveBytes) return { answer: 'full', send: [] };
+      const adds = frame.k === 'receipt' ? 0 : frame.k !== 'part' ? heap.tail * sizeOf(frame) : slot.parts.has(`${clientId}/${frame.key}`) ? 0 : 2 * heap.tail * frame.size + SLOT_COST * frame.m + STAGE_COST;
+      if (adds && used() + others.used() + adds > liveBytes) {
+        slot.starved = true;
+        return { answer: 'full', send: [] };
+      }
       const from = room.log.length;
+      if (!room.restores.size) slot.copyBytes = 0;
+      if (frame.k === 'copy') slot.copyBytes += sizeOf(frame);
+      if (frame.k === 'part' && frame.i === 0 && frame.frame.k === 'copy') slot.copyBytes += frame.size;
       let answer;
       try {
         answer = frame.k === 'part' ? admitPart(slot, room, clientId, frame) : admit(envOf(slot), room, frame, clientId);
@@ -229,11 +257,14 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       }
       if (answer === 'outside') {
         forget(key);
+        wake();
         return { answer, send: [], dirty: wasDirty };
       }
       slot.bytes = bytes;
       slot.docBytes = utf8(bytes);
-      return { answer, send: answer === 'establishing' ? sent(slot, slot.room.log.length) : sent(slot, from) };
+      const send = answer === 'establishing' ? sent(slot, slot.room.log.length) : sent(slot, from);
+      wake();
+      return { answer, send };
     },
 
     leave(room, conn) {
@@ -249,7 +280,9 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
         if (roomBytes(slot.room) < before) slot.notices.push({ to: '*', k: 'space' });
       }
       if (!slot.conns.size) slot.idle = now();
-      return { empty: !slot.conns.size, dirty: dirty(slot.room), send: sent(slot, slot.room?.log.length ?? 0) };
+      const send = sent(slot, slot.room?.log.length ?? 0);
+      wake();
+      return { empty: !slot.conns.size, dirty: dirty(slot.room), send };
     },
 
     sweep(connectedOf = () => 0) {
@@ -261,13 +294,17 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
         forget(key);
         dropped.push(key);
       }
+      if (dropped.length) wake();
       return dropped;
     },
 
     drop(key) {
       const slot = forget(key);
+      if (slot) wake();
       return slot ? { dirty: dirty(slot.room) } : null;
     },
+
+    wake,
 
     used,
     size: () => slots.size,

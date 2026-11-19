@@ -9,7 +9,7 @@ const KIB = 1024, MIB = KIB * KIB, REAL_LIMITS = Object.freeze({
   roomBytes: 6 * MIB,
   actionBytes: 3 * MIB,
   ledgerCap: 2 * KIB
-}), env = (name, fallback) => Number(define_process_env_default[name] || fallback);
+}), ROOM_HEAP = Object.freeze({ doc: 1, tail: 2 }), env = (name, fallback) => Number(define_process_env_default[name] || fallback);
 function labLimits(over = {}) {
   const limits = {
     opsPerFrame: env("LAB_OPS_PER_FRAME", REAL_LIMITS.opsPerFrame / 64),
@@ -25,6 +25,7 @@ const FRAME_OVERHEAD = 64, actionBytes = (action) => action == null ? 4 : codec(
 export {
   FRAME_OVERHEAD,
   REAL_LIMITS,
+  ROOM_HEAP,
   actionBytes,
   frameBytes,
   frameOps,

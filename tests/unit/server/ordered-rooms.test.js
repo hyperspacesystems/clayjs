@@ -9,6 +9,7 @@ import { serialize, parse } from "../../../src/live-room/core/record.js";
 import { useCodec } from "../../../src/live-room/core/codec.js";
 import { labLimits } from "../../../src/live-room/core/limits.js";
 import { explode } from "../../../src/live-room/core/frames.js";
+import { stateReserve } from "../../../src/live-room/core/room.js";
 import { codec as tiny } from "../../live-room/lab/codec-tiny/reducer.mjs";
 
 const RECORD = { v: 2, doc: "doc0123456789abc", gen: "0.00000000", epoch: 0, commit: "c00000000000", parent: null, through: 0 };
@@ -171,7 +172,8 @@ test("a paste in parts is admitted when its last part lands, and parts that woul
   const [first] = parts(room, "ben", 3, paste(6));
   expect(rooms.frame(room, "ben", { ...first, m: 100_000_000 }).answer).toBe("bad-frame");
   expect(rooms.frame(room, "ben", { ...first, order: undefined }).answer).toBe("bad-frame");
-  expect(rooms.frame(room, "ben", { ...first, key: "q:ben:9", size: 0, pad: "x".repeat(60_000) }).answer).toBe("bad-size");
+  expect(rooms.frame(room, "ben", { ...first, key: "q:ben:9", pad: "x".repeat(60_000) }).answer).toBe("bad-size");
+  expect(rooms.frame(room, "ben", { ...first, key: "q:ben:8", size: 0 }).answer).toBe("bad-frame");
   expect(room.staging.size).toBe(0);
   expect(rooms.frame(room, "ben", { ...first, size: 2 ** 40 }).answer).toBe("bad-size");
 });
@@ -324,4 +326,82 @@ test("a client that leaves with a staged paste frees its space and tells the oth
   rooms.attach(room, "cy", shared);
   expect(rooms.attach(second, "cy", shared)).not.toBeNull();
   expect(rooms.leave(room, "conn-ben")).toEqual(expect.objectContaining({ empty: true }));
+});
+
+test("a room is charged its file and twice its unsaved bytes, and a frame that would pass the process total is refused", () => {
+  const reserve = stateReserve(labLimits());
+  const { rooms, room, bytes } = opened();
+  const empty = rooms.used();
+  expect(empty).toBe(Buffer.byteLength(bytes, "utf8") + reserve);
+  rooms.attach(room, "ben", "conn-ben");
+  rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "x")));
+  expect(rooms.used() - empty).toBe(2 * room.bytes.tail);
+  const frame = request(room, "ben", 2, set("r1", "c1", "y"));
+  const wire = Buffer.byteLength(JSON.stringify(frame), "utf8");
+  const tight = opened({ liveBytes: empty + 2 * room.bytes.tail + wire + 1 });
+  tight.rooms.attach(tight.room, "ben", "conn-ben");
+  tight.rooms.frame(tight.room, "ben", request(tight.room, "ben", 1, set("r1", "c1", "x")));
+  expect(tight.rooms.frame(tight.room, "ben", request(tight.room, "ben", 2, set("r1", "c1", "y"))).answer).toBe("full");
+});
+
+test("part frames that would make the room hold memory it does not charge are refused", () => {
+  const { rooms, room } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  const [first] = parts(room, "ben", 1, paste(6));
+  expect(rooms.frame(room, "ben", { ...first, m: 6000 }).answer).toBe("bad-frame");
+  const answers = [];
+  const quiet = rooms.used();
+  for (let n = 0; n < 12; n++) answers.push(rooms.frame(room, "ben", { ...first, key: `flood:${n}` }).answer);
+  expect(answers.slice(0, 8).every((answer) => answer === "staged")).toBe(true);
+  expect(answers.slice(8)).toEqual(["full", "full", "full", "full"]);
+  expect(rooms.used() - quiet).toBeGreaterThanOrEqual(8 * 1024);
+  const before = rooms.used();
+  rooms.leave(room, "conn-ben");
+  expect(rooms.used()).toBeLessThan(before);
+});
+
+test("a room refused for the process total is woken when another room frees space", () => {
+  const woken = [];
+  let other = 0;
+  const { rooms, room, bytes } = opened({ liveBytes: 40_000, others: { used: () => other, size: () => 0 }, onSpace: (key) => woken.push(key) });
+  rooms.attach(room, "ben", "conn-ben");
+  other = 40_000 - rooms.used();
+  expect(rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "x"))).answer).toBe("full");
+  rooms.wake();
+  expect(woken).toEqual([]);
+  rooms.attach(room, "cy", "conn-cy");
+  other = 0;
+  rooms.leave(room, "conn-cy");
+  expect(woken).toEqual(["doc"]);
+  rooms.wake();
+  expect(woken).toEqual(["doc"]);
+  expect(rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "x"))).answer).toBe("ok");
+  void bytes;
+});
+
+// Bug it catches: the room keeps every judged restore offer and its answer until the next
+// generation, so a registry that charges nothing for them lets restore jobs fill the heap; and
+// a registry whose ids refuse the tab's job ids ("tab#1") never lets a restore reach the room.
+test("a restore offer with the tab's job id reaches the room, and its bytes stay charged while the room keeps the job", () => {
+  const { rooms, room } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  const before = rooms.used();
+  const offer = { k: "copy", gen: room.gen, job: "ben#1", copy: "x", i: 0, p: 0, n: 1, c: "ben", e: "ben:1", via: [], origin: [], action: set("r1", "c1", "x".repeat(4000)), saw: ["not what the room holds"] };
+  expect(rooms.frame(room, "ben", offer).answer).toEqual(expect.objectContaining({ how: expect.any(String) }));
+  expect(room.restores.size).toBe(1);
+  expect(rooms.used() - before).toBeGreaterThanOrEqual(2 * Buffer.byteLength(JSON.stringify(offer), "utf8"));
+});
+
+// Bug it catches: a stage that reserved its space when it opened is checked against the process
+// total again for every later part, so a paste that fits is refused partway and left staged.
+test("a paste whose stage fit when it opened is admitted to its last part", () => {
+  const probe = opened();
+  probe.rooms.attach(probe.room, "ben", "conn-ben");
+  const [head] = parts(probe.room, "ben", 1, paste(6));
+  const reserve = 2 * 2 * head.size + 64 * head.m + 1024;
+  const { rooms, room } = opened({ liveBytes: probe.rooms.used() + reserve + 16 });
+  rooms.attach(room, "ben", "conn-ben");
+  const pieces = parts(room, "ben", 1, paste(6));
+  for (const piece of pieces.slice(0, -1)) expect(rooms.frame(room, "ben", piece).answer).toBe("staged");
+  expect(rooms.frame(room, "ben", pieces.at(-1)).answer).toBe("ok");
 });

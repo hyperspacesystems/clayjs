@@ -12,6 +12,14 @@ export const REAL_LIMITS = Object.freeze({
   ledgerCap: 2 * KIB,
 });
 
+// Bytes an ordered room charges against the process's live-room total per byte it counts. That
+// total (LIVE_LIMITS.liveBytes) already allows 2 to 4.5 bytes of heap per counted byte. Step P4
+// measured with the small codec (tests/live-room/measure-rooms.mjs, 2026-11-18): an open room holds
+// 2.2 to 3.7 bytes of heap per file byte (wide sheets to one-column lists), so a document is charged
+// its size; unsaved edits hold up to 8.6 bytes of heap per counted byte (a paste into empty cells),
+// so they are charged twice. Rerun with the sheet codec and compare its ratios with 4.5.
+export const ROOM_HEAP = Object.freeze({ doc: 1, tail: 2 });
+
 const env = (name, fallback) => Number(process.env[name] || fallback);
 
 export function labLimits(over = {}) {
