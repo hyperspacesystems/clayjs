@@ -182,6 +182,19 @@ test("undoing a write leaves a peer's later format on the cell", async () => {
   expect(grid("s1").get("B1")).toBe(5);
 });
 
+// Bug: a whole-column format recorded no cell, so an undo overwrote a coworker's later column format.
+test("undoing a column format leaves a coworker's later percent format on that column", async () => {
+  const { grid, history, peer } = await start();
+  const colFmt = () => document.querySelector('section[data-id="s1"] col[data-id="c2"]').getAttribute("fmt");
+  grid("s1").format("B:B", { fmt: "$#,##0.00" });
+  expect(colFmt()).toBe("$#,##0.00");
+  peer(() => grid("s1").format("B:B", { fmt: "0.00%" }));
+
+  expect(history.undo("s1")).toEqual({ ok: false, why: "changed" });
+  expect(colFmt()).toBe("0.00%");
+  expect(grid("s1").cell("B1").effectiveFmt).toBe("0.00%");
+});
+
 // Bug: undoing a deleted row left another tab's formula cut, because only the action was replayed and
 // not the step's restore list.
 test("undoing a deleted row puts another tab's formula back from the step's restore", async () => {
@@ -195,4 +208,54 @@ test("undoing a deleted row puts another tab's formula back from the step's rest
 
   expect(grid("s2").input("A1")).toBe("=Sheet1!A1*2");
   expect(grid("s2").get("A1")).toBe(6);
+});
+
+// Bug: history.group recorded separate undo entries or replayed parts in forward order on undo, leaving intermediate values behind.
+test("a history group undoes its parts in reverse order as one entry and redoes them in forward order", async () => {
+  const { grid, history } = await start();
+  history.group("s1", () => {
+    grid("s1").set("B1", "10");
+    grid("s1").set("B2", "20");
+    grid("s1").merge("B1:B2");
+  });
+
+  expect(grid("s1").cell("B1").span).toEqual({ rows: 2, cols: 1 });
+  expect(grid("s1").get("B1")).toBe(10);
+
+  const undone = history.undo("s1");
+  expect(undone.ok).toBe(true);
+  expect(history.canUndo("s1")).toBe(false);
+  expect(grid("s1").cell("B1").span).toBeNull();
+  expect(grid("s1").get("B1")).toBeNull();
+  expect(grid("s1").get("B2")).toBeNull();
+
+  const redone = history.redo("s1");
+  expect(redone.ok).toBe(true);
+  expect(grid("s1").cell("B1").span).toEqual({ rows: 2, cols: 1 });
+  expect(grid("s1").get("B1")).toBe(10);
+});
+
+// Bug: undoing a group checked only the last part's cells, so an earlier part's inverse overwrote a peer's later edit.
+test("a history group is refused when any part's cell changed after the group ran", async () => {
+  const { grid, history, peer } = await start();
+  history.group("s1", () => {
+    grid("s1").set("B1", "10");
+    grid("s1").set("B2", "20");
+  });
+  peer(() => grid("s1").set("B1", "peer-edit"));
+
+  expect(history.undo("s1")).toEqual({ ok: false, why: "changed" });
+  expect(grid("s1").get("B1")).toBe("peer-edit");
+  expect(grid("s1").get("B2")).toBe(20);
+});
+
+// Bug: the history guard ignored cell.style, so undoing a write or format wiped out a coworker's later style on the cell.
+test("a coworker's later style on a cell survives an undo", async () => {
+  const { grid, history, peer } = await start();
+  grid("s1").format("A1", { style: { "font-weight": "bold" } });
+  peer(() => grid("s1").format("A1", { style: { "font-style": "italic" } }));
+
+  expect(history.undo("s1")).toEqual({ ok: false, why: "changed" });
+  expect(grid("s1").cell("A1").style).toContain("font-style:italic");
+  expect(grid("s1").cell("A1").style).toContain("font-weight:bold");
 });

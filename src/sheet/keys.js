@@ -16,6 +16,7 @@ export function keyIntent(event, { platform = "", editing = false, picking = fal
   const alt = Boolean(event.altKey);
   const shift = Boolean(event.shiftKey);
   const mod = mac ? meta && !ctrl : ctrl && !meta;
+  const modOrMacCtrl = mod || (mac && ctrl && !meta);
   const plain = !ctrl && !meta && !alt;
   const key = event.key;
 
@@ -72,6 +73,40 @@ export function keyIntent(event, { platform = "", editing = false, picking = fal
   if ((key === "z" || key === "Z") && mod && !alt) return shift ? { type: "redo" } : { type: "undo" };
   if ((key === "y" || key === "Y") && mod && !alt && !shift) return { type: "redo" };
   if ((key === "v" || key === "V") && mod && !alt && shift) return { type: "pasteValues" };
+
+  if ((key === "b" || key === "B") && mod && !alt && !shift) return { type: "bold" };
+  if ((key === "i" || key === "I") && mod && !alt && !shift) return { type: "italic" };
+  if ((key === "u" || key === "U") && mod && !alt && !shift) return { type: "underline" };
+  const altGr = Boolean(event.getModifierState?.("AltGraph"));
+  if (
+    (mac && mod && !alt && shift && (key === "x" || key === "X")) ||
+    (!mac && !ctrl && !meta && alt && shift && (key === "5" || key === "%" || event.code === "Digit5"))
+  ) {
+    return { type: "strikethrough" };
+  }
+  if ((key === "l" || key === "L") && mod && !alt && shift) return { type: "align", align: "left" };
+  if ((key === "e" || key === "E") && mod && !alt && shift) return { type: "align", align: "center" };
+  if ((key === "r" || key === "R") && mod && !alt && shift) return { type: "align", align: "right" };
+  if ((key === "1" || key === "!" || event.code === "Digit1") && modOrMacCtrl && !alt && shift) {
+    return { type: "numberFormat", fmt: "#,##0.00" };
+  }
+  if ((key === "4" || key === "$" || event.code === "Digit4") && modOrMacCtrl && !alt && shift) {
+    return { type: "numberFormat", fmt: "$#,##0.00" };
+  }
+  if ((key === "5" || key === "%" || event.code === "Digit5") && modOrMacCtrl && !alt && shift) {
+    return { type: "numberFormat", fmt: "0.00%" };
+  }
+  if (key === "\\" && mod && !alt && !shift) return { type: "clearFormat" };
+
+  if (modOrMacCtrl && alt && !altGr && ((key === "=" && !shift) || (key === "+" && shift))) {
+    return { type: "insertAxis" };
+  }
+  if (modOrMacCtrl && alt && !altGr && !shift && key === "-") {
+    return { type: "deleteAxis" };
+  }
+  if ((key === "ContextMenu" && plain && !shift) || (key === "F10" && plain && shift)) {
+    return { type: "contextMenu" };
+  }
 
   return null;
 }

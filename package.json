@@ -88,7 +88,6 @@
     "build:parse5": "node scripts/build-parse5-vendor.mjs",
     "build:prosemirror": "node scripts/build-prosemirror-vendor.mjs",
     "build:yjs": "node scripts/build-yjs-vendor.mjs",
-    "build:sap-grid": "node scripts/build-sap-grid-vendor.mjs",
     "build:bevel": "node scripts/build-bevel-subset.mjs",
     "check:bevel": "node scripts/build-bevel-subset.mjs --check",
     "build:live-room-core": "node scripts/build-live-room-core.mjs",

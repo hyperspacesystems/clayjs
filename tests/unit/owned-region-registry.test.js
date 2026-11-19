@@ -78,9 +78,9 @@ test("only the revision of a region with a conflict function can be taken out of
 });
 
 test("the painted values of a file leave the roots of a registered region out", () => {
-  const file = `<!DOCTYPE html><html><head></head><body><main sap><p text="'hi'">hi</p><section item><table grid><tbody><tr><td text="'x'">stale</td></tr></tbody></table></section></main></body></html>`;
+  const file = `<!DOCTYPE html><html><head></head><body><main sap><p text="'hi'">hi</p><section item><table grid><tbody><tr><td n="7">stale</td></tr></tbody></table></section></main></body></html>`;
   const painted = () => derived.paintSignatureOfHtml(file).split("\u0001").join(" ");
-  expect(painted()).toBe("p #hi td #stale");
+  expect(painted()).toBe("p #hi td n=7");
   handle = regions.own(SELECTOR, spec());
   expect(painted()).toBe("p #hi");
 });

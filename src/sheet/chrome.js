@@ -8,9 +8,11 @@ import {
   protectIcon,
   setShown,
 } from "../ui/bevel-controls.js";
-import { FONT_MONO, FONT_SANS, TOKENS } from "../ui/bevel.js";
+import { FONT_MONO, FONT_SANS, RULES, TOKENS } from "../ui/bevel.js";
 import { resolveTheme } from "../ui/theme.js";
 import { mountEditorUI } from "../ui/editor-ui.js";
+
+const LONG_PRESS_MS = 420;
 
 const ICONS = {
   undo: '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,0,1-94.71,96H128A95.38,95.38,0,0,1,62.1,197.8a8,8,0,0,1,11-11.63A80,80,0,1,0,71.43,71.39l-.26.25L44.59,96H72a8,8,0,0,1,0,16H24a8,8,0,0,1-8-8V56a8,8,0,0,1,16,0V85.8L60.25,60A96,96,0,0,1,224,128Z"/></svg>',
@@ -94,52 +96,73 @@ function appendSvg(parent, markup, size) {
 
 function makeToolButton(spec, theme, onCommand) {
   const iconOnly = Boolean(spec.icon && !spec.text && !spec.caret);
-  if (iconOnly) {
-    const btn = bevelIconButton(ICONS[spec.icon], {
-      label: spec.label,
-      onClick: () => onCommand(spec.id),
-      theme,
-      parts: ["sheet.tool"],
-    });
-    btn.setAttribute("data-command", spec.id);
-    btn.addEventListener("mousedown", (e) => e.preventDefault());
-    return btn;
-  }
-
-  const extra = ["height:26px", "padding:0 8px", "gap:4px", "font-size:12px"];
-  if (spec.mono) extra.push(`font-family:${FONT_MONO}`, "font-variant-numeric:tabular-nums");
-  if (spec.square) extra.push("width:26px", "padding:0");
-  if (spec.extra) extra.push(...spec.extra);
-
+  const baseExtra = iconOnly
+    ? ["width:26px", "height:26px", "padding:0", "display:inline-grid", "place-items:center"]
+    : [
+        "height:26px",
+        "padding:0 8px",
+        "gap:4px",
+        "font-size:12px",
+        ...(spec.mono ? [`font-family:${FONT_MONO}`, "font-variant-numeric:tabular-nums"] : []),
+        ...(spec.square ? ["width:26px", "padding:0"] : []),
+        ...(spec.extra ?? []),
+      ];
+  const stateExtra = [...baseExtra];
   const btn = bevelButton(spec.text ?? "", {
     small: true,
     onClick: () => onCommand(spec.id),
     theme,
     parts: ["sheet.tool"],
-    extra,
-    labelExtra: ["display:inline-flex", "align-items:center", "gap:4px"],
+    extra: stateExtra,
+    labelExtra: iconOnly
+      ? ["display:inline-grid", "width:12px", "height:12px"]
+      : ["display:inline-flex", "align-items:center", "gap:4px"],
   });
   const span = btn.firstChild;
   span.textContent = "";
-  if (spec.icon) appendSvg(span, ICONS[spec.icon], 14);
-  if (spec.text) {
-    const txt = bevelText("span", ["font:inherit", "color:inherit"], spec.text, { theme, role: null });
-    span.append(txt);
+  let textEl = null;
+  if (iconOnly) {
+    span.innerHTML = ICONS[spec.icon];
+    protectIcon(span.firstElementChild, 12);
+  } else {
+    if (spec.icon) appendSvg(span, ICONS[spec.icon], 14);
+    if (spec.text) {
+      textEl = bevelText("span", ["font:inherit", "color:inherit"], spec.text, { theme, role: null });
+      span.append(textEl);
+    }
+    if (spec.caret) appendSvg(span, ICONS.caret, 11);
   }
-  if (spec.caret) appendSvg(span, ICONS.caret, 11);
   btn.setAttribute("aria-label", spec.label);
   btn.title = spec.label;
   btn.setAttribute("data-command", spec.id);
   btn.addEventListener("mousedown", (e) => e.preventDefault());
-  return btn;
+  return { btn, textEl, baseExtra, stateExtra, pressed: false };
 }
 
-export function createChrome({ scrollBox, commands = {}, onSelectTab, onCommit, onCancel } = {}) {
+export function createChrome({
+  scrollBox,
+  commands = {},
+  onSelectTab,
+  onTabMenu,
+  onRenameTab,
+  onRenameTabStart,
+  onCommit,
+  onCancel,
+} = {}) {
   const doc = scrollBox.ownerDocument ?? document;
   const parent = scrollBox.parentElement ?? doc.body;
   const theme = resolveTheme();
   const registry = new Map(Object.entries(commands));
   const buttons = new Map();
+  const buttonMeta = new Map();
+  let longPressTimer = null;
+
+  const clearLongPress = () => {
+    if (longPressTimer !== null) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  };
 
   const topRoot = bevelBox("div", [
     "display:block",
@@ -184,10 +207,11 @@ export function createChrome({ scrollBox, commands = {}, onSelectTab, onCommit, 
     ], { theme });
     groupEl.setAttribute("data-toolbar-group", group.name);
     for (const spec of group.items) {
-      const btn = makeToolButton(spec, theme, (id) => registry.get(id)?.());
-      btn.setDisabled(!registry.has(spec.id));
-      buttons.set(spec.id, btn);
-      groupEl.append(btn);
+      const meta = makeToolButton(spec, theme, (id) => registry.get(id)?.());
+      meta.btn.setDisabled(!registry.has(spec.id));
+      buttons.set(spec.id, meta.btn);
+      buttonMeta.set(spec.id, meta);
+      groupEl.append(meta.btn);
     }
     toolbar.append(groupEl);
   });
@@ -317,6 +341,7 @@ export function createChrome({ scrollBox, commands = {}, onSelectTab, onCommit, 
   const addTabBtn = bevelButton("+", {
     small: true,
     variant: "quiet",
+    onClick: () => registry.get("add-tab")?.(),
     theme,
     extra: ["width:28px", "height:28px", "padding:0"],
   });
@@ -326,7 +351,7 @@ export function createChrome({ scrollBox, commands = {}, onSelectTab, onCommit, 
   addTabBtn.addEventListener("mousedown", (e) => e.preventDefault());
   buttons.set("add-tab", addTabBtn);
 
-  const tabsHolder = bevelBox("div", ["display:inline-flex", "align-items:stretch", "gap:2px"], { theme });
+  const tabsHolder = bevelBox("div", ["display:inline-flex", "align-items:center", "gap:2px"], { theme });
   tabStrip.append(addTabBtn, tabsHolder);
 
   const statusText = bevelText("div", [
@@ -376,10 +401,112 @@ export function createChrome({ scrollBox, commands = {}, onSelectTab, onCommit, 
     if (statusText.textContent !== status) statusText.textContent = status;
   }
 
+  function setButtonPressed(id, pressed) {
+    const meta = buttonMeta.get(id);
+    if (!meta) return;
+    const next = Boolean(pressed);
+    const val = next ? "true" : "false";
+    if (meta.btn.getAttribute("aria-pressed") === val && meta.pressed === next) return;
+    meta.pressed = next;
+    meta.btn.setAttribute("aria-pressed", val);
+    meta.stateExtra.splice(0, meta.stateExtra.length, ...meta.baseExtra, ...(next ? RULES.recess : []));
+    meta.btn.pin({});
+  }
+
+  function setButtonText(id, text, ariaLabel) {
+    const meta = buttonMeta.get(id);
+    if (!meta) return;
+    if (meta.textEl && meta.textEl.textContent !== text) meta.textEl.textContent = text;
+    if (ariaLabel && meta.btn.getAttribute("aria-label") !== ariaLabel) {
+      meta.btn.setAttribute("aria-label", ariaLabel);
+      meta.btn.title = ariaLabel;
+    }
+  }
+
   let lastTabsKey = "";
+  let currentTabs = [];
+  let currentActiveId = "";
+  let renaming = null;
+
+  function finishRenameUI() {
+    if (!renaming) return;
+    renaming = null;
+    lastTabsKey = "";
+    renderTabs(currentTabs, currentActiveId);
+  }
+
+  function startRenameTab(tabId) {
+    const tab = currentTabs.find((t) => t.id === tabId);
+    if (!tab) return null;
+    if (renaming) {
+      if (renaming.tabId === tabId) {
+        renaming.input.focus();
+        return renaming.input;
+      }
+      finishRenameUI();
+    }
+    const tabBtn = [...tabsHolder.children].find((el) => el.getAttribute("data-tab-id") === tabId);
+    if (!tabBtn) return null;
+
+    const input = bevelInput("input", {
+      theme,
+      rules: [
+        "display:inline-block",
+        "width:116px",
+        "height:26px",
+        "block-size:26px",
+        "min-block-size:26px",
+        "padding:0 8px",
+        `font:500 12px/24px ${FONT_SANS}`,
+      ],
+    });
+    input.value = tab.name;
+    input.setAttribute("aria-label", "Rename sheet");
+    input.setAttribute("data-tab-rename", tabId);
+
+    let settled = false;
+    const commit = () => {
+      if (settled || renaming?.input !== input) return false;
+      settled = true;
+      if (onRenameTab?.(tabId, input.value) === false) {
+        settled = false;
+        input.focus();
+        return false;
+      }
+      finishRenameUI();
+      return true;
+    };
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        commit();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        settled = true;
+        finishRenameUI();
+        onRenameTab?.(tabId, null);
+      }
+    });
+    input.addEventListener("blur", () => {
+      commit();
+    });
+
+    renaming = { tabId, input, commit };
+    tabBtn.replaceWith(input);
+    input.focus();
+    input.select?.();
+    return input;
+  }
+
   function renderTabs(tabs, activeId) {
+    currentTabs = tabs;
+    currentActiveId = activeId;
     const key = `${activeId}\u0000${tabs.map((t) => `${t.id}:${t.name}`).join("\u0000")}`;
     if (key === lastTabsKey) return;
+    renaming = null;
     lastTabsKey = key;
     tabsHolder.textContent = "";
     for (const tab of tabs) {
@@ -401,6 +528,36 @@ export function createChrome({ scrollBox, commands = {}, onSelectTab, onCommit, 
       btn.setAttribute("aria-selected", selected ? "true" : "false");
       btn.setAttribute("data-tab-id", tab.id);
       btn.addEventListener("mousedown", (e) => e.preventDefault());
+      btn.addEventListener("dblclick", (e) => {
+        e.preventDefault();
+        if (onRenameTabStart) onRenameTabStart(tab.id);
+        else startRenameTab(tab.id);
+      });
+      btn.addEventListener("keydown", (e) => {
+        if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
+          e.preventDefault();
+          onTabMenu?.(tab.id, btn, 0, 0);
+        }
+      });
+      btn.addEventListener("contextmenu", (e) => {
+        clearLongPress();
+        e.preventDefault();
+        e.stopPropagation();
+        onTabMenu?.(tab.id, btn, e.clientX ?? 0, e.clientY ?? 0);
+      });
+      btn.addEventListener("pointerdown", (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        clearLongPress();
+        const x = e.clientX ?? 0;
+        const y = e.clientY ?? 0;
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          onTabMenu?.(tab.id, btn, x, y);
+        }, LONG_PRESS_MS);
+      });
+      for (const evt of ["pointerup", "pointerleave", "pointercancel"]) {
+        btn.addEventListener(evt, clearLongPress);
+      }
       tabsHolder.append(btn);
     }
   }
@@ -412,6 +569,8 @@ export function createChrome({ scrollBox, commands = {}, onSelectTab, onCommit, 
   }
 
   return {
+    theme,
+    topRoot,
     topHost: topUI.host,
     bottomHost: bottomUI.host,
     topShadow: topUI.shadow,
@@ -425,9 +584,16 @@ export function createChrome({ scrollBox, commands = {}, onSelectTab, onCommit, 
     hideNotice,
     setEditing,
     setCoord,
+    setButtonPressed,
+    setButtonText,
+    getButton: (id) => buttons.get(id) ?? null,
+    startRenameTab,
+    commitRename: () => renaming?.commit?.() ?? false,
     renderTabs,
     registerCommand,
     dispose() {
+      clearLongPress();
+      renaming = null;
       topUI.remove();
       bottomUI.remove();
     },

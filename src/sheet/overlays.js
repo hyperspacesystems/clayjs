@@ -6,6 +6,11 @@ import { mountEditorUI } from "../ui/editor-ui.js";
 
 const GUTTER_W = 42;
 const HEADER_H = 24;
+const GRIP_PX = 6;
+const MIN_COL_W = 8;
+const MIN_ROW_H = 12;
+const MAX_FIT_W = 600;
+const FIT_PAD_PX = 12;
 
 const REF_COLORS = [
   { border: TOKENS.brass, fill: TOKENS["brass-soft"] },
@@ -61,6 +66,28 @@ const OVERLAY_CSS = `
 }
 .sheet-row-hdr[data-active-next="true"] {
   border-bottom-color: var(--sheet-sel-line);
+}
+.sheet-col-grip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: ${GRIP_PX}px;
+  height: 100%;
+  cursor: col-resize;
+}
+.sheet-row-grip {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: ${GRIP_PX}px;
+  cursor: row-resize;
+}
+.sheet-resize-guide {
+  position: absolute;
+  pointer-events: none;
+  background: var(--sheet-sel);
+  z-index: 7;
 }
 .sheet-sel-fill {
   position: absolute;
@@ -122,8 +149,10 @@ function tableMetrics(table, win) {
     if (r < headRows) {
       const tr = table.tHead.rows[r];
       const trBox = tr.getBoundingClientRect();
+      const styleH = parseFloat(tr.style?.height);
+      const fallbackH = tr.hidden ? 0 : (Number.isFinite(styleH) ? styleH : ROW_ESTIMATE);
       const top = trBox.height > 0 ? trBox.top : tBox.top + r * ROW_ESTIMATE;
-      const height = trBox.height > 0 ? trBox.height : (tr.hidden ? 0 : ROW_ESTIMATE);
+      const height = trBox.height > 0 ? trBox.height : fallbackH;
       return { left: tBox.left + geom.colLeft(c), top, width: geom.colWidth(c), height };
     }
     const br = r - headRows;
@@ -182,11 +211,44 @@ function tableMetrics(table, win) {
     return br === -1 || c === -1 ? null : { r: br + headRows, c };
   }
 
-  return { cellBox, spanBox, visibleRows, cellAt, tableBox: tBox, width: geom.width };
+  return { cellBox, spanBox, visibleRows, cellAt, tableBox: tBox, width: geom.width, totalHeight: headHeight + geom.total() };
 }
 
-export function createOverlays(workbook, { onSelectCol, onSelectRow, onSelectAll } = {}) {
+function defaultMeasure(doc) {
+  let ctx = null;
+  let tried = false;
+  return (text, font) => {
+    if (!tried) {
+      tried = true;
+      try {
+        ctx = doc.createElement("canvas").getContext?.("2d") ?? null;
+      } catch {
+        ctx = null;
+      }
+    }
+    if (!ctx || typeof ctx.measureText !== "function") return text.length * 8;
+    if (font) ctx.font = font;
+    return ctx.measureText(text).width;
+  };
+}
+
+export function createOverlays(
+  workbook,
+  {
+    onSelectCol,
+    onSelectRow,
+    onSelectAll,
+    onResizeCol,
+    onResizeRow,
+    onFitCol,
+    onColMenu,
+    onRowMenu,
+    measureText: customMeasure = null,
+  } = {},
+) {
   const doc = workbook.ownerDocument ?? document;
+  const winObj = doc.defaultView ?? window;
+  const measure = customMeasure ?? defaultMeasure(doc);
   const theme = resolveTheme();
   const root = doc.createElement("div");
   root.className = "sheet-overlays";
@@ -197,6 +259,9 @@ export function createOverlays(workbook, { onSelectCol, onSelectRow, onSelectAll
   if (theme.tokens?.border) root.style.setProperty("--sheet-line-2", theme.tokens.border);
   if (theme.tokens?.mutedText) root.style.setProperty("--sheet-muted", theme.tokens.mutedText);
 
+  let lastState = { table: null, win: null, view: null };
+  let resizing = null;
+
   const corner = doc.createElement("div");
   corner.className = "sheet-corner";
   corner.setAttribute("role", "presentation");
@@ -206,23 +271,153 @@ export function createOverlays(workbook, { onSelectCol, onSelectRow, onSelectAll
     onSelectAll?.();
   });
 
+  function colGripOf(e) {
+    const grip = e.target?.closest?.("[data-col-resize]");
+    if (grip) return Number(grip.getAttribute("data-col-resize"));
+    const hdr = e.target?.closest?.("[data-col]");
+    if (!hdr || !lastState.table || typeof e.clientX !== "number") return null;
+    const c = Number(hdr.getAttribute("data-col"));
+    const cb = api.cellBox(lastState.table, lastState.win, 0, c);
+    if (cb && cb.width > GRIP_PX && e.clientX >= cb.left + cb.width - GRIP_PX && e.clientX <= cb.left + cb.width + 2) {
+      return c;
+    }
+    return null;
+  }
+
+  function rowGripOf(e) {
+    const grip = e.target?.closest?.("[data-row-resize]");
+    if (grip) return Number(grip.getAttribute("data-row-resize"));
+    const hdr = e.target?.closest?.("[data-row]");
+    if (!hdr || !lastState.table || typeof e.clientY !== "number") return null;
+    const r = Number(hdr.getAttribute("data-row"));
+    const rb = api.cellBox(lastState.table, lastState.win, r, 0);
+    if (rb && rb.height > GRIP_PX && e.clientY >= rb.top + rb.height - GRIP_PX && e.clientY <= rb.top + rb.height + 2) {
+      return r;
+    }
+    return null;
+  }
+
+  function paintGuide() {
+    if (!resizing || !lastState.table) return;
+    const origin = root.getBoundingClientRect();
+    const metrics = tableMetrics(lastState.table, lastState.win);
+    const first = metrics.cellBox(0, 0);
+    resizeGuide.hidden = false;
+    if (resizing.axis === "col") {
+      placeBox(resizeGuide, origin, {
+        left: resizing.baseStart + resizing.nextSize,
+        top: first.top - HEADER_H,
+        width: 2,
+        height: HEADER_H + Math.max(metrics.totalHeight, HEADER_H),
+      });
+    } else {
+      placeBox(resizeGuide, origin, {
+        left: first.left - GUTTER_W,
+        top: resizing.baseStart + resizing.nextSize,
+        width: GUTTER_W + Math.max(metrics.width, GUTTER_W),
+        height: 2,
+      });
+    }
+  }
+
   const colsLayer = doc.createElement("div");
   colsLayer.addEventListener("mousedown", (e) => {
-    if (e.button !== 0) return;
-    const hdr = e.target.closest?.("[data-col]");
+    if (e.button !== undefined && e.button !== 0) return;
+    const gripCol = colGripOf(e);
+    if (gripCol !== null) {
+      e.preventDefault();
+      e.stopPropagation();
+      const cb = lastState.table ? api.cellBox(lastState.table, lastState.win, 0, gripCol) : null;
+      const startSize = cb?.width || 100;
+      resizing = {
+        axis: "col",
+        index: gripCol,
+        startPos: e.clientX ?? 0,
+        startSize,
+        baseStart: cb?.left ?? 0,
+        nextSize: startSize,
+        moved: false,
+      };
+      paintGuide();
+      return;
+    }
+    const hdr = e.target?.closest?.("[data-col]");
     if (!hdr) return;
     e.preventDefault();
     onSelectCol?.(Number(hdr.getAttribute("data-col")), e.shiftKey);
   });
+  colsLayer.addEventListener("dblclick", (e) => {
+    const gripCol = colGripOf(e);
+    if (gripCol === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onFitCol?.(gripCol);
+  });
+  colsLayer.addEventListener("contextmenu", (e) => {
+    const hdr = e.target?.closest?.("[data-col]");
+    if (!hdr) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onColMenu?.(Number(hdr.getAttribute("data-col")), hdr, e.clientX ?? 0, e.clientY ?? 0);
+  });
 
   const rowsLayer = doc.createElement("div");
   rowsLayer.addEventListener("mousedown", (e) => {
-    if (e.button !== 0) return;
-    const hdr = e.target.closest?.("[data-row]");
+    if (e.button !== undefined && e.button !== 0) return;
+    const gripRow = rowGripOf(e);
+    if (gripRow !== null) {
+      e.preventDefault();
+      e.stopPropagation();
+      const rb = lastState.table ? api.cellBox(lastState.table, lastState.win, gripRow, 0) : null;
+      const startSize = rb?.height || ROW_ESTIMATE;
+      resizing = {
+        axis: "row",
+        index: gripRow,
+        startPos: e.clientY ?? 0,
+        startSize,
+        baseStart: rb?.top ?? 0,
+        nextSize: startSize,
+        moved: false,
+      };
+      paintGuide();
+      return;
+    }
+    const hdr = e.target?.closest?.("[data-row]");
     if (!hdr) return;
     e.preventDefault();
     onSelectRow?.(Number(hdr.getAttribute("data-row")), e.shiftKey);
   });
+  rowsLayer.addEventListener("contextmenu", (e) => {
+    const hdr = e.target?.closest?.("[data-row]");
+    if (!hdr) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onRowMenu?.(Number(hdr.getAttribute("data-row")), hdr, e.clientX ?? 0, e.clientY ?? 0);
+  });
+
+  function onWinMouseMove(e) {
+    if (!resizing) return;
+    resizing.moved = true;
+    if (resizing.axis === "col") {
+      resizing.nextSize = Math.max(MIN_COL_W, Math.round(resizing.startSize + ((e.clientX ?? 0) - resizing.startPos)));
+    } else {
+      resizing.nextSize = Math.max(MIN_ROW_H, Math.round(resizing.startSize + ((e.clientY ?? 0) - resizing.startPos)));
+    }
+    paintGuide();
+  }
+
+  function onWinMouseUp() {
+    if (!resizing) return;
+    const done = resizing;
+    resizing = null;
+    resizeGuide.hidden = true;
+    if (!done.moved) return;
+    if (done.axis === "col") onResizeCol?.(done.index, done.nextSize);
+    else onResizeRow?.(done.index, done.nextSize);
+  }
+
+  winObj.addEventListener("mousemove", onWinMouseMove);
+  winObj.addEventListener("mouseup", onWinMouseUp);
 
   const refsLayer = doc.createElement("div");
   const selFill = doc.createElement("div");
@@ -233,6 +428,10 @@ export function createOverlays(workbook, { onSelectCol, onSelectRow, onSelectAll
   activeRing.className = "sheet-active-ring";
   activeRing.hidden = true;
 
+  const resizeGuide = doc.createElement("div");
+  resizeGuide.className = "sheet-resize-guide";
+  resizeGuide.hidden = true;
+
   const editorSlot = doc.createElement("div");
   editorSlot.className = "sheet-editor-slot";
 
@@ -241,7 +440,7 @@ export function createOverlays(workbook, { onSelectCol, onSelectRow, onSelectAll
   live.setAttribute("aria-live", "polite");
   live.setAttribute("aria-atomic", "true");
 
-  root.append(corner, colsLayer, rowsLayer, refsLayer, selFill, activeRing, editorSlot, live);
+  root.append(corner, colsLayer, rowsLayer, refsLayer, selFill, activeRing, resizeGuide, editorSlot, live);
 
   const parent = workbook.parentElement ?? doc.body;
   const ui = mountEditorUI({
@@ -253,7 +452,22 @@ export function createOverlays(workbook, { onSelectCol, onSelectRow, onSelectAll
     attributes: { "sap-ignore": "" },
   });
 
+  function setHeaderContent(el, label, gripClass, gripAttr, index) {
+    let labelEl = el.firstElementChild;
+    let gripEl = labelEl?.nextElementSibling ?? null;
+    if (!labelEl || !gripEl) {
+      el.textContent = "";
+      labelEl = doc.createElement("span");
+      gripEl = doc.createElement("div");
+      gripEl.className = gripClass;
+      el.append(labelEl, gripEl);
+    }
+    if (labelEl.textContent !== label) labelEl.textContent = label;
+    gripEl.setAttribute(gripAttr, String(index));
+  }
+
   function render({ table, win, view, box, editing = false, refs = [], shownTab = "" }) {
+    lastState = { table, win, view };
     if (!table || !view || view.rows.length === 0 || view.cols.length === 0) {
       colsLayer.textContent = "";
       rowsLayer.textContent = "";
@@ -288,8 +502,7 @@ export function createOverlays(workbook, { onSelectCol, onSelectRow, onSelectAll
       el.hidden = cb.width === 0;
       el.setAttribute("data-col", String(c));
       el.setAttribute("data-active", box && c >= box.left && c <= box.right ? "true" : "false");
-      const label = colName(c);
-      if (el.textContent !== label) el.textContent = label;
+      setHeaderContent(el, colName(c), "sheet-col-grip", "data-col-resize", c);
       placeBox(el, origin, { left: cb.left, top: firstCell.top - HEADER_H, width: cb.width, height: HEADER_H });
     }
 
@@ -309,8 +522,7 @@ export function createOverlays(workbook, { onSelectCol, onSelectRow, onSelectAll
       const nextActive = Boolean(active && box && r < box.bottom);
       el.setAttribute("data-active", active ? "true" : "false");
       el.setAttribute("data-active-next", nextActive ? "true" : "false");
-      const label = String(r + 1);
-      if (el.textContent !== label) el.textContent = label;
+      setHeaderContent(el, String(r + 1), "sheet-row-grip", "data-row-resize", r);
       placeBox(el, origin, { left: firstCell.left - GUTTER_W, top: rb.top, width: GUTTER_W, height: rb.height });
     });
 
@@ -380,16 +592,41 @@ export function createOverlays(workbook, { onSelectCol, onSelectRow, onSelectAll
     return tableMetrics(table, win).cellBox(r, c);
   }
 
-  return {
+  function fitColumnWidth(table, win, view, c) {
+    if (!table || !view || c < 0 || c >= view.cols.length) return null;
+    const cs = winObj.getComputedStyle(table);
+    const font = cs.font || `${cs.fontWeight || "400"} ${cs.fontSize || "13px"} ${cs.fontFamily || "sans-serif"}`.trim();
+    const visRows = tableMetrics(table, win).visibleRows(view.rows.length);
+    let maxText = 0;
+    let found = false;
+    for (const r of visRows) {
+      if (view.rowHidden?.(r)) continue;
+      const cell = view.cell(r, c);
+      if (!cell || cell.covered || (cell.span?.cols ?? 1) > 1 || !cell.text) continue;
+      found = true;
+      for (const line of cell.text.split("\n")) maxText = Math.max(maxText, measure(line, font) || 0);
+    }
+    return found ? Math.min(MAX_FIT_W, Math.max(MIN_COL_W, Math.ceil(maxText + FIT_PAD_PX))) : null;
+  }
+
+  const api = {
     host: ui.host,
     shadow: ui.shadow,
     root,
     editorSlot,
+    resizeGuide,
     live,
     render,
     announce,
     cellAtPoint,
     cellBox,
-    dispose: () => ui.remove(),
+    fitColumnWidth,
+    dispose() {
+      resizing = null;
+      winObj.removeEventListener("mousemove", onWinMouseMove);
+      winObj.removeEventListener("mouseup", onWinMouseUp);
+      ui.remove();
+    },
   };
+  return api;
 }

@@ -140,4 +140,90 @@ describe("sheet keyboard map", () => {
     expect(keyIntent({ key: "x", metaKey: true }, { platform: "MacIntel", editing: false })).toBeNull();
     expect(keyIntent({ key: "v", metaKey: true }, { platform: "MacIntel", editing: false })).toBeNull();
   });
+
+  // Bug: AltGr characters on Windows (reported as Ctrl+Alt) and Option characters on macOS triggered insert, delete and strikethrough.
+  test("AltGr and Option characters never trigger insert, delete or strikethrough", () => {
+    const altGr = (extra) => ({
+      ctrlKey: true,
+      altKey: true,
+      getModifierState: (name) => name === "AltGraph",
+      ...extra,
+    });
+
+    expect(keyIntent(altGr({ key: "\\", code: "Minus" }), { platform: "Win32", editing: false })).toBeNull();
+    expect(keyIntent(altGr({ key: "}", code: "Equal" }), { platform: "Win32", editing: false })).toBeNull();
+    expect(
+      keyIntent({ key: "[", code: "Digit5", altKey: true, shiftKey: true }, { platform: "MacIntel", editing: false }),
+    ).toBeNull();
+  });
+
+  // Bug: formatting, structure and context-menu shortcuts fired while editing a cell's text or missed platform modifiers.
+  test("maps formatting, alignment, number-format, clear-format, insert/delete and context-menu shortcuts in ready mode only", () => {
+    expect(keyIntent({ key: "b", ctrlKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "bold" });
+    expect(keyIntent({ key: "b", metaKey: true }, { platform: "MacIntel", editing: false })).toEqual({ type: "bold" });
+    expect(keyIntent({ key: "i", ctrlKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "italic" });
+    expect(keyIntent({ key: "u", metaKey: true }, { platform: "MacIntel", editing: false })).toEqual({ type: "underline" });
+    expect(keyIntent({ key: "5", altKey: true, shiftKey: true }, { platform: "Win32", editing: false })).toEqual({
+      type: "strikethrough",
+    });
+    expect(keyIntent({ key: "X", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: false })).toEqual({
+      type: "strikethrough",
+    });
+    expect(keyIntent({ key: "X", ctrlKey: true, shiftKey: true }, { platform: "Win32", editing: false })).toBeNull();
+
+    expect(keyIntent({ key: "L", ctrlKey: true, shiftKey: true }, { platform: "Win32", editing: false })).toEqual({
+      type: "align",
+      align: "left",
+    });
+    expect(keyIntent({ key: "E", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: false })).toEqual({
+      type: "align",
+      align: "center",
+    });
+    expect(keyIntent({ key: "R", ctrlKey: true, shiftKey: true }, { platform: "Win32", editing: false })).toEqual({
+      type: "align",
+      align: "right",
+    });
+
+    expect(keyIntent({ key: "1", ctrlKey: true, shiftKey: true }, { platform: "Win32", editing: false })).toEqual({
+      type: "numberFormat",
+      fmt: "#,##0.00",
+    });
+    expect(keyIntent({ key: "$", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: false })).toEqual({
+      type: "numberFormat",
+      fmt: "$#,##0.00",
+    });
+    expect(keyIntent({ key: "%", ctrlKey: true, shiftKey: true }, { platform: "Win32", editing: false })).toEqual({
+      type: "numberFormat",
+      fmt: "0.00%",
+    });
+    expect(keyIntent({ key: "\\", ctrlKey: true }, { platform: "Win32", editing: false })).toEqual({
+      type: "clearFormat",
+    });
+
+    expect(keyIntent({ key: "=", ctrlKey: true, altKey: true }, { platform: "Win32", editing: false })).toEqual({
+      type: "insertAxis",
+    });
+    expect(keyIntent({ key: "-", metaKey: true, altKey: true }, { platform: "MacIntel", editing: false })).toEqual({
+      type: "deleteAxis",
+    });
+    expect(keyIntent({ key: "ContextMenu" }, { platform: "Win32", editing: false })).toEqual({ type: "contextMenu" });
+    expect(keyIntent({ key: "F10", shiftKey: true }, { platform: "Win32", editing: false })).toEqual({
+      type: "contextMenu",
+    });
+
+    for (const [event, opts] of [
+      [{ key: "b", ctrlKey: true }, { platform: "Win32", editing: true }],
+      [{ key: "i", metaKey: true }, { platform: "MacIntel", editing: true }],
+      [{ key: "u", ctrlKey: true }, { platform: "Win32", editing: true }],
+      [{ key: "X", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: true }],
+      [{ key: "L", ctrlKey: true, shiftKey: true }, { platform: "Win32", editing: true }],
+      [{ key: "1", ctrlKey: true, shiftKey: true }, { platform: "Win32", editing: true }],
+      [{ key: "\\", ctrlKey: true }, { platform: "Win32", editing: true }],
+      [{ key: "=", ctrlKey: true, altKey: true }, { platform: "Win32", editing: true }],
+      [{ key: "-", ctrlKey: true, altKey: true }, { platform: "Win32", editing: true }],
+      [{ key: "F10", shiftKey: true }, { platform: "Win32", editing: true }],
+    ]) {
+      expect(keyIntent(event, opts)).toBeNull();
+    }
+  });
 });

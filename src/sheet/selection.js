@@ -1,4 +1,4 @@
-import { a1 } from "./commit.js";
+import { a1, colName } from "./commit.js";
 
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
@@ -93,6 +93,26 @@ export function clipSelection(view, sel, prevView = null) {
     return { tab, anchor: { row: "", col: "" }, focus: { row: "", col: "" } };
   }
   const { ar, ac, fr, fc } = coordsOf(view, sel, prevView);
+  if (sel?.whole === "cols") {
+    const left = visibleCol(view, Math.min(ac, fc), 1);
+    const right = visibleCol(view, Math.max(ac, fc), -1);
+    return {
+      tab,
+      anchor: { row: view.rows[0], col: view.cols[left] },
+      focus: { row: view.rows[view.rows.length - 1], col: view.cols[right] },
+      whole: "cols",
+    };
+  }
+  if (sel?.whole === "rows") {
+    const top = visibleRow(view, Math.min(ar, fr), 1);
+    const bottom = visibleRow(view, Math.max(ar, fr), -1);
+    return {
+      tab,
+      anchor: { row: view.rows[top], col: view.cols[0] },
+      focus: { row: view.rows[bottom], col: view.cols[view.cols.length - 1] },
+      whole: "rows",
+    };
+  }
   const single = sel?.anchor?.row === sel?.focus?.row && sel?.anchor?.col === sel?.focus?.col;
   const ownA = ownerOf(view, visibleRow(view, ar, 1), visibleCol(view, ac, 1));
   const anchor = { row: view.rows[ownA.r], col: view.cols[ownA.c] };
@@ -109,6 +129,7 @@ export function growBox(view, rawTop, rawLeft, rawBottom, rawRight) {
   let left = clamp(Math.min(rawLeft, rawRight), 0, maxC);
   let bottom = clamp(Math.max(rawTop, rawBottom), 0, maxR);
   let right = clamp(Math.max(rawLeft, rawRight), 0, maxC);
+  if (top === 0 && left === 0 && bottom === maxR && right === maxC) return { top, left, bottom, right };
   let grew = true;
   while (grew) {
     grew = false;
@@ -131,6 +152,8 @@ export function selectionBox(view, sel) {
   if (view.rows.length === 0 || view.cols.length === 0) return null;
   const { ar, ac, fr, fc } = coordsOf(view, sel);
   const active = ownerOf(view, ar, ac);
+  if (sel?.whole === "cols") return { top: 0, bottom: view.rows.length - 1, left: Math.min(ac, fc), right: Math.max(ac, fc), active };
+  if (sel?.whole === "rows") return { top: Math.min(ar, fr), bottom: Math.max(ar, fr), left: 0, right: view.cols.length - 1, active };
   const box = growBox(view, active.r, active.c, fr, fc);
   return { ...box, active };
 }
@@ -140,6 +163,21 @@ export function selectionArea(view, sel) {
   if (!box) return "A1";
   if (box.top === box.bottom && box.left === box.right) return a1(box.top, box.left);
   return `${a1(box.top, box.left)}:${a1(box.bottom, box.right)}`;
+}
+
+export function axisSpan(view, sel) {
+  if (view.rows.length === 0 || view.cols.length === 0) return null;
+  const { ar, ac, fr, fc } = coordsOf(view, sel);
+  if (sel?.whole === "rows") return { axis: "rows", first: Math.min(ar, fr), last: Math.max(ar, fr) };
+  if (sel?.whole === "cols") return { axis: "cols", first: Math.min(ac, fc), last: Math.max(ac, fc) };
+  return null;
+}
+
+export function commandArea(view, sel) {
+  const span = axisSpan(view, sel);
+  if (span?.axis === "cols") return `${colName(span.first)}:${colName(span.last)}`;
+  if (span?.axis === "rows") return `${span.first + 1}:${span.last + 1}`;
+  return selectionArea(view, sel);
 }
 
 function landSingle(view, tab, r, c, dr = 0, dc = 0) {
@@ -265,22 +303,22 @@ export function selectAll(view, sel) {
 export function selectCols(view, sel) {
   const box = selectionBox(view, sel);
   if (!box) return sel;
-  const own = ownerOf(view, 0, box.left);
   return {
     tab: sel.tab,
-    anchor: { row: view.rows[own.r], col: view.cols[own.c] },
+    anchor: { row: view.rows[0], col: view.cols[box.left] },
     focus: { row: view.rows[view.rows.length - 1], col: view.cols[box.right] },
+    whole: "cols",
   };
 }
 
 export function selectRows(view, sel) {
   const box = selectionBox(view, sel);
   if (!box) return sel;
-  const own = ownerOf(view, box.top, 0);
   return {
     tab: sel.tab,
-    anchor: { row: view.rows[own.r], col: view.cols[own.c] },
+    anchor: { row: view.rows[box.top], col: view.cols[0] },
     focus: { row: view.rows[box.bottom], col: view.cols[view.cols.length - 1] },
+    whole: "rows",
   };
 }
 
@@ -298,7 +336,13 @@ export function readSelection(storage, path = "/") {
       typeof parsed?.focus?.row === "string" &&
       typeof parsed?.focus?.col === "string"
     ) {
-      return parsed;
+      const out = {
+        tab: parsed.tab,
+        anchor: { row: parsed.anchor.row, col: parsed.anchor.col },
+        focus: { row: parsed.focus.row, col: parsed.focus.col },
+      };
+      if (parsed.whole === "cols" || parsed.whole === "rows") out.whole = parsed.whole;
+      return out;
     }
   } catch {}
   return null;
@@ -308,4 +352,14 @@ export function writeSelection(storage, path, sel) {
   try {
     storage?.setItem?.(selectionKey(path), JSON.stringify(sel));
   } catch {}
+}
+
+export function selectColsAt(view, sel, c, { extend = false } = {}) {
+  const from = extend && sel?.whole === "cols" ? coordsOf(view, sel).ac : c;
+  return { tab: sel.tab, anchor: { row: view.rows[0], col: view.cols[from] }, focus: { row: view.rows[view.rows.length - 1], col: view.cols[c] }, whole: "cols" };
+}
+
+export function selectRowsAt(view, sel, r, { extend = false } = {}) {
+  const from = extend && sel?.whole === "rows" ? coordsOf(view, sel).ar : r;
+  return { tab: sel.tab, anchor: { row: view.rows[from], col: view.cols[0] }, focus: { row: view.rows[r], col: view.cols[view.cols.length - 1] }, whole: "rows" };
 }

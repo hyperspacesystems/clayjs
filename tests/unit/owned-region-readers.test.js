@@ -3,7 +3,7 @@ let regions;
 let derived;
 let save;
 
-const PAGE = '<main sap><p text="\'hi\'">hi</p><section item><table grid><tbody><tr><td text="\'x\'">x</td></tr></tbody></table></section></main>';
+const PAGE = '<main sap><p text="\'hi\'">hi</p><section item><table grid><tbody><tr><td n="1" text="\'x\'">x</td></tr></tbody></table></section></main>';
 const SELECTOR = "section[item] > table[grid]";
 const BYTES = '<tbody><tr><td text="\'x\'">owner</td></tr></tbody>';
 
@@ -39,7 +39,7 @@ test("the demo plugin stores the owner's bytes and no marker", async () => {
 });
 
 test("the painted values of the page leave region roots out, as the file side does, and ask the owner for no bytes", () => {
-  const file = `<!DOCTYPE html><html><head></head><body>${PAGE.replace(">x<", ">stale<")}</body></html>`;
+  const file = `<!DOCTYPE html><html><head></head><body>${PAGE.replace('n="1"', 'n="2"')}</body></html>`;
   expect(derived.paintSignatureOfHtml(file)).toBe(save.currentPaintSignature());
   expect(serialized).toBe(0);
   handle.dispose();

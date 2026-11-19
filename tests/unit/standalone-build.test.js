@@ -81,8 +81,9 @@ test("carries the core, every plugin and every satellite", () => {
   // the SEO sheet's page skin and the phone menu rules among the Nov 11 changes (5.80 MB measured),
   // then to 6.0 MB for sapjs 0.9.0's plugin host and the visitor menu's Earlier drafts
   // (2026-11-13, 5.92 MB measured), then to 6.1 MB for owned regions (2026-11-15, 6.01 MB measured), then to 6.3 MB for the sheet's grid engine
-  // (2026-11-18, 6.21 MB measured), then to 6.5 MB for the sheet interface (2026-11-18, 6.39 MB measured).
-  expect(bundle.length).toBeLessThan(6_500_000);
+  // (2026-11-18, 6.21 MB measured), then to 6.5 MB for the sheet interface (2026-11-18, 6.39 MB measured), then to 6.6 MB for the sheet's formatting
+  // commands and sapjs's locales (2026-11-19, 6.55 MB measured).
+  expect(bundle.length).toBeLessThan(6_600_000);
 });
 
 // The chunk build adds a generated bootstrap per entry that has a target, plus the

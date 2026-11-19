@@ -17,9 +17,16 @@ export const BEACON = "sap-error";
 // attributes. Under a boundary only rules and the error marker say what is painted,
 // because the engine stays out of it: its own directives, sap-ignore and templates mean
 // nothing there. First party rules live in this table, because this is the one file
-// ClayJS vendors. None ships yet. A plugin from anyone else gives the same rules in its
-// definition's `ownership` field, and they count once its file has run.
-export const PLUGIN_RULES = [];
+// ClayJS vendors. A plugin from anyone else gives the same rules in its definition's
+// `ownership` field, and they count once its file has run.
+export const PLUGIN_RULES = [
+  // The grid: what a host leaves out of its undo, its live-sync merges and its paint check.
+  // Only `n` is declared. A formula's text and v and a value cell's shown text are the file's
+  // to a host: its undo puts back the v that typing a formula over a number removed, its merges
+  // carry them from tab to tab as written, and the text the stale refresh paints when a sheet
+  // opens is no painted difference, so opening a sheet saves nothing.
+  { plugin: "grid", within: "table[grid]", select: "td", attrs: ["n"] },
+];
 
 const WHEN = /^(show-when|hide-when|option|option-not):/;
 // Identity and the attributes that declare the record itself are never paint
