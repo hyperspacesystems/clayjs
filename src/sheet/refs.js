@@ -20,6 +20,49 @@ export function quoteSheetName(name) {
 
 const getTokenize = (custom) => custom ?? globalThis.window?.Sap?.grid?.tokenize ?? null;
 
+const COL_LIMIT = 18278; // ZZZ, the last column a reference can name
+
+const colNumber = (letters) => [...letters].reduce((n, ch) => n * 26 + (ch.charCodeAt(0) - 64), 0);
+
+function colLetters(n) {
+  let out = "";
+  for (let k = n; k > 0; k = Math.floor((k - 1) / 26)) out = String.fromCharCode(65 + ((k - 1) % 26)) + out;
+  return out;
+}
+
+const WORD_PART = /[A-Za-z0-9_.'$]/;
+
+// The formula `text` as it reads `dr` rows and `dc` columns away: every relative row and column of
+// a reference moves, an absolute one ($) stays, and a reference moved off the sheet becomes #REF!.
+// A bare column or row word moves only as one end of a range (A:C, 2:5), so a function name being
+// typed is never taken for a column. Text that is not a formula comes back as it is.
+export function shiftFormula(text, dr, dc, customTokenize) {
+  const tokenize = getTokenize(customTokenize);
+  if (typeof text !== "string" || !text.startsWith("=") || (dr === 0 && dc === 0) || typeof tokenize !== "function") return text;
+  const tokens = tokenize(text);
+  const colon = (t) => t?.type === "punct" && t.value === ":";
+  const whole = (t) =>
+    t && !WORD_PART.test(text[t.start - 1] ?? "") && !WORD_PART.test(text[t.end] ?? "") && (t.row === undefined || Number.isInteger(t.row));
+  const okEnd = (t, want) => whole(t) && (t.type === want || (want === "col" && t.type === "cell"));
+  const paired = (i) =>
+    (colon(tokens[i - 1]) && okEnd(tokens[i - 2], tokens[i].type)) || (colon(tokens[i + 1]) && whole(tokens[i + 2]) && tokens[i + 2].type === tokens[i].type);
+  let out = "";
+  let at = 0;
+  tokens.forEach((t, i) => {
+    if (!whole(t) || (t.type !== "cell" && !((t.type === "col" || t.type === "row") && paired(i)))) return;
+    const src = text.slice(t.start, t.end);
+    const bang = src.lastIndexOf("!");
+    const prefix = bang === -1 ? "" : src.slice(0, bang + 1);
+    const col = t.col === undefined ? null : colNumber(t.col) + (t.absCol ? 0 : dc);
+    const row = t.row === undefined ? null : t.row + (t.absRow ? 0 : dr);
+    const off = (col !== null && (col < 1 || col > COL_LIMIT)) || (row !== null && row < 1);
+    const coord = (col === null ? "" : (t.absCol ? "$" : "") + colLetters(col)) + (row === null ? "" : (t.absRow ? "$" : "") + row);
+    out += text.slice(at, t.start) + (off ? "#REF!" : prefix + coord);
+    at = t.end;
+  });
+  return out + text.slice(at);
+}
+
 function resolveTabId(sheetName, activeTab, tabs) {
   if (sheetName === null || sheetName === undefined) return activeTab;
   const low = sheetName.toLowerCase();

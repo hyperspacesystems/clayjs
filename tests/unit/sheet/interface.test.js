@@ -30,6 +30,49 @@ const BOOK = () => `<main sap plugins="grid"><div id="scroller" style="position:
 <script type="application/json" sheet-commit>{"rev":1}</script>
 </div></div></main>`;
 
+const SLICE_BOOK = () => `<main sap plugins="grid"><div id="scroller" style="position:relative;overflow:auto"><div items="sheets" sheet-workbook>
+<section item data-id="s1" data-pos="V"><h2 bind="name">Budget</h2><table grid><colgroup><col data-id="c1" data-pos="V"><col data-id="c2" data-pos="l"><col data-id="c3" data-pos="l"><col data-id="c4" data-pos="l"><col data-id="c5" data-pos="l"><col data-id="c6" data-pos="l"></colgroup>
+<tbody>
+<tr data-id="r1" data-pos="V"><td n v="1">1</td><td n v="2">2</td><td n></td><td n></td><td n></td><td n></td></tr>
+<tr data-id="r2" data-pos="l"><td n></td><td n v="3">3</td><td n v="4">4</td><td n></td><td n></td><td n></td></tr>
+<tr data-id="r3" data-pos="l"><td n></td><td n v="5">5</td><td n f="=B3*2" v="10">10</td><td n></td><td n></td><td n></td></tr>
+<tr data-id="r4" data-pos="l"><td n></td><td n></td><td n></td><td n></td><td n></td><td n></td></tr>
+<tr data-id="r5" data-pos="l"><td n></td><td n></td><td n></td><td n></td><td n></td><td n></td></tr>
+<tr data-id="r6" data-pos="l"><td n></td><td n></td><td n></td><td n></td><td n></td><td n></td></tr>
+</tbody></table></section>
+<script type="application/json" sheet-commit">{"rev":1}</script>
+</div></div></main>`;
+
+function clipEvent(type, data = {}) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  const store = { ...data };
+  Object.defineProperty(event, "clipboardData", {
+    value: {
+      getData: (kind) => store[kind] ?? "",
+      setData: (kind, value) => {
+        store[kind] = value;
+      },
+    },
+  });
+  return event;
+}
+
+function selectB2ToC3(textarea) {
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  press(textarea, "ArrowRight", { shiftKey: true });
+  press(textarea, "ArrowDown", { shiftKey: true });
+}
+
+function moveToE5(textarea) {
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  press(textarea, "ArrowDown");
+  press(textarea, "ArrowDown");
+}
+
 function installAdoptedStyleSheets() {
   let adopted = [];
   window.CSSStyleSheet = class {
@@ -438,6 +481,414 @@ test("browser shortcuts typed into the editor are not prevented", async () => {
   textarea.dispatchEvent(print);
   expect(print.defaultPrevented).toBe(false);
   expect(textarea.value).toBe("=A1+B1");
+
+  ui.dispose();
+});
+
+// Bug: copy, paste, undo or redo lost a formula, or a paste was not one undoable action.
+test("copy B2:C3, paste at E5, then undo empties it and redo pastes it again", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  selectB2ToC3(textarea);
+  const copy = clipEvent("copy");
+  textarea.dispatchEvent(copy);
+  expect(copy.defaultPrevented).toBe(true);
+  expect(copy.clipboardData.getData("text/html")).toContain('data-sheet-origin="1,1"');
+
+  moveToE5(textarea);
+  const paste = clipEvent("paste", { "text/html": copy.clipboardData.getData("text/html"), "text/plain": copy.clipboardData.getData("text/plain") });
+  textarea.dispatchEvent(paste);
+  expect(paste.defaultPrevented).toBe(true);
+
+  expect(grid.get("E5")).toBe(3);
+  expect(grid.get("E6")).toBe(5);
+  expect(grid.input("F6")).toBe("=E6*2");
+  expect(grid.get("F6")).toBe(10);
+
+  press(textarea, "z", { metaKey: true });
+  expect(grid.cell("E5").content).toBeNull();
+  expect(grid.cell("F6").content).toBeNull();
+
+  press(textarea, "Z", { metaKey: true, shiftKey: true });
+  expect(grid.get("E5")).toBe(3);
+  expect(grid.input("F6")).toBe("=E6*2");
+  expect(grid.get("F6")).toBe(10);
+
+  ui.dispose();
+});
+
+// Bug: the sheet undid a cell while the person was undoing typing inside the editor.
+test("Ctrl+Z in edit mode is not prevented and leaves the sheet alone", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  typeInto(textarea, "42");
+  press(textarea, "Enter");
+  expect(grid.get("A1")).toBe(42);
+
+  press(textarea, "ArrowUp");
+  typeInto(textarea, "99");
+  expect(inst.editor.editing).toBe(true);
+
+  const undoKey = new KeyboardEvent("keydown", { key: "z", metaKey: true, bubbles: true, composed: true, cancelable: true });
+  textarea.dispatchEvent(undoKey);
+
+  expect(undoKey.defaultPrevented).toBe(false);
+  expect(grid.get("A1")).toBe(42);
+  expect(textarea.value).toBe("99");
+
+  press(textarea, "Escape");
+  expect(grid.get("A1")).toBe(42);
+
+  ui.dispose();
+});
+
+// Bug: a paste while the person was editing a cell wrote the block into the Grid.
+test("a paste in edit mode does nothing to the Grid", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  typeInto(textarea, "hello");
+  expect(inst.editor.editing).toBe(true);
+  const html = '<table data-sheet-origin="0,0"><tr><td data-content="42">42</td></tr></table>';
+  const paste = clipEvent("paste", { "text/html": html });
+  textarea.dispatchEvent(paste);
+
+  expect(paste.defaultPrevented).toBe(false);
+  expect(grid.cell("A1").content).not.toBe(42);
+
+  press(textarea, "Escape");
+  ui.dispose();
+});
+
+// Bug: cut copied nothing, or its clear was not one undoable action.
+test("cut leaves the copied text on the clipboard, empties the cells and one undo brings them back", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  selectB2ToC3(textarea);
+  const cut = clipEvent("cut");
+  textarea.dispatchEvent(cut);
+
+  expect(cut.defaultPrevented).toBe(true);
+  expect(cut.clipboardData.getData("text/plain")).toContain("3");
+  expect(grid.cell("B2").content).toBeNull();
+  expect(grid.cell("C3").content).toBeNull();
+
+  press(textarea, "z", { metaKey: true });
+  expect(grid.get("B2")).toBe(3);
+  expect(grid.input("C3")).toBe("=B3*2");
+
+  ui.dispose();
+});
+
+// Bug: values-only pasted a formula instead of its result.
+test("Ctrl+Shift+V pastes values only", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  selectB2ToC3(textarea);
+  const copy = clipEvent("copy");
+  textarea.dispatchEvent(copy);
+
+  moveToE5(textarea);
+  const vKey = new KeyboardEvent("keydown", { key: "V", metaKey: true, shiftKey: true, bubbles: true, composed: true, cancelable: true });
+  textarea.dispatchEvent(vKey);
+  expect(vKey.defaultPrevented).toBe(false);
+  const paste = clipEvent("paste", { "text/html": copy.clipboardData.getData("text/html") });
+  textarea.dispatchEvent(paste);
+  expect(paste.defaultPrevented).toBe(true);
+
+  expect(grid.get("F6")).toBe(10);
+  expect(grid.input("F6")).not.toBe("=E6*2");
+
+  ui.dispose();
+});
+
+// Bug: the page's undo plugin recorded the sheet's own Grid writes.
+test("a commit adds nothing to the page undo history", async () => {
+  const { ui, inst } = await start(SLICE_BOOK());
+  window.clayEditMode = true;
+  await import("../../../src/lib/mutation.js");
+  const { undo, ready } = await import("../../../src/plugins/undo.js");
+  window.clay.undo = undo;
+  await ready;
+  await turn();
+
+  typeInto(inst.editor.textarea, "42");
+  press(inst.editor.textarea, "Enter");
+  await turn();
+  undo.flush();
+
+  expect(undo.history).toEqual([]);
+  undo.stop();
+  ui.dispose();
+});
+
+// Bug: the toolbar's undo button stayed disabled after a change the sheet could undo.
+test("the toolbar's undo button turns enabled after a commit and undoes that commit", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const button = () => inst.chrome.topShadow.querySelector('[data-command="undo"]');
+  expect(button().getAttribute("aria-disabled")).toBe("true");
+
+  typeInto(inst.editor.textarea, "42");
+  press(inst.editor.textarea, "Enter");
+  await frame();
+
+  expect(button().getAttribute("aria-disabled")).not.toBe("true");
+
+  button().click();
+  await frame();
+
+  expect(Sap.grid(tableOf("s1")).get("A1")).toBe(1);
+
+  ui.dispose();
+});
+
+// Bug: a foreign table pasted by its HTML, so a colspan moved every value left and a cell's line break
+// ran its words together.
+test("a foreign table pastes the clipboard's plain text, so spans and line breaks keep their cells", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+  const html = '<table><tr><td colspan="2">Q1</td><td>Total</td></tr><tr><td>Line 1<br>Line 2</td><td>10</td><td>20</td></tr></table>';
+  const text = 'Q1\t\tTotal\r\n"Line 1\nLine 2"\t10\t20';
+
+  const paste = clipEvent("paste", { "text/html": html, "text/plain": text });
+  textarea.dispatchEvent(paste);
+
+  expect(paste.defaultPrevented).toBe(true);
+  expect(grid.get("A1")).toBe("Q1");
+  expect(grid.cell("B1").content).toBeNull();
+  expect(grid.get("C1")).toBe("Total");
+  expect(grid.get("A2")).toBe("Line 1\nLine 2");
+  expect(grid.get("B2")).toBe(10);
+  expect(grid.get("C2")).toBe(20);
+
+  ui.dispose();
+});
+
+// Bug: a cut cell's formula moved by the distance to where it was pasted.
+test("cut then paste keeps the formula's references", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+  expect(grid.input("C3")).toBe("=B3*2");
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.textContent).toBe("C3");
+
+  const cut = clipEvent("cut");
+  textarea.dispatchEvent(cut);
+  expect(cut.clipboardData.getData("text/html")).toContain("data-sheet-cut");
+  expect(grid.cell("C3").content).toBeNull();
+
+  for (let i = 0; i < 3; i++) press(textarea, "ArrowRight");
+  for (let i = 0; i < 3; i++) press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.textContent).toBe("F6");
+
+  const paste = clipEvent("paste", { "text/html": cut.clipboardData.getData("text/html"), "text/plain": cut.clipboardData.getData("text/plain") });
+  textarea.dispatchEvent(paste);
+
+  expect(grid.input("F6")).toBe("=B3*2");
+  expect(grid.get("F6")).toBe(10);
+
+  ui.dispose();
+});
+
+// Bug: a cut event with no clipboard to write to cleared the selected cells anyway.
+test("a cut that cannot write the clipboard leaves the cells as they were", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+  selectB2ToC3(textarea);
+
+  const cut = new Event("cut", { bubbles: true, cancelable: true });
+  textarea.dispatchEvent(cut);
+
+  expect(cut.defaultPrevented).toBe(false);
+  expect(grid.get("B2")).toBe(3);
+  expect(grid.cell("C3").content).toEqual({ f: "=B3*2" });
+  expect(grid.get("C3")).toBe(10);
+
+  ui.dispose();
+});
+
+// Bug: a ready-mode textarea never cancelled beforecopy or beforecut, so the browser's menu Copy and
+// Cut and Safari's Cmd+C and Cmd+X did nothing.
+test("beforecopy and beforecut are cancelled in ready mode and left alone while editing", async () => {
+  const { ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+
+  for (const type of ["beforecopy", "beforecut"]) {
+    const ready = new Event(type, { bubbles: true, cancelable: true });
+    textarea.dispatchEvent(ready);
+    expect(ready.defaultPrevented).toBe(true);
+  }
+
+  typeInto(textarea, "42");
+  expect(inst.editor.editing).toBe(true);
+  for (const type of ["beforecopy", "beforecut"]) {
+    const editing = new Event(type, { bubbles: true, cancelable: true });
+    textarea.dispatchEvent(editing);
+    expect(editing.defaultPrevented).toBe(false);
+  }
+
+  press(textarea, "Escape");
+  ui.dispose();
+});
+
+// Bug: plain text starting with an unclosed quote threw an uncaught DelimitedError and pasted nothing.
+test("plain text starting with an unclosed quote pastes as that text and throws nothing", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+  const errors = [];
+  const onError = (event) => errors.push(event.error ?? event.reason ?? event);
+  window.addEventListener("error", onError);
+
+  const paste = clipEvent("paste", { "text/plain": '"TBD' });
+  textarea.dispatchEvent(paste);
+
+  window.removeEventListener("error", onError);
+  expect(errors).toEqual([]);
+  expect(paste.defaultPrevented).toBe(true);
+  expect(grid.get("A1")).toBe('"TBD');
+  expect(inst.chrome.noticeBar.hidden).toBe(true);
+
+  ui.dispose();
+});
+
+// Bug: plain text read as quoted CSV dropped the quotes a person had typed.
+test("plain text that looks like quoted csv keeps its quotes", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  textarea.dispatchEvent(clipEvent("paste", { "text/plain": '"Best" coffee' }));
+
+  expect(grid.get("A1")).toBe('"Best" coffee');
+
+  ui.dispose();
+});
+
+// Bug: one value pasted over two percent cells stored a different value than the same paste onto one.
+test("one value pasted over a percent selection stores what the same paste onto one cell stores", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+  grid.format("A1:B2", { fmt: "0%" });
+
+  textarea.dispatchEvent(clipEvent("paste", { "text/plain": "5" }));
+  const single = grid.get("A1");
+  expect(single).not.toBeNull();
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown", { shiftKey: true });
+  textarea.dispatchEvent(clipEvent("paste", { "text/plain": "5" }));
+
+  expect(grid.get("B1")).toBe(single);
+  expect(grid.get("B2")).toBe(single);
+
+  ui.dispose();
+});
+
+// Bug: values-only stayed armed after Cmd+Shift+V with no paste came, so the next Cmd+V pasted values.
+test("values only switches off on a later key, so the next paste keeps the formula", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  selectB2ToC3(textarea);
+  const copy = clipEvent("copy");
+  textarea.dispatchEvent(copy);
+
+  moveToE5(textarea);
+  press(textarea, "V", { metaKey: true, shiftKey: true });
+  press(textarea, "v", { metaKey: true });
+  textarea.dispatchEvent(clipEvent("paste", { "text/html": copy.clipboardData.getData("text/html"), "text/plain": copy.clipboardData.getData("text/plain") }));
+
+  expect(grid.input("F6")).toBe("=E6*2");
+  expect(grid.get("F6")).toBe(10);
+
+  ui.dispose();
+});
+
+// Bug: one value pasted over a selection that holds a merge was refused, so nothing was written.
+test("one value over a selection that holds a merge fills every uncovered cell without a notice", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+  grid.merge("B2:C3");
+
+  for (let i = 0; i < 3; i++) press(textarea, "ArrowDown", { shiftKey: true });
+  for (let i = 0; i < 3; i++) press(textarea, "ArrowRight", { shiftKey: true });
+  expect(inst.chrome.nameBox.textContent).toBe("A1:D4");
+
+  const paste = clipEvent("paste", { "text/plain": "7" });
+  textarea.dispatchEvent(paste);
+
+  expect(inst.chrome.noticeBar.hidden).toBe(true);
+  for (const ref of ["A1", "A2", "A3", "A4", "B1", "B2", "C1", "D1", "D2", "D3", "D4", "B4", "C4"]) expect(grid.get(ref)).toBe(7);
+  for (const ref of ["C2", "B3", "C3"]) expect(grid.cell(ref).content).toBeNull();
+
+  ui.dispose();
+});
+
+// Bug: a refused undo left the toolbar's undo button enabled with nothing left to undo.
+test("a refused undo shows the notice and leaves the toolbar's undo button disabled", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const button = () => inst.chrome.topShadow.querySelector('[data-command="undo"]');
+
+  typeInto(textarea, "42");
+  press(textarea, "Enter");
+  await frame();
+  expect(button().getAttribute("aria-disabled")).not.toBe("true");
+
+  const grid = Sap.grid(tableOf("s1"));
+  grid.apply = () => {
+    throw Object.assign(new Error("the sheet has 1 issue(s) to repair first"), { name: "GridRefused" });
+  };
+  press(textarea, "z", { metaKey: true });
+  await frame();
+
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(button().getAttribute("aria-disabled")).toBe("true");
+
+  ui.dispose();
+});
+
+// Bug: a redo that found changed cells showed the undo wording.
+test("a redo that finds changed cells says that step was not redone", async () => {
+  const { book, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+
+  typeInto(textarea, "42");
+  press(textarea, "Enter");
+  press(textarea, "z", { metaKey: true });
+  await frame();
+
+  const saved = book.serialize({ purpose: "save" });
+  const peer = docOf(saved);
+  const first = peer.querySelector('section[data-id="s1"] tr[data-id="r1"] td');
+  first.setAttribute("v", "99");
+  first.textContent = "99";
+  book.merge({ document: peer, base: docOf(saved) })();
+  await frame();
+
+  press(inst.editor.textarea, "Z", { metaKey: true, shiftKey: true });
+
+  expect(inst.chrome.noticeBar.textContent).toContain("Those cells changed since, so that step was not redone.");
 
   ui.dispose();
 });

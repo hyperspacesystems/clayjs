@@ -108,7 +108,6 @@ describe("sheet keyboard map", () => {
       [{ key: "s", ctrlKey: true }, { platform: "Win32", editing: false }],
       [{ key: "s", metaKey: true }, { platform: "MacIntel", editing: true }],
       [{ key: "p", ctrlKey: true }, { platform: "Win32", editing: false }],
-      [{ key: "z", metaKey: true }, { platform: "MacIntel", editing: false }],
       [{ key: "Enter", ctrlKey: true }, { platform: "Win32", editing: true }],
       [{ key: "d", ctrlKey: true }, { platform: "Win32", editing: false }],
       [{ key: "r", ctrlKey: true }, { platform: "Win32", editing: false }],
@@ -119,5 +118,26 @@ describe("sheet keyboard map", () => {
     ]) {
       expect(keyIntent(event, opts)).toBeNull();
     }
+  });
+
+  // Bug: ready-mode undo and redo went to the page or the textarea instead of the sheet's history,
+  // or Ctrl+Shift+V pasted a formula instead of values.
+  test("maps ready-mode undo, redo and values-only, and leaves the keys native while editing", () => {
+    expect(keyIntent({ key: "z", metaKey: true }, { platform: "MacIntel", editing: false })).toEqual({ type: "undo" });
+    expect(keyIntent({ key: "z", ctrlKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "undo" });
+    expect(keyIntent({ key: "Z", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: false })).toEqual({ type: "redo" });
+    expect(keyIntent({ key: "Z", ctrlKey: true, shiftKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "redo" });
+    expect(keyIntent({ key: "y", ctrlKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "redo" });
+    expect(keyIntent({ key: "V", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: false })).toEqual({ type: "pasteValues" });
+    expect(keyIntent({ key: "V", ctrlKey: true, shiftKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "pasteValues" });
+
+    expect(keyIntent({ key: "z", metaKey: true }, { platform: "MacIntel", editing: true })).toBeNull();
+    expect(keyIntent({ key: "Z", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: true })).toBeNull();
+    expect(keyIntent({ key: "y", ctrlKey: true }, { platform: "Win32", editing: true })).toBeNull();
+    expect(keyIntent({ key: "V", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: true })).toBeNull();
+
+    expect(keyIntent({ key: "c", metaKey: true }, { platform: "MacIntel", editing: false })).toBeNull();
+    expect(keyIntent({ key: "x", metaKey: true }, { platform: "MacIntel", editing: false })).toBeNull();
+    expect(keyIntent({ key: "v", metaKey: true }, { platform: "MacIntel", editing: false })).toBeNull();
   });
 });

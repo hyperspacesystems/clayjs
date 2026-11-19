@@ -1,6 +1,8 @@
 import { a1, colIndex, rowIndex, tabTable } from "./commit.js";
 import { createChrome } from "./chrome.js";
+import { copyParts, fillBlock, fillFormula, pasteBlock } from "./clipboard.js";
 import { createEditor } from "./editor.js";
+import { createHistory } from "./history.js";
 import { keyIntent } from "./keys.js";
 import { createOverlays } from "./overlays.js";
 import {
@@ -67,6 +69,9 @@ function formatCount(n, singular, plural) {
   return `${n.toLocaleString("en-US")} ${n === 1 ? singular : plural}`;
 }
 
+const CHANGED_MSG = "Those cells changed since, so that step was not undone.";
+const REDONE_MSG = "Those cells changed since, so that step was not redone.";
+
 function createWorkbookInterface(workbook, { shell, storage, tabOptions, commands, platform }) {
   const doc = workbook.ownerDocument ?? document;
   const win = doc.defaultView ?? window;
@@ -80,8 +85,32 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   const seenKeys = new WeakSet();
   let sel = null;
   let disposed = false;
+  let mine = false;
+  let valuesNext = false;
 
   const gridOf = (table) => (table && typeof win.Sap?.grid === "function" ? win.Sap.grid(table) : null);
+  const history = createHistory(workbook, gridOf);
+
+  function withMine(fn) {
+    mine = true;
+    try {
+      return fn();
+    } finally {
+      mine = false;
+    }
+  }
+
+  function writeGrid(fn) {
+    try {
+      withMine(fn);
+      return true;
+    } catch (error) {
+      if (error?.name !== "GridRefused") throw error;
+      chrome.showNotice(error.message || "Those cells could not be pasted.");
+      return false;
+    }
+  }
+
   const windowOf = (table) => shell?.windowOf?.(table) ?? null;
 
   function viewOf(tabId) {
@@ -151,7 +180,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     onSelectCol(c, extend) {
       editor.settle();
       if (editor.editing && editor.canPick()) return editor.focus();
-      if (editor.editing && !editor.commit().ok) return;
+      if (editor.editing && !commitEdit().ok) return;
       const view = viewOf(sel.tab);
       const next = selectCell(view, sel, 0, c, { extend });
       applySelection(selectCols(view, next));
@@ -160,7 +189,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     onSelectRow(r, extend) {
       editor.settle();
       if (editor.editing && editor.canPick()) return editor.focus();
-      if (editor.editing && !editor.commit().ok) return;
+      if (editor.editing && !commitEdit().ok) return;
       const view = viewOf(sel.tab);
       const next = selectCell(view, sel, r, 0, { extend });
       applySelection(selectRows(view, next));
@@ -169,7 +198,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     onSelectAll() {
       editor.settle();
       if (editor.editing && editor.canPick()) return;
-      if (editor.editing && !editor.commit().ok) return;
+      if (editor.editing && !commitEdit().ok) return;
       applySelection(selectAll(viewOf(sel.tab), sel));
       editor.focus();
     },
@@ -183,7 +212,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     },
     onCommit() {
       if (!editor.editing) return;
-      const res = editor.commit();
+      const res = commitEdit();
       if (res.ok) {
         applySelection(moveSelection(viewOf(sel.tab), sel, { dr: 1, dc: 0, extend: false }));
         revealFocus();
@@ -218,6 +247,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     const box = shownId === sel.tab ? selectionBox(view, sel) : null;
 
     chrome.setEditing(editor.editing);
+    chrome.registerCommand("undo", !editor.editing && history.canUndo(sel.tab) ? () => replayStep("undo") : null);
+    chrome.registerCommand("redo", !editor.editing && history.canRedo(sel.tab) ? () => replayStep("redo") : null);
     chrome.setCoord(selectionArea(selView, sel));
     chrome.renderTabs(tabs.list(), shownId);
     if (!editor.editing) editor.refreshReady();
@@ -310,7 +341,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       return;
     }
 
-    if (editor.editing && !editor.commit().ok) return;
+    if (editor.editing && !commitEdit().ok) return;
     if (tabId === sel.tab && tabs.activeId === tabId) {
       editor.focus();
       return;
@@ -336,7 +367,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     const view = viewOf(sel.tab);
     if (view.rows.length === 0 || view.cols.length === 0) return;
     try {
-      grid.clear(selectionArea(view, sel));
+      withMine(() => grid.clear(selectionArea(view, sel)));
       chrome.hideNotice();
     } catch (error) {
       if (error?.name !== "GridRefused") throw error;
@@ -344,6 +375,168 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       return;
     }
     syncUI({ announce: true });
+  }
+
+  function commitEdit() {
+    return withMine(() => editor.commit());
+  }
+
+  function boxSelection(view, current, coords) {
+    const top = Math.min(...coords.map((p) => p.r));
+    const left = Math.min(...coords.map((p) => p.c));
+    const bottom = Math.max(...coords.map((p) => p.r));
+    const right = Math.max(...coords.map((p) => p.c));
+    return {
+      tab: current.tab,
+      anchor: { row: view.rows[top], col: view.cols[left] },
+      focus: { row: view.rows[bottom], col: view.cols[right] },
+    };
+  }
+
+  function replayStep(kind) {
+    let res;
+    try {
+      res = kind === "undo" ? history.undo(sel.tab) : history.redo(sel.tab);
+    } catch (error) {
+      if (error?.name !== "GridRefused") throw error;
+      chrome.showNotice(error.message || "That step could not be applied.");
+      syncUI();
+      return;
+    }
+    if (res.why === "changed") {
+      chrome.showNotice(kind === "undo" ? CHANGED_MSG : REDONE_MSG);
+      syncUI();
+      return;
+    }
+    if (!res.ok) return;
+    chrome.hideNotice();
+    const table = tabTable(workbook, sel.tab);
+    const coords = [];
+    for (const { row, col } of res.cells) {
+      const r = table ? rowIndex(table, row) : -1;
+      const c = table ? colIndex(table, col) : -1;
+      if (r >= 0 && c >= 0) coords.push({ r, c });
+    }
+    if (coords.length > 0) applyMove(boxSelection(viewOf(sel.tab), sel, coords));
+    else syncUI({ announce: true });
+  }
+
+  function copySelection(cut = false) {
+    const table = tabTable(workbook, sel.tab);
+    const grid = gridOf(table);
+    if (!grid) return null;
+    const view = viewOf(sel.tab);
+    if (view.rows.length === 0 || view.cols.length === 0) return null;
+    const box = selectionBox(view, sel);
+    return box ? { grid, box, parts: copyParts(grid, box, a1, { cut }) } : null;
+  }
+
+  function onCopy(event) {
+    if (disposed || editor.editing || !sel || !event.clipboardData) return;
+    const copied = copySelection();
+    if (!copied) return;
+    event.preventDefault();
+    event.clipboardData.setData("text/plain", copied.parts.text);
+    event.clipboardData.setData("text/html", copied.parts.html);
+  }
+
+  function onCut(event) {
+    if (disposed || editor.editing || !sel || !event.clipboardData) return;
+    const copied = copySelection(true);
+    if (!copied) return;
+    event.preventDefault();
+    event.clipboardData.setData("text/plain", copied.parts.text);
+    event.clipboardData.setData("text/html", copied.parts.html);
+    clearSelectedCells();
+  }
+
+  function onBeforeClipboard(event) {
+    if (!disposed && !editor.editing) event.preventDefault();
+  }
+
+  function onPaste(event) {
+    if (disposed || editor.editing || !sel) return;
+    event.preventDefault();
+    try {
+      const table = tabTable(workbook, sel.tab);
+      const grid = gridOf(table);
+      if (!grid) return;
+      const view = viewOf(sel.tab);
+      if (view.rows.length === 0 || view.cols.length === 0) return;
+      const box = selectionBox(view, sel);
+      if (!box) return;
+      const at = a1(box.top, box.left);
+      const singleMerge =
+        box.top === box.active.r &&
+        box.left === box.active.c &&
+        box.bottom === box.active.r + box.active.rows - 1 &&
+        box.right === box.active.c + box.active.cols - 1;
+      const [selRows, selCols] = singleMerge ? [1, 1] : [box.bottom - box.top + 1, box.right - box.left + 1];
+      const html = event.clipboardData?.getData("text/html") ?? "";
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      const valuesOnly = valuesNext;
+      const parsed = pasteBlock(html, { r: box.top, c: box.left }, { valuesOnly });
+      const uncovered = (write) =>
+        write.map((line, i) => line.map((item, j) => (view.cell(box.top + i, box.left + j)?.covered ? undefined : item)));
+      let rows = 0;
+      let cols = 0;
+      if (parsed && (parsed.kind === "ours" || !text)) {
+        const { kind, block, origin } = parsed;
+        let write = block;
+        if (kind === "ours" && !valuesOnly && block.length === 1 && block[0].length === 1 && block[0][0]?.content && typeof block[0][0].content === "object" && typeof block[0][0].content.f === "string") {
+          const item = block[0][0];
+          write = uncovered(fillFormula(item.content.f, item.fmt, box.top - origin.r, box.left - origin.c, selRows, selCols));
+          rows = selRows;
+          cols = selCols;
+        } else if (block.length === 1 && block[0].length === 1) {
+          write = uncovered(fillBlock(block, selRows, selCols));
+          rows = selRows;
+          cols = selCols;
+        } else {
+          rows = block.length;
+          cols = block[0]?.length ?? 0;
+        }
+        const options = kind === "ours" ? (valuesOnly ? { grow: true, detect: false, formats: false } : { grow: true }) : { grow: true, formulas: !valuesOnly };
+        if (!writeGrid(() => grid.setRange(at, write, options))) return;
+      } else if (text) {
+        const flat = text.replace(/\r?\n$/, "");
+        let lines;
+        if (!/[\t\r\n]/.test(flat)) {
+          lines = [[flat]];
+        } else {
+          try {
+            lines = win.Sap?.grid?.csv?.parseDelimited(text, { delimiter: "\t" }) ?? [];
+          } catch (error) {
+            if (error?.name !== "DelimitedError") throw error;
+            lines = [[flat]];
+          }
+        }
+        const one = lines.length === 1 && (lines[0]?.length ?? 0) === 1;
+        const filled = fillBlock(lines, selRows, selCols);
+        rows = filled.length;
+        cols = Math.max(0, ...filled.map((line) => line.length));
+        if (!rows || !cols) return;
+        const options = { grow: true, formulas: !valuesOnly };
+        const wrote = one
+          ? writeGrid(() => grid.setRange(at, uncovered(filled), options))
+          : writeGrid(() => grid.importDelimited(text, at, { delimiter: "\t", formulas: !valuesOnly }));
+        if (!wrote) return;
+      } else {
+        return;
+      }
+      if (!rows || !cols) return;
+      const nextView = viewOf(sel.tab);
+      if (nextView.rows.length === 0 || nextView.cols.length === 0) return;
+      const bottom = Math.min(box.top + rows - 1, nextView.rows.length - 1);
+      const right = Math.min(box.left + cols - 1, nextView.cols.length - 1);
+      applyMove({
+        tab: sel.tab,
+        anchor: { row: nextView.rows[box.top], col: nextView.cols[box.left] },
+        focus: { row: nextView.rows[bottom], col: nextView.cols[right] },
+      });
+    } finally {
+      valuesNext = false;
+    }
   }
 
   function runKey(event) {
@@ -357,6 +550,11 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       picking: editor.canPick({ keyboard: true }),
       composing: editor.composing,
     });
+    if (intent?.type === "pasteValues") {
+      valuesNext = true;
+      return;
+    }
+    if (!["Shift", "Control", "Meta", "Alt"].includes(event.key) && intent?.type !== "pasteValues") valuesNext = false;
     if (!intent) return;
 
     event.preventDefault();
@@ -398,6 +596,12 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       case "clear":
         clearSelectedCells();
         break;
+      case "undo":
+        replayStep("undo");
+        break;
+      case "redo":
+        replayStep("redo");
+        break;
       case "edit":
         editor.openWithInput(editor.textarea);
         break;
@@ -414,7 +618,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
         editor.pickMove(intent);
         break;
       case "commit": {
-        const res = editor.commit();
+        const res = commitEdit();
         if (res.ok) {
           applyMove(moveSelection(viewOf(sel.tab), sel, { dr: intent.dr, dc: intent.dc, extend: false }));
           editor.focus();
@@ -460,7 +664,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
         editor.pickCell({ tab: hit.tab, tabName: tabInfo?.name ?? "", r: hit.r, c: hit.c, extend });
         return;
       }
-      const res = editor.commit();
+      const res = commitEdit();
       if (!res.ok) return;
     }
     const view = viewOf(hit.tab);
@@ -517,7 +721,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (editor.editing && editor.canPick()) return;
     const hit = locateCellEvent(event);
     if (hit) {
-      if (editor.editing && !editor.commit().ok) return;
+      if (editor.editing && !commitEdit().ok) return;
       const view = viewOf(hit.tab);
       applySelection(selectCell(view, { ...sel, tab: hit.tab }, hit.r, hit.c, { extend: false }));
     }
@@ -532,8 +736,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       const grid = gridOf(tab.table);
       if (!grid) continue;
       unsubGrids.push(
-        grid.on("change", () => {
+        grid.on("change", (event) => {
           if (disposed) return;
+          if (mine) history.record(tab.id, event);
           if (tab.id === sel?.tab) {
             const view = viewOf(sel.tab);
             sel = clipSelection(view, sel, lastViews.get(sel.tab) ?? null);
@@ -586,6 +791,11 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   win.addEventListener("keydown", onWindowKeyDown, true);
   editor.textarea.addEventListener("keydown", runKey);
+  editor.textarea.addEventListener("beforecopy", onBeforeClipboard);
+  editor.textarea.addEventListener("beforecut", onBeforeClipboard);
+  editor.textarea.addEventListener("copy", onCopy);
+  editor.textarea.addEventListener("cut", onCut);
+  editor.textarea.addEventListener("paste", onPaste);
   chrome.formulaInput.addEventListener("keydown", runKey);
   workbook.addEventListener("mousedown", onMouseDown);
   win.addEventListener("mousemove", onMouseMove);
@@ -604,6 +814,11 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     for (const off of unsubGrids.splice(0)) off();
     win.removeEventListener("keydown", onWindowKeyDown, true);
     editor.textarea.removeEventListener("keydown", runKey);
+    editor.textarea.removeEventListener("beforecopy", onBeforeClipboard);
+    editor.textarea.removeEventListener("beforecut", onBeforeClipboard);
+    editor.textarea.removeEventListener("copy", onCopy);
+    editor.textarea.removeEventListener("cut", onCut);
+    editor.textarea.removeEventListener("paste", onPaste);
     chrome.formulaInput.removeEventListener("keydown", runKey);
     workbook.removeEventListener("mousedown", onMouseDown);
     win.removeEventListener("mousemove", onMouseMove);

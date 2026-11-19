@@ -69,5 +69,9 @@ export function keyIntent(event, { platform = "", editing = false, picking = fal
     if (shift && plain) return { type: "selectRows" };
   }
 
+  if ((key === "z" || key === "Z") && mod && !alt) return shift ? { type: "redo" } : { type: "undo" };
+  if ((key === "y" || key === "Y") && mod && !alt && !shift) return { type: "redo" };
+  if ((key === "v" || key === "V") && mod && !alt && shift) return { type: "pasteValues" };
+
   return null;
 }
