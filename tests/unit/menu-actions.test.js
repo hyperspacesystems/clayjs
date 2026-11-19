@@ -18,6 +18,15 @@ const flush = async () => {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// jsdom 20's Blob has no text(), so a download's contents are read through FileReader.
+const readBlob = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+
 function clearRoot() {
   const root = document.documentElement;
   for (const name of Array.from(root.attributes, (attribute) => attribute.name)) root.removeAttribute(name);
@@ -387,7 +396,7 @@ test("Download in edit mode saves what a save would send now", async () => {
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     const blob = createObjectURL.mock.calls[0][0];
     expect(blob).toBeInstanceOf(Blob);
-    if (typeof blob.text === "function") expect(await blob.text()).toBe("<html>copy</html>");
+    expect(await readBlob(blob)).toBe("<html>copy</html>");
   } finally {
     anchorClick.mockRestore();
   }
@@ -410,7 +419,7 @@ test("Download in view mode fetches the saved file, and says when it cannot", as
     expect(names).toHaveLength(1);
     expect(names[0]).toBe("notes.html");
     const blob = createObjectURL.mock.calls[0][0];
-    if (typeof blob.text === "function") expect(await blob.text()).toBe("<html>saved</html>");
+    expect(await readBlob(blob)).toBe("<html>saved</html>");
 
     window.fetch = jest.fn(async () => ({ ok: false }));
     click(buttonOf("clay.download"));
