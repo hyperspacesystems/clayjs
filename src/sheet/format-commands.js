@@ -11,6 +11,7 @@ import {
   selectionBox,
   selectRowsAt,
 } from "./selection.js";
+import { buildRangeSortAction, buildSheetSortAction, rangeAnchorCutAtRight } from "./sort.js";
 import { bevelInput } from "../ui/bevel-controls.js";
 import { FONT_SANS } from "../ui/bevel.js";
 
@@ -578,6 +579,7 @@ export function createCommandActions({
   writeGrid,
   runTabStep,
   syncUI,
+  refreshStatus = () => {},
   applySelection,
   applyMove,
   subscribeGrids,
@@ -680,6 +682,92 @@ export function createCommandActions({
   const deleteRowsAt = (top, bottom) => runFormat((grid) => grid.deleteRows(`${top + 1}:${bottom + 1}`));
   const deleteColsAt = (left, right) => runFormat((grid) => grid.deleteCols(`${colName(left)}:${colName(right)}`));
 
+  function sortSheetByCol(tabId, col, direction) {
+    if (editor.editing && editor.canPick()) return editor.focus();
+    if (!ensureReadyForAction()) return;
+    const table = tabTable(workbook, tabId);
+    const grid = gridOf(table);
+    if (!grid) return;
+    const view = viewOf(tabId);
+    const frozen = frozenOf(table);
+    const action = buildSheetSortAction(grid, view, {
+      sheet: tabId,
+      col,
+      frozenRows: frozen.rows,
+      direction,
+    });
+    if (!action) return;
+    if (!writeGrid(() => grid.apply(action))) return;
+    refreshStatus();
+    syncUI({ announce: true });
+    editor.focus();
+  }
+
+  function sortSelectedRange(tabId, direction) {
+    if (editor.editing && editor.canPick()) return editor.focus();
+    if (!ensureReadyForAction()) return;
+    const curSel = getSel();
+    if (!curSel || curSel.tab !== tabId) return;
+    const table = tabTable(workbook, tabId);
+    const grid = gridOf(table);
+    if (!grid) return;
+    const view = viewOf(tabId);
+    const box = selectionBox(view, curSel);
+    if (!box) return;
+    const anchorCol = view.cols.indexOf(curSel.anchor?.col ?? "");
+    const col = curSel.whole === "cols" && anchorCol >= box.left && anchorCol <= box.right
+      ? anchorCol
+      : box.active.c;
+    const frozenRows = frozenOf(table).rows;
+    const sortBox = curSel.whole === "cols" ? { ...box, top: Math.max(box.top, frozenRows) } : box;
+    const action = buildRangeSortAction(grid, view, { sheet: tabId, box: sortBox, col, direction });
+    if (!action) return;
+    const prevWhole = curSel.whole ?? null;
+    const ar = view.rows.indexOf(curSel.anchor?.row ?? "");
+    const ac = view.cols.indexOf(curSel.anchor?.col ?? "");
+    const fr = view.rows.indexOf(curSel.focus?.row ?? "");
+    const fc = view.cols.indexOf(curSel.focus?.col ?? "");
+    const ok = writeGrid(() => {
+      if (sortBox.top < frozenRows) {
+        throw Object.assign(new Error("Sort can't move a frozen row. Select rows below the frozen ones."), {
+          name: "GridRefused",
+          code: "bad_action",
+        });
+      }
+      if (action.cols !== null && rangeAnchorCutAtRight(view, sortBox)) {
+        throw Object.assign(new Error("Sort can't move part of a merged cell."), {
+          name: "GridRefused",
+          code: "merge_cut",
+        });
+      }
+      grid.apply(action);
+    });
+    if (!ok) return;
+    if (!prevWhole && ar >= 0 && ac >= 0 && fr >= 0 && fc >= 0) {
+      const nextView = viewOf(tabId);
+      if (nextView.rows.length > 0 && nextView.cols.length > 0) {
+        const ownA = ownerOf(
+          nextView,
+          Math.min(ar, nextView.rows.length - 1),
+          Math.min(ac, nextView.cols.length - 1),
+        );
+        applySelection({
+          tab: tabId,
+          anchor: { row: nextView.rows[ownA.r], col: nextView.cols[ownA.c] },
+          focus: {
+            row: nextView.rows[Math.min(fr, nextView.rows.length - 1)],
+            col: nextView.cols[Math.min(fc, nextView.cols.length - 1)],
+          },
+        });
+        editor.focus();
+        return;
+      }
+    }
+    refreshStatus();
+    syncUI({ announce: true });
+    editor.focus();
+  }
+
   function openRowHeaderMenu(r, anchor, x, y) {
     if (editor.editing && editor.canPick()) return editor.focus();
     if (!ensureReadyForAction() || !getSel()) return;
@@ -718,11 +806,18 @@ export function createCommandActions({
     if (curSpan?.axis !== "cols" || c < curSpan.first || c > curSpan.last) {
       applySelection(selectColsAt(view, sel, c));
     }
-    const span = axisSpan(viewOf(getSel().tab), getSel());
+    const curSel = getSel();
+    const tabId = curSel.tab;
+    const curView = viewOf(tabId);
+    const span = axisSpan(curView, curSel);
     if (!span) return;
     const count = span.last - span.first + 1;
-    const frozen = frozenOf(tabTable(workbook, getSel().tab));
+    const frozen = frozenOf(tabTable(workbook, tabId));
     const letter = colName(c);
+    const isFullSheetCols = span.first === 0 && span.last === curView.cols.length - 1;
+    const canSortSheet = curView.rows.length - frozen.rows >= 2;
+    const box = selectionBox(curView, curSel);
+    const canSortRange = Boolean(box && box.bottom - Math.max(box.top, frozen.rows) + 1 >= 2);
     menu.open({
       anchor: x === null ? anchor : null,
       x: x ?? 0,
@@ -733,6 +828,15 @@ export function createCommandActions({
         { id: "insert-right", label: `Insert ${count} right`, onSelect: () => insertColsAt(span.last + 1, count, colName(span.last), true) },
         { id: "delete-cols", label: "Delete columns", onSelect: () => deleteColsAt(span.first, span.last) },
         { type: "separator" },
+        { id: "sort-sheet-asc", label: "Sort sheet A to Z", disabled: !canSortSheet, onSelect: () => sortSheetByCol(tabId, c, "asc") },
+        { id: "sort-sheet-desc", label: "Sort sheet Z to A", disabled: !canSortSheet, onSelect: () => sortSheetByCol(tabId, c, "desc") },
+        ...(!isFullSheetCols
+          ? [
+              { id: "sort-range-asc", label: "Sort range A to Z", disabled: !canSortRange, onSelect: () => sortSelectedRange(tabId, "asc") },
+              { id: "sort-range-desc", label: "Sort range Z to A", disabled: !canSortRange, onSelect: () => sortSelectedRange(tabId, "desc") },
+            ]
+          : []),
+        { type: "separator" },
         { id: "freeze-cols", label: `Freeze up to column ${letter}`, onSelect: () => runFormat((g) => g.freeze({ rows: frozen.rows, cols: c + 1 })) },
         { id: "unfreeze-cols", label: "Unfreeze columns", disabled: frozen.cols === 0, onSelect: () => runFormat((g) => g.freeze({ rows: frozen.rows, cols: 0 })) },
       ],
@@ -742,7 +846,8 @@ export function createCommandActions({
   function openCellContextMenu(r, c, x, y) {
     const sel = getSel();
     if (!sel) return;
-    const view = viewOf(sel.tab);
+    const tabId = sel.tab;
+    const view = viewOf(tabId);
     const box = selectionBox(view, sel);
     let sourceBottom = box ? box.top : 0;
     let sourceRight = box ? box.left : 0;
@@ -758,6 +863,7 @@ export function createCommandActions({
     }
     const canFillDown = Boolean(box && box.bottom > sourceBottom);
     const canFillRight = Boolean(box && box.right > sourceRight);
+    const canSortRange = Boolean(box && box.bottom - box.top + 1 >= 2);
     menu.open({
       x,
       y,
@@ -765,6 +871,9 @@ export function createCommandActions({
       items: [
         { id: "fill-down", label: "Fill down", disabled: !canFillDown, onSelect: () => onFillShortcut?.("down") },
         { id: "fill-right", label: "Fill right", disabled: !canFillRight, onSelect: () => onFillShortcut?.("right") },
+        { type: "separator" },
+        { id: "sort-range-asc", label: "Sort range A to Z", disabled: !canSortRange, onSelect: () => sortSelectedRange(tabId, "asc") },
+        { id: "sort-range-desc", label: "Sort range Z to A", disabled: !canSortRange, onSelect: () => sortSelectedRange(tabId, "desc") },
         { type: "separator" },
         { id: "insert-row-above", label: "Insert row above", onSelect: () => insertRowsAt(r, 1, r + 1, false) },
         { id: "insert-col-left", label: "Insert column left", onSelect: () => insertColsAt(c, 1, colName(c), false) },

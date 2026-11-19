@@ -2158,3 +2158,326 @@ test("pressing a lazy fill or formatting shortcut as the first action loads its 
 
   ui.dispose();
 });
+
+const C8C_SLICE_BOOK = () => `<main sap plugins="grid"><div id="scroller" style="position:relative;overflow:auto"><div items="sheets" sheet-workbook>
+<section item data-id="s1" data-pos="V"><h2 bind="name">Data</h2><table grid><colgroup><col data-id="c1" data-pos="F"><col data-id="c2" data-pos="P"><col data-id="c3" data-pos="Z"></colgroup>
+<thead><tr data-id="r1" data-pos="F"><td>Item</td><td>Val</td><td>Echo</td></tr></thead>
+<tbody>
+<tr data-id="r2" data-pos="J"><td>first</td><td n v="30">30</td><td n f="=B2" v="30">30</td></tr>
+<tr data-id="r3" data-pos="P"><td>second</td><td>apple</td><td>tag-apple</td></tr>
+<tr data-id="r4" data-pos="V"><td>third</td><td n v="10">10</td><td>tag-10</td></tr>
+<tr data-id="r5" data-pos="b"><td>fourth</td><td></td><td>tag-empty</td></tr>
+</tbody></table></section>
+<script type="application/json" sheet-commit>{"rev":1}</script>
+</div></div></main>`;
+
+// Bug: Sort sheet moved frozen header rows or left other columns and row formulas behind, Ctrl+Z failed to restore the order in one step, or Sort range touched rows and columns outside the selection.
+test("c8c slice: Sort sheet A to Z on column B keeps frozen row 1, moves all columns and shifts =B2 with its row, Ctrl+Z restores the order, and Sort range Z to A on A2:B3 moves only A2:B3", async () => {
+  const { Sap, ui, inst } = await start(C8C_SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = () => Sap.grid(tableOf("s1"));
+  expect(grid().issues).toEqual([]);
+
+  // Right-click column B's header and choose "Sort sheet A to Z".
+  inst.overlays.shadow
+    .querySelector('[data-col="1"]')
+    .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 140, clientY: 10 }));
+  await turn();
+  const sortSheetAsc = inst.chrome.topShadow.querySelector('[data-menu-item="sort-sheet-asc"]');
+  expect(sortSheetAsc?.textContent).toContain("Sort sheet A to Z");
+  sortSheetAsc.click();
+
+  // Frozen row 1 stays; B2:B5 come out 10, 30, "apple", empty; cols A and C move with their rows; =B2 moved to C3 as =B3 = 30.
+  expect(tableOf("s1").tHead?.rows.length).toBe(1);
+  expect(grid().get("A1:C5")).toEqual([
+    ["Item", "Val", "Echo"],
+    ["third", 10, "tag-10"],
+    ["first", 30, 30],
+    ["second", "apple", "tag-apple"],
+    ["fourth", null, "tag-empty"],
+  ]);
+  expect(grid().input("C3")).toBe("=B3");
+  expect(grid().get("C3")).toBe(30);
+
+  // Cmd+Z puts the original row order and =B2 back in one undo step.
+  press(textarea, "z", { metaKey: true });
+  expect(grid().get("A1:C5")).toEqual([
+    ["Item", "Val", "Echo"],
+    ["first", 30, 30],
+    ["second", "apple", "tag-apple"],
+    ["third", 10, "tag-10"],
+    ["fourth", null, "tag-empty"],
+  ]);
+  expect(grid().input("C2")).toBe("=B2");
+
+  // Select A2:B3 with active cell B2 (mousedown B2, shift+mousedown A3) and "Sort range Z to A" from the cell menu.
+  const bodyRows = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+  bodyRows()[0].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  bodyRows()[1].children[0].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.nameBox.value).toBe("A2:B3");
+
+  bodyRows()[0].children[0].dispatchEvent(
+    new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 80, clientY: 60 }),
+  );
+  await turn();
+  const sortRangeDesc = inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-desc"]');
+  expect(sortRangeDesc?.textContent).toContain("Sort range Z to A");
+  sortRangeDesc.click();
+
+  // Only A2:B3 moved ("apple" before 30 in Z to A); rows 4:5 and column C stayed in their rows.
+  expect(grid().get("A1:C5")).toEqual([
+    ["Item", "Val", "Echo"],
+    ["second", "apple", "apple"],
+    ["first", 30, "tag-apple"],
+    ["third", 10, "tag-10"],
+    ["fourth", null, "tag-empty"],
+  ]);
+  expect(grid().input("C2")).toBe("=B2");
+
+  press(textarea, "z", { metaKey: true });
+  expect(grid().get("A2:C3")).toEqual([
+    ["first", 30, 30],
+    ["second", "apple", "tag-apple"],
+  ]);
+
+  ui.dispose();
+});
+
+const UNFROZEN_SORT_BOOK = () => `<main sap plugins="grid"><div id="scroller" style="position:relative;overflow:auto"><div items="sheets" sheet-workbook>
+<section item data-id="s1" data-pos="V"><h2 bind="name">Plain</h2><table grid><colgroup><col data-id="c1" data-pos="F"><col data-id="c2" data-pos="P"><col data-id="c3" data-pos="Z"></colgroup>
+<tbody>
+<tr data-id="r1" data-pos="F"><td>k2</td><td n v="20">20</td><td>x</td></tr>
+<tr data-id="r2" data-pos="P"><td>k1</td><td n v="5">5</td><td>y</td></tr>
+<tr data-id="r3" data-pos="Z"><td>k3</td><td n v="15">15</td><td>z</td></tr>
+</tbody></table></section>
+<script type="application/json" sheet-commit>{"rev":1}</script>
+</div></div></main>`;
+
+// Bug: column header menu showed Sort range when the full sheet was selected or omitted it for one column, 1-row selections left Sort range enabled, or Sort sheet skipped row 1 when nothing was frozen.
+test("column and cell menus disable Sort range on one row, offer Sort range on partial-sheet column selections, sort every row when none are frozen, and send cols null on full-width ranges", async () => {
+  const { Sap, ui, inst } = await start(UNFROZEN_SORT_BOOK());
+  const grid = () => Sap.grid(tableOf("s1"));
+  const rows = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+
+  // Single-row selection (A1:C1): cell menu shows Sort range items disabled.
+  rows()[0].children[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  rows()[0].children[2].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.nameBox.value).toBe("A1:C1");
+
+  rows()[0].children[1].dispatchEvent(
+    new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 80, clientY: 40 }),
+  );
+  await turn();
+  expect(inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-asc"]')?.getAttribute("aria-disabled")).toBe(
+    "true",
+  );
+  expect(inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-desc"]')?.getAttribute("aria-disabled")).toBe(
+    "true",
+  );
+  inst.menu.close();
+
+  // Single-column header menu on B (not full sheet): offers Sort range A to Z and sorts only column B.
+  inst.overlays.shadow
+    .querySelector('[data-col="1"]')
+    .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 140, clientY: 10 }));
+  expect(inst.chrome.topShadow.querySelector('[data-menu-item="sort-sheet-asc"]')).not.toBeNull();
+  const colRangeAsc = inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-asc"]');
+  expect(colRangeAsc).not.toBeNull();
+  expect(colRangeAsc.getAttribute("aria-disabled")).toBeNull();
+  colRangeAsc.click();
+
+  expect(grid().get("A1:C3")).toEqual([
+    ["k2", 5, "x"],
+    ["k1", 15, "y"],
+    ["k3", 20, "z"],
+  ]);
+
+  // Select all columns A:C via headers: full-sheet whole-column menu omits Sort range, and Sort sheet Z to A sorts every row including row 1.
+  inst.overlays.shadow
+    .querySelector('[data-col="0"]')
+    .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  inst.overlays.shadow
+    .querySelector('[data-col="2"]')
+    .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  inst.overlays.shadow
+    .querySelector('[data-col="1"]')
+    .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 140, clientY: 10 }));
+  expect(inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-asc"]')).toBeNull();
+  inst.chrome.topShadow.querySelector('[data-menu-item="sort-sheet-desc"]').click();
+
+  expect(grid().get("A1:C3")).toEqual([
+    ["k3", 20, "z"],
+    ["k1", 15, "y"],
+    ["k2", 5, "x"],
+  ]);
+
+  // Full-width cell selection A2:C3 sends cols: null to grid.apply and keeps A2:C3 selected.
+  rows()[1].children[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  rows()[2].children[2].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.nameBox.value).toBe("A2:C3");
+
+  const applySpy = jest.spyOn(grid(), "apply");
+  rows()[1].children[0].dispatchEvent(
+    new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 60, clientY: 70 }),
+  );
+  inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-desc"]').click();
+
+  expect(applySpy).toHaveBeenCalledWith(expect.objectContaining({ v: 1, t: "sort", sheet: "s1", cols: null }));
+  expect(inst.chrome.nameBox.value).toBe("A2:C3");
+  expect(grid().get("A1:C3")).toEqual([
+    ["k3", 20, "z"],
+    ["k2", 5, "x"],
+    ["k1", 15, "y"],
+  ]);
+
+  ui.dispose();
+});
+
+// Bug: sorting across a vertical merge, a covered cell, a cut horizontal merge, or a frozen row threw GridRefused or altered cells instead of showing the notice.
+test("a refused sort over a merge or a frozen row shows sapjs's notice and leaves the sheet unchanged", async () => {
+  const { Sap, ui, inst } = await start(C8C_SLICE_BOOK());
+  const grid = () => Sap.grid(tableOf("s1"));
+  const bodyRows = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+
+  // Vertical merge A3:A4 refused on whole-width Sort sheet A to Z (would split r3 and r4 around r2).
+  grid().merge("A3:A4");
+  await frame();
+  const snapMerged = grid().get("A1:C5");
+
+  inst.overlays.shadow
+    .querySelector('[data-col="1"]')
+    .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 140, clientY: 10 }));
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="sort-sheet-asc"]').click();
+
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(inst.chrome.noticeBar.textContent).toContain("merge");
+  expect(grid().get("A1:C5")).toEqual(snapMerged);
+  expect(grid().cell("A3").span).toEqual({ rows: 2, cols: 1 });
+  expect(inst.chrome.topShadow.querySelector('[data-command="undo"]').getAttribute("aria-disabled")).toBe("true");
+
+  // Partial-width Sort range over A2:B4 (contains covered cell A4) shows notice and changes nothing.
+  inst.chrome.hideNotice();
+  bodyRows()[0].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  bodyRows()[2].children[0].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  bodyRows()[1].children[1].dispatchEvent(
+    new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }),
+  );
+  inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-asc"]').click();
+
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(grid().get("A1:C5")).toEqual(snapMerged);
+
+  // Horizontal merge A2:B2 refused when sorting whole column A alone via Sort range.
+  grid().unmerge("A3");
+  grid().merge("A2:B2");
+  await frame();
+  inst.chrome.hideNotice();
+  const snapHoriz = grid().get("A1:C5");
+
+  inst.overlays.shadow
+    .querySelector('[data-col="0"]')
+    .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 60, clientY: 10 }));
+  inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-desc"]').click();
+
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(grid().cell("A2").span).toEqual({ rows: 1, cols: 2 });
+  expect(grid().get("A1:C5")).toEqual(snapHoriz);
+
+  // Full-width Sort range A1:C3 that includes frozen row 1 is refused by sapjs with its frozen-row notice.
+  grid().unmerge("A2");
+  await frame();
+  inst.chrome.hideNotice();
+  const snapUnmerged = grid().get("A1:C5");
+  const allRows = () => [...tableOf("s1").querySelectorAll("tr")];
+  allRows()[0].children[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  allRows()[2].children[2].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.nameBox.value).toBe("A1:C3");
+
+  allRows()[1].children[1].dispatchEvent(
+    new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 50 }),
+  );
+  inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-asc"]').click();
+
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(inst.chrome.noticeBar.textContent).toContain("frozen row");
+  expect(grid().get("A1:C5")).toEqual(snapUnmerged);
+
+  ui.dispose();
+});
+
+// Bug: a partial-width Sort range on a column selection moved frozen header row 1 into the data (sapjs checks frozen rows only on whole-width sorts).
+test("Sort range on a column selection leaves frozen rows in place, and a cell range over a frozen row is refused", async () => {
+  const { Sap, ui, inst } = await start(C8C_SLICE_BOOK());
+  const grid = () => Sap.grid(tableOf("s1"));
+  const header = () => inst.overlays.shadow.querySelector('[data-col="1"]');
+  header().dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 140, clientY: 10 }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  header().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 140, clientY: 10 }));
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-asc"]').click();
+  expect(grid().get("B1")).toBe("Val");
+  expect([grid().get("B2"), grid().get("B3"), grid().get("B4")]).toEqual([10, 30, "apple"]);
+  expect(grid().get("A1")).toBe("Item");
+
+  inst.chrome.hideNotice();
+  const before = grid().get("A1:C5");
+  const allRows = () => [...tableOf("s1").querySelectorAll("tr")];
+  allRows()[0].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  allRows()[2].children[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.nameBox.value).toBe("B1:B3");
+  allRows()[1].children[1].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 140, clientY: 50 }));
+  inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-asc"]').click();
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(inst.chrome.noticeBar.textContent).toContain("frozen row");
+  expect(grid().get("A1:C5")).toEqual(before);
+  ui.dispose();
+});
+
+// Bug: pressing Undo after a later foreign edit in the sorted rows moved the edited row back instead of showing the changed-since notice.
+test("undoing a sort after a later edit in the sorted rows shows the changed-since notice and moves nothing", async () => {
+  const { Sap, ui, inst } = await start(C8C_SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = () => Sap.grid(tableOf("s1"));
+
+  inst.overlays.shadow
+    .querySelector('[data-col="1"]')
+    .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 140, clientY: 10 }));
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="sort-sheet-asc"]').click();
+
+  expect(grid().get("B2:B5")).toEqual([[10], [30], ["apple"], [null]]);
+
+  // Later foreign edit in one of the sorted rows.
+  grid().set("A3", "edited-later");
+  await frame();
+
+  press(textarea, "z", { metaKey: true });
+
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(inst.chrome.noticeBar.textContent).toContain("Those cells changed since, so that step was not undone.");
+  expect(grid().get("A2:B5")).toEqual([
+    ["third", 10],
+    ["edited-later", 30],
+    ["second", "apple"],
+    ["fourth", null],
+  ]);
+
+  ui.dispose();
+});

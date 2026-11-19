@@ -259,3 +259,106 @@ test("a coworker's later style on a cell survives an undo", async () => {
   expect(grid("s1").cell("A1").style).toContain("font-style:italic");
   expect(grid("s1").cell("A1").style).toContain("font-weight:bold");
 });
+
+// Bug: history.js ignored row order on a sort entry, so undoing a sort after a peer moved or inserted among the sorted rows scrambled the sheet.
+test("a sort undo restores the original order and redo sorts again, while a peer row move among the sorted rows makes undo answer changed", async () => {
+  const { grid, history, peer } = await start();
+  peer(() => {
+    grid("s1").insertRows(3, 2);
+    grid("s1").setRange("A1", [["Header"], [30], [10], [20]]);
+    grid("s1").freeze({ rows: 1 });
+  });
+  const rowIds = () =>
+    [...document.querySelectorAll('section[data-id="s1"] tr')].map((tr) => tr.getAttribute("data-id"));
+  const [r1, r2, r3, r4] = rowIds();
+
+  grid("s1").apply({ v: 1, t: "sort", sheet: "s1", rows: [r3, r4, r2], cols: null });
+  expect(grid("s1").get("A2:A4")).toEqual([[10], [20], [30]]);
+
+  // A peer edit on frozen row 1 outside the sorted rows leaves undo allowed.
+  peer(() => grid("s1").set("A1", "Items"));
+  expect(history.undo("s1")).toEqual({ ok: true, cells: [] });
+  expect(grid("s1").get("A1:A4")).toEqual([["Items"], [30], [10], [20]]);
+  expect(rowIds()).toEqual([r1, r2, r3, r4]);
+
+  expect(history.redo("s1")).toEqual({ ok: true, cells: [] });
+  expect(rowIds()).toEqual([r1, r3, r4, r2]);
+
+  // Peer moves one of the sorted rows without changing any cell's own content: undo must refuse.
+  peer(() => grid("s1").moveRows("2:2", 5));
+  expect(rowIds()).toEqual([r1, r4, r2, r3]);
+
+  expect(history.undo("s1")).toEqual({ ok: false, why: "changed" });
+  expect(rowIds()).toEqual([r1, r4, r2, r3]);
+});
+
+// Bug: a whole-width sort emitted no plain-value cell changes in event.cells, so undoing the sort moved a peer's edit in a filled or empty cell of the sorted rows.
+test("a peer's edit to a filled or empty cell in the sorted rows makes a whole-width sort undo answer changed", async () => {
+  const { grid, history, peer } = await start();
+  const ids = () =>
+    [...document.querySelectorAll('section[data-id="s1"] tr')].map((tr) => tr.getAttribute("data-id"));
+  const [r1, r2] = ids();
+
+  grid("s1").apply({ v: 1, t: "sort", sheet: "s1", rows: [r2, r1], cols: null });
+  expect(grid("s1").get("A1:A2")).toEqual([[4], [3]]);
+  peer(() => grid("s1").set("A1", "peer-filled"));
+
+  expect(history.undo("s1")).toEqual({ ok: false, why: "changed" });
+  expect(grid("s1").get("A1:A2")).toEqual([["peer-filled"], [3]]);
+
+  // Sort back, then have a peer write into B1 (which was empty when the sort ran).
+  grid("s1").apply({ v: 1, t: "sort", sheet: "s1", rows: [r1, r2], cols: null });
+  expect(grid("s1").get("A1:B2")).toEqual([
+    [3, null],
+    ["peer-filled", null],
+  ]);
+  peer(() => grid("s1").set("B1", "peer-into-empty"));
+
+  expect(history.undo("s1")).toEqual({ ok: false, why: "changed" });
+  expect(grid("s1").get("A1:B2")).toEqual([
+    [3, "peer-into-empty"],
+    ["peer-filled", null],
+  ]);
+});
+
+// Bug: a range sort checked only changed cells instead of all cells in the sorted range, or blocked undo when an unrelated column changed.
+test("a range sort undo succeeds after a peer edits another column, returns the range's cells, and answers changed when a tied cell inside the range was edited", async () => {
+  const { grid, history, peer } = await start();
+  peer(() => {
+    grid("s1").insertCols("C", 1);
+    grid("s1").setRange("A1", [
+      ["same", 10, "keep"],
+      ["same", 20, "note"],
+    ]);
+  });
+
+  grid("s1").apply({ v: 1, t: "sort", sheet: "s1", rows: ["r2", "r1"], cols: ["c1", "c2"] });
+  expect(grid("s1").get("A1:C2")).toEqual([
+    ["same", 20, "keep"],
+    ["same", 10, "note"],
+  ]);
+
+  // Peer edits column C outside the sorted columns: undo still succeeds and keeps C1.
+  peer(() => grid("s1").set("C1", "peer-outside"));
+  const undone = history.undo("s1");
+  expect(undone.ok).toBe(true);
+  // The range's two corners, never one entry per cell: a 10,000-row range returned 20,000 cells and froze the undo.
+  expect(undone.cells).toEqual([
+    { row: "r1", col: "c1" },
+    { row: "r2", col: "c2" },
+  ]);
+  expect(grid("s1").get("A1:C2")).toEqual([
+    ["same", 10, "peer-outside"],
+    ["same", 20, "note"],
+  ]);
+
+  expect(history.redo("s1").ok).toBe(true);
+  // Peer edits A1, whose value tied ("same") during the sort so event.cells did not name it.
+  peer(() => grid("s1").set("A1", "peer-inside"));
+
+  expect(history.undo("s1")).toEqual({ ok: false, why: "changed" });
+  expect(grid("s1").get("A1:C2")).toEqual([
+    ["peer-inside", 20, "peer-outside"],
+    ["same", 10, "note"],
+  ]);
+});

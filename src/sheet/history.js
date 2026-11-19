@@ -19,6 +19,7 @@ function collectCoords(events) {
   for (const event of events) {
     for (const id of event.rows?.removed ?? []) removedRows.add(id);
     for (const id of event.cols?.removed ?? []) removedCols.add(id);
+    if (event.action?.t === "sort") continue;
     for (const { row, col } of [...(event.cells ?? []), ...actionCoords(event.action)]) {
       if (!row || !col) continue;
       seen.set(`${row}\u0000${col}`, { row, col });
@@ -27,10 +28,166 @@ function collectCoords(events) {
   return [...seen.values()].filter(({ row, col }) => !removedRows.has(row) && !removedCols.has(col));
 }
 
-function axisEl(table, kind, id) {
-  if (!table) return null;
-  const tag = kind === "col" ? "col" : "tr";
-  return table.querySelector(`${kind === "col" ? "colgroup > " : ""}${tag}[data-id="${id}"]`);
+function sortCorners(action, maps) {
+  if (!Array.isArray(action.cols)) return [];
+  const byRow = (a, b) => maps.rows.get(a).r - maps.rows.get(b).r;
+  const byCol = (a, b) => maps.cols.get(a).c - maps.cols.get(b).c;
+  const rows = (action.rows ?? []).filter((id) => maps.rows.has(id)).sort(byRow);
+  const cols = action.cols.filter((id) => maps.cols.has(id)).sort(byCol);
+  if (rows.length === 0 || cols.length === 0) return [];
+  return [{ row: rows[0], col: cols[0] }, { row: rows.at(-1), col: cols.at(-1) }];
+}
+
+function replayCoords(events, maps) {
+  const removedRows = new Set();
+  const removedCols = new Set();
+  const seen = new Map();
+  for (const event of events) {
+    for (const id of event.rows?.removed ?? []) removedRows.add(id);
+    for (const id of event.cols?.removed ?? []) removedCols.add(id);
+    if (event.action?.t === "sort") {
+      for (const corner of sortCorners(event.action, maps)) seen.set(`${corner.row}\u0000${corner.col}`, corner);
+      continue;
+    }
+    for (const { row, col } of [...(event.cells ?? []), ...actionCoords(event.action)]) {
+      if (!row || !col) continue;
+      seen.set(`${row}\u0000${col}`, { row, col });
+    }
+  }
+  return [...seen.values()].filter(({ row, col }) => !removedRows.has(row) && !removedCols.has(col));
+}
+
+function tableMaps(table) {
+  const rows = new Map();
+  const cols = new Map();
+  const colIds = [];
+  if (!table) return { rows, cols, colIds };
+  let r = 0;
+  for (const section of [table.tHead, ...table.tBodies]) {
+    if (!section) continue;
+    const frozen = section === table.tHead;
+    for (let tr = section.firstElementChild; tr !== null; tr = tr.nextElementSibling) {
+      if (tr.localName !== "tr") continue;
+      const id = tr.getAttribute("data-id");
+      if (id) rows.set(id, { r, tr, frozen });
+      r += 1;
+    }
+  }
+  let group = null;
+  for (let node = table.firstElementChild; node !== null; node = node.nextElementSibling) {
+    if (node.localName === "colgroup") {
+      group = node;
+      break;
+    }
+  }
+  let c = 0;
+  for (let el = group?.firstElementChild ?? null; el !== null; el = el.nextElementSibling) {
+    if (el.localName !== "col") continue;
+    const id = el.getAttribute("data-id");
+    if (id) {
+      cols.set(id, { c, el });
+      colIds.push(id);
+    }
+    c += 1;
+  }
+  return { rows, cols, colIds };
+}
+
+const rowCells = (tr) => [...tr.children].filter((el) => el.localName === "td" || el.localName === "th");
+
+function isBareEmptyTd(td) {
+  if (!td || td.textContent !== "") return false;
+  for (const attr of ["f", "v", "fmt", "style", "colspan", "rowspan", "hidden"]) {
+    if (td.hasAttribute(attr)) return false;
+  }
+  return true;
+}
+
+function cellSnapshot(grid, r, c, row, col) {
+  const cell = grid && r >= 0 && c >= 0 ? grid.cell(a1(r, c)) : null;
+  return {
+    row,
+    col,
+    after: cell ? cell.content : null,
+    fmt: cell ? cell.fmt : null,
+    style: cell ? cell.style : null,
+    span: cell ? cell.span : null,
+    covered: Boolean(cell?.covered),
+  };
+}
+
+function cellMatches(grid, maps, { row, col, after, fmt, style, span, covered }) {
+  const r = maps.rows.get(row)?.r ?? -1;
+  const c = maps.cols.get(col)?.c ?? -1;
+  if (r === -1 || c === -1) return false;
+  const cell = grid.cell(a1(r, c));
+  return (
+    same(cell.content, after) &&
+    cell.fmt === fmt &&
+    same(cell.style, style) &&
+    same(cell.span, span) &&
+    Boolean(cell.covered) === Boolean(covered)
+  );
+}
+
+function buildSortSnap(grid, maps, action) {
+  const orderedRows = [...(action.rows ?? [])].sort(
+    (a, b) => (maps.rows.get(a)?.r ?? -1) - (maps.rows.get(b)?.r ?? -1),
+  );
+  const frozen = orderedRows.map((id) => Boolean(maps.rows.get(id)?.frozen));
+  const cols = action.cols === null ? null : [...action.cols];
+  const targetCols = cols ?? maps.colIds;
+  const cells = [];
+  const seen = new Set();
+  for (const rowId of orderedRows) {
+    const rowInfo = maps.rows.get(rowId);
+    if (!rowInfo) continue;
+    const tds = rowCells(rowInfo.tr);
+    for (const colId of targetCols) {
+      const c = maps.cols.get(colId)?.c ?? -1;
+      if (c < 0 || !tds[c] || isBareEmptyTd(tds[c])) continue;
+      seen.add(`${rowId}\u0000${colId}`);
+      cells.push(cellSnapshot(grid, rowInfo.r, c, rowId, colId));
+    }
+  }
+  return { rows: orderedRows, frozen, cols, cells, seen };
+}
+
+function sortStillHolds(grid, maps, snap) {
+  if (snap.rows.length === 0) return true;
+  const first = maps.rows.get(snap.rows[0]);
+  if (!first) return false;
+  for (let i = 0; i < snap.rows.length; i++) {
+    const info = maps.rows.get(snap.rows[i]);
+    if (!info || info.r !== first.r + i || info.frozen !== snap.frozen[i]) return false;
+  }
+  if (snap.cols !== null) {
+    for (const colId of snap.cols) if (!maps.cols.has(colId)) return false;
+  }
+  for (const item of snap.cells) {
+    if (!cellMatches(grid, maps, item)) return false;
+  }
+  const checkCols = snap.cols ?? maps.colIds;
+  for (const rowId of snap.rows) {
+    const info = maps.rows.get(rowId);
+    const tds = rowCells(info.tr);
+    for (const colId of checkCols) {
+      if (snap.seen.has(`${rowId}\u0000${colId}`)) continue;
+      const c = maps.cols.get(colId)?.c ?? -1;
+      if (c < 0 || !tds[c] || isBareEmptyTd(tds[c])) continue;
+      const cell = grid.cell(a1(info.r, c));
+      if (
+        cell.content !== null ||
+        cell.fmt !== null ||
+        cell.style !== null ||
+        cell.span !== null ||
+        Boolean(cell.covered)
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 function collectAdded(events, key) {
@@ -60,31 +217,29 @@ export function createHistory(root, gridOf) {
   function buildEntry(tab, events) {
     const table = tabTable(root, tab);
     const grid = table ? gridOf(table) : null;
+    const maps = tableMaps(table);
     const coords = collectCoords(events);
-    const cells = coords.map(({ row, col }) => {
-      const r = table ? rowIndex(table, row) : -1;
-      const c = table ? colIndex(table, col) : -1;
-      const cell = grid && r >= 0 && c >= 0 ? grid.cell(a1(r, c)) : null;
-      return {
-        row,
-        col,
-        after: cell ? cell.content : null,
-        fmt: cell ? cell.fmt : null,
-        style: cell ? cell.style : null,
-        span: cell ? cell.span : null,
-        covered: Boolean(cell?.covered),
-      };
-    });
+    const cells = coords.map(({ row, col }) =>
+      cellSnapshot(grid, maps.rows.get(row)?.r ?? -1, maps.cols.get(col)?.c ?? -1, row, col),
+    );
+    const nonSort = events.filter((e) => e.action?.t !== "sort");
     const axisStates = [];
-    for (const [kind, changed] of [["row", events.flatMap((e) => e.rows?.changed ?? [])], ["col", events.flatMap((e) => e.cols?.changed ?? [])]]) {
+    for (const [kind, changed] of [
+      ["row", nonSort.flatMap((e) => e.rows?.changed ?? [])],
+      ["col", nonSort.flatMap((e) => e.cols?.changed ?? [])],
+    ]) {
       for (const id of new Set(changed)) {
-        const el = axisEl(table, kind, id);
+        const el = kind === "col" ? maps.cols.get(id)?.el ?? null : maps.rows.get(id)?.tr ?? null;
         axisStates.push({ kind, id, fmt: el?.getAttribute("fmt") ?? null, style: el?.getAttribute("style") ?? null });
       }
     }
+    const sorts = events
+      .filter((e) => e.action?.t === "sort")
+      .map((e) => buildSortSnap(grid, maps, e.action));
     return {
       inverses: events.map((ev) => ev.inverse),
       cells,
+      sorts,
       rows: collectAdded(events, "rows"),
       cols: collectAdded(events, "cols"),
       axisStates,
@@ -140,23 +295,15 @@ export function createHistory(root, gridOf) {
   }
 
   function stillHolds(table, grid, entry) {
-    for (const { row, col, after, fmt, style, span, covered } of entry.cells) {
-      const r = rowIndex(table, row);
-      const c = colIndex(table, col);
-      if (r === -1 || c === -1) return false;
-      const cell = grid.cell(a1(r, c));
-      if (
-        !same(cell.content, after) ||
-        cell.fmt !== fmt ||
-        !same(cell.style, style) ||
-        !same(cell.span, span) ||
-        Boolean(cell.covered) !== Boolean(covered)
-      ) {
-        return false;
-      }
+    const maps = tableMaps(table);
+    for (const item of entry.cells) {
+      if (!cellMatches(grid, maps, item)) return false;
+    }
+    for (const snap of entry.sorts ?? []) {
+      if (!sortStillHolds(grid, maps, snap)) return false;
     }
     for (const { kind, id, fmt, style } of entry.axisStates ?? []) {
-      const el = axisEl(table, kind, id);
+      const el = kind === "col" ? maps.cols.get(id)?.el ?? null : maps.rows.get(id)?.tr ?? null;
       if (!el) return false;
       if ((el.getAttribute("fmt") ?? null) !== fmt || (el.getAttribute("style") ?? null) !== style) return false;
     }
@@ -183,7 +330,7 @@ export function createHistory(root, gridOf) {
       replaying = false;
     }
     if (events.length > 0) list[to].push(buildEntry(tab, events));
-    return { ok: true, cells: collectCoords(events) };
+    return { ok: true, cells: replayCoords(events, tableMaps(tabTable(root, tab))) };
   }
 
   return {
