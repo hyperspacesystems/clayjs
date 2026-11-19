@@ -17,6 +17,7 @@ import {
   formatLabelOf,
   inspectMerge,
   numberFormatMenuItems,
+  openCustomFormatDialog,
   runMergeCommand,
 } from "../../../src/sheet/format-commands.js";
 import { createHistory } from "../../../src/sheet/history.js";
@@ -384,4 +385,91 @@ test("merging a range with one filled cell keeps that value wherever it sits, in
   expect(history.undo("s1").ok).toBe(true);
   expect(grid.cell("A2").span).toBeNull();
   expect(grid.get("A2:B2")).toEqual([[null, "beta"]]);
+});
+
+// Bug: numberFormatMenuItems omitted Custom format... at the end, or openCustomFormatDialog failed to prefill, show Loading formats... while grid-formats loaded, disable Apply on an unknown code, or apply across a selection in one undo step.
+test("Custom format... opens a Bevel dialog prefilled with the active code, loads grid-formats for custom codes, disables Apply on invalid codes, and writes in one undo step", async () => {
+  const { Sap, grid, history, view } = await setup();
+  let customOpened = 0;
+  const items = numberFormatMenuItems({
+    activeValue: 12.5,
+    activeFmt: "$#,##0.00",
+    formatValue: Sap.grid.formatValue,
+    onPick: () => {},
+    onCustom: () => {
+      customOpened += 1;
+    },
+  });
+  const last = items.at(-1);
+  expect(last).toMatchObject({ id: "custom-format", label: "Custom format..." });
+  last.onSelect();
+  expect(customOpened).toBe(1);
+
+  // Hold grid-formats download open so we can observe "Loading formats..." before it settles.
+  const formatsMod = await import("../../../src/vendor/sap-grid-formats.vendor.js");
+  let releaseFormats;
+  const heldDownload = new Promise((resolve) => {
+    releaseFormats = () => resolve(formatsMod);
+  });
+  Sap.plugins.loader = (name) => (name === "grid-formats" ? heldDownload : undefined);
+
+  let sel = createSelection(view(), "s1");
+  sel = moveSelection(view(), sel, { dr: 0, dc: 1, extend: true });
+  let appliedFmt = undefined;
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const dlg = openCustomFormatDialog({
+    doc: document,
+    win: window,
+    container,
+    initialFmt: "$#,##0.00",
+    activeValue: 12.5,
+    onConfirm: (fmt) => {
+      appliedFmt = fmt;
+      applyNumberFormat(grid, view(), sel, fmt);
+    },
+  });
+
+  const input = dlg.shell.panel.querySelector("[data-custom-format-input]");
+  const sample = dlg.shell.panel.querySelector("[data-custom-format-sample]");
+  expect(input.value).toBe("$#,##0.00");
+  expect(sample.textContent).toBe("$12.50");
+  expect(dlg.confirmBtn.isDisabled()).toBe(false);
+  expect(dlg.confirmBtn.getAttribute("aria-disabled")).toBeNull();
+
+  // Type custom format requiring grid-formats: shows "Loading formats..." and blocks submit until loaded.
+  input.value = '0.00 "kg"';
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  expect(sample.textContent).toBe("Loading formats...");
+  expect(dlg.confirmBtn.getAttribute("aria-disabled")).toBe("true");
+  dlg.shell.panel.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  expect(appliedFmt).toBeUndefined();
+
+  releaseFormats();
+  await turn();
+  await turn();
+  expect(Sap.plugins.has("grid-formats")).toBe(true);
+  expect(sample.textContent).toBe("12.50 kg");
+  expect(dlg.confirmBtn.getAttribute("aria-disabled")).toBeNull();
+
+  // Invalid format code even with grid-formats installed: disables Apply and shows exact unknown message.
+  input.value = "[not-a-format";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  expect(sample.textContent).toBe("That code isn't a number format Sheets knows.");
+  expect(dlg.confirmBtn.getAttribute("aria-disabled")).toBe("true");
+
+  // Restore valid custom code and Apply: formats A1:B1 in one undo step.
+  input.value = '0.00 "kg"';
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  expect(dlg.confirmBtn.getAttribute("aria-disabled")).toBeNull();
+  dlg.shell.panel.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+  expect(appliedFmt).toBe('0.00 "kg"');
+  expect(grid.cell("A1").text).toBe("12.50 kg");
+  expect(grid.cell("B1").text).toBe("0.25 kg");
+
+  expect(history.undo("s1").ok).toBe(true);
+  expect(grid.cell("A1").text).toBe("12.5");
+  expect(grid.cell("B1").text).toBe("0.25");
 });

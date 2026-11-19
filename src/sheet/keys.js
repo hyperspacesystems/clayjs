@@ -77,7 +77,9 @@ export function keyIntent(event, { platform = "", editing = false, picking = fal
   if ((key === "d" || key === "D") && mod && !alt && !shift) return { type: "fillDown" };
   if ((key === "r" || key === "R") && mod && !alt && !shift) return { type: "fillRight" };
   if ((key === "f" || key === "F") && mod && !alt && !shift) return { type: "find" };
+  if ((key === "h" || key === "H") && mod && !alt && shift === mac) return { type: "findReplace" };
   if ((key === "j" || key === "J") && mod && !alt && !shift) return { type: "goto" };
+  if (key === "/" && mod && !alt) return { type: "shortcuts" };
 
   if ((key === "b" || key === "B") && mod && !alt && !shift) return { type: "bold" };
   if ((key === "i" || key === "I") && mod && !alt && !shift) return { type: "italic" };

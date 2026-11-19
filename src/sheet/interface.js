@@ -1,6 +1,6 @@
 import { a1, colIndex, rowIndex, tabTable } from "./commit.js";
 import { createChrome } from "./chrome.js";
-import { copyParts, fillBlock, fillFormula, pasteBlock } from "./clipboard.js";
+import { copyParts, fillBlock, fillFormula, pasteBlock, transposeMatrix } from "./clipboard.js";
 import { createEditor } from "./editor.js";
 import { ROW_ESTIMATE } from "./geometry.js";
 import { createHistory } from "./history.js";
@@ -246,7 +246,7 @@ export function extractCellLink(cell, tokenize) {
   return safeLinkUrl(cell.text);
 }
 
-function createWorkbookInterface(workbook, { shell, storage, tabOptions, commands, platform, measureText }) {
+function createWorkbookInterface(workbook, { shell, storage, tabOptions, commands, platform, measureText, loaders = {} }) {
   const doc = workbook.ownerDocument ?? document;
   const win = doc.defaultView ?? window;
   const scrollBox = scrollerOf(workbook) ?? workbook;
@@ -267,6 +267,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   let liveMenu = null;
   let cmdActions = null;
   let findCtrl = null;
+  let fnHelp = null;
   let fillDrag = null;
   let statusCache = "";
 
@@ -274,13 +275,21 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   const onLazyFail = () => {
     if (alive()) chrome.showNotice(LAZY_FAIL_MESSAGE);
   };
-  const cmdTool = lazyModule(() => import("./format-commands.js"), onLazyFail);
-  const fillTool = lazyModule(() => import("./fill.js"), onLazyFail);
-  const findTool = lazyModule(() => import("./find.js"), onLazyFail);
-  const csvTool = lazyModule(async () => {
-    if (!cmdTool.peek()) cmdTool.put(await import("./format-commands.js"));
-    return import("./csv.js");
-  }, onLazyFail);
+  const cmdTool = lazyModule(loaders.commands ?? (() => import("./format-commands.js")), onLazyFail);
+  const fillTool = lazyModule(loaders.fill ?? (() => import("./fill.js")), onLazyFail);
+  const findTool = lazyModule(loaders.find ?? (() => import("./find.js")), onLazyFail);
+  const pasteSpecialTool = lazyModule(loaders.pasteSpecial ?? (() => import("./paste-special.js")), onLazyFail);
+  const shortcutsTool = lazyModule(loaders.shortcuts ?? (() => import("./shortcuts.js")), onLazyFail);
+  // Function help is never asked for, so a failed load stays quiet instead of a notice per keystroke.
+  const functionHelpTool = lazyModule(loaders.functionHelp ?? (() => import("./function-help.js")), null);
+  const csvTool = lazyModule(
+    loaders.csv ??
+      (async () => {
+        if (!cmdTool.peek()) cmdTool.put(await import("./format-commands.js"));
+        return import("./csv.js");
+      }),
+    onLazyFail,
+  );
   let pendingLazy = null;
 
   function runLazy(holder, fn, { guardSel = false } = {}) {
@@ -527,6 +536,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     restart,
     showDialog,
     clearDialog,
+    applyPasteData,
+    platform: platform ?? win.navigator?.platform ?? "",
+    isMac,
     measureText,
   });
 
@@ -542,11 +554,40 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       ...sharedCtx(),
       menu: liveMenu,
       onFillShortcut: triggerFillShortcut,
+      onPasteSpecial: (mode) => runLazy(pasteSpecialTool, (ps) => ps.runPasteSpecial(sharedCtx(), mode)),
+      onShortcuts: () => runLazy(shortcutsTool, (s) => s.showShortcutsDialog(sharedCtx())),
     });
     return { menu: liveMenu, actions: cmdActions };
   }
 
   const ensureFind = (f) => (findCtrl ??= f.createFindController(sharedCtx()));
+
+  function ensureFunctionHelp(mod) {
+    fnHelp ??= mod.createFunctionHelp({
+      container: chrome.topRoot,
+      win,
+      theme: chrome.theme,
+      editor,
+      overlays,
+    });
+    return fnHelp;
+  }
+
+  function syncFunctionHelp() {
+    if (!editor.editing || editor.isTextCell() || !editor.buffer.startsWith("=")) {
+      fnHelp?.update();
+      return;
+    }
+    const ready = functionHelpTool.peek();
+    if (ready) {
+      ensureFunctionHelp(ready).update();
+      return;
+    }
+    functionHelpTool.load().then((mod) => {
+      if (!alive() || !mod) return;
+      ensureFunctionHelp(mod).update();
+    });
+  }
 
   const overlays = createOverlays(workbook, {
     onSelectCol(c, extend) {
@@ -638,6 +679,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     getShownTab: () => tabs.activeId,
     showTab: (id) => tabs.show(id),
     onStateChange: () => syncUI(),
+    onCaretChange: () => fnHelp?.update(),
     onNotice: (msg) => chrome.showNotice(msg),
     onClearNotice: () => chrome.hideNotice(),
   });
@@ -672,7 +714,13 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     const extFind = externalCommands.find;
     chrome.registerCommand(
       "find",
-      !editor.editing ? (typeof extFind === "function" ? extFind : (canEdit ? () => ensureReadyForAction() && runLazy(findTool, (f) => ensureFind(f).open()) : null)) : null,
+      !editor.editing
+        ? typeof extFind === "function"
+          ? extFind
+          : canEdit
+            ? () => ensureReadyForAction() && runLazy(findTool, (f) => ensureFind(f).open({ replace: true }))
+            : null
+        : null,
     );
     const extImport = externalCommands.import;
     chrome.registerCommand(
@@ -726,6 +774,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       fillPreviewBox: fillDrag?.tab === shownId ? fillDrag.targetBox : null,
       linkUrl,
     });
+    findCtrl?.syncTab();
+    syncFunctionHelp();
   }
 
   function revealFocus() {
@@ -909,85 +959,145 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (!disposed && !editor.editing) event.preventDefault();
   }
 
+  function applyPasteData({ html = "", text = "", valuesOnly = false, transpose = false, formatOnly = false } = {}) {
+    if (disposed || editor.editing || !sel) return false;
+    const grid = gridOf(tabTable(workbook, sel.tab));
+    if (!grid) return false;
+    const view = viewOf(sel.tab);
+    if (view.rows.length === 0 || view.cols.length === 0) return false;
+    const box = selectionBox(view, sel);
+    if (!box) return false;
+    const at = a1(box.top, box.left);
+    const singleMerge =
+      box.top === box.active.r &&
+      box.left === box.active.c &&
+      box.bottom === box.active.r + box.active.rows - 1 &&
+      box.right === box.active.c + box.active.cols - 1;
+    const [selRows, selCols] = singleMerge ? [1, 1] : [box.bottom - box.top + 1, box.right - box.left + 1];
+    const parsed = pasteBlock(html, { r: box.top, c: box.left }, { valuesOnly, transpose, formatOnly });
+    const uncovered = (write) =>
+      write.map((line, i) => line.map((item, j) => (view.cell(box.top + i, box.left + j)?.covered ? undefined : item)));
+
+    let rows = 0;
+    let cols = 0;
+
+    if (formatOnly) {
+      if (parsed?.kind !== "ours") {
+        chrome.showNotice("Format only works with cells copied from a sheet.");
+        return false;
+      }
+      const { block } = parsed;
+      const write = block.length === 1 && block[0].length === 1 ? fillBlock(block, selRows, selCols) : block;
+      // Formats never grow the sheet: what falls past the last row or column is left off.
+      rows = Math.min(write.length, view.rows.length - box.top);
+      cols = Math.min(write[0]?.length ?? 0, view.cols.length - box.left);
+      if (rows <= 0 || cols <= 0) return false;
+      const ok = writeGrid(() =>
+        history.group(sel.tab, () => {
+          // One source cell formats the whole target in one Grid step; a cell at a time froze large ranges.
+          if (block.length === 1 && block[0].length === 1) {
+            const item = block[0][0];
+            grid.format(`${at}:${a1(box.top + rows - 1, box.left + cols - 1)}`, { fmt: item.fmt ?? null, style: item.style });
+            return;
+          }
+          for (let i = 0; i < rows; i++) {
+            for (let j = 0; j < cols; j++) {
+              if (view.cell(box.top + i, box.left + j)?.covered) continue;
+              const item = write[i]?.[j];
+              if (!item) continue;
+              grid.format(a1(box.top + i, box.left + j), { fmt: item.fmt ?? null, style: item.style });
+            }
+          }
+        }),
+      );
+      if (!ok) return false;
+    } else if (parsed && (parsed.kind === "ours" || !text)) {
+      const { kind, block, origin } = parsed;
+      let write = block;
+      if (
+        kind === "ours" &&
+        !valuesOnly &&
+        block.length === 1 &&
+        block[0].length === 1 &&
+        block[0][0]?.content &&
+        typeof block[0][0].content === "object" &&
+        typeof block[0][0].content.f === "string"
+      ) {
+        const item = block[0][0];
+        write = uncovered(fillFormula(item.content.f, item.fmt, box.top - origin.r, box.left - origin.c, selRows, selCols, item.style));
+        rows = selRows;
+        cols = selCols;
+      } else if (block.length === 1 && block[0].length === 1) {
+        write = uncovered(fillBlock(block, selRows, selCols));
+        rows = selRows;
+        cols = selCols;
+      } else {
+        rows = block.length;
+        cols = block[0]?.length ?? 0;
+      }
+      const options =
+        kind === "ours"
+          ? valuesOnly
+            ? { grow: true, detect: false, formats: false }
+            : { grow: true }
+          : { grow: true, formulas: !valuesOnly };
+      if (!writeGrid(() => grid.setRange(at, write, options))) return false;
+    } else if (text) {
+      const flat = text.replace(/\r?\n$/, "");
+      let lines;
+      if (!/[\t\r\n]/.test(flat)) {
+        lines = [[flat]];
+      } else {
+        try {
+          lines = win.Sap?.grid?.csv?.parseDelimited(text, { delimiter: "\t" }) ?? [];
+        } catch (error) {
+          if (error?.name !== "DelimitedError") throw error;
+          lines = [[flat]];
+        }
+      }
+      const matrix = transpose ? transposeMatrix(lines, "") : lines;
+      const one = matrix.length === 1 && (matrix[0]?.length ?? 0) === 1;
+      const filled = fillBlock(matrix, selRows, selCols);
+      rows = filled.length;
+      cols = Math.max(0, ...filled.map((line) => line.length));
+      if (!rows || !cols) return false;
+      const options = { grow: true, formulas: !valuesOnly };
+      let wrote;
+      if (one) {
+        wrote = writeGrid(() => grid.setRange(at, uncovered(filled), options));
+      } else if (!transpose) {
+        wrote = writeGrid(() => grid.importDelimited(text, at, { delimiter: "\t", formulas: !valuesOnly }));
+      } else if (typeof win.Sap?.grid?.csv?.writeDelimited === "function") {
+        const transposedText = win.Sap.grid.csv.writeDelimited(matrix, { delimiter: "\t" });
+        wrote = writeGrid(() => grid.importDelimited(transposedText, at, { delimiter: "\t", formulas: !valuesOnly }));
+      } else {
+        wrote = writeGrid(() => grid.setRange(at, uncovered(filled), options));
+      }
+      if (!wrote) return false;
+    } else {
+      return false;
+    }
+
+    if (!rows || !cols) return false;
+    const nextView = viewOf(sel.tab);
+    if (nextView.rows.length === 0 || nextView.cols.length === 0) return false;
+    const bottom = Math.min(box.top + rows - 1, nextView.rows.length - 1);
+    const right = Math.min(box.left + cols - 1, nextView.cols.length - 1);
+    applyMove({
+      tab: sel.tab,
+      anchor: { row: nextView.rows[box.top], col: nextView.cols[box.left] },
+      focus: { row: nextView.rows[bottom], col: nextView.cols[right] },
+    });
+    return true;
+  }
+
   function onPaste(event) {
     if (disposed || editor.editing || !sel) return;
     event.preventDefault();
     try {
-      const grid = gridOf(tabTable(workbook, sel.tab));
-      if (!grid) return;
-      const view = viewOf(sel.tab);
-      if (view.rows.length === 0 || view.cols.length === 0) return;
-      const box = selectionBox(view, sel);
-      if (!box) return;
-      const at = a1(box.top, box.left);
-      const singleMerge =
-        box.top === box.active.r &&
-        box.left === box.active.c &&
-        box.bottom === box.active.r + box.active.rows - 1 &&
-        box.right === box.active.c + box.active.cols - 1;
-      const [selRows, selCols] = singleMerge ? [1, 1] : [box.bottom - box.top + 1, box.right - box.left + 1];
       const html = event.clipboardData?.getData("text/html") ?? "";
       const text = event.clipboardData?.getData("text/plain") ?? "";
-      const valuesOnly = valuesNext;
-      const parsed = pasteBlock(html, { r: box.top, c: box.left }, { valuesOnly });
-      const uncovered = (write) =>
-        write.map((line, i) => line.map((item, j) => (view.cell(box.top + i, box.left + j)?.covered ? undefined : item)));
-      let rows = 0;
-      let cols = 0;
-      if (parsed && (parsed.kind === "ours" || !text)) {
-        const { kind, block, origin } = parsed;
-        let write = block;
-        if (kind === "ours" && !valuesOnly && block.length === 1 && block[0].length === 1 && block[0][0]?.content && typeof block[0][0].content === "object" && typeof block[0][0].content.f === "string") {
-          const item = block[0][0];
-          write = uncovered(fillFormula(item.content.f, item.fmt, box.top - origin.r, box.left - origin.c, selRows, selCols));
-          rows = selRows;
-          cols = selCols;
-        } else if (block.length === 1 && block[0].length === 1) {
-          write = uncovered(fillBlock(block, selRows, selCols));
-          rows = selRows;
-          cols = selCols;
-        } else {
-          rows = block.length;
-          cols = block[0]?.length ?? 0;
-        }
-        const options = kind === "ours" ? (valuesOnly ? { grow: true, detect: false, formats: false } : { grow: true }) : { grow: true, formulas: !valuesOnly };
-        if (!writeGrid(() => grid.setRange(at, write, options))) return;
-      } else if (text) {
-        const flat = text.replace(/\r?\n$/, "");
-        let lines;
-        if (!/[\t\r\n]/.test(flat)) {
-          lines = [[flat]];
-        } else {
-          try {
-            lines = win.Sap?.grid?.csv?.parseDelimited(text, { delimiter: "\t" }) ?? [];
-          } catch (error) {
-            if (error?.name !== "DelimitedError") throw error;
-            lines = [[flat]];
-          }
-        }
-        const one = lines.length === 1 && (lines[0]?.length ?? 0) === 1;
-        const filled = fillBlock(lines, selRows, selCols);
-        rows = filled.length;
-        cols = Math.max(0, ...filled.map((line) => line.length));
-        if (!rows || !cols) return;
-        const options = { grow: true, formulas: !valuesOnly };
-        const wrote = one
-          ? writeGrid(() => grid.setRange(at, uncovered(filled), options))
-          : writeGrid(() => grid.importDelimited(text, at, { delimiter: "\t", formulas: !valuesOnly }));
-        if (!wrote) return;
-      } else {
-        return;
-      }
-      if (!rows || !cols) return;
-      const nextView = viewOf(sel.tab);
-      if (nextView.rows.length === 0 || nextView.cols.length === 0) return;
-      const bottom = Math.min(box.top + rows - 1, nextView.rows.length - 1);
-      const right = Math.min(box.left + cols - 1, nextView.cols.length - 1);
-      applyMove({
-        tab: sel.tab,
-        anchor: { row: nextView.rows[box.top], col: nextView.cols[box.left] },
-        focus: { row: nextView.rows[bottom], col: nextView.cols[right] },
-      });
+      applyPasteData({ html, text, valuesOnly: valuesNext });
     } finally {
       valuesNext = false;
     }
@@ -996,6 +1106,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   function runKey(event) {
     if (disposed || seenKeys.has(event)) return;
     seenKeys.add(event);
+
+    if (editor.editing && fnHelp?.handleKeyDown(event)) return;
 
     const intent = keyIntent(event, {
       platform: platform ?? win.navigator?.platform ?? "",
@@ -1061,7 +1173,13 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
         triggerFillShortcut("right");
         break;
       case "find":
-        if (ensureReadyForAction()) runLazy(findTool, (f) => ensureFind(f).open());
+        if (ensureReadyForAction()) runLazy(findTool, (f) => ensureFind(f).open({ replace: false }));
+        break;
+      case "findReplace":
+        if (ensureReadyForAction()) runLazy(findTool, (f) => ensureFind(f).open({ replace: true }));
+        break;
+      case "shortcuts":
+        if (ensureReadyForAction()) runLazy(shortcutsTool, (s) => s.showShortcutsDialog(sharedCtx()));
         break;
       case "goto":
         chrome.focusNameBox();
@@ -1419,6 +1537,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     closeDialog();
     liveMenu?.dispose();
     findCtrl?.dispose();
+    fnHelp?.dispose();
+    fnHelp = null;
     for (const off of unsubGrids.splice(0)) off();
     for (const off of cleanups.splice(0)) off();
     resizeObserver?.disconnect();
@@ -1455,6 +1575,7 @@ export function startInterface({
   commands = {},
   platform,
   measureText = null,
+  loaders = {},
 } = {}) {
   const instances = new Map();
 
@@ -1467,7 +1588,7 @@ export function startInterface({
     }
     for (const el of live) {
       if (!instances.has(el)) {
-        instances.set(el, createWorkbookInterface(el, { shell, storage, tabOptions, commands, platform, measureText }));
+        instances.set(el, createWorkbookInterface(el, { shell, storage, tabOptions, commands, platform, measureText, loaders }));
       }
     }
   }

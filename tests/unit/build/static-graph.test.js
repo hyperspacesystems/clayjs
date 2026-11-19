@@ -175,6 +175,39 @@ for (const { mode, isEditMode, isDraftMode } of MODES) {
   });
 }
 
+const SHEET_LAZY_C11A = [
+  "src/sheet/function-help.js",
+  "src/sheet/function-help-data.js",
+  "src/sheet/paste-special.js",
+  "src/sheet/shortcuts.js",
+  "src/vendor/sap-grid-functions.vendor.js",
+  "src/vendor/sap-grid-formats.vendor.js",
+];
+
+// Bug: a boot module statically imported function-help, paste-special, shortcuts, or the sapjs extension bundles instead of loading them lazily.
+test("sheet view, draft and edit: c11a lazy feature modules and grid extension bundles stay out of the boot graph", async () => {
+  for (const { mode, isEditMode, isDraftMode } of MODES) {
+    const tag = FIXTURES.sheet;
+    const params = new URLSearchParams(`plugins=${tag.plugins}&exclude=${tag.exclude}`);
+    const plan = resolveModules(params, isEditMode, { isDraftMode, hasSap: tag.hasSap });
+    const entries = [...plan.core, ...plan.plugins].map((path) => `src/${path}`);
+    const inputs = await inputsFor(entries);
+    const graph = walk(inputs, ["src/loader.js", ...entries]);
+
+    expect(graph.has("src/sheet/shell.js")).toBe(true);
+    expect([...graph].filter((file) => SHEET_LAZY_C11A.includes(file))).toEqual([]);
+    if (mode !== "view") {
+      expect(dynamicDeps(inputs, "src/sheet/interface.js")).toEqual(
+        expect.arrayContaining([
+          "src/sheet/function-help.js",
+          "src/sheet/paste-special.js",
+          "src/sheet/shortcuts.js",
+        ]),
+      );
+    }
+  }
+});
+
 // An owner editing the original reads the owner chip, not the draft store: the
 // store, its hyper-html-api data engine, the prompt and the intro are a visitor's,
 // and the loader resolves plugins/visitor-drafts-owner.js in edit mode. The draft

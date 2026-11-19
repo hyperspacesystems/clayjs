@@ -448,7 +448,10 @@ test("sheet edit: the blank sheet's exact module list", async () => {
     "src/sheet/fill.js",
     "src/sheet/find.js",
     "src/sheet/format-commands.js",
+    "src/sheet/function-help.js",
+    "src/sheet/paste-special.js",
     "src/sheet/sheet-view.js",
+    "src/sheet/shortcuts.js",
   ]);
   expect(paths.filter((path) => /\/sheet\/features\//.test(path))).toEqual([]);
   expect(paths.filter((path) => /yjs|prosemirror/.test(path))).toEqual([]);

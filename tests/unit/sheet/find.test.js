@@ -4,7 +4,8 @@
  */
 import { afterEach, beforeEach, describe, expect, jest, test } from "@jest/globals";
 import { tabTable } from "../../../src/sheet/commit.js";
-import { createFindBar, findMatches, parseGoToRef } from "../../../src/sheet/find.js";
+import { createFindBar, findMatches, isValidFormula, parseGoToRef } from "../../../src/sheet/find.js";
+import { createHistory } from "../../../src/sheet/history.js";
 import { resolveTheme } from "../../../src/ui/theme.js";
 
 const FIND_BOOK = `<main sap plugins="grid"><div items="sheets" sheet-workbook>
@@ -176,5 +177,223 @@ describe("sheet find and go-to", () => {
     expect(parseGoToRef("2:5", tabs, "s1")).toEqual({ tab: "s1", r0: 1, c0: 0, r1: 4, c1: null, whole: "rows" });
     expect(parseGoToRef("Missing!A1", tabs, "s1")).toBeNull();
     expect(parseGoToRef("not a ref", tabs, "s1")).toBeNull();
+  });
+
+  // Bug: the replace check read a row range as a column range, so Replace all wrote =SUM(A1:$2)
+  // (sapjs's #ERROR!) over a working formula and refused the valid open-ended =AVERAGE(A1:A).
+  test("isValidFormula agrees with sapjs's own parser on ranges", async () => {
+    const { Sap, root } = await mountFindBook();
+    const s1 = Sap.grid(tabTable(root, "s1"));
+    const cases = ["=SUM(A1:$2)", "=AVERAGE(A1:A)", "=SUM(A:A1)", "=SUM(2:3)", "=SUM(A:B)", "=SUM(A1:B2)", "=SUM(1:B)", "=A1+"];
+    for (const f of cases) {
+      s1.set("C1", f);
+      const sapjsAccepts = s1.cell("C1").text !== "#ERROR!";
+      expect([f, isValidFormula(f, Sap.grid.tokenize)]).toEqual([f, sapjsAccepts]);
+    }
+  });
+
+  // Bug: every cell Replace all wrote announced a change that made the open bar search every tab
+  // again, so a large Replace all froze the tab; it must search once, after the writes.
+  test("Replace all searches the tabs again once, not once per replaced cell", async () => {
+    const { Sap, root, tabs } = await mountFindBook();
+    const s1 = Sap.grid(tabTable(root, "s1"));
+    const container = document.createElement("div");
+    document.body.append(container);
+    let searches = 0;
+    const bar = createFindBar({
+      theme: resolveTheme(),
+      container,
+      getTabs: () => (searches++, tabs()),
+      getActiveTab: () => "s1",
+      getActivePos: () => ({ tab: "s1", r: 0, c: 0 }),
+      getTokenize: () => Sap.grid.tokenize,
+      onSelectMatch: () => {},
+      onNotice: () => {},
+      onClose: () => {},
+    });
+    s1.on("change", () => bar.refresh());
+    bar.open({ replace: true });
+    bar.input.value = "rent";
+    bar.input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(bar.replaceAllBtn.textContent).toBe("Replace all (3)");
+    bar.replaceInput.value = "fee";
+    searches = 0;
+    bar.replaceAllBtn.click();
+    expect(s1.get("C1")).toBe("fee due");
+    expect(searches).toBeLessThanOrEqual(2);
+    bar.dispose();
+  });
+
+  // Bug: Replace all modified matches on inactive tabs, recorded multiple undo steps, wrote numeric replacements as strings, or failed to show the active tab's match count.
+  test("Replace steps to the next match and Replace all edits typed text on the active tab only in one undo step, turning numeric text into numbers", async () => {
+    const { Sap, root, tabs } = await mountFindBook();
+    const s1 = Sap.grid(tabTable(root, "s1"));
+    const s2 = Sap.grid(tabTable(root, "s2"));
+    const history = createHistory(root, (t) => Sap.grid(t));
+    s1.on("change", (ev) => history.record("s1", ev));
+    s2.on("change", (ev) => history.record("s2", ev));
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    let activeTab = "s1";
+    let activePos = { tab: "s1", r: 0, c: 0 };
+    const notices = [];
+    const selected = [];
+
+    const bar = createFindBar({
+      theme: resolveTheme(),
+      container,
+      getTabs: tabs,
+      getActiveTab: () => activeTab,
+      getActivePos: () => activePos,
+      history,
+      getTokenize: () => Sap.grid.tokenize,
+      onSelectMatch: (m) => {
+        activeTab = m.tab;
+        activePos = { tab: m.tab, r: m.r, c: m.c };
+        selected.push(`${m.tab}:${m.ref}`);
+      },
+      onNotice: (msg) => notices.push(msg),
+      onClose: () => {},
+    });
+
+    // open() hides replaceRow; open({ replace: true }) shows it.
+    bar.open();
+    expect(bar.replaceRow.hidden).toBe(true);
+    // Ctrl+H typed inside the bar shows the replace row instead of the browser's history.
+    const ctrlH = new KeyboardEvent("keydown", { key: "h", ctrlKey: true, bubbles: true, cancelable: true });
+    bar.input.dispatchEvent(ctrlH);
+    expect(ctrlH.defaultPrevented).toBe(true);
+    expect(bar.replaceRow.hidden).toBe(false);
+    bar.open();
+    expect(bar.replaceRow.hidden).toBe(true);
+    bar.open({ replace: true });
+    expect(bar.replaceRow.hidden).toBe(false);
+
+    // "rent" matches 3 cells on s1 (A1="Rent", C1="rent due", A2="RENTAL") and 1 on s2 (B1="Parent").
+    bar.input.value = "rent";
+    bar.input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(bar.countText.textContent).toBe("1 of 4");
+    expect(bar.replaceAllBtn.textContent).toBe("Replace all (3)");
+
+    // Single Replace on A1 ("Rent" -> "10") writes typed input so "10" becomes number 10 and moves to next match C1.
+    bar.replaceInput.value = "10";
+    bar.replaceBtn.click();
+    expect(s1.get("A1")).toBe(10);
+    expect(typeof s1.get("A1")).toBe("number");
+    expect(selected.at(-1)).toBe("s1:C1");
+    expect(bar.replaceAllBtn.textContent).toBe("Replace all (2)");
+
+    // Replacing inside a formatted/plain number keeps it a number ("40" -> "90").
+    activePos = { tab: "s1", r: 0, c: 0 };
+    bar.input.value = "4";
+    bar.input.dispatchEvent(new Event("input", { bubbles: true }));
+    bar.replaceInput.value = "9";
+    bar.replaceBtn.click();
+    expect(s1.get("B1")).toBe(90);
+    expect(typeof s1.get("B1")).toBe("number");
+
+    // Replace all on s1 for "rent" -> "lease" replaces C1 and A2 on s1 in ONE undo step and leaves s2!B1 ("Parent") untouched.
+    activeTab = "s1";
+    activePos = { tab: "s1", r: 0, c: 0 };
+    bar.input.value = "rent";
+    bar.input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(bar.replaceAllBtn.textContent).toBe("Replace all (2)");
+    bar.replaceInput.value = "lease";
+    bar.replaceAllBtn.click();
+
+    expect(s1.get("C1")).toBe("lease due");
+    expect(s1.get("A2")).toBe("leaseAL");
+    expect(s1.cell("B2").covered).toBe(true);
+    expect(s2.get("B1")).toBe("Parent");
+    expect(notices.at(-1)).toBe("Replaced 2 cells.");
+
+    // One undo step restores BOTH C1 and A2 on s1.
+    expect(history.undo("s1").ok).toBe(true);
+    expect(s1.get("C1")).toBe("rent due");
+    expect(s1.get("A2")).toBe("RENTAL");
+
+    // The person clicks back to s1 while the current match is on s2: Replace shows s2 before
+    // writing, so Ctrl+Z (the shown tab's undo) undoes this replace.
+    bar.input.value = "parent";
+    bar.input.dispatchEvent(new Event("input", { bubbles: true }));
+    activeTab = "s1";
+    let shownAtWrite = null;
+    const off = s2.on("change", () => (shownAtWrite ??= activeTab));
+    bar.replaceInput.value = "Child";
+    bar.replaceBtn.click();
+    off();
+    expect(s2.get("B1")).toBe("Child");
+    expect(shownAtWrite).toBe("s2");
+
+    bar.dispose();
+  });
+
+  // Bug: Replace modified a formula cell's shown value when Search formulas was off, or overwrote a formula with invalid syntax instead of skipping and counting it.
+  test("formula cells are replaced only when Search formulas is checked, and invalid formulas are left alone and counted in the notice", async () => {
+    const { Sap, root, tabs } = await mountFindBook();
+    const s1 = Sap.grid(tabTable(root, "s1"));
+    s1.set("A1", "=B1+80");
+    // B1=40 => A1 evaluates to 120, C2 has formula "=B1*2" which evaluates to 80.
+    expect(s1.cell("C2").text).toBe("80");
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const notices = [];
+    const bar = createFindBar({
+      theme: resolveTheme(),
+      container,
+      getTabs: tabs,
+      getActiveTab: () => "s1",
+      getActivePos: () => ({ tab: "s1", r: 0, c: 0 }),
+      getTokenize: () => Sap.grid.tokenize,
+      onSelectMatch: () => {},
+      onNotice: (msg) => notices.push(msg),
+      onClose: () => {},
+    });
+
+    // With Search formulas unchecked, "80" matches C2's shown text ("80"), NOT A1's formula, and Replace all skips formula cell C2.
+    bar.open({ replace: true });
+    bar.input.value = "80";
+    bar.input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(bar.matches.map((m) => m.ref)).toEqual(["C2"]);
+    bar.replaceInput.value = "99";
+    // A formula's result is not counted as something Replace all can change.
+    expect(bar.replaceAllBtn.textContent).toBe("Replace all");
+    expect(bar.replaceAllBtn.getAttribute("aria-disabled")).toBe("true");
+    bar.replaceBtn.click();
+    expect(s1.input("C2")).toBe("=B1*2");
+    expect(s1.get("C2")).toBe(80);
+    expect(notices.at(-1)).toBe("That match is a formula's result. Turn on Search formulas to change the formula.");
+
+    // Turn Search formulas ON: replacing "B1" with "(" breaks "=B1+80" -> "=(+80" (unclosed paren), while replacing "+80" in A1 or valid ref works.
+    // Put a plain text cell C1="B1 note" alongside formulas A1="=B1+80" and C2="=B1*2".
+    s1.set("C1", "B1 note");
+    bar.formulaCheck.checked = true;
+    bar.formulaCheck.dispatchEvent(new Event("change", { bubbles: true }));
+
+    // Replace "B1" with "B1+" -> C1 becomes "B1+ note" (valid text), while A1 ("=B1++80" -> unary + is valid? Wait: use "B1*" so "=B1**2" and "=B1*+80": wait, "B1)" makes "=B1)+80" and "=B1)*2", both invalid unmatched ')'!).
+    bar.input.value = "B1";
+    bar.input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(bar.replaceAllBtn.textContent).toBe("Replace all (3)");
+    bar.replaceInput.value = "B1)";
+    bar.replaceAllBtn.click();
+
+    expect(s1.get("C1")).toBe("B1) note");
+    expect(s1.input("A1")).toBe("=B1+80");
+    expect(s1.input("C2")).toBe("=B1*2");
+    expect(notices.at(-1)).toBe("Replaced 1 cell. 2 formulas would not be valid and were left alone.");
+
+    // Valid formula replacement with Search formulas ON updates both formula cells.
+    bar.input.value = "B1";
+    bar.input.dispatchEvent(new Event("input", { bubbles: true }));
+    bar.replaceInput.value = "20";
+    bar.replaceAllBtn.click();
+    expect(s1.input("A1")).toBe("=20+80");
+    expect(s1.get("A1")).toBe(100);
+    expect(s1.input("C2")).toBe("=20*2");
+    expect(s1.get("C2")).toBe(40);
+
+    bar.dispose();
   });
 });

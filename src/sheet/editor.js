@@ -58,6 +58,7 @@ export function createEditor({
   getShownTab,
   showTab,
   onStateChange,
+  onCaretChange,
   onNotice,
   onClearNotice,
 }) {
@@ -286,6 +287,19 @@ export function createEditor({
     return true;
   }
 
+  function replaceRange(start, end, replacement) {
+    if (!editing) return false;
+    const s = Math.max(0, Math.min(buffer.length, start));
+    const e = Math.max(s, Math.min(buffer.length, end));
+    const nextText = buffer.slice(0, s) + replacement + buffer.slice(e);
+    const nextCaret = s + replacement.length;
+    pickState = null;
+    syncFields(nextText, nextCaret);
+    activeField.focus();
+    onStateChange?.();
+    return true;
+  }
+
   function commit() {
     if (!editing || !target) return { ok: true, changed: false };
     const result = commitCell(workbook, target, buffer);
@@ -325,12 +339,15 @@ export function createEditor({
 
   textarea.addEventListener("focus", () => {
     activeField = textarea;
+    if (editing && buffer.startsWith("=")) onCaretChange?.();
   });
   formulaInput.addEventListener("focus", () => {
     activeField = formulaInput;
     if (!editing) {
       const active = getActiveCell();
       if (active) beginEdit(active.input, formulaInput, caretOf(formulaInput));
+    } else if (buffer.startsWith("=")) {
+      onCaretChange?.();
     }
   });
 
@@ -344,6 +361,13 @@ export function createEditor({
     });
     field.addEventListener("click", () => {
       if (pickState && caretOf(field) !== pickState.end) pickState = null;
+      if (editing && buffer.startsWith("=")) onCaretChange?.();
+    });
+    field.addEventListener("keyup", (event) => {
+      if (!editing || !buffer.startsWith("=")) return;
+      if (/^(Arrow(Left|Right|Up|Down)|Home|End)$/.test(event.key)) {
+        onCaretChange?.();
+      }
     });
   }
 
@@ -388,6 +412,13 @@ export function createEditor({
     get target() {
       return target;
     },
+    get activeField() {
+      return activeField;
+    },
+    get caret() {
+      return caretOf(activeField);
+    },
+    isTextCell,
     refs: currentRefs,
     canPick,
     settle,
@@ -396,6 +427,7 @@ export function createEditor({
     pickMove,
     insertNewline,
     cycleRef,
+    replaceRange,
     commit,
     commitWith,
     cancel,

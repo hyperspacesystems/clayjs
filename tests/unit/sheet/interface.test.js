@@ -917,6 +917,18 @@ test("slice: format B2:C3 bold, currency, outer border and merge, insert row abo
   expect(grid().cell("B2").fmt).toBe("$#,##0.00");
   expect(grid().cell("B2").text).toBe("$3.00");
 
+  // Custom format... opens the dialog on the active cell's code, and Apply writes the typed code.
+  inst.chrome.topShadow.querySelector('[data-command="number-format"]').click();
+  inst.chrome.topShadow.querySelector('[data-menu-item="custom-format"]').click();
+  const customInput = inst.chrome.topShadow.querySelector("[data-custom-format-input]");
+  expect(customInput.value).toBe("$#,##0.00");
+  customInput.value = "0.0";
+  customInput.dispatchEvent(new Event("input", { bubbles: true }));
+  customInput.closest('[role="dialog"]').querySelector('button[type="submit"]').click();
+  expect(grid().cell("C3").fmt).toBe("0.0");
+  press(textarea, "z", { metaKey: true });
+  expect(grid().cell("B2").text).toBe("$3.00");
+
   inst.chrome.topShadow.querySelector('[data-command="borders"]').click();
   inst.chrome.topShadow.querySelector('[data-menu-item="outer"]').click();
   expect(grid().cell("B2").style).toContain("border-top:1px solid #5F6368");
@@ -2478,6 +2490,390 @@ test("undoing a sort after a later edit in the sorted rows shows the changed-sin
     ["second", "apple"],
     ["fourth", null],
   ]);
+
+  ui.dispose();
+});
+
+const C11A_FIND_BOOK = () => `<main sap plugins="grid"><div id="scroller" style="position:relative;overflow:auto"><div items="sheets" sheet-workbook>
+<section item data-id="s1" data-pos="V"><h2 bind="name">Produce</h2><table grid><colgroup><col data-id="c1" data-pos="V"><col data-id="c2" data-pos="l"></colgroup>
+<tbody>
+<tr data-id="r1" data-pos="V"><td>apple</td><td n v="10">10</td></tr>
+<tr data-id="r2" data-pos="l"><td>red apple</td><td>pear</td></tr>
+</tbody></table></section>
+<section item data-id="s2" data-pos="l"><h2 bind="name">Backup</h2><table grid><colgroup><col data-id="c1" data-pos="V"><col data-id="c2" data-pos="l"></colgroup>
+<tbody>
+<tr data-id="r1" data-pos="V"><td>apple</td><td n v="20">20</td></tr>
+</tbody></table></section>
+<script type="application/json" sheet-commit>{"rev":1}</script>
+</div></div></main>`;
+
+// Bug: Ctrl+H / Cmd+Shift+H or toolbar Find failed to open the replace row, Ctrl+F showed the replace row, Replace all edited inactive tabs or split undo steps, or Ctrl+/ and the cell menu failed to open Keyboard shortcuts with platform keys and Go to.
+test("c11a find-replace and shortcuts: Ctrl+H / Cmd+Shift+H / toolbar Find show replace while Ctrl+F hides it, Replace all updates the active tab in one undo step, and Ctrl+/ / cell menu open Keyboard shortcuts", async () => {
+  const { Sap, ui, inst } = await start(C11A_FIND_BOOK(), { platform: "Win32" });
+  const textarea = inst.editor.textarea;
+  const s1 = Sap.grid(tableOf("s1"));
+  const s2 = Sap.grid(tableOf("s2"));
+
+  // Ctrl+F opens find without replace row; Ctrl+H opens find with replace row.
+  press(textarea, "f", { ctrlKey: true });
+  await turn();
+  const findBar = inst.chrome.topShadow.querySelector("[data-sheet-find]");
+  expect(findBar.hidden).toBe(false);
+  expect(findBar.querySelector("[data-find-replace-row]").hidden).toBe(true);
+  press(findBar.querySelector("[data-find-input]"), "Escape");
+  expect(findBar.hidden).toBe(true);
+
+  press(textarea, "h", { ctrlKey: true });
+  await turn();
+  expect(findBar.hidden).toBe(false);
+  expect(findBar.querySelector("[data-find-replace-row]").hidden).toBe(false);
+
+  typeInto(findBar.querySelector("[data-find-input]"), "apple");
+  expect(findBar.querySelector("[data-find-count]").textContent).toBe("1 of 3");
+  expect(findBar.querySelector("[data-find-replace-all]").textContent).toBe("Replace all (2)");
+
+  typeInto(findBar.querySelector("[data-replace-input]"), "pear");
+  findBar.querySelector("[data-find-replace-all]").click();
+
+  expect(s1.get("A1")).toBe("pear");
+  expect(s1.get("A2")).toBe("red pear");
+  expect(s2.get("A1")).toBe("apple");
+  expect(inst.chrome.noticeBar.textContent).toContain("Replaced 2 cells.");
+
+  // Close find, then one Ctrl+Z restores both cells on s1.
+  press(findBar.querySelector("[data-find-input]"), "Escape");
+  press(textarea, "z", { ctrlKey: true });
+  expect(s1.get("A1")).toBe("apple");
+  expect(s1.get("A2")).toBe("red apple");
+
+  // Toolbar "Find and replace" button also opens with replace row shown.
+  inst.chrome.topShadow.querySelector('[data-command="find"]').click();
+  expect(findBar.hidden).toBe(false);
+  expect(findBar.querySelector("[data-find-replace-row]").hidden).toBe(false);
+  press(findBar.querySelector("[data-find-input]"), "Escape");
+
+  // Ctrl+/ opens Keyboard shortcuts on Windows with all 5 groups and Ctrl+J for Go to.
+  press(textarea, "/", { ctrlKey: true });
+  await turn();
+  const winDlg = inst.chrome.topShadow.querySelector("[data-sheet-shortcuts]");
+  expect(winDlg).not.toBeNull();
+  const groups = [...winDlg.querySelectorAll("[data-shortcut-group]")].map((g) => g.getAttribute("data-shortcut-group"));
+  expect(groups).toEqual(["Move and select", "Edit", "Format", "Rows and columns", "Find and tools"]);
+  expect(winDlg.textContent).toContain("Ctrl+J");
+  expect(winDlg.textContent).toContain("Ctrl+H");
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  expect(inst.chrome.topShadow.querySelector("[data-sheet-shortcuts]")).toBeNull();
+  ui.dispose();
+
+  // macOS: Cmd+H is left to the OS, Cmd+Shift+H opens Find & Replace, and cell menu's last item opens Keyboard shortcuts with ⌘/⇧/⌥.
+  const macRun = await start(C11A_FIND_BOOK(), { platform: "MacIntel" });
+  const macArea = macRun.inst.editor.textarea;
+  press(macArea, "h", { metaKey: true });
+  await turn();
+  expect(macRun.inst.chrome.topShadow.querySelector("[data-sheet-find]")).toBeNull();
+
+  press(macArea, "H", { metaKey: true, shiftKey: true });
+  await turn();
+  const macFind = macRun.inst.chrome.topShadow.querySelector("[data-sheet-find]");
+  expect(macFind.hidden).toBe(false);
+  expect(macFind.querySelector("[data-find-replace-row]").hidden).toBe(false);
+  press(macFind.querySelector("[data-find-input]"), "Escape");
+
+  tableOf("s1")
+    .querySelector("tbody tr td")
+    .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+  await turn();
+  const menuItems = [...macRun.inst.chrome.topShadow.querySelectorAll("[data-menu-item]")];
+  expect(menuItems.at(-1).getAttribute("data-menu-item")).toBe("shortcuts");
+  menuItems.at(-1).click();
+  await turn();
+
+  const macDlg = macRun.inst.chrome.topShadow.querySelector("[data-sheet-shortcuts]");
+  expect(macDlg).not.toBeNull();
+  expect(macDlg.textContent).toContain("⌘J");
+  expect(macDlg.textContent).toContain("⌘⇧H");
+  expect(macDlg.textContent).toContain("⌘/");
+  macRun.ui.dispose();
+});
+
+// Bug: Paste special failed to transpose formulas and values, paste values only, or paste format only in one undo step, or missed the foreign-table and clipboard-denied notices.
+test("c11a paste special: Transposed writes B1 into D2 and shifts formulas, Values only strips formulas, Format only copies fmt+style or warns on foreign tables, and refused clipboard shows notice", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const grid = Sap.grid(tableOf("s1"));
+
+  grid.setRange("A1", [
+    [10, 20],
+    [30, "=A2+B1"],
+  ]);
+  grid.format("A1", { fmt: "$#,##0.00", style: { "font-weight": "bold" } });
+  await frame();
+
+  // Select A1:B2 and copy.
+  press(textarea, "ArrowRight", { shiftKey: true });
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.value).toBe("A1:B2");
+  const copy = clipEvent("copy");
+  textarea.dispatchEvent(copy);
+  let clipHtml = copy.clipboardData.getData("text/html");
+  let clipText = copy.clipboardData.getData("text/plain");
+
+  let denyClipboard = false;
+  Object.defineProperty(window.navigator, "clipboard", {
+    configurable: true,
+    value: {
+      read: async () => {
+        if (denyClipboard) throw new Error("NotAllowedError");
+        return [
+          {
+            types: ["text/html", "text/plain"],
+            getType: async (type) => new Blob([type === "text/html" ? clipHtml : clipText], { type }),
+          },
+        ];
+      },
+    },
+  });
+
+  const openPasteSpecialSubmenu = async (rowIdx, colIdx) => {
+    const td = tableOf("s1").querySelectorAll("tbody tr")[rowIdx].children[colIdx];
+    td.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    td.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 60 }));
+    await turn();
+    inst.chrome.topShadow.querySelector('[data-menu-item="paste-special"]').click();
+    return inst.chrome.topShadow.querySelector('[data-submenu="paste-special"]');
+  };
+
+  const waitPaste = async () => {
+    for (let i = 0; i < 4; i++) await turn();
+  };
+
+  try {
+    // 1. Transposed at D1 (row 0, col 3): writes B1 (20) into D2, A2 (30) into E1, and moves B2 (=A2+B1) to E2 as =E1+D2 (50) in one undo step.
+    const sub1 = await openPasteSpecialSubmenu(0, 3);
+    expect(sub1).not.toBeNull();
+    sub1.querySelector('[data-menu-item="paste-transpose"]').click();
+    await waitPaste();
+
+    expect(grid.get("D1")).toBe(10);
+    expect(grid.cell("D1").text).toBe("$10.00");
+    expect(grid.cell("D1").style).toContain("font-weight:bold");
+    expect(grid.get("E1")).toBe(30);
+    expect(grid.get("D2")).toBe(20);
+    expect(grid.input("E2")).toBe("=E1+D2");
+    expect(grid.get("E2")).toBe(50);
+
+    press(textarea, "z", { metaKey: true });
+    expect(grid.get("D1:E2")).toEqual([
+      [null, null],
+      [null, null],
+    ]);
+
+    // 2. Values only at D4 (row 3, col 3) from B2 (=A2+B1 = 50): pastes plain number 50 in one undo step.
+    const tdB2 = tableOf("s1").querySelectorAll("tbody tr")[1].children[1];
+    tdB2.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    const copyB2 = clipEvent("copy");
+    textarea.dispatchEvent(copyB2);
+    clipHtml = copyB2.clipboardData.getData("text/html");
+    clipText = copyB2.clipboardData.getData("text/plain");
+
+    const sub2 = await openPasteSpecialSubmenu(3, 3);
+    sub2.querySelector('[data-menu-item="paste-values"]').click();
+    await waitPaste();
+    expect(grid.get("D4")).toBe(50);
+    expect(grid.input("D4")).toBe("50");
+    press(textarea, "z", { metaKey: true });
+    expect(grid.cell("D4").content).toBeNull();
+
+    // 3. Format only at F1 (row 0, col 5) holding 99: copies A1's $#,##0.00 + bold without touching 99, in one undo step.
+    grid.set("F1", 99);
+    await frame();
+    clipHtml = copy.clipboardData.getData("text/html");
+    clipText = copy.clipboardData.getData("text/plain");
+
+    const sub3 = await openPasteSpecialSubmenu(0, 5);
+    sub3.querySelector('[data-menu-item="paste-format"]').click();
+    await waitPaste();
+    expect(grid.get("F1")).toBe(99);
+    expect(grid.cell("F1").text).toBe("$99.00");
+    expect(grid.cell("F1").style).toContain("font-weight:bold");
+
+    press(textarea, "z", { metaKey: true });
+    expect(grid.get("F1")).toBe(99);
+    expect(grid.cell("F1").text).toBe("99");
+    expect(grid.cell("F1").style).toBeNull();
+
+    // 3b. One copied cell over F1:F3 formats the whole range in one Grid step: a step per cell froze large ranges.
+    clipHtml = '<table data-sheet-origin="0,0"><tbody><tr><td data-content="10" data-value="10" data-fmt="$#,##0.00" data-style="font-weight:bold">$10.00</td></tr></tbody></table>';
+    clipText = "$10.00";
+    const f1 = tableOf("s1").querySelectorAll("tbody tr")[0].children[5];
+    f1.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    press(textarea, "ArrowDown", { shiftKey: true });
+    press(textarea, "ArrowDown", { shiftKey: true });
+    expect(inst.chrome.nameBox.value).toBe("F1:F3");
+    f1.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 60 }));
+    await turn();
+    inst.chrome.topShadow.querySelector('[data-menu-item="paste-special"]').click();
+    let steps = 0;
+    const offSteps = grid.on("change", () => steps++);
+    inst.chrome.topShadow.querySelector('[data-submenu="paste-special"] [data-menu-item="paste-format"]').click();
+    await waitPaste();
+    offSteps();
+    expect(grid.cell("F3").style).toContain("font-weight:bold");
+    expect(steps).toBe(1);
+    press(textarea, "z", { metaKey: true });
+    expect(grid.cell("F3").style).toBeNull();
+
+    // 3c. Format only of A1:B2 at F1, the last column, formats F1:F2 and never grows the sheet.
+    clipHtml = copy.clipboardData.getData("text/html");
+    clipText = copy.clipboardData.getData("text/plain");
+    const colsBefore = grid.size.cols;
+    const sub3c = await openPasteSpecialSubmenu(0, 5);
+    sub3c.querySelector('[data-menu-item="paste-format"]').click();
+    await waitPaste();
+    expect(grid.cell("F1").style).toContain("font-weight:bold");
+    expect(grid.size.cols).toBe(colsBefore);
+    press(textarea, "z", { metaKey: true });
+
+    // 4. Format only on a foreign table shows the exact foreign-table notice.
+    clipHtml = "<table><tr><td>7</td></tr></table>";
+    clipText = "7";
+    const sub4 = await openPasteSpecialSubmenu(0, 5);
+    sub4.querySelector('[data-menu-item="paste-format"]').click();
+    await waitPaste();
+    expect(inst.chrome.noticeBar.hidden).toBe(false);
+    expect(inst.chrome.noticeBar.textContent).toContain("Format only works with cells copied from a sheet.");
+
+    // 5. Browser refuses clipboard.read(): shows the exact clipboard-denied notice.
+    denyClipboard = true;
+    const sub5 = await openPasteSpecialSubmenu(0, 5);
+    sub5.querySelector('[data-menu-item="paste-values"]').click();
+    await waitPaste();
+    expect(inst.chrome.noticeBar.hidden).toBe(false);
+    expect(inst.chrome.noticeBar.textContent).toContain(
+      "Your browser didn't let the sheet read the clipboard. Press ⌘V to paste, or ⌘⇧V for values only.",
+    );
+  } finally {
+    delete window.navigator.clipboard;
+    ui.dispose();
+  }
+});
+
+// Bug: function-help loaded before the first = was typed, or failed to drive completion and argument hints in the cell editor and formula bar.
+test("c11a function help loads lazily on the first = in the editor or formula bar, inserts SUM( on Tab without committing on Enter, and bolds the active argument in =PMT(5%,", async () => {
+  const fnHelpLoader = jest.fn(() => import("../../../src/sheet/function-help.js"));
+  const { Sap, ui, inst } = await start(SLICE_BOOK(), { loaders: { functionHelp: fnHelpLoader } });
+  const textarea = inst.editor.textarea;
+  const formulaInput = inst.chrome.formulaInput;
+  const grid = Sap.grid(tableOf("s1"));
+
+  // Typing plain text never imports function-help.js.
+  press(textarea, "ArrowDown");
+  typeInto(textarea, "notes");
+  press(textarea, "Enter");
+  await turn();
+  expect(grid.get("A2")).toBe("notes");
+  expect(fnHelpLoader).not.toHaveBeenCalled();
+
+  // First = in cell editor loads function-help.js and shows completions for =su.
+  typeInto(textarea, "=su");
+  await turn();
+  await turn();
+  expect(fnHelpLoader).toHaveBeenCalledTimes(1);
+
+  const compList = inst.chrome.topShadow.querySelector("[data-function-completions]");
+  expect(compList).not.toBeNull();
+  expect(compList.hidden).toBe(false);
+  expect([...compList.querySelectorAll("[data-completion-item]")].map((el) => el.getAttribute("data-completion-item"))).toEqual([
+    "SUBSTITUTE",
+    "SUBTOTAL",
+    "SUM",
+    "SUMIF",
+    "SUMIFS",
+    "SUMPRODUCT",
+  ]);
+
+  // Move to SUM and press Tab -> inserts SUM( and switches to argument hint.
+  press(textarea, "ArrowDown");
+  press(textarea, "ArrowDown");
+  press(textarea, "Tab");
+  expect(textarea.value).toBe("=SUM(");
+  expect(compList.hidden).toBe(true);
+  const hintCard = inst.chrome.topShadow.querySelector("[data-function-hint]");
+  expect(hintCard.hidden).toBe(false);
+
+  // Enter while completions show inserts NAME( and does NOT commit the cell.
+  typeInto(textarea, "=su");
+  expect(compList.hidden).toBe(false);
+  press(textarea, "Enter");
+  expect(inst.editor.editing).toBe(true);
+  expect(textarea.value).toBe("=SUBSTITUTE(");
+
+  // Escape while completions show closes only the list; second Escape cancels edit.
+  typeInto(textarea, "=su");
+  expect(compList.hidden).toBe(false);
+  press(textarea, "Escape");
+  expect(compList.hidden).toBe(true);
+  expect(inst.editor.editing).toBe(true);
+  press(textarea, "Escape");
+  expect(inst.editor.editing).toBe(false);
+
+  // Formula bar: typing =PMT(5%, highlights the 2nd argument ("periods") in bold.
+  typeInto(formulaInput, "=PMT(5%,");
+  expect(hintCard.hidden).toBe(false);
+  expect(hintCard.querySelector("[data-function-signature]").textContent).toBe(
+    "PMT(rate, periods, present_value, [future_value], [end_or_beginning])",
+  );
+  expect(hintCard.querySelector("[data-active-arg]").textContent).toBe("periods");
+
+  ui.dispose();
+});
+
+// Bug: a failed lazy load for shortcuts swallowed the error without the Bevel notice, function help showed a notice per keystroke offline, or either stayed broken on retry.
+test("a failed shortcuts load shows the Bevel notice, a failed function help load stays quiet, and both recover on the next try", async () => {
+  let shortcutsCalls = 0;
+  let fnHelpCalls = 0;
+  const { ui, inst } = await start(SLICE_BOOK(), {
+    loaders: {
+      shortcuts: () => {
+        shortcutsCalls += 1;
+        return shortcutsCalls === 1 ? Promise.reject(new Error("offline")) : import("../../../src/sheet/shortcuts.js");
+      },
+      functionHelp: () => {
+        fnHelpCalls += 1;
+        return fnHelpCalls === 1 ? Promise.reject(new Error("offline")) : import("../../../src/sheet/function-help.js");
+      },
+    },
+  });
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "/", { metaKey: true });
+  await turn();
+  await turn();
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(inst.chrome.noticeBar.textContent).toContain("That tool could not load. Check your connection and try again.");
+
+  press(textarea, "/", { metaKey: true });
+  await turn();
+  await turn();
+  expect(inst.chrome.topShadow.querySelector("[data-sheet-shortcuts]")).not.toBeNull();
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+
+  // Function help is never asked for, so its failed load shows no notice (one per keystroke offline).
+  const notices = jest.spyOn(inst.chrome, "showNotice");
+  typeInto(textarea, "=su");
+  await turn();
+  await turn();
+  expect(fnHelpCalls).toBe(1);
+  expect(notices).not.toHaveBeenCalled();
+
+  press(textarea, "Escape");
+  typeInto(textarea, "=su");
+  await turn();
+  await turn();
+  expect(inst.chrome.topShadow.querySelector("[data-function-completions]")?.hidden).toBe(false);
 
   ui.dispose();
 });

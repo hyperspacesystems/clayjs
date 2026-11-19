@@ -37,8 +37,36 @@ const WORD_PART = /[A-Za-z0-9_.'$]/;
 // A bare column or row word moves only as one end of a range (A:C, 2:5), so a function name being
 // typed is never taken for a column. Text that is not a formula comes back as it is.
 export function shiftFormula(text, dr, dc, customTokenize) {
+  if (dr === 0 && dc === 0) return text;
+  return rewriteRefs(text, customTokenize, (t) => ({
+    col: t.col === undefined ? null : colNumber(t.col) + (t.absCol ? 0 : dc),
+    row: t.row === undefined ? null : t.row + (t.absRow ? 0 : dr),
+  }));
+}
+
+// The formula of the cell at `src` (0-based { r, c }) as it reads pasted transposed at `dst`: a
+// relative cell reference keeps its distance from the formula with rows and columns swapped, as
+// Excel and Sheets transpose. A whole-column or whole-row range only moves, as shiftFormula does.
+export function transposeFormula(text, src, dst, customTokenize) {
+  const dr = dst.r - src.r;
+  const dc = dst.c - src.c;
+  return rewriteRefs(text, customTokenize, (t) => {
+    if (t.col === undefined || t.row === undefined) {
+      return {
+        col: t.col === undefined ? null : colNumber(t.col) + (t.absCol ? 0 : dc),
+        row: t.row === undefined ? null : t.row + (t.absRow ? 0 : dr),
+      };
+    }
+    return {
+      col: t.absCol ? colNumber(t.col) : dst.c + 1 + (t.row - 1 - src.r),
+      row: t.absRow ? t.row : dst.r + 1 + (colNumber(t.col) - 1 - src.c),
+    };
+  });
+}
+
+function rewriteRefs(text, customTokenize, place) {
   const tokenize = getTokenize(customTokenize);
-  if (typeof text !== "string" || !text.startsWith("=") || (dr === 0 && dc === 0) || typeof tokenize !== "function") return text;
+  if (typeof text !== "string" || !text.startsWith("=") || typeof tokenize !== "function") return text;
   const tokens = tokenize(text);
   const colon = (t) => t?.type === "punct" && t.value === ":";
   const whole = (t) =>
@@ -53,8 +81,7 @@ export function shiftFormula(text, dr, dc, customTokenize) {
     const src = text.slice(t.start, t.end);
     const bang = src.lastIndexOf("!");
     const prefix = bang === -1 ? "" : src.slice(0, bang + 1);
-    const col = t.col === undefined ? null : colNumber(t.col) + (t.absCol ? 0 : dc);
-    const row = t.row === undefined ? null : t.row + (t.absRow ? 0 : dr);
+    const { col, row } = place(t);
     const off = (col !== null && (col < 1 || col > COL_LIMIT)) || (row !== null && row < 1);
     const coord = (col === null ? "" : (t.absCol ? "$" : "") + colLetters(col)) + (row === null ? "" : (t.absRow ? "$" : "") + row);
     out += text.slice(at, t.start) + (off ? "#REF!" : prefix + coord);

@@ -251,4 +251,30 @@ describe("sheet keyboard map", () => {
       expect(keyIntent(event, opts)).toBeNull();
     }
   });
+
+  // Bug: Ctrl+H failed to map to findReplace on non-Mac platforms, or macOS stole Cmd+H (hide app) instead of requiring Cmd+Shift+H.
+  test("maps Ctrl+H on Windows and Cmd+Shift+H on macOS to findReplace while leaving Cmd+H and edit mode untouched", () => {
+    expect(keyIntent({ key: "h", ctrlKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "findReplace" });
+    expect(keyIntent({ key: "H", ctrlKey: true, shiftKey: true }, { platform: "Win32", editing: false })).toBeNull();
+    expect(keyIntent({ key: "H", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: false })).toEqual({
+      type: "findReplace",
+    });
+    expect(keyIntent({ key: "h", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: false })).toEqual({
+      type: "findReplace",
+    });
+    expect(keyIntent({ key: "h", metaKey: true }, { platform: "MacIntel", editing: false })).toBeNull();
+    expect(keyIntent({ key: "h", ctrlKey: true }, { platform: "Win32", editing: true })).toBeNull();
+    expect(keyIntent({ key: "H", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: true })).toBeNull();
+  });
+
+  // Bug: Ctrl+/ or Cmd+/ failed to map to shortcuts in ready mode (or with the Shift a German keyboard needs for /), or intercepted keys while editing.
+  test("maps Ctrl+/ on Windows and Cmd+/ on macOS to shortcuts in ready mode only", () => {
+    expect(keyIntent({ key: "/", ctrlKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "shortcuts" });
+    expect(keyIntent({ key: "/", metaKey: true }, { platform: "MacIntel", editing: false })).toEqual({ type: "shortcuts" });
+    // German, French and Nordic keyboards type "/" with Shift held.
+    expect(keyIntent({ key: "/", ctrlKey: true, shiftKey: true }, { platform: "Win32", editing: false })).toEqual({ type: "shortcuts" });
+    expect(keyIntent({ key: "/", metaKey: true, shiftKey: true }, { platform: "MacIntel", editing: false })).toEqual({ type: "shortcuts" });
+    expect(keyIntent({ key: "/", ctrlKey: true }, { platform: "Win32", editing: true })).toBeNull();
+    expect(keyIntent({ key: "/", metaKey: true }, { platform: "MacIntel", editing: true })).toBeNull();
+  });
 });

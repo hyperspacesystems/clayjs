@@ -173,4 +173,63 @@ describe("sheet Bevel menu", () => {
     expect(menu.isOpen).toBe(false);
     expect(document.activeElement).toBe(textarea);
   });
+
+  // Bug: submenu items lacked aria-haspopup, failed to open/close on ArrowRight/ArrowLeft, or outside-mousedown closed the menu when clicking a submenu item.
+  test("submenu items open on ArrowRight or click, return to the parent item on ArrowLeft, and execute submenu selections cleanly", () => {
+    const { shadow, textarea, menu } = setupHost();
+    const chosen = [];
+    const surface = menu.open({
+      x: 20,
+      y: 30,
+      items: [
+        {
+          id: "paste-special",
+          label: "Paste special",
+          items: [
+            { id: "paste-values", label: "Values only", detail: "Ctrl+Shift+V", onSelect: () => chosen.push("values") },
+            { id: "paste-transpose", label: "Transposed", onSelect: () => chosen.push("transpose") },
+          ],
+        },
+        { id: "other", label: "Other", onSelect: () => chosen.push("other") },
+      ],
+    });
+
+    const parentBtn = surface.querySelector('[data-menu-item="paste-special"]');
+    expect(parentBtn.getAttribute("aria-haspopup")).toBe("menu");
+    expect(parentBtn.getAttribute("aria-expanded")).toBe("false");
+
+    surface.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    const sub = shadow.querySelector('[data-submenu="paste-special"]');
+    expect(sub).not.toBeNull();
+    expect(parentBtn.getAttribute("aria-expanded")).toBe("true");
+    expect(shadow.activeElement.getAttribute("data-menu-item")).toBe("paste-values");
+
+    sub.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true }));
+    expect(shadow.querySelector('[data-submenu="paste-special"]')).toBeNull();
+    expect(parentBtn.getAttribute("aria-expanded")).toBe("false");
+    expect(shadow.activeElement).toBe(parentBtn);
+
+    // The pointer crossing a sibling closes the submenu; the keyboard focus comes back to the parent.
+    surface.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    expect(shadow.activeElement.getAttribute("data-menu-item")).toBe("paste-values");
+    surface.querySelector('[data-menu-item="other"]').dispatchEvent(new Event("pointerenter"));
+    expect(shadow.querySelector('[data-submenu="paste-special"]')).toBeNull();
+    expect(shadow.activeElement).toBe(parentBtn);
+    // ArrowDown from the parent with its submenu open moves on and closes it.
+    surface.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    parentBtn.focus();
+    surface.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    expect(shadow.activeElement.getAttribute("data-menu-item")).toBe("other");
+    expect(shadow.querySelector('[data-submenu="paste-special"]')).toBeNull();
+
+    parentBtn.click();
+    const sub2 = shadow.querySelector('[data-submenu="paste-special"]');
+    const transposeBtn = sub2.querySelector('[data-menu-item="paste-transpose"]');
+    transposeBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, composed: true }));
+    expect(menu.isOpen).toBe(true);
+    transposeBtn.click();
+    expect(chosen).toEqual(["transpose"]);
+    expect(menu.isOpen).toBe(false);
+    expect(document.activeElement).toBe(textarea);
+  });
 });

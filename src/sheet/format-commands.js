@@ -1,5 +1,5 @@
 import { a1, colName, tabTable } from "./commit.js";
-import { SWATCHES, createMenu, openDeleteTabDialog, openMergeKeepDialog } from "./menu.js";
+import { SWATCHES, createMenu, mountSheetDialog, openDeleteTabDialog, openMergeKeepDialog } from "./menu.js";
 export { createMenu };
 import {
   axisSpan,
@@ -12,8 +12,10 @@ import {
   selectRowsAt,
 } from "./selection.js";
 import { buildRangeSortAction, buildSheetSortAction, rangeAnchorCutAtRight } from "./sort.js";
-import { bevelInput } from "../ui/bevel-controls.js";
-import { FONT_SANS } from "../ui/bevel.js";
+import { bevelBox, bevelInput, bevelText } from "../ui/bevel-controls.js";
+import { bevelDialog } from "../ui/bevel-dialog.js";
+import { FONT_MONO, FONT_SANS, TOKENS } from "../ui/bevel.js";
+import { resolveTheme } from "../ui/theme.js";
 
 export const BORDER_LINE = "1px solid #5F6368";
 
@@ -64,7 +66,11 @@ export function formatLabelOf(fmt) {
   return found ? found.label : "Custom";
 }
 
-export function numberFormatMenuItems({ activeValue, activeFmt, formatValue, onPick }) {
+export const UNKNOWN_FORMAT_MESSAGE = "That code isn't a number format Sheets knows.";
+export const FORMATS_FAILED_MESSAGE = "Number formats couldn't load. Check your connection and try again.";
+export const LOADING_FORMATS_MESSAGE = "Loading formats...";
+
+export function numberFormatMenuItems({ activeValue, activeFmt, formatValue, onPick, onCustom }) {
   const norm = activeFmt === "" || activeFmt === undefined ? null : activeFmt;
   const out = [];
   let prevGroup = 0;
@@ -84,7 +90,187 @@ export function numberFormatMenuItems({ activeValue, activeFmt, formatValue, onP
       onSelect: () => onPick(entry.fmt),
     });
   }
+  out.push(
+    { type: "separator" },
+    {
+      id: "custom-format",
+      label: "Custom format...",
+      onSelect: () => onCustom?.(),
+    },
+  );
   return out;
+}
+
+export function openCustomFormatDialog({
+  doc = document,
+  win = doc.defaultView ?? window,
+  theme = resolveTheme(),
+  container = null,
+  initialFmt = "",
+  activeValue = null,
+  getReturnFocus,
+  onConfirm,
+  onCancel,
+} = {}) {
+  const shell = bevelDialog({ zIndex: "2147483001", width: "420px", closable: true, titled: true, theme });
+  const stack = bevelBox("div", ["display:flex", "flex-direction:column", "gap:10px"], { theme });
+
+  const fieldLabel = bevelText(
+    "label",
+    ["display:flex", "flex-direction:column", "gap:6px", `font:500 12.5px/1.35 ${FONT_SANS}`, `color:${TOKENS["ink-2"]}`],
+    undefined,
+    { theme },
+  );
+  fieldLabel.append(bevelText("span", ["font:inherit", "color:inherit"], "Format code", { theme, role: null }));
+
+  const monoTheme = {
+    ...theme,
+    parts: {
+      ...theme.parts,
+      "sheet.customFmt": { ...theme.parts?.["sheet.customFmt"], base: { ...theme.parts?.["sheet.customFmt"]?.base, "font-family": FONT_MONO } },
+    },
+  };
+  const input = bevelInput("input", {
+    theme: monoTheme,
+    rules: [`font:400 13px/1.4 ${FONT_MONO}`],
+    parts: ["sheet.customFmt"],
+  });
+  input.value = initialFmt ?? "";
+  input.spellcheck = false;
+  input.setAttribute("autocomplete", "off");
+  input.setAttribute("aria-label", "Format code");
+  input.setAttribute("data-custom-format-input", "");
+  fieldLabel.append(input);
+
+  const sampleRow = bevelBox(
+    "div",
+    [
+      "display:flex",
+      "align-items:baseline",
+      "justify-content:space-between",
+      "gap:10px",
+      "min-height:32px",
+      "padding:6px 10px",
+      `background:${TOKENS.sunk}`,
+      `border:1px solid ${TOKENS["line-2"]}`,
+    ],
+    { theme },
+  );
+  const sampleTitle = bevelText("span", [`font:500 12px/1.3 ${FONT_SANS}`, `color:${TOKENS.muted}`], "Sample", {
+    theme,
+    role: "mutedText",
+  });
+  const sampleValue = bevelText(
+    "span",
+    [`font:500 12.5px/1.35 ${FONT_MONO}`, "font-variant-numeric:tabular-nums", `color:${TOKENS.ink}`],
+    "",
+    { theme },
+  );
+  sampleValue.setAttribute("data-custom-format-sample", "");
+  sampleRow.append(sampleTitle, sampleValue);
+
+  stack.append(fieldLabel, sampleRow);
+  shell.body.append(stack);
+
+  let closed = false;
+  let canApply = true;
+  let formatsSettled = false;
+  let formatsFailed = false;
+  let loadingPromise = null;
+  let handle = null;
+
+  function ensureFormatsPlugin() {
+    if (loadingPromise) return;
+    const load = win?.Sap?.plugins?.load;
+    if (typeof load !== "function") {
+      formatsSettled = true;
+      return;
+    }
+    loadingPromise = Promise.resolve(load.call(win.Sap.plugins, "grid-formats"))
+      .then(
+        () => {
+          formatsSettled = true;
+        },
+        () => {
+          formatsSettled = true;
+          formatsFailed = true;
+        },
+      )
+      .finally(() => {
+        if (!closed) syncSample();
+      });
+  }
+
+  function syncSample() {
+    const raw = input.value;
+    if (raw.length > 255) {
+      canApply = false;
+      handle?.confirmBtn.setDisabled(true);
+      sampleValue.textContent = UNKNOWN_FORMAT_MESSAGE;
+      return;
+    }
+    const fmt = raw === "" ? null : raw;
+    const sapGrid = win?.Sap?.grid;
+    const kind = fmt === null ? "auto" : (typeof sapGrid?.fmtKind === "function" ? sapGrid.fmtKind(fmt) : "unknown");
+    if (kind === "unknown") {
+      const installed = Boolean(win?.Sap?.plugins?.has?.("grid-formats"));
+      if (!installed && !formatsSettled && typeof win?.Sap?.plugins?.load === "function") {
+        canApply = false;
+        handle?.confirmBtn.setDisabled(true);
+        sampleValue.textContent = LOADING_FORMATS_MESSAGE;
+        ensureFormatsPlugin();
+        return;
+      }
+      canApply = false;
+      handle?.confirmBtn.setDisabled(true);
+      sampleValue.textContent = formatsFailed && !installed ? FORMATS_FAILED_MESSAGE : UNKNOWN_FORMAT_MESSAGE;
+      return;
+    }
+    canApply = true;
+    handle?.confirmBtn.setDisabled(false);
+    if (activeValue === null || activeValue === undefined) {
+      sampleValue.textContent = "";
+      return;
+    }
+    const shown =
+      typeof sapGrid?.formatValue === "function"
+        ? (sapGrid.formatValue(activeValue, fmt) ?? sapGrid.formatValue(activeValue, null) ?? String(activeValue))
+        : String(activeValue);
+    sampleValue.textContent = shown;
+  }
+
+  shell.panel.addEventListener(
+    "submit",
+    (event) => {
+      if (!canApply) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    },
+    true,
+  );
+  input.addEventListener("input", syncSample);
+
+  handle = mountSheetDialog(doc, shell, {
+    title: "Custom number format",
+    confirmLabel: "Apply",
+    confirmVariant: "primary",
+    onConfirm: () => {
+      closed = true;
+      onConfirm?.(input.value === "" ? null : input.value);
+    },
+    onCancel: () => {
+      closed = true;
+      onCancel?.();
+    },
+    getReturnFocus,
+    container,
+  });
+
+  syncSample();
+  input.focus();
+  input.select?.();
+  return handle;
 }
 
 export function colorMenuItems({ current, onPick }) {
@@ -587,6 +773,9 @@ export function createCommandActions({
   showDialog,
   clearDialog,
   onFillShortcut,
+  onPasteSpecial,
+  onShortcuts,
+  isMac = () => false,
   measureText: customMeasure = null,
 }) {
   let canvasCtx = null;
@@ -864,11 +1053,27 @@ export function createCommandActions({
     const canFillDown = Boolean(box && box.bottom > sourceBottom);
     const canFillRight = Boolean(box && box.right > sourceRight);
     const canSortRange = Boolean(box && box.bottom - box.top + 1 >= 2);
+    const mac = Boolean(isMac?.());
     menu.open({
       x,
       y,
       label: "Cell options",
       items: [
+        {
+          id: "paste-special",
+          label: "Paste special",
+          items: [
+            {
+              id: "paste-values",
+              label: "Values only",
+              detail: mac ? "⌘⇧V" : "Ctrl+Shift+V",
+              onSelect: () => onPasteSpecial?.("values"),
+            },
+            { id: "paste-format", label: "Format only", onSelect: () => onPasteSpecial?.("format") },
+            { id: "paste-transpose", label: "Transposed", onSelect: () => onPasteSpecial?.("transpose") },
+          ],
+        },
+        { type: "separator" },
         { id: "fill-down", label: "Fill down", disabled: !canFillDown, onSelect: () => onFillShortcut?.("down") },
         { id: "fill-right", label: "Fill right", disabled: !canFillRight, onSelect: () => onFillShortcut?.("right") },
         { type: "separator" },
@@ -880,6 +1085,13 @@ export function createCommandActions({
         { type: "separator" },
         { id: "delete-row", label: "Delete row", onSelect: () => deleteRowsAt(r, r) },
         { id: "delete-col", label: "Delete column", onSelect: () => deleteColsAt(c, c) },
+        { type: "separator" },
+        {
+          id: "shortcuts",
+          label: "Keyboard shortcuts",
+          detail: mac ? "⌘/" : "Ctrl+/",
+          onSelect: () => onShortcuts?.(),
+        },
       ],
     });
   }
@@ -1000,6 +1212,32 @@ export function createCommandActions({
     });
   }
 
+  function openCustomNumberFormat() {
+    if (!ensureReadyForAction()) return;
+    const sel = getSel();
+    if (!sel) return;
+    const info = activeCellInfo();
+    showDialog(
+      sel.tab,
+      openCustomFormatDialog({
+        doc,
+        win,
+        theme: chrome.theme,
+        container: chrome.topRoot,
+        initialFmt: info?.effectiveFmt ?? "",
+        activeValue: info?.cell?.value ?? null,
+        getReturnFocus: () => editor.textarea,
+        onConfirm: (fmt) => {
+          clearDialog();
+          runFormat((g, v) => applyNumberFormat(g, v, getSel(), fmt));
+        },
+        onCancel: () => {
+          clearDialog();
+        },
+      }),
+    );
+  }
+
   function openNumberFormatMenu() {
     const info = activeCellInfo();
     menu.open({
@@ -1010,6 +1248,7 @@ export function createCommandActions({
         activeFmt: info?.effectiveFmt ?? null,
         formatValue: win.Sap?.grid?.formatValue,
         onPick: (fmt) => runFormat((g, v) => applyNumberFormat(g, v, getSel(), fmt)),
+        onCustom: openCustomNumberFormat,
       }),
     });
   }

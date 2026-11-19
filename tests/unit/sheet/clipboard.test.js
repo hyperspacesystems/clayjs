@@ -201,3 +201,72 @@ test("a cut table pastes its formulas unmoved while a copy still moves them", as
   expect(res.block[1][0].content).toEqual({ f: "=A1*2" });
   expect(res.origin).toEqual({ r: 5, c: 5 });
 });
+
+// Bug: copyParts omitted data-style, or pasteBlock with formatOnly included cell content instead of only fmt and style.
+test("copyParts writes data-style and pasteBlock carries style on regular paste and fmt+style only on formatOnly", async () => {
+  const { grid } = await start();
+  grid.format("A1", {
+    fmt: "$#,##0.00",
+    style: { "font-weight": "bold", "background-color": "#f0e4cc" },
+    border: { preset: "outer", line: "1px solid #5F6368" },
+  });
+
+  const { html } = copyParts(grid, { top: 0, left: 0, bottom: 0, right: 1 }, a1);
+  expect(html).toContain("data-style=");
+  expect(html).toContain("font-weight:bold");
+
+  // Regular paste carries style onto C3 and clears style on D3 when landing over a styled cell.
+  grid.format("D3", { style: { "font-style": "italic" } });
+  const regular = pasteBlock(html, { r: 2, c: 2 });
+  grid.setRange("C3", regular.block, { grow: true });
+  expect(grid.cell("C3").text).toBe("$3.00");
+  expect(grid.cell("C3").style).toContain("font-weight:bold");
+  expect(grid.cell("C3").style).toContain("background-color:#f0e4cc");
+  expect(grid.cell("D3").style).toBeNull();
+
+  // formatOnly returns only { fmt, style } with no content property, and leaves foreign tables marked foreign.
+  const fmtOnly = pasteBlock(html, { r: 3, c: 0 }, { formatOnly: true });
+  expect(fmtOnly.kind).toBe("ours");
+  expect("content" in fmtOnly.block[0][0]).toBe(false);
+  expect(fmtOnly.block[0][0].fmt).toBe("$#,##0.00");
+  expect(fmtOnly.block[0][0].style["font-weight"]).toBe("bold");
+  expect(pasteBlock("<table><tr><td>9</td></tr></table>", { r: 0, c: 0 }, { formatOnly: true }).kind).toBe("foreign");
+});
+
+// Bug: pasteBlock with transpose failed to swap rows and columns or shifted formulas by the untransposed offset instead of the distance to each transposed cell.
+test("pasteBlock with transpose swaps rows and columns and shifts formulas from each source cell to its transposed target cell", async () => {
+  const { grid } = await start();
+  grid.setRange("A1", [
+    [10, "=A1+5", 30],
+    [40, 50, "=B2*3"],
+  ]);
+
+  // Copy 2x3 A1:C2 and paste transposed at D1 (r: 0, c: 3) -> 3x2 D1:E3.
+  const { html } = copyParts(grid, { top: 0, left: 0, bottom: 1, right: 2 }, a1);
+  const transposed = pasteBlock(html, { r: 0, c: 3 }, { transpose: true });
+
+  expect(transposed.kind).toBe("ours");
+  expect(transposed.block).toHaveLength(3);
+  expect(transposed.block[0]).toHaveLength(2);
+  // A1 (0,0)->D1 (0,3)=10; A2 (1,0)->E1 (0,4)=40
+  expect(transposed.block[0][0].content).toBe(10);
+  expect(transposed.block[0][1].content).toBe(40);
+  // B1 (0,1) "=A1+5" -> D2 (1,3); A1 went to D1, so the reference follows it.
+  expect(transposed.block[1][0].content).toEqual({ f: "=D1+5" });
+  expect(transposed.block[1][1].content).toBe(50);
+  // C1 (0,2)=30 -> D3 (2,3); C2 (1,2) "=B2*3" -> E3 (2,4); B2 went to E2.
+  expect(transposed.block[2][0].content).toBe(30);
+  expect(transposed.block[2][1].content).toEqual({ f: "=E2*3" });
+});
+
+// Bug: transposed formulas moved by the distance between the cells instead of swapping each
+// reference's offset, so a column total pasted as a row read =SUM(#REF!:#REF!).
+test("a column with its total pasted transposed keeps the total over the pasted row, and absolute references stay", async () => {
+  const { grid } = await start();
+  grid.setRange("A1", [[1], [2], ["=SUM(A1:A2)"], ["=$A$1+A2"]]);
+  const { html } = copyParts(grid, { top: 0, left: 0, bottom: 3, right: 0 }, a1);
+  const transposed = pasteBlock(html, { r: 0, c: 2 }, { transpose: true });
+  expect(transposed.block).toHaveLength(1);
+  expect(transposed.block[0][2].content).toEqual({ f: "=SUM(C1:D1)" });
+  expect(transposed.block[0][3].content).toEqual({ f: "=$A$1+D1" });
+});

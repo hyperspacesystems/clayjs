@@ -1,8 +1,10 @@
 import { a1 } from "./commit.js";
+import { keyIntent } from "./keys.js";
 import { colIndexFromLetters } from "./refs.js";
 import { createSelection, ownerOf, selectCell } from "./selection.js";
 import {
   bevelBox,
+  bevelButton,
   bevelIconButton,
   bevelInput,
   bevelText,
@@ -13,6 +15,169 @@ import { FONT_MONO, FONT_SANS, TOKENS } from "../ui/bevel.js";
 const PREV_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>';
 const NEXT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 const CLOSE_SVG = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>';
+
+const BINARY = { "=": 1, "<>": 1, "<": 1, ">": 1, "<=": 1, ">=": 1, "&": 2, "+": 3, "-": 3, "*": 4, "/": 4, "^": 5 };
+const UNARY = 6;
+const POSTFIX = 7;
+
+const isFormulaCell = (cell) =>
+  Boolean(cell && cell.content !== null && typeof cell.content === "object" && typeof cell.content.f === "string");
+
+export function replaceOccurrences(source, query, replacement) {
+  const q = String(query ?? "");
+  if (!q) return String(source ?? "");
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const repl = String(replacement ?? "");
+  return String(source ?? "").replace(new RegExp(escaped, "gi"), () => repl);
+}
+
+export function isValidFormula(text, tokenize) {
+  if (typeof text !== "string" || !text.startsWith("=") || text.length < 2) return false;
+  if (/[\0\r]/.test(text)) return false;
+  if (typeof tokenize !== "function") return true;
+  const tokens = tokenize(text.slice(1));
+  if (!Array.isArray(tokens) || tokens.length === 0) return false;
+  if (tokens.some((t) => t.type === "invalid")) return false;
+
+  let index = 0;
+  const isCoord = (t) => t?.type === "cell" || t?.type === "col" || t?.type === "row";
+
+  function parsePrefix() {
+    const token = tokens[index++];
+    if (!token) return false;
+    switch (token.type) {
+      case "num":
+      case "str":
+      case "bool":
+      case "err":
+        return true;
+      case "cell":
+      case "col":
+      case "row": {
+        const next = tokens[index];
+        if (!next || next.type !== "punct" || next.value !== ":") return token.type === "cell";
+        index += 1;
+        const second = tokens[index++];
+        if (!second || !isCoord(second)) return false;
+        // sapjs's own rule (formula/text.js parseReference): a row pairs only with a row, and a
+        // column cannot start a range that ends in a cell (A1:A is open-ended, A:A1 is not).
+        if ((token.type === "row") !== (second.type === "row")) return false;
+        if (token.type === "col" && second.type !== "col") return false;
+        if (token.sheet && second.sheet && token.sheet !== second.sheet) return false;
+        return true;
+      }
+      case "op":
+        if (token.value !== "+" && token.value !== "-") return false;
+        return parseExpr(UNARY);
+      case "punct": {
+        if (token.value !== "(") return false;
+        if (!parseExpr(0)) return false;
+        const close = tokens[index++];
+        return Boolean(close && close.type === "punct" && close.value === ")");
+      }
+      case "name": {
+        const open = tokens[index++];
+        if (!open || open.type !== "punct" || open.value !== "(") return false;
+        if (tokens[index]?.type === "punct" && tokens[index].value === ")") {
+          index += 1;
+          return true;
+        }
+        for (;;) {
+          if (!parseExpr(0)) return false;
+          const sep = tokens[index++];
+          if (!sep || sep.type !== "punct") return false;
+          if (sep.value === ")") return true;
+          if (sep.value !== ",") return false;
+        }
+      }
+      default:
+        return false;
+    }
+  }
+
+  function parseExpr(minPower) {
+    if (!parsePrefix()) return false;
+    for (;;) {
+      const token = tokens[index];
+      if (!token) break;
+      if (token.type === "punct" && token.value === "%") {
+        if (POSTFIX <= minPower) break;
+        index += 1;
+        continue;
+      }
+      if (token.type !== "op") break;
+      const power = BINARY[token.value];
+      if (power === undefined || power <= minPower) break;
+      index += 1;
+      if (!parseExpr(token.value === "^" ? power - 1 : power)) return false;
+    }
+    return true;
+  }
+
+  return parseExpr(0) && index === tokens.length;
+}
+
+export function replaceNoticeText(replaced, refused = 0) {
+  const head = `Replaced ${replaced} ${replaced === 1 ? "cell" : "cells"}.`;
+  if (refused <= 0) return head;
+  return `${head} ${refused} ${refused === 1 ? "formula" : "formulas"} would not be valid and ${refused === 1 ? "was" : "were"} left alone.`;
+}
+
+function applyCellReplacement(grid, ref, { query, replacement, searchFormulas, tokenize }) {
+  const cell = grid?.cell?.(ref);
+  if (!cell || cell.covered) return "skipped";
+  const needle = String(query ?? "").toLowerCase();
+  if (!needle) return "skipped";
+
+  if (isFormulaCell(cell)) {
+    if (!searchFormulas) return "skipped";
+    const cur = grid.input(ref);
+    if (!cur.toLowerCase().includes(needle)) return "skipped";
+    const next = replaceOccurrences(cur, query, replacement);
+    if (!isValidFormula(next, tokenize)) return "refused";
+    try {
+      grid.set(ref, next);
+    } catch (error) {
+      if (error?.name !== "GridRefused") throw error;
+      return "refused";
+    }
+    return "replaced";
+  }
+
+  const cur = grid.input(ref);
+  if (!cur.toLowerCase().includes(needle)) return "skipped";
+  const next = replaceOccurrences(cur, query, replacement);
+  if (cell.effectiveFmt !== "@" && next.startsWith("=") && next.length > 1 && !isValidFormula(next, tokenize)) {
+    return "refused";
+  }
+  try {
+    grid.set(ref, next);
+  } catch (error) {
+    if (error?.name !== "GridRefused") throw error;
+    return "refused";
+  }
+  return "replaced";
+}
+
+export function replaceAllOnTab(tab, { query, replacement, searchFormulas = false, history = null, runWrite = (fn) => fn(), tokenize } = {}) {
+  const grid = tab?.grid;
+  if (!grid || !query) return { replaced: 0, refused: 0 };
+  const matches = findMatches([tab], { query, searchFormulas });
+  let replaced = 0;
+  let refused = 0;
+  const exec = () => {
+    for (const match of matches) {
+      const outcome = applyCellReplacement(grid, match.ref, { query, replacement, searchFormulas, tokenize });
+      if (outcome === "replaced") replaced += 1;
+      else if (outcome === "refused") refused += 1;
+    }
+  };
+  runWrite(() => {
+    if (history?.group) history.group(tab.id, exec);
+    else exec();
+  });
+  return { replaced, refused };
+}
 
 export function findMatches(tabs, { query, searchFormulas = false } = {}) {
   const raw = String(query ?? "");
@@ -29,13 +194,10 @@ export function findMatches(tabs, { query, searchFormulas = false } = {}) {
         const ref = a1(r, c);
         const cell = tab.grid ? tab.grid.cell(ref) : tab.cell?.(r, c);
         if (!cell || cell.covered) continue;
-        const hasFormula =
-          cell.content !== null &&
-          typeof cell.content === "object" &&
-          typeof cell.content.f === "string";
+        const hasFormula = isFormulaCell(cell);
         const haystack = searchFormulas && hasFormula ? cell.content.f : (cell.text ?? "");
         if (haystack && haystack.toLowerCase().includes(needle)) {
-          matches.push({ tab: tab.id, tabName: tab.name ?? "", r, c, ref });
+          matches.push({ tab: tab.id, tabName: tab.name ?? "", r, c, ref, formula: hasFormula });
         }
       }
     }
@@ -141,21 +303,32 @@ export function createFindBar({
   container,
   getTabs,
   getActivePos,
+  getActiveTab,
+  history = null,
+  runWrite = (fn) => {
+    fn();
+    return true;
+  },
+  getTokenize = () => globalThis.window?.Sap?.grid?.tokenize,
   onSelectMatch,
+  onNotice,
+  onAfterReplace,
+  onBeforeAction = () => true,
   onClose,
 }) {
   const doc = container.ownerDocument ?? document;
   let openState = false;
+  let replaceOpen = false;
   let matches = [];
   let currentIndex = -1;
   let lastBuiltKey = "";
   const stateKey = () => `${input.value}\u0000${formulaCheck.checked}`;
+  const activeTabOf = () => (typeof getActiveTab === "function" ? getActiveTab() : (getActivePos()?.tab ?? getTabs()[0]?.id ?? ""));
 
   const bar = bevelBox("div", [
     "display:none",
-    "align-items:center",
-    "flex-wrap:wrap",
-    "gap:8px",
+    "flex-direction:column",
+    "gap:6px",
     "min-height:32px",
     "padding:4px 10px",
     `background:${TOKENS.surface}`,
@@ -168,18 +341,18 @@ export function createFindBar({
   bar.setAttribute("data-sheet-find", "");
   bar.hidden = true;
 
-  const input = bevelInput("input", {
-    theme,
-    rules: [
-      "width:196px",
-      "max-width:100%",
-      "height:24px",
-      "block-size:24px",
-      "min-block-size:24px",
-      "padding:0 8px",
-      `font:400 12.5px/22px ${FONT_SANS}`,
-    ],
-  });
+  const findRow = bevelBox("div", ["display:flex", "align-items:center", "flex-wrap:wrap", "gap:8px"], { theme });
+
+  const inputRules = [
+    "width:196px",
+    "max-width:100%",
+    "height:24px",
+    "block-size:24px",
+    "min-block-size:24px",
+    "padding:0 8px",
+    `font:400 12.5px/22px ${FONT_SANS}`,
+  ];
+  const input = bevelInput("input", { theme, rules: inputRules });
   input.type = "text";
   input.placeholder = "Find";
   input.spellcheck = false;
@@ -223,26 +396,76 @@ export function createFindBar({
   closeBtn.setAttribute("data-find-close", "");
   closeBtn.addEventListener("mousedown", (e) => e.preventDefault());
   navGroup.append(prevBtn, nextBtn, closeBtn);
+  findRow.append(input, formulaLabel, countText, navGroup);
 
-  bar.append(input, formulaLabel, countText, navGroup);
+  const replaceRow = bevelBox("div", ["display:none", "align-items:center", "flex-wrap:wrap", "gap:8px"], { theme });
+  replaceRow.setAttribute("data-find-replace-row", "");
+  replaceRow.hidden = true;
+
+  const replaceInput = bevelInput("input", { theme, rules: inputRules });
+  replaceInput.type = "text";
+  replaceInput.placeholder = "Replace with";
+  replaceInput.spellcheck = false;
+  replaceInput.setAttribute("autocomplete", "off");
+  replaceInput.setAttribute("aria-label", "Replace with");
+  replaceInput.setAttribute("data-replace-input", "");
+
+  const replaceBtn = bevelButton("Replace", {
+    small: true,
+    onClick: () => replaceCurrent(),
+    theme,
+    extra: ["height:24px", "padding:0 10px", "font-size:12px"],
+  });
+  replaceBtn.setAttribute("data-find-replace", "");
+  replaceBtn.addEventListener("mousedown", (e) => e.preventDefault());
+
+  const replaceAllBtn = bevelButton("Replace all", {
+    small: true,
+    onClick: () => replaceAllInActiveTab(),
+    theme,
+    extra: ["height:24px", "padding:0 10px", "font-size:12px"],
+  });
+  replaceAllBtn.setAttribute("data-find-replace-all", "");
+  replaceAllBtn.addEventListener("mousedown", (e) => e.preventDefault());
+
+  replaceRow.append(replaceInput, replaceBtn, replaceAllBtn);
+  bar.append(findRow, replaceRow);
   container.append(bar);
+
+  function syncReplaceControls() {
+    if (!input.value || matches.length === 0) {
+      replaceBtn.setDisabled(true);
+      replaceAllBtn.setLabel("Replace all");
+      replaceAllBtn.setDisabled(true);
+      return;
+    }
+    replaceBtn.setDisabled(false);
+    const activeTab = activeTabOf();
+    // A formula's result matches the search, but only the formula text can be replaced.
+    const tabCount = matches.filter((m) => m.tab === activeTab && (formulaCheck.checked || !m.formula)).length;
+    replaceAllBtn.setLabel(tabCount > 0 ? `Replace all (${tabCount})` : "Replace all");
+    replaceAllBtn.setDisabled(tabCount === 0);
+  }
 
   function syncControls() {
     if (!input.value) {
       countText.textContent = "";
       prevBtn.setDisabled(true);
       nextBtn.setDisabled(true);
+      syncReplaceControls();
       return;
     }
     if (matches.length === 0) {
       countText.textContent = "0 of 0";
       prevBtn.setDisabled(true);
       nextBtn.setDisabled(true);
+      syncReplaceControls();
       return;
     }
     countText.textContent = `${currentIndex + 1} of ${matches.length}`;
     prevBtn.setDisabled(false);
     nextBtn.setDisabled(false);
+    syncReplaceControls();
   }
 
   function rebuild({ jump = false } = {}) {
@@ -292,8 +515,82 @@ export function createFindBar({
     onSelectMatch?.(matches[currentIndex]);
   }
 
-  function open() {
+  function replaceCurrent() {
+    if (!input.value || !onBeforeAction()) return;
+    if (stateKey() !== lastBuiltKey || matches.length === 0) rebuild({ jump: true });
+    if (currentIndex < 0 || currentIndex >= matches.length) return;
+    const target = matches[currentIndex];
+    const tabs = getTabs();
+    const tabObj = tabs.find((t) => t.id === target.tab);
+    if (!tabObj?.grid) return;
+    // Undo is kept per tab, so the match's tab is shown before its cell changes.
+    if (target.tab !== activeTabOf()) onSelectMatch?.(target);
+
+    let outcome = "skipped";
+    runWrite(() => {
+      outcome = applyCellReplacement(tabObj.grid, target.ref, {
+        query: input.value,
+        replacement: replaceInput.value,
+        searchFormulas: formulaCheck.checked,
+        tokenize: getTokenize?.(),
+      });
+    });
+
+    if (outcome === "refused") {
+      onNotice?.("1 formula would not be valid and was left alone.");
+    } else if (outcome === "skipped" && target.formula && !formulaCheck.checked) {
+      onNotice?.("That match is a formula's result. Turn on Search formulas to change the formula.");
+    }
+    onAfterReplace?.();
+
+    const freshTabs = getTabs();
+    const tabOrder = new Map(freshTabs.map((t, i) => [t.id, i]));
+    lastBuiltKey = stateKey();
+    matches = findMatches(freshTabs, { query: input.value, searchFormulas: formulaCheck.checked });
+    if (matches.length === 0) {
+      currentIndex = -1;
+      syncControls();
+      return;
+    }
+    const nextIdx = matches.findIndex((m) => compareMatchPos(tabOrder, m, target) > 0);
+    currentIndex = nextIdx !== -1 ? nextIdx : 0;
+    syncControls();
+    onSelectMatch?.(matches[currentIndex]);
+  }
+
+  let replacing = false;
+
+  function replaceAllInActiveTab() {
+    if (!input.value || !onBeforeAction()) return;
+    const activeTab = activeTabOf();
+    const tabObj = getTabs().find((t) => t.id === activeTab);
+    if (!tabObj?.grid) return;
+    // Each cell written announces a change; searching every tab again per cell made a large
+    // Replace all freeze the tab, so it searches once at the end.
+    replacing = true;
+    let result;
+    try {
+      result = replaceAllOnTab(tabObj, {
+        query: input.value,
+        replacement: replaceInput.value,
+        searchFormulas: formulaCheck.checked,
+        history,
+        runWrite,
+        tokenize: getTokenize?.(),
+      });
+    } finally {
+      replacing = false;
+    }
+    const { replaced, refused } = result;
+    onAfterReplace?.();
+    rebuild({ jump: false });
+    onNotice?.(replaceNoticeText(replaced, refused));
+  }
+
+  function open({ replace = false } = {}) {
     openState = true;
+    replaceOpen = Boolean(replace);
+    setShown(replaceRow, replaceOpen, "flex");
     setShown(bar, true, "flex");
     rebuild({ jump: false });
     input.focus();
@@ -311,6 +608,14 @@ export function createFindBar({
   formulaCheck.addEventListener("change", () => rebuild({ jump: true }));
 
   bar.addEventListener("keydown", (event) => {
+    // Inside the bar, Ctrl+H would open the browser's history and Ctrl+F the browser's find.
+    const intent = keyIntent(event, { platform: container.ownerDocument?.defaultView?.navigator?.platform ?? "" });
+    if (intent?.type === "findReplace" || intent?.type === "find") {
+      event.preventDefault();
+      event.stopPropagation();
+      open({ replace: intent.type === "findReplace" || replaceOpen });
+      return;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -321,6 +626,12 @@ export function createFindBar({
       event.preventDefault();
       event.stopPropagation();
       step(event.shiftKey ? -1 : 1);
+      return;
+    }
+    if (event.key === "Enter" && event.target === replaceInput) {
+      event.preventDefault();
+      event.stopPropagation();
+      replaceCurrent();
     }
   });
 
@@ -329,10 +640,17 @@ export function createFindBar({
   return {
     el: bar,
     input,
+    replaceInput,
+    replaceRow,
+    replaceBtn,
+    replaceAllBtn,
     formulaCheck,
     countText,
     get isOpen() {
       return openState;
+    },
+    get isReplaceOpen() {
+      return openState && replaceOpen;
     },
     get matches() {
       return matches.slice();
@@ -343,8 +661,13 @@ export function createFindBar({
     open,
     close,
     step,
+    replaceCurrent,
+    replaceAll: replaceAllInActiveTab,
+    syncTab() {
+      if (openState) syncReplaceControls();
+    },
     refresh() {
-      if (openState) rebuild({ jump: false });
+      if (openState && !replacing) rebuild({ jump: false });
     },
     dispose() {
       openState = false;
@@ -361,6 +684,7 @@ export function createFindController(ctx) {
       theme: ctx.chrome.theme,
       container: ctx.chrome.findSlot,
       getTabs: () => ctx.tabs.list().map((t) => ({ id: t.id, name: t.name, grid: ctx.gridOf(t.table) })),
+      getActiveTab: () => ctx.tabs.activeId || ctx.getSel()?.tab || "",
       getActivePos: () => {
         const info = ctx.activeCellInfo();
         const sel = ctx.getSel();
@@ -368,6 +692,15 @@ export function createFindController(ctx) {
           ? { tab: info.tab, r: Math.max(0, info.r), c: Math.max(0, info.c) }
           : { tab: sel?.tab ?? "", r: 0, c: 0 };
       },
+      history: ctx.history,
+      runWrite: (fn) => ctx.writeGrid(fn),
+      getTokenize: () => ctx.win.Sap?.grid?.tokenize,
+      onBeforeAction: () => ctx.ensureReadyForAction(),
+      onAfterReplace: () => {
+        ctx.refreshStatus();
+        ctx.syncUI({ announce: true });
+      },
+      onNotice: (msg) => ctx.chrome.showNotice(msg),
       onSelectMatch: (match) => {
         if (!ctx.ensureReadyForAction()) return;
         const view = ctx.viewOf(match.tab);
@@ -431,8 +764,9 @@ export function createFindController(ctx) {
   }
 
   return {
-    open: () => ensureBar().open(),
+    open: (opts) => ensureBar().open(opts),
     goTo,
+    syncTab: () => bar?.syncTab(),
     refresh: () => bar?.refresh(),
     dispose: () => bar?.dispose(),
   };
