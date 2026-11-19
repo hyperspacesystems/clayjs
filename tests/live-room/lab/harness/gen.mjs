@@ -4,6 +4,7 @@ import { faultPlan } from "./host.mjs";
 import { keyBetween } from "./vendor/order-keys.mjs";
 import { rng, rowsInOrder, COLS } from "./lib.mjs";
 import { cellsOf } from "../codec-tiny/reducer.mjs";
+import { refAction } from "./lens.mjs";
 
 const pick = (rnd, list) => (list.length ? list[Math.floor(rnd() * list.length)] : null);
 const slow = (world, way, tab) => world.slow?.[way] === Number(tab.id.slice(1)) % 3;
@@ -291,7 +292,8 @@ export const MOVES = {
     const frame = pick(rnd, live(world).flatMap((tab) => stranded(world, tab)));
     if (!frame) return null;
     const tab = pick(rnd, live(world).filter((one) => !stranded(world, one).some((held) => held.e === frame.e)));
-    const [row, col] = frame.action.t === "del" ? [frame.action.row, pick(rnd, COLS)] : pick(rnd, cellsOf(frame.action)) ?? [];
+    const action = refAction(frame.action);
+    const [row, col] = action.t === "del" ? [action.row, pick(rnd, COLS)] : pick(rnd, cellsOf(action)) ?? [];
     if (!tab || !row || !view(tab).rows[row]) return null;
     const value = `v${++world.values}`;
     userEdit(world, tab, { t: "set", row, col, value });

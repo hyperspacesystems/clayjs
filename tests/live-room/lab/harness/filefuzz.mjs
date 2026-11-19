@@ -6,6 +6,7 @@ import { keyBetween } from "./vendor/order-keys.mjs";
 import { usePlant, PLANTS } from "../core/planted.mjs";
 import { faultPlan } from "./host.mjs";
 import { rng, rowsInOrder, COLS } from "./lib.mjs";
+import { CODEC } from "./lens.mjs";
 
 export const FILE_PLANTS = Object.keys(PLANTS).filter((plant) => plant.startsWith("file-"));
 export const FILE_PROFILES = ["v1", "v2", "v3"];
@@ -106,7 +107,8 @@ const MOVES = {
 
 function parseRows(body) {
   const rows = {};
-  for (const [, id, pos] of body.matchAll(/<tr data-id="([^"]*)" data-pos="([^"]*)">/g)) rows[id] = { pos, cells: {} };
+  const tag = CODEC === "list" ? /<li data-key="([^"]*)" data-at="([^"]*)">/g : /<tr data-id="([^"]*)" data-pos="([^"]*)">/g;
+  for (const [, id, pos] of body.matchAll(tag)) rows[id] = { pos, cells: {} };
   return { rows };
 }
 

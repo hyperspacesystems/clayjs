@@ -35,9 +35,9 @@ export const PRODUCT_IMPORTS = {
   "scenarios.mjs": { "recover.mjs": ["replay"], "room.mjs": ["admit"], "host.mjs": ["fileAccepted"] },
 };
 
-const VIEW_LINE = "  const shown = view(tab);\n";
+const VIEW_LINE = "  const raw = codecView(tab);\n";
 
-const DEFAULTS = { adapter: "product", core: "", suite: "vectors", from: 1, seeds: 200, longSeeds: 20, steps: 400, longSteps: 2000, fileSeeds: 0, modes: ["ordered", "scrambled"], profile: "", faults: "", workers: 0, out: "", keep: false };
+const DEFAULTS = { adapter: "product", core: "", suite: "vectors", from: 1, seeds: 200, longSeeds: 20, steps: 400, longSteps: 2000, fileSeeds: 0, modes: ["ordered", "scrambled"], profile: "", faults: "", workers: 0, codec: process.env.LAB_CODEC === "list" ? "list" : "tiny", out: "", keep: false };
 
 const whole = (name, value) => {
   if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a whole number of at least 1, not ${value}`);
@@ -52,6 +52,8 @@ export function check(opts) {
   for (const name of ["from", "seeds", "longSeeds", "steps", "longSteps", "fileSeeds"]) whole(name, opts[name]);
   if (opts.core && opts.adapter !== "product") throw new Error("--core applies only to the product adapter");
   if (opts.suite === "plants" && opts.adapter !== "product") throw new Error("--suite plants applies only to the product adapter");
+  if (!["tiny", "list"].includes(opts.codec)) throw new Error(`unknown codec ${opts.codec}`);
+  if (opts.codec !== "tiny" && ["vectors", "plants", "all"].includes(opts.suite)) throw new Error("--codec list runs the fuzz, long and files suites: vectors and plants replay small-workbook sessions");
   return opts;
 }
 
@@ -72,6 +74,7 @@ export function parseArgs(argv) {
     else if (arg === "--suite") opts.suite = value;
     else if (arg === "--modes") opts.modes = value.split(",").filter(Boolean);
     else if (arg === "--profile") opts.profile = value;
+    else if (arg === "--codec") opts.codec = value;
     else if (arg === "--faults") opts.faults = value;
     else if (arg === "--out") opts.out = value;
     else throw new Error(`unknown option ${arg}`);
@@ -111,7 +114,7 @@ export function route(text, file, used = new Set()) {
 
 export function productTree(core = PRODUCT_CORE) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "live-room-product-"));
-  fs.cpSync(path.join(LAB, "codec-tiny"), path.join(dir, "codec-tiny"), { recursive: true });
+  for (const codec of ["codec-tiny", "codec-list"]) fs.cpSync(path.join(LAB, codec), path.join(dir, codec), { recursive: true });
   fs.cpSync(path.join(LAB, "harness"), path.join(dir, "harness"), { recursive: true });
   fs.cpSync(path.join(LAB, "core"), path.join(dir, "ref-core"), { recursive: true });
   fs.mkdirSync(path.join(dir, "core"));
@@ -131,12 +134,12 @@ export function productTree(core = PRODUCT_CORE) {
   }
   const host = path.join(dir, "harness/host.mjs");
   const hostText = fs.readFileSync(host, "utf8");
-  if (!hostText.includes("\nuseCodec(codec);\n")) throw new Error("harness/host.mjs no longer installs the codec with useCodec(codec)");
-  fs.writeFileSync(host, `import { useCodec as useProductCodec } from "../core/codec.mjs";\n${hostText.replace("\nuseCodec(codec);\n", "\nuseCodec(codec);\nuseProductCodec(codec);\n")}`);
+  if (!hostText.includes("\nuseCodec(labCodec);\n")) throw new Error("harness/host.mjs no longer installs the codec with useCodec(labCodec)");
+  fs.writeFileSync(host, `import { useCodec as useProductCodec } from "../core/codec.mjs";\n${hostText.replace("\nuseCodec(labCodec);\n", "\nuseCodec(labCodec);\nuseProductCodec(labCodec);\n")}`);
   const world = path.join(dir, "harness/world.mjs");
   const worldText = fs.readFileSync(world, "utf8");
-  if (!worldText.includes(VIEW_LINE)) throw new Error("harness/world.mjs userEdit no longer starts with `const shown = view(tab);`");
-  fs.writeFileSync(world, `import { view as labView } from "../ref-core/tab.mjs";\nimport { canon as canonOf } from "./lib.mjs";\n${worldText.replace(VIEW_LINE, `${VIEW_LINE}  if (canonOf(shown) !== canonOf(labView(tab))) throw new Error(\`V1 \${tab.id} shows a table the lab's view does not\`);\n`)}`);
+  if (!worldText.includes(VIEW_LINE)) throw new Error("harness/world.mjs userEdit no longer starts with `const raw = codecView(tab);`");
+  fs.writeFileSync(world, `import { view as labView } from "../ref-core/tab.mjs";\nimport { canon as canonOf } from "./lib.mjs";\n${worldText.replace(VIEW_LINE, `${VIEW_LINE}  if (canonOf(raw) !== canonOf(labView(tab))) throw new Error(\`V1 \${tab.id} shows a table the lab's view does not\`);\n`)}`);
   return dir;
 }
 
@@ -180,19 +183,21 @@ const FILES = `
 const [tree, plant, from, to, steps, profile] = process.argv.slice(1);
 const { fuzzFile } = await import(tree + "/harness/filefuzz.mjs");
 const result = fuzzFile({ from: Number(from), to: Number(to), steps: Number(steps), plant, profile });
-console.log(JSON.stringify({ runs: result.seeds, failures: result.failures, caught: result.caught }));
+console.log(JSON.stringify({ runs: result.seeds, failures: result.failures, caught: result.caught, totals: result.totals }));
 `;
 
 const classOf = (message) => /^([A-Z]+\d+[a-z]?)\b/.exec(message ?? "")?.[1] ?? "other";
 
-function node(cwd, args) {
-  const result = spawnSync(process.execPath, args, { cwd, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+// The child runs read LAB_CODEC from their own environment, which is passed here because a test
+// runner may give the calling module a copy of process.env that child processes do not inherit.
+function node(cwd, args, codec = "tiny") {
+  const result = spawnSync(process.execPath, args, { cwd, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, env: { ...process.env, LAB_CODEC: codec } });
   if (result.error) throw result.error;
   return result;
 }
 
-function inline(tree, code, args) {
-  const result = node(tree, ["--input-type=module", "-e", code, "--", tree, ...args]);
+function inline(tree, code, args, codec = "tiny") {
+  const result = node(tree, ["--input-type=module", "-e", code, "--", tree, ...args], codec);
   if (result.status !== 0) throw new Error(`a run in ${tree} exited ${result.status ?? result.signal}: ${result.stderr.slice(-800)}`);
   return JSON.parse(result.stdout.trim().split("\n").pop());
 }
@@ -219,7 +224,7 @@ function sweep(tree, plant, opts, part, seeds, steps, mode) {
     if (opts.profile) args.push("--profile", opts.profile);
     if (opts.faults) args.push("--faults", opts.faults);
     if (opts.workers) args.push("--workers", String(opts.workers));
-    const result = node(tree, args);
+    const result = node(tree, args, opts.codec);
     if (result.status !== 0 && result.status !== 1) throw new Error(`fuzz ${part} exited ${result.status ?? result.signal}: ${result.stderr.slice(-800)}`);
     if (!fs.existsSync(out)) throw new Error(`fuzz ${part} wrote no report (exit ${result.status}): ${result.stderr.slice(-800)}`);
     const report = JSON.parse(fs.readFileSync(out, "utf8"));
@@ -253,8 +258,8 @@ function plants() {
 }
 
 function files(tree, plant, opts, profile) {
-  const result = inline(tree, FILES, [plant, String(opts.from), String(opts.from + opts.fileSeeds - 1), "300", profile]);
-  return { part: `files-${profile}`, runs: result.runs, failures: result.failures, classes: counted(`files-${profile}`, opts.fileSeeds, result.runs, result.caught), first: result.caught.slice(0, 10) };
+  const result = inline(tree, FILES, [plant, String(opts.from), String(opts.from + opts.fileSeeds - 1), "300", profile], opts.codec);
+  return { part: `files-${profile}`, runs: result.runs, failures: result.failures, totals: result.totals, classes: counted(`files-${profile}`, opts.fileSeeds, result.runs, result.caught), first: result.caught.slice(0, 10) };
 }
 
 export function conform(options = {}) {

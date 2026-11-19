@@ -12,8 +12,10 @@ The files sit in three folders (`CONTRACT.md` section 18). A file in `core/` imp
 - `harness/world.mjs`, `harness/host.mjs`: the simulated world and host, with outside writes. `hostPort` in `world.mjs` is the port that core uses.
 - `core/fileonly.mjs`: the same file rules for a host with no room: the tab side of reads, conditional saves and pushed documents.
 - `harness/fileworld.mjs`: the world, host side and oracle of file-only mode, with outside writes. `filePort` is its port.
-- `core/codec.mjs`: the slot through which core applies an action to a workbook (`act`). `harness/host.mjs` puts the reducer of `codec-tiny/` in it.
+- `core/codec.mjs`: the slot through which core applies an action to a workbook (`act`). `harness/host.mjs` puts the chosen codec in it (`harness/lens.mjs`).
 - `codec-tiny/reducer.mjs`: the reducer for the lab's small workbook.
+- `codec-list/reducer.mjs`: a second codec, an ordered list of items with named text fields. It has the small workbook's meaning under other names and shapes, so a core that passes the lab's proof with it reads documents only through the codec (step P2b of C3).
+- `harness/lens.mjs`: picks the codec (`LAB_CODEC=list` for the list codec) and converts between its shapes and the small workbook's. The harness builds and checks workbook actions and documents; the core sees only the chosen codec's. `harness/scenarios.mjs --neutral` runs the scenarios that name no cells (`namesCells`).
 - `core/recover.mjs`: the recovery copy format, and the restore from a copy: each stored edit is judged against a file's lineage, ledger and cut record before it is applied. The room judges a restore with the same function (`weigh`). An edit that a restore leaves for a person is passed over and listed in the decision record on the host (`host.decisions`, `CONTRACT.md` rules 82 to 86).
 - `core/conflict.mjs`: the conflict rule in one place: what an author saw in each cell an edit writes, which cells no longer hold that value, which earlier edit of a copy an edit waits for, and what a person reviewed before a decision.
 - `harness/reader.mjs`: the oracle's own reader for stored files and stored copies.
@@ -67,6 +69,8 @@ tmux new -d -s fable-side 'TESTBOX_RUN_ID=fable-side-1 testbox run --command "ba
 
 `run-final.sh gate` writes a source manifest (the sha256 of every source file, and one hash over all of them), then runs the tests, the scenarios, 250,000 seeds per delivery mode at 400 moves, 5,000 long sessions per mode at 2,000 moves, every planted defect under the fuzzer at 1,000 seeds per mode (and up to 60,000 for a defect caught fewer than twice), 400,000 file-only seeds with pushed documents, the same 400,000 seeds on the frozen file-only generator, and the file-only planted defects. It exits 1 if any seed fails or the fuzzer catches a planted defect in neither delivery mode.
 
+`run-final.sh list` runs, with the list codec, the scenarios that name no cells, 20,000 seeds per delivery mode of profiles `v3` and `v10`, and 20,000 file-only seeds. `run-final.sh everything` includes it.
+
 `run-final.sh side` writes the same manifest, then runs the lineage window at 4, 8 and 16 with and without outside writes, the `v2`, `v4`, `v5`, `v6`, `v7` and `v8` profiles (`v8` also with the record of removed values on), copy writes that fail at a rate of 1 and of 0.5 (also on `v6`), file-only profile `v3`, the comparison with union recovery in both readings, and the measurements. `run-final.sh everything` runs both parts.
 
-Settings: `LAB_W` sets the lineage window (default 16). `LAB_STORE_BYTES`, `LAB_ROOM_BYTES`, `LAB_ACTION_BYTES`, `LAB_LEDGER_CAP` and `LAB_OPS_PER_FRAME` set the lab's caps (defaults are the real ClayJS caps divided by 1,024, and 2 operations per frame). `SEEDS`, `LONG_SEEDS`, `MUTANT_SEEDS`, `DEEP_SEEDS`, `SIDE_SEEDS`, `COMPARE_SEEDS`, `FILE_SEEDS` and `FILE_DEEP_SEEDS` set the seed counts in `run-final.sh`.
+Settings: `LAB_CODEC=list` runs the lab with the list codec. `LAB_W` sets the lineage window (default 16). `LAB_STORE_BYTES`, `LAB_ROOM_BYTES`, `LAB_ACTION_BYTES`, `LAB_LEDGER_CAP` and `LAB_OPS_PER_FRAME` set the lab's caps (defaults are the real ClayJS caps divided by 1,024, and 2 operations per frame). `SEEDS`, `LONG_SEEDS`, `MUTANT_SEEDS`, `DEEP_SEEDS`, `SIDE_SEEDS`, `COMPARE_SEEDS`, `FILE_SEEDS` and `FILE_DEEP_SEEDS` set the seed counts in `run-final.sh`.

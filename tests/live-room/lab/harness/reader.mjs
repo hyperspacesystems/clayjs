@@ -7,7 +7,13 @@ function attribute(tag, name) {
   return plain(tag.slice(from, tag.indexOf('"', from)));
 }
 
+import { CODEC, labCodec, refDoc } from "./lens.mjs";
+
 export function readPage(body) {
+  if (CODEC === "list") {
+    const { record, doc } = labCodec.read(body);
+    return { record, wb: refDoc(doc) };
+  }
   const mark = '<script type="application/json" id="commit">';
   const script = body.lastIndexOf(mark);
   const record = JSON.parse(body.slice(script + mark.length, body.indexOf("</script>", script)));

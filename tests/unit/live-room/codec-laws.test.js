@@ -7,6 +7,8 @@ import seedWindowHelpers from "../../helpers/seed-window.cjs";
 import { checkCodec } from "../../../src/live-room/codec.js";
 import { codec as tiny } from "../../live-room/lab/codec-tiny/reducer.mjs";
 import { sample } from "../../live-room/lab/codec-tiny/sample.mjs";
+import { codec as list } from "../../live-room/lab/codec-list/reducer.mjs";
+import { sample as listSample } from "../../live-room/lab/codec-list/sample.mjs";
 import { usePlant } from "../../live-room/lab/core/planted.mjs";
 
 const window = seedWindowHelpers.seedWindow({ name: "live-room codec laws", full: 50, routine: 5 });
@@ -19,6 +21,12 @@ afterEach(() => usePlant(""));
 // such as a delete whose inverse loses a cell.
 test("the small workbook codec keeps every law", () => {
   for (const seed of window.seeds) expect({ seed, window: window.label, failures: checkCodec(tiny, sample, { seed, runs: 100 }) }).toEqual({ seed, window: window.label, failures: [] });
+});
+
+// Bug it catches: the list codec (step P2b's second codec, which runs the lab's proof without
+// the workbook's names) breaks a law, so a sweep that passes with it would prove nothing.
+test("the list codec keeps every law", () => {
+  for (const seed of window.seeds) expect({ seed, window: window.label, failures: checkCodec(list, listSample, { seed, runs: 100 }) }).toEqual({ seed, window: window.label, failures: [] });
 });
 
 let calls = 0;

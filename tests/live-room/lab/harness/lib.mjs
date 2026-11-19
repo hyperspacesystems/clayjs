@@ -10,7 +10,10 @@ export function rng(seed) {
 
 const byPos = (a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
 
-export function canon(wb) {
+import { refDoc } from "./lens.mjs";
+
+export function canon(doc) {
+  const wb = refDoc(doc);
   const rows = Object.entries(wb.rows).map(([id, row]) => [
     id,
     row.pos,
@@ -54,4 +57,4 @@ export function fromFixture(workbook) {
   return { wb: { rows }, cells };
 }
 
-export const rowsInOrder = (wb) => Object.entries(wb.rows).map(([id, row]) => [id, row.pos]).sort(byPos).map(([id]) => id);
+export const rowsInOrder = (doc) => Object.entries(refDoc(doc).rows).map(([id, row]) => [id, row.pos]).sort(byPos).map(([id]) => id);

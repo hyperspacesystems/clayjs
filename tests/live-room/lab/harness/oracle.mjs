@@ -4,14 +4,21 @@ import { get, verdict, FIRST_GEN, FIRST_COMMIT } from "./host.mjs";
 import { W, epochOf, ledgerMarks } from "../core/ledger.mjs";
 import { stateReserve } from "../core/room.mjs";
 import { frameBytes, frameOps, actionBytes } from "../core/limits.mjs";
-import { cellsOf } from "../codec-tiny/reducer.mjs";
-import { attached, view, frameId } from "../core/tab.mjs";
+import { cellsOf as workbookCells } from "../codec-tiny/reducer.mjs";
+import { attached, view as codecView, frameId } from "../core/tab.mjs";
+import { refAction, refDoc, codecAction, codecDoc } from "./lens.mjs";
 import { replay, CLOSING } from "../core/recover.mjs";
 import { reviewed } from "../core/conflict.mjs";
 import { planted } from "../core/planted.mjs";
 import { readPage, parse } from "./reader.mjs";
 
 export const newTally = () => ({ applied: 0, misfit: 0, saved: 0, resolved: 0, replaced: 0, unjudged: 0, refused: 0, conflict: 0, held: 0, order: 0, row: 0, kept: 0, late: 0, again: 0, shown: 0, back: 0 });
+
+const cellsOf = (action) => workbookCells(refAction(action));
+
+const view = (tab) => refDoc(codecView(tab));
+
+const codecFile = (file) => ({ ...file, state: { ...file.state, wb: codecDoc(file.state.wb) } });
 
 const newWhatIf = () => ({ copies: 0, edits: 0, auto: 0, chosen: 0, kept: 0, released: 0, misfit: 0, conflict: 0, held: 0, left: 0 });
 
@@ -22,6 +29,8 @@ const authorOf = (world, edit) => world.tabs.find((tab) => tab.id === edit.by) ?
 const shownRefused = (world, oracle, id) => oracle.takeOf.has(id) && oracle.edits.get(id).action.t === "del" && ["dropped", "kept-refused"].includes(authorOf(world, oracle.edits.get(id)).edits.get(id)?.state);
 
 export function refStep(wb, done, id, action) {
+  wb = refDoc(wb);
+  action = refAction(action);
   if (done.has(id)) return { applied: false, dup: true };
   done.add(id);
   const row = wb.rows[action.row];
@@ -42,11 +51,17 @@ export function refStep(wb, done, id, action) {
   return { applied: true, dup: false };
 }
 
-const fitsRef = (wb, action) => (action.t === "ins" ? !wb.rows[action.row] : action.t === "del" ? Boolean(wb.rows[action.row]) : cellsOf(action).every(([row]) => wb.rows[row]));
+const fitsRef = (wb, action) => fitsRefOf(refDoc(wb), refAction(action));
 
-const rowsRef = (action) => (action.t === "ins" ? [] : action.t === "del" ? [action.row] : cellsOf(action).map(([row]) => row));
+const fitsRefOf = (wb, action) => (action.t === "ins" ? !wb.rows[action.row] : action.t === "del" ? Boolean(wb.rows[action.row]) : cellsOf(action).every(([row]) => wb.rows[row]));
 
-const marksRef = (action) => (action.t === "ins" ? [action.row] : cellsOf(action).map(([row, col]) => `${row}/${col}`));
+const rowsRef = (action) => rowsRefOf(refAction(action));
+
+const rowsRefOf = (action) => (action.t === "ins" ? [] : action.t === "del" ? [action.row] : cellsOf(action).map(([row]) => row));
+
+const marksRef = (action) => marksRefOf(refAction(action));
+
+const marksRefOf = (action) => (action.t === "ins" ? [action.row] : cellsOf(action).map(([row, col]) => `${row}/${col}`));
 
 function aheadOf(wb, action, waiting) {
   const row = rowsRef(action).find((one) => !wb.rows[one] && waiting.has(one));
@@ -84,6 +99,7 @@ function wholeRef({ record, state }, entry) {
 const outOfRoom = (oracle, room) => (id) => oracle.cutOut.has(id) || oracle.backedUp.has(id) || oracle.gens.get(room.gen).done.has(id);
 
 function rowToComeRef(oracle, target, wb, action, made, gone = replacedNow(oracle), far = false) {
+  wb = refDoc(wb);
   return rowsRef(action).find((row) => !wb.rows[row] && insertPending(oracle, target, made?.[row], gone, far)) ?? null;
 }
 
@@ -143,7 +159,9 @@ function whyLeft(file, entry, stands) {
 
 const whyWaits = ({ mark, row, e }) => (row ? `its row ${mark} is created by ${e}, an earlier insert of the same copy that was left waiting` : `${e}, an earlier edit of the same copy that writes its cell ${mark}, was left waiting: edits of one copy that write the same cell are restored in their order`);
 
-const holdsRef = (wb, action) => (action.t === "ins" ? Boolean(wb.rows[action.row]) : cellsOf(action).length > 0 && cellsOf(action).every(([row, col, value]) => value !== "" && wb.rows[row]?.cells[col] === value));
+const holdsRef = (wb, action) => holdsRefOf(refDoc(wb), refAction(action));
+
+const holdsRefOf = (wb, action) => (action.t === "ins" ? Boolean(wb.rows[action.row]) : cellsOf(action).length > 0 && cellsOf(action).every(([row, col, value]) => value !== "" && wb.rows[row]?.cells[col] === value));
 
 function keepStep(done, id) {
   if (done.has(id)) return { applied: false, dup: true };
@@ -154,6 +172,8 @@ function keepStep(done, id) {
 const filledRef = (row) => Object.fromEntries(Object.entries(row?.cells ?? {}).filter(([, value]) => value !== "" && value != null));
 
 function unseen(wb, { action, seen }) {
+  wb = refDoc(wb);
+  action = refAction(action);
   if (action.t === "ins") return [];
   if (action.t === "del") {
     const now = filledRef(wb.rows[action.row]);
@@ -175,6 +195,8 @@ function lateRef(wb, edit) {
 }
 
 function removedRef(wb, { action, seen }) {
+  wb = refDoc(wb);
+  action = refAction(action);
   if (action.t !== "del" || !seen) return [];
   return Object.entries(filledRef(wb.rows[action.row]))
     .filter(([col]) => !(col in seen))
@@ -183,12 +205,14 @@ function removedRef(wb, { action, seen }) {
 }
 
 function seenFrom(action, saw) {
+  action = refAction(action);
   if (action.t === "ins" || !saw) return null;
   if (action.t === "del") return { ...saw };
   return Object.fromEntries(cellsOf(action).map(([row, col], at) => [`${row}/${col}`, saw[at]]));
 }
 
 function lookedRef({ action, seen }, cells) {
+  action = refAction(action);
   if (action.t === "ins" || !seen) return null;
   const looked = { ...seen };
   for (const [row, col, now] of cells) {
@@ -717,7 +741,7 @@ export function newOracle(world) {
       const first = frame.k === "adopt" ? oracle.gens.get(frame.from[0])?.who[frame.from[1]] : frame.copy ? [sent.c, sent.n] : [oracle.edits.get(id)?.c, oracle.edits.get(id)?.n];
       if (first?.[0] !== frame.c || first[1] !== frame.n) throw new Error(`P7 ${room.gen}#${frame.seq} carries ${id} as request ${frame.n} of ${frame.c}, and ${frame.k === "adopt" ? `the room of ${frame.from[0]} admitted it` : "its tab made it"} as request ${first?.[1]} of ${first?.[0]}`);
       if (frame.action) {
-        if (JSON.stringify(frame.action) !== JSON.stringify(oracle.edits.get(id)?.action)) throw new Error(`P7 ${room.gen}#${frame.seq} carries an action that differs from the one ${id} authored`);
+        if (JSON.stringify(refAction(frame.action)) !== JSON.stringify(oracle.edits.get(id)?.action)) throw new Error(`P7 ${room.gen}#${frame.seq} carries an action that differs from the one ${id} authored`);
         if (actionBytes(frame.action) > theWorld.limits.actionBytes) throw new Error(`M4 ${id} is ${actionBytes(frame.action)} bytes, over the action cap of ${theWorld.limits.actionBytes}, and the room admitted it`);
         if (!sawAsSeen(oracle.edits.get(id), frame.saw)) throw new Error(`P7 ${room.gen}#${frame.seq} carries seen values for ${id} that differ from what its author's tab showed when the edit was made`);
       }
@@ -928,7 +952,7 @@ export function newOracle(world) {
       const rows = cellsOf(edit.action).map(([row]) => row);
       if (!rows.some((row) => removed(oracle, row))) throw new Error(`R3 ${tab.id} dropped ${id} as an edit with no row left, and no admitted action deleted a row it writes (${rows.slice(0, 4).join(", ")})`);
       const notice = tab.notices.findLast((one) => one.kind === "refused" && one.edits.includes(id));
-      if (!notice || JSON.stringify(notice.action) !== JSON.stringify(edit.action)) throw new Error(`R3 ${tab.id} dropped ${id} as an edit with no row left, with no notice that carries the action`);
+      if (!notice || JSON.stringify(refAction(notice.action)) !== JSON.stringify(edit.action)) throw new Error(`R3 ${tab.id} dropped ${id} as an edit with no row left, with no notice that carries the action`);
       if (!oracle.homeless.has(id)) oracle.homeless.set(id, new Set());
       oracle.homeless.get(id).add(tab.id);
       oracle.owed.get(id)?.delete(tab);
@@ -1014,7 +1038,7 @@ function checkCopy(world, oracle, known) {
     if (!edit) throw new Error(`R3 the stored recovery copy ${known.id} holds ${entry.e}, which no tab authored`);
     if (ids.has(entry.e)) throw new Error(`R3 the stored recovery copy ${known.id} holds ${entry.e} twice`);
     ids.add(entry.e);
-    if (JSON.stringify(entry.action) !== JSON.stringify(edit.action)) throw new Error(`R3 the stored recovery copy ${known.id} holds an action for ${entry.e} that differs from the one its tab authored`);
+    if (JSON.stringify(refAction(entry.action)) !== JSON.stringify(edit.action)) throw new Error(`R3 the stored recovery copy ${known.id} holds an action for ${entry.e} that differs from the one its tab authored`);
     if (!sawAsSeen(edit, entry.saw)) throw new Error(`R3 the stored recovery copy ${known.id} stores seen values for ${entry.e} that differ from what its author's tab showed when the edit was made`);
     const name = world.tabs.find((tab) => tab.id === edit.by)?.name ?? null;
     if (entry.c in (stored.about.names ?? {}) ? stored.about.names[entry.c] !== name : name !== null) throw new Error(`R3 the stored recovery copy ${known.id} names ${JSON.stringify(stored.about.names?.[entry.c])} as the author of ${entry.e}, and ${edit.by} made it as ${JSON.stringify(name)}`);
@@ -1122,8 +1146,8 @@ function checkHeld(about, id, decision, ahead, coming, view, tally) {
 const placedRef = ({ record, state }, entry) => [entry.org, ...(entry.via ?? []), entry.src].some((at) => at && (record.gen === at[0] ? record.through : state.lineage.find(([gen]) => gen === at[0])?.[1] ?? -1) >= at[1]);
 
 function foldReplay(oracle, about, copy, file, ctx, tally, choices = null, marks = new Map()) {
-  const offered = choices && new Map([...choices].map(([e, choice]) => [e, choice.how === "take" ? { decide: "take", reviewed: reviewed(oracle.edits.get(e).action, copy.edits.find((entry) => entry.e === e).saw, choice.cells) } : { decide: "keep" }]));
-  const result = replay(file, copy, offered, marks);
+  const offered = choices && new Map([...choices].map(([e, choice]) => [e, choice.how === "take" ? { decide: "take", reviewed: reviewed(codecAction(oracle.edits.get(e).action), copy.edits.find((entry) => entry.e === e).saw, choice.cells) } : { decide: "keep" }]));
+  const result = replay(codecFile(file), copy, offered, marks);
   const expected = { wb: fromCanon(canon(file.state.wb)), seen: structuredClone(file.state.seen) };
   const { held, gone, before, writers } = ctx;
   const passed = new Map();
@@ -1314,7 +1338,7 @@ function checkReplay(world, oracle, known, commit, tally, gone = replacedNow(ora
   const at = oracle.commits.get(commit);
   const ctx = newContext(oracle, at, gone);
   const stored = storedCopy(world, known.id);
-  const copy = { ...stored.about, preview: stored.preview };
+  const copy = { ...stored.about, preview: codecDoc(stored.preview) };
   const first = replayOnto(oracle, known, copy, storedVersion(world, commit), ctx, tally, commit, hostMarks(world));
   if (decide) for (const how of ["take", "keep"]) decideAll(oracle, known, copy, first, ctx, how, commit);
 }
@@ -1326,8 +1350,8 @@ function checkPlaces(world, oracle) {
     if (marks.get(id) !== "open") continue;
     for (const { at, c, n, saw } of places) {
       if (!placedRef(file, { src: at })) continue;
-      const entry = { e: id, c, n, b: null, src: at, org: at, via: [], out: "applied", action: oracle.edits.get(id).action, saw };
-      const [line] = replay(file, { edits: [entry] }, null, marks).decisions;
+      const entry = { e: id, c, n, b: null, src: at, org: at, via: [], out: "applied", action: codecAction(oracle.edits.get(id).action), saw };
+      const [line] = replay(codecFile(file), { edits: [entry] }, null, marks).decisions;
       oracle.placesOpen++;
       if (line.how === "saved") throw new Error(`R11 a copy that lists ${id} by its place ${at[0]}#${at[1]} is replayed onto the final file as covered by a file position, and the decision record lists ${id} as an edit that no person has decided: its place in a lost room does not show that its value was written (rule 111)`);
     }
@@ -1468,7 +1492,7 @@ function checkRemovals(world, oracle, tabs) {
   }
 }
 
-const toldRefused = (oracle, tab, id) => [...oracle.gens.values()].some((info) => info.turned.has(id)) && tab.notices.some((notice) => notice.kind === "refused" && notice.edits.includes(id) && JSON.stringify(notice.action) === JSON.stringify(oracle.edits.get(id).action));
+const toldRefused = (oracle, tab, id) => [...oracle.gens.values()].some((info) => info.turned.has(id)) && tab.notices.some((notice) => notice.kind === "refused" && notice.edits.includes(id) && JSON.stringify(refAction(notice.action)) === JSON.stringify(oracle.edits.get(id).action));
 
 export function checkStep(world) {
   const { oracle } = world;
@@ -1563,7 +1587,7 @@ export function checkEnd(world, join) {
   fresh.connected = false;
   const final = outcomesAt(oracle, oracle.commits.get(oracle.live));
   const writers = lastWriters(oracle, oracle.commits.get(oracle.live));
-  const wb = file.state.wb;
+  const wb = refDoc(file.state.wb);
   const deleted = new Set();
   for (const [id, applied] of final) if (applied && oracle.edits.get(id)?.action.t === "del") deleted.add(oracle.edits.get(id).action.row);
   for (const [id, edit] of oracle.edits) {
@@ -1579,24 +1603,24 @@ export function checkEnd(world, join) {
     if (!inVersion && oracle.saved.has(id)) throw new Error(`P2 ${id} was saved in ${oracle.saved.get(id)}, and the final file's history does not hold it`);
     if (oracle.recovered.has(id)) continue;
     if (oracle.homeless.get(id)?.has(author.id)) {
-      const shown = author.notices.some((notice) => notice.kind === "refused" && notice.edits.includes(id) && JSON.stringify(notice.action) === JSON.stringify(edit.action));
+      const shown = author.notices.some((notice) => notice.kind === "refused" && notice.edits.includes(id) && JSON.stringify(refAction(notice.action)) === JSON.stringify(edit.action));
       if (author.alive && (!shown || mine.state !== "dropped")) throw new Error(`P6 ${id} had no row left in ${author.id}'s recovery copy, and the tab shows ${mine.state} with ${shown ? "a" : "no"} notice`);
       continue;
     }
     const owed = oracle.owed.get(id);
     if (!inVersion && owed && [...owed].some((tab) => tab.alive) && !listed(world, oracle, id, true)) throw new Error(`P3 ${id} was shared, a tab that held it stayed open, and it is neither saved nor in a recovery copy, and the decision record does not list it`);
     if (!author.alive) continue;
-    const told = author.notices.some((notice) => notice.edits.includes(id) && (notice.kind !== "refused" || JSON.stringify(notice.action) === JSON.stringify(edit.action)));
+    const told = author.notices.some((notice) => notice.edits.includes(id) && (notice.kind !== "refused" || JSON.stringify(refAction(notice.action)) === JSON.stringify(edit.action)));
     if (oracle.refused.has(id)) {
       if (!cellsOf(edit.action).length || (mine.state === "saved" && (oracle.metItsValue.has(id) || !oracle.takeOf.has(id)) && takenInFile(oracle, id))) continue;
-      const held = author.notices.some((notice) => notice.edits.includes(id) && JSON.stringify(notice.kind === "refused" ? notice.action : notice.actions?.[id]) === JSON.stringify(edit.action));
+      const held = author.notices.some((notice) => notice.edits.includes(id) && JSON.stringify(refAction(notice.kind === "refused" ? notice.action : notice.actions?.[id])) === JSON.stringify(edit.action));
       if (!held || mine.state === "saved") throw new Error(`P6 ${id} of open tab ${author.id} was refused, and the tab shows ${mine.state} with ${held ? "a" : "no"} notice that holds it`);
       continue;
     }
     if (!inVersion) {
       const refusal = oracle.everRefused.get(id);
-      const held = author.notices.some((notice) => notice.kind === "refused" && notice.edits.includes(id) && JSON.stringify(notice.action) === JSON.stringify(edit.action));
-      const passed = listed(world, oracle, id, false) && ["recovered", "kept-refused"].includes(mine.state) && author.notices.some((notice) => notice.edits.includes(id) && JSON.stringify(notice.actions?.[id]) === JSON.stringify(edit.action));
+      const held = author.notices.some((notice) => notice.kind === "refused" && notice.edits.includes(id) && JSON.stringify(refAction(notice.action)) === JSON.stringify(edit.action));
+      const passed = listed(world, oracle, id, false) && ["recovered", "kept-refused"].includes(mine.state) && author.notices.some((notice) => notice.edits.includes(id) && JSON.stringify(refAction(notice.actions?.[id])) === JSON.stringify(edit.action));
       if (listed(world, oracle, id, false) && (!refusal || passed)) continue;
       if (refusal && mine.state === "saved" && !oracle.takeOf.has(id) && kinOf(oracle, id).some((one) => writtenInFile(oracle, one))) continue;
       if (!refusal) throw new Error(`P6 ${id} of open tab ${author.id} ended as ${mine.state}, with no saved file, no recovery copy and no refusal, and the decision record does not list it`);

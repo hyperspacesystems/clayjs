@@ -4,16 +4,16 @@ import { newState } from "../core/ledger.mjs";
 import { clone } from "../core/lib.mjs";
 import { CLOSING } from "../core/recover.mjs";
 import { useCodec } from "../core/codec.mjs";
-import { codec } from "../codec-tiny/reducer.mjs";
+import { labCodec, codecDoc } from "./lens.mjs";
 
-useCodec(codec);
+useCodec(labCodec);
 
 export const FIRST_GEN = "0.00000000";
 export const FIRST_COMMIT = "c00000000000";
 
 export function newHost(wb) {
   const record = { v: 2, doc: DOC, gen: FIRST_GEN, epoch: 0, commit: FIRST_COMMIT, parent: null, through: 0 };
-  const body = serialize(record, newState(clone(wb)));
+  const body = serialize(record, newState(codecDoc(clone(wb))));
   return { etag: "e0", writes: 0, title: "", body, versions: [{ kind: "initial", commit: FIRST_COMMIT, body }], recoveries: [], decisions: [], removals: [], copyWrites: 0, copyFaults: 0, markWrites: 0, markFaults: 0, removalSaves: 0, faults: null, deaf: null, deafMark: null };
 }
 
@@ -38,7 +38,7 @@ export function put(host, body, ifMatch, kind) {
 
 export function keepVersion(host, body, kind) {
   const { record, state } = parse(body);
-  const stored = kind === "backup" && planted("backup-empty-bytes") ? serialize(record, { ...state, wb: { rows: {} } }) : body;
+  const stored = kind === "backup" && planted("backup-empty-bytes") ? serialize(record, { ...state, wb: codecDoc({ rows: {} }) }) : body;
   host.versions.push({ kind, commit: record.commit, body: stored });
 }
 
@@ -58,7 +58,7 @@ function nextFault(host) {
   return FAULTS[Math.floor(plan.rnd() * FAULTS.length)];
 }
 
-const damaged = (body, fault) => (fault === "blank" ? page({ ...parsePage(body).record, edits: [] }, { rows: {} }) : fault === "torn" ? body.slice(0, body.length >> 1) : body);
+const damaged = (body, fault) => (fault === "blank" ? page({ ...parsePage(body).record, edits: [] }, codecDoc({ rows: {} })) : fault === "torn" ? body.slice(0, body.length >> 1) : body);
 
 export function keepRecovery(host, copy) {
   const fault = nextFault(host);

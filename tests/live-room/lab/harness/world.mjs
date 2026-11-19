@@ -1,16 +1,19 @@
 import { planted } from "../core/planted.mjs";
 import { W, trimLedger } from "../core/ledger.mjs";
-import { act } from "../codec-tiny/reducer.mjs";
+import { act } from "../core/codec.mjs";
+import { codecAction, refDoc } from "./lens.mjs";
 import { newHost, get, put, write, keepVersion, verdict, marked, keepDecision, fetchDecision, keepRecovery, fetchRecovery, readRecovery, keepRemovals } from "./host.mjs";
 import { newRoom, newInstance, dropConnection, rejoin, admit } from "../core/room.mjs";
 import { labLimits } from "../core/limits.mjs";
 import { serialize, parse, DOC } from "../core/record.mjs";
-import { newTab, attached, view, edit, restoreCopy, decide, flush, toRoom, post, answered, waited, toTab, receive, sync, read, link, nudgeAll, capture, deliver, rotate, retry, nextCommit, nextGen, storeRemovals } from "../core/tab.mjs";
+import { newTab, attached, view as codecView, edit, restoreCopy, decide, flush, toRoom, post, answered, waited, toTab, receive, sync, read, link, nudgeAll, capture, deliver, rotate, retry, nextCommit, nextGen, storeRemovals } from "../core/tab.mjs";
 import { establishing, openOn, fileAccepted, sameTables } from "../core/host.mjs";
 import { newOracle, checkStep, checkEnd } from "./oracle.mjs";
 import { tinyWorkbook } from "./lib.mjs";
 
-export { attached, view, toRoom, post, waited, toTab, receive, sync, read, link, capture, deliver, rotate, flush, checkStep };
+export const view = (tab) => refDoc(codecView(tab));
+
+export { attached, toRoom, post, waited, toTab, receive, sync, read, link, capture, deliver, rotate, flush, checkStep };
 
 export function newWorld(options = {}) {
   const world = {
@@ -141,10 +144,11 @@ export function join(world) {
 }
 
 export function userEdit(world, tab, action) {
-  const shown = view(tab);
+  const raw = codecView(tab);
+  const shown = refDoc(raw);
   const prior = world.oracle.priorOf(shown, action, tab);
   const seen = world.oracle.seenOf(shown, action);
-  const id = edit(world, tab, action, shown);
+  const id = edit(world, tab, codecAction(action), raw);
   if (id) world.oracle.onEdit(world, tab, id, action, prior, seen);
   return id;
 }
@@ -282,11 +286,11 @@ export function outsideWrite(world, kind, at, action) {
   const source = parse(version.body);
   const patch = action && { id: `x${++world.patches}`, action };
   if (patch && planted("outside-no-reset")) {
-    act(current.state.wb, action);
+    act(current.state.wb, codecAction(action));
     write(world.host, serialize({ ...current.record, commit: nextCommit(world), parent: current.record.commit }, current.state), kind);
     return true;
   }
-  if (patch) act(source.state.wb, action);
+  if (patch) act(source.state.wb, codecAction(action));
   if (world.hostMade && !planted("host-equal-tables-new-gen") && sameTables(source, current)) return rawWrite(world, world.host.body, kind);
   const cut = room ? [room.gen, room.seq] : [current.record.gen, current.record.through];
   const dirty = Boolean(room) && (room.gen !== current.record.gen || room.seq > current.record.through);

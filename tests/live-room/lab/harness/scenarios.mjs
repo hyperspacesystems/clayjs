@@ -12,6 +12,7 @@ import { FIXTURES } from "./vendor/fixtures.mjs";
 import { usePlant, PLANTS } from "../core/planted.mjs";
 import * as F from "./fileworld.mjs";
 import { rng, fromFixture } from "./lib.mjs";
+import { refDoc } from "./lens.mjs";
 import { run as replaySeed, runMoves as replayMoves, start as startSeed, MOVES } from "./gen.mjs";
 import { runFile } from "./filefuzz.mjs";
 
@@ -80,7 +81,7 @@ function stage(count = 2, options = {}) {
     title: (how) => step(() => retitle(world, how)),
     end: () => quiesce(world),
     file: () => get(world.host),
-    cell: (row, col) => get(world.host).state.wb.rows[row]?.cells[col],
+    cell: (row, col) => refDoc(get(world.host).state.wb).rows[row]?.cells[col],
     status: (tab, id) => tab.edits.get(id).state,
     copyOf: (tab, id) => readRecovery(world.host, tab.edits.get(id).copy),
     stored: (tab, id) => readRecovery(world.host, tab.edits.get(id).copy)?.edits.find((entry) => entry.e === id),
@@ -115,7 +116,7 @@ function fileStage(count = 2, options = {}) {
     close: (tab) => step(() => F.close(world, tab)),
     outside: (at, action, raw) => step(() => F.outside(world, at, action, raw)),
     end: () => F.finish(world),
-    cell: (row, col) => get(world.host).state.wb.rows[row]?.cells[col],
+    cell: (row, col) => refDoc(get(world.host).state.wb).rows[row]?.cells[col],
     status: (tab, id) => tab.edits.get(id).state,
     copyOf: (tab, id) => readRecovery(world.host, tab.notices.find((notice) => notice.kind === "recovery" && notice.edits.includes(id))?.copy),
     guests(count) {
@@ -3401,6 +3402,18 @@ function conflicted() {
   return { ...made, job: notice.job, clash: second, other: first, row: "r2", value: "second" };
 }
 
+// A scenario names cells when its own steps, or a helper of this file it calls, read the small
+// workbook's document or action internals, build a workbook action by hand, or check the small
+// codec's HTML. The stage builders are left out: their helpers (type, paste, cell and so on)
+// go through the lens. Every other scenario runs with any codec (LAB_CODEC=list).
+const NAMES_CELLS = /\.rows\b|\.cells\b|state\.wb|\.preview\b|\.actions?\b|\bt: "(set|paste|ins|del)"|<table|<tr|<td/;
+const HELPERS = [...fs.readFileSync(fileURLToPath(import.meta.url), "utf8").matchAll(/^function (\w+)\([^)]*\) \{\n([\s\S]*?)^\}/gm)].filter(([, name]) => name !== "stage" && name !== "fileStage").map(([, name, body]) => [name, body]);
+
+export const namesCells = (scenario) => {
+  const body = scenario.run.toString();
+  return NAMES_CELLS.test(body) || HELPERS.some(([name, text]) => NAMES_CELLS.test(text) && new RegExp(`\\b${name}\\(`).test(body));
+};
+
 export function runScenario(scenario, plant = "") {
   if (plant && !(plant in PLANTS)) throw new Error(`unknown plant: ${plant}`);
   armed = plant;
@@ -3446,7 +3459,18 @@ export function runAll() {
   return { rows, unused: Object.keys(PLANTS).filter((plant) => !used.has(plant)) };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// The scenarios that name no cells, each run once with no plant: with LAB_CODEC=list they show
+// the core needs nothing from the document but the codec.
+export function runNeutral() {
+  return SCENARIOS.filter((scenario) => !namesCells(scenario)).map((scenario) => ({ name: scenario.name, ...runScenario(scenario) }));
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === "--neutral") {
+  const rows = runNeutral();
+  for (const row of rows) console.log(`${row.ok ? "pass" : "FAIL"}  ${row.name}${row.ok ? "" : `: ${row.message}`}`);
+  console.log(`${rows.filter((row) => row.ok).length} of ${rows.length} scenarios that name no cells pass with the ${process.env.LAB_CODEC ?? "tiny"} codec`);
+  process.exit(rows.every((row) => row.ok) ? 0 : 1);
+} else if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const result = runAll();
   for (const row of result.rows) {
     console.log(`${row.passes ? "pass" : "FAIL"}  ${row.name}${row.passes ? "" : `: ${row.message}`}`);

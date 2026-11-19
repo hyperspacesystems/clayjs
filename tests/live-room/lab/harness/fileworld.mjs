@@ -1,16 +1,26 @@
 import { planted } from "../core/planted.mjs";
 import { newHost, get, put, write, keepRecovery, fetchRecovery } from "./host.mjs";
 import { serialize, parse, DOC, ledgerBytes } from "../core/record.mjs";
-import { act, cellsOf } from "../codec-tiny/reducer.mjs";
+import { act as refAct, cellsOf as workbookCells } from "../codec-tiny/reducer.mjs";
+import { act } from "../core/codec.mjs";
+import { refAction, refDoc, codecAction, codecDoc } from "./lens.mjs";
 import { resolved, trimLedger } from "../core/ledger.mjs";
 import { preview, replay } from "../core/recover.mjs";
 import { readPage, parse as readFile } from "./reader.mjs";
 import { labLimits } from "../core/limits.mjs";
 import { newTally, refStep as refFold } from "./oracle.mjs";
 import { canon, tinyWorkbook } from "./lib.mjs";
-import { nextCommit, nextGen, view, refresh, push, save, deliver } from "../core/fileonly.mjs";
+import { nextCommit, nextGen, view as codecView, edit as codecEdit, refresh, push, save, deliver } from "../core/fileonly.mjs";
 
-export { view, edit, refresh, push, save, deliver } from "../core/fileonly.mjs";
+export { refresh, push, save, deliver } from "../core/fileonly.mjs";
+
+export const view = (tab) => refDoc(codecView(tab));
+
+export const edit = (world, tab, action) => codecEdit(world, tab, codecAction(action));
+
+const cellsOf = (action) => workbookCells(refAction(action));
+
+const codecFile = (file) => ({ ...file, state: { ...file.state, wb: codecDoc(file.state.wb) } });
 
 export function newFileWorld(options = {}) {
   const world = {
@@ -96,7 +106,7 @@ export function outside(world, at, action, raw = false) {
   const current = get(world.host);
   const source = parse(version.body);
   const patch = action ? { id: `x${++world.patches}`, action } : null;
-  if (patch) act(source.state.wb, action);
+  if (patch) act(source.state.wb, codecAction(action));
   world.replaced++;
   if (raw) {
     const body = serialize(source.record, source.state);
@@ -142,7 +152,7 @@ export function settleAll(world) {
 }
 
 function refStep(wb, action) {
-  return act(wb, action);
+  return refAct(wb, refAction(action));
 }
 
 export function newFileOracle(world) {
@@ -166,7 +176,7 @@ export function newFileOracle(world) {
     inFile: new Set(),
     maxLedger: 0,
     onEdit(_, tab, id, action, shown) {
-      oracle.edits.set(id, { id, by: tab.id, action, seen: seenOf(shown, action) });
+      oracle.edits.set(id, { id, by: tab.id, action: refAction(action), seen: seenOf(shown, action) });
     },
     onSend(_, tab, io, numbers) {
       for (const [id, n] of numbers) oracle.sent.set(id, { c: io.client, n, commit: io.commit, applied: io.outcomes.get(id) });
@@ -237,7 +247,7 @@ export function newFileOracle(world) {
         const sent = oracle.sent.get(entry.e);
         const about = `the stored recovery copy ${copyId} stores ${entry.e}`;
         if (!ids.includes(entry.e)) throw new Error(`R3 ${about}, and no notice lists it`);
-        if (!authored || authored.by !== tab.id || JSON.stringify(entry.action) !== JSON.stringify(authored.action)) throw new Error(`R3 ${about} with an action that is not the one ${tab.id} authored`);
+        if (!authored || authored.by !== tab.id || JSON.stringify(refAction(entry.action)) !== JSON.stringify(authored.action)) throw new Error(`R3 ${about} with an action that is not the one ${tab.id} authored`);
         if (JSON.stringify(seenOf(null, entry.action, entry.saw)) !== JSON.stringify(authored.seen)) throw new Error(`R3 ${about} with seen values that differ from what ${tab.id} showed when the edit was made`);
         if (!sent || sent.c !== entry.c || sent.n !== entry.n) throw new Error(`R3 ${about} as request ${entry.n} of ${entry.c}, and its tab last sent it as request ${sent?.n} of ${sent?.c}`);
         if (entry.out !== "unanswered" || entry.src || entry.sent?.[0] !== sent.commit || entry.sent?.[1] !== sent.applied) throw new Error(`R3 ${about} as ${entry.out} from ${entry.sent?.[0]}, and its tab sent it in ${sent.commit} and got no answer`);
@@ -248,7 +258,7 @@ export function newFileOracle(world) {
         if (oracle.versions[at].history.has(entry.e)) oracle.unprovable++;
         oracle.recovered.set(entry.e, copyId);
       }
-      if (canon(shown) !== canon(preview(onto.state.wb, copy.edits))) throw new Error(`R3 the table of the stored recovery copy ${copyId} is not file ${copy.onto} with the stored edits on it`);
+      if (canon(shown) !== canon(preview(codecDoc(onto.state.wb), copy.edits))) throw new Error(`R3 the table of the stored recovery copy ${copyId} is not file ${copy.onto} with the stored edits on it`);
       oracle.copies.set(copyId, copy);
       checkFileReplay(oracle, copyId, copy, onto, oracle.versions[at].history, oracle.replays);
     },
@@ -259,14 +269,20 @@ export function newFileOracle(world) {
 const fetchStored = (world, copyId) => world.host.recoveries.find((copy) => copy.id === copyId)?.body ?? null;
 
 function seenOf(wb, action, saw) {
+  wb = refDoc(wb);
+  action = refAction(action);
   if (action.t === "ins") return null;
   if (action.t === "del") return saw ?? Object.fromEntries(Object.entries(wb.rows[action.row]?.cells ?? {}).filter(([, value]) => value !== "" && value != null));
   return Object.fromEntries(cellsOf(action).map(([row, col], at) => [`${row}/${col}`, saw ? saw[at] : wb.rows[row]?.cells[col] ?? ""]));
 }
 
-const fitsRef = (wb, action) => (action.t === "ins" ? !wb.rows[action.row] : action.t === "del" ? Boolean(wb.rows[action.row]) : cellsOf(action).every(([row]) => wb.rows[row]));
+const fitsRef = (wb, action) => fitsRefOf(refDoc(wb), refAction(action));
+
+const fitsRefOf = (wb, action) => (action.t === "ins" ? !wb.rows[action.row] : action.t === "del" ? Boolean(wb.rows[action.row]) : cellsOf(action).every(([row]) => wb.rows[row]));
 
 function unseen(wb, { action, seen }) {
+  wb = refDoc(wb);
+  action = refAction(action);
   if (action.t === "ins") return [];
   if (action.t === "del") {
     const now = seenOf(wb, action);
@@ -282,7 +298,7 @@ function unseen(wb, { action, seen }) {
 }
 
 function checkFileReplay(oracle, copyId, copy, file, history, tally) {
-  const first = replay(file, copy);
+  const first = replay(codecFile(file), copy);
   const about = `replaying recovery copy ${copyId} onto ${file.record.commit}`;
   const expected = { wb: fromText(canon(file.state.wb)), seen: structuredClone(file.state.seen) };
   const passed = new Map();
@@ -348,7 +364,7 @@ export function checkFileEnd(world) {
       } else if (one.state === "recovered") {
         if (!oracle.recovered.has(id)) throw new Error(`F7 ${id} of ${tab.id} shows a recovery copy that the oracle never read`);
         const body = fetchStored(world, oracle.recovered.get(id));
-        const held = body !== null && readPage(body).record.edits.some((entry) => entry.e === id && JSON.stringify(entry.action) === JSON.stringify(oracle.edits.get(id).action));
+        const held = body !== null && readPage(body).record.edits.some((entry) => entry.e === id && JSON.stringify(refAction(entry.action)) === JSON.stringify(oracle.edits.get(id).action));
         if (!held) throw new Error(`F7 ${tab.id} shows ${id} as recovered, and no stored recovery copy holds its action`);
       } else {
         throw new Error(`F7 ${id} of open tab ${tab.id} ended as ${one.state}`);

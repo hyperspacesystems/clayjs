@@ -83,6 +83,17 @@ if [ "$what" = gate ] || [ "$what" = everything ]; then
   done
 fi
 
+if [ "$what" = list ] || [ "$what" = everything ]; then
+  export LAB_CODEC=list
+  step list-scenarios node harness/scenarios.mjs --neutral
+  sweep list-v3-ordered "$side" 400 ordered
+  sweep list-v3-scrambled "$side" 400 scrambled
+  sweep list-v10-ordered "$side" 400 ordered --profile v10
+  sweep list-v10-scrambled "$side" 400 scrambled --profile v10
+  step list-file-only node harness/filefuzz.mjs --seeds="1..$side" --steps=300 --mutants=0 --out="$out/list-file-only.json"
+  unset LAB_CODEC
+fi
+
 if [ "$what" = side ] || [ "$what" = window ] || [ "$what" = everything ]; then
   for w in 4 8 16; do
     LAB_W=$w sweep "window-$w-scrambled" "$side" 400 scrambled
