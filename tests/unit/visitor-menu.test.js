@@ -2,8 +2,8 @@ import { afterEach, jest } from "@jest/globals";
 import { hostOf, $, $$ } from "./helpers/editor-ui.js";
 
 // Scenario: a draft visitor with no account gets a settings gear, not the Claygoo, in the
-// document's slot, holding exactly Undo, Redo, Download copy and Make your own copy (David,
-// Nov 11): no theme row, no page items and no Start over.
+// document's slot, holding exactly New blank document, Undo, Redo, Download copy and Make your own
+// copy (David, Nov 11 and Nov 19): no theme row, no page items and no Start over.
 // It makes no host request and loads no owner code, and its download flushes the draft
 // first so the file it gives holds the latest text.
 
@@ -112,14 +112,14 @@ test("mounts nothing outside a draft", async () => {
   expect(window.clay.menu).toBeUndefined();
 });
 
-test("the list holds Download copy and Make your own copy, and nothing the owner menu or the page carries", async () => {
+test("the list holds New blank document, Download copy and Make your own copy, and nothing the owner menu or the page carries", async () => {
   document.addEventListener("clay:menu-ready", () => {}, { once: true });
   await boot({ body: BODY + '<a data-id="thanks" clay-menu-item href="mailto:x@example.com">Thanks</a>' });
 
   click(gooOf());
   expect(listOf().hidden).toBe(false);
 
-  expect(itemIds()).toEqual(["clay.download", "clay.copy"]);
+  expect(itemIds()).toEqual(["clay.new", "clay.download", "clay.copy"]);
   expect(listOf().querySelector('[data-menu-id="clay.download"]').textContent.trim()).toBe("Download copy");
   for (const id of ["clay.mode", "seo", "clay.people", "clay.versions", "clay.variants.keep", "clay.start-over", "clay.look", "dom.thanks"]) {
     expect(listOf().querySelector(`[data-menu-id="${id}"]`)).toBeNull();
@@ -144,11 +144,11 @@ test("the button is a gear named Settings, and a slot's own icon and label still
   expect(gooOf().querySelector("#own")).not.toBeNull();
 });
 
-test("a page that loads undo gets Undo and Redo first, and they run the page's history", async () => {
+test("a page that loads undo gets Undo and Redo right after New blank document, and they run the page's history", async () => {
   await boot({ params: "plugins=visitor-drafts,visitor-menu,undo&exclude=richclay,source" });
   click(gooOf());
   const ids = itemIds();
-  expect(ids.slice(0, 3)).toEqual(["clay.undo", "clay.undo.undo", "clay.undo.redo"]);
+  expect(ids.slice(0, 4)).toEqual(["clay.new", "clay.undo", "clay.undo.undo", "clay.undo.redo"]);
   expect(ids.slice(-2)).toEqual(["clay.download", "clay.copy"]);
 
   expect(listOf().querySelector('[data-menu-id="clay.undo.undo"]').getAttribute("aria-disabled")).toBe("true");
@@ -261,7 +261,7 @@ test("a trial bar closed before the menu loads leaves its Host action and a way 
 
   click(gooOf());
   expect(listOf().hidden).toBe(false);
-  expect(itemIds()).toEqual(["clay.download", "clay.copy", "clay.bar.host", "clay.bar.show"]);
+  expect(itemIds()).toEqual(["clay.new", "clay.download", "clay.copy", "clay.bar.host", "clay.bar.show"]);
 
   const host = listOf().querySelector('[data-menu-id="clay.bar.host"]');
   expect(host.textContent.trim()).toBe("Host and share online");
@@ -276,7 +276,7 @@ test("a trial bar closed and reopened after the menu loads adds and removes its 
   window.hyperclayBar = trialBar(false);
   await boot();
   click(gooOf());
-  expect(itemIds()).toEqual(["clay.download", "clay.copy"]);
+  expect(itemIds()).toEqual(["clay.new", "clay.download", "clay.copy"]);
 
   window.hyperclayBar.dismissed = true;
   document.dispatchEvent(new CustomEvent("hyperclay:bar", { detail: window.hyperclayBar }));
@@ -287,7 +287,7 @@ test("a trial bar closed and reopened after the menu loads adds and removes its 
   window.hyperclayBar.dismissed = false;
   document.dispatchEvent(new CustomEvent("hyperclay:bar", { detail: window.hyperclayBar }));
   await flush();
-  expect(itemIds()).toEqual(["clay.download", "clay.copy"]);
+  expect(itemIds()).toEqual(["clay.new", "clay.download", "clay.copy"]);
 });
 
 test("another kind of bar adds nothing to the menu", async () => {
@@ -295,5 +295,5 @@ test("another kind of bar adds nothing to the menu", async () => {
   await boot();
 
   click(gooOf());
-  expect(itemIds()).toEqual(["clay.download", "clay.copy"]);
+  expect(itemIds()).toEqual(["clay.new", "clay.download", "clay.copy"]);
 });

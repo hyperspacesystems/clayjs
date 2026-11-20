@@ -52,7 +52,7 @@ function metaFetch(meta) {
   });
 }
 
-async function boot({ meta = null, plugins = "menu", edit = false } = {}) {
+async function boot({ meta = null, plugins = "menu", edit = false, head = "" } = {}) {
   jest.resetModules();
   sessionStorage.clear();
   localStorage.clear();
@@ -62,7 +62,7 @@ async function boot({ meta = null, plugins = "menu", edit = false } = {}) {
   document.cookie = "isAdminOfCurrentResource=true; path=/";
   clearRoot();
   window.history.replaceState({}, "", edit ? `${SLOT}?editmode=true` : SLOT);
-  document.head.innerHTML = "";
+  document.head.innerHTML = head;
   document.body.innerHTML = BODY;
   window.fetch = metaFetch(meta);
   window.clay = {};
@@ -188,6 +188,7 @@ test("hostActions() keeps a same-origin post and drops one elsewhere", async () 
       reveal: { post: "/_/reveal/tok" },
       export: { post: "https://elsewhere.example/_/export" },
       versions: { post: "javascript:void 0" },
+      newDocument: { post: "/_/new-document/tok" },
     },
   });
   window.fetch = metaFetch(meta);
@@ -195,7 +196,10 @@ test("hostActions() keeps a same-origin post and drops one elsewhere", async () 
   const { hostActions } = await import("../../src/core/host-meta.js");
   const actions = await hostActions();
 
-  expect(actions).toEqual({ reveal: { post: new URL("/_/reveal/tok", location.origin).href } });
+  expect(actions).toEqual({
+    reveal: { post: new URL("/_/reveal/tok", location.origin).href },
+    newDocument: { post: new URL("/_/new-document/tok", location.origin).href },
+  });
 });
 
 test("a host action the host does itself is a button that posts, opens what it answers, and says why it could not", async () => {
@@ -243,4 +247,46 @@ test("a host action the host does itself is a button that posts, opens what it a
   await flush();
   expect($(".clay-menu-note", "menu").textContent).toBe("The Downloads folder is missing.");
   opened.mockRestore();
+});
+
+test("New blank document is the first item when the page has an api rules tag, opens the created page or shows the refusal, and is absent without an api tag", async () => {
+  const apiHead = '<script type="application/json" data-rules-name="api" data-rules-version="1">{"title":"h1"}</script>';
+  const meta = metaDocument({ actions: { newDocument: { post: "/_/new-document/tok" } } });
+  await boot({ meta, head: apiHead });
+
+  let reply = { ok: true, status: 200, json: async () => ({ ok: true, href: "http://localhost/notes-2.html" }) };
+  window.fetch = jest.fn(async (url, options = {}) => {
+    const href = fetchSomewhere(url);
+    if (href.includes("/_/meta")) return metaResponse(meta);
+    if (options.method === "POST") return reply;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => `<!DOCTYPE html><html><head>${apiHead}</head><body><h1>Old</h1></body></html>`,
+    };
+  });
+  const tab = { opener: window };
+  const opened = jest.spyOn(window, "open").mockImplementation(() => tab);
+
+  gooOf().click();
+  await flush();
+  expect(ids()[0]).toBe("clay.new");
+  expect(buttonOf("clay.new").textContent.trim()).toBe("New blank document");
+
+  buttonOf("clay.new").click();
+  await flush();
+  expect(opened).toHaveBeenCalledWith("http://localhost/notes-2.html", "_blank");
+  expect(tab.opener).toBeNull();
+
+  reply = { ok: false, status: 403, json: async () => ({ msg: "Free plan limit reached.", msgType: "error", code: "forbidden" }) };
+  gooOf().click();
+  buttonOf("clay.new").click();
+  await flush();
+  expect($(".clay-menu-note", "menu").textContent).toBe("Free plan limit reached.");
+  opened.mockRestore();
+
+  await boot({ meta: metaDocument({}) });
+  gooOf().click();
+  await flush();
+  expect(ids()).not.toContain("clay.new");
 });

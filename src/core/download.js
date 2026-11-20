@@ -16,6 +16,25 @@ export function documentName(pathname = location.pathname) {
   return name.replace(/\.(html?|htmlclay)$/i, "") || "page";
 }
 
+// A copy that leaves this host keeps nothing that only resolves on it. The Yjs page store
+// (`blockeditor`, and its split parts) holds upload paths inside base64 updates no text
+// rewrite reaches, so it goes: the article names every upload in full, and the editor
+// that opens the copy seeds the page from it. Upload paths are written in full. A file:
+// page has no host to leave.
+const PAGE_STORE_TAG = /<script\b[^>]*>[\s\S]*?<\/script>\n?/gi;
+const isPageStoreTag = (tag) => {
+  const open = tag.slice(0, tag.indexOf(">") + 1);
+  return /\bmerge="blockeditor(?:\.\d+)?"/.test(open) && /\bclay="[^"]*\blive\b/.test(open);
+};
+
+export function portableHtml(html) {
+  if (typeof html !== "string" || !/^https?:$/.test(location.protocol)) return html;
+  const withoutStore = /<article\b[^>]*\bdata-blockeditor\b/.test(html)
+    ? html.replace(PAGE_STORE_TAG, (tag) => (isPageStoreTag(tag) ? "" : tag))
+    : html;
+  return withoutStore.replace(/(^|[^\w./:-])\/_\/uploads\//g, `$1${location.origin}/_/uploads/`);
+}
+
 export async function downloadHtml({ html, name, type = "text/html" }) {
   let url = null;
   try {

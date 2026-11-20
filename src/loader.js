@@ -296,6 +296,11 @@ function assembleCore(loaded, { isDraftMode, isOwner, siteVisibility }, regionPo
       return import("./core/host-meta.js").then((m) => m.hostVersions());
     },
   };
+  // New blank document, on every page: loaded on first use, so a reader pays nothing.
+  clay.newDocument = {
+    build: () => import("./core/new-document.js").then((m) => m.build()),
+    create: () => import("./core/new-document.js").then((m) => m.create()),
+  };
   clay.trash = trash;
   clay.derived = derived;
   clay.effect = effect;

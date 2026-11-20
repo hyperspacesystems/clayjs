@@ -25,7 +25,7 @@ const GRIP =
 // order it was added.
 // An item may also ask for the first or the last section with `section: "start" | "end"`.
 const SECTIONS = [
-  ["clay.undo", "clay.cms", "clay.ai", "clay.code"],
+  ["clay.new", "clay.undo", "clay.cms", "clay.ai", "clay.code"],
   ["seo", "clay.share", "clay.people"],
   ["clay.duplicate", "clay.download", "clay.export", "clay.reveal"],
   ["clay.versions"],
@@ -193,6 +193,9 @@ function mount() {
   const openSeo = () => import("./menu/seo.js").then((m) => m.open({ returnFocus: goo }));
 
   actions = attachActions({ addItem, note: showNote, currentMode });
+  if (document.querySelector('script[data-rules-name~="api"]')) {
+    import("./menu/new-document-item.js").then(({ addNewDocumentItem }) => addNewDocumentItem({ addItem, note: showNote })).catch(() => {});
+  }
   people = attachPeople({ root, capsule: root.querySelector(".clay-menu"), addItem, removeItem, closeMenu: close, note: showNote });
   attachVariants({ root, capsule: root.querySelector(".clay-menu"), addItem, removeItem, note: showNote, currentMode });
   attachDomItems({ addItem, removeItem, beforeOpen });

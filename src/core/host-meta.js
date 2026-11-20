@@ -181,7 +181,7 @@ export async function hostVersions() {
   return meta.document?.versions === true;
 }
 
-const HOST_ACTIONS = ["codeEditor", "versions", "duplicate", "reveal", "export"];
+const HOST_ACTIONS = ["codeEditor", "versions", "duplicate", "reveal", "export", "newDocument"];
 
 function httpUrl(value) {
   if (typeof value !== "string" || !value) return null;
@@ -195,7 +195,7 @@ function httpUrl(value) {
 
 /**
  * What the host offers this caller for the document, from the `document.actions` block:
- * `{ codeEditor, versions, duplicate, reveal, export }`, each present only when the host
+ * `{ codeEditor, versions, duplicate, reveal, export, newDocument }`, each present only when the host
  * named it. An action is a page to open (`{ href }`, any http(s) URL) or something the
  * host does itself when the page asks (`{ post }`, a same-origin URL). A host without
  * the block offers none of them.

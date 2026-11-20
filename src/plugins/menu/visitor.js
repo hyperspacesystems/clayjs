@@ -90,13 +90,14 @@ function attachBar({ addItem, removeItem }) {
   draw(window.hyperclayBar);
 }
 
-// A visitor's menu holds exactly Undo, Redo, Download copy and Make your own copy (David, Nov 11):
+// A visitor's menu holds exactly New blank document (when the page has an api rules tag), Undo, Redo,
+// Download copy and Make your own copy (David, Nov 11 and Nov 19):
 // no theme row, no page items, no Start over. While Hyperclay's trial bar is closed it also holds
 // Host and share online and Show draft bar (David, Nov 11, sheet hosts review), and Earlier
 // drafts when this page has recovery copies (David, Nov 13).
 export function start() {
   if (document.querySelector('clay-editor-ui[data-clay-ui="menu"]')) return;
-  const shell = createShell({ sections: [["clay.undo"], null], icon: GEAR, label: "Settings" });
+  const shell = createShell({ sections: [["clay.new", "clay.undo"], null], icon: GEAR, label: "Settings" });
   const { embedded, skin, addItem, removeItem, open, close, note, goo, beforeOpen } = shell;
   shell.mount(embedded ? [MENU_SAFETY, SHELL_BASE, skin ?? MENU_SKIN, MENU_TOUCH] : [MENU_SAFETY, SHELL_BASE, SHELL_FLOATING, MENU_SKIN, MENU_TOUCH]);
   let recoveryMenu;
@@ -112,6 +113,9 @@ export function start() {
   });
   publishLooks();
   attachUndo({ addItem, beforeOpen });
+  if (document.querySelector('script[data-rules-name~="api"]')) {
+    import("./new-document-item.js").then(({ addNewDocumentItem }) => addNewDocumentItem({ addItem, note })).catch(() => {});
+  }
   addItem({ id: "clay.download", label: "Download copy", run: () => window.clay.visitorDrafts.download() });
   addItem({ id: "clay.copy", label: "Make your own copy", href: copyUrl() });
   attachBar({ addItem, removeItem });

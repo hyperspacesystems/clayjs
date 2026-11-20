@@ -2,7 +2,7 @@
 // copy. Each one calls the service that already does the job and keeps no second copy
 // of its state.
 import { modeRefusalText } from "../../core/mode-refusal.js";
-import { downloadHtml, documentName } from "../../core/download.js";
+import { downloadHtml, documentName, portableHtml } from "../../core/download.js";
 import { keys, revealLabel } from "./preferences.js";
 import { hostMeta } from "../../core/host-meta.js";
 
@@ -184,18 +184,6 @@ export function attachActions({ addItem, note, currentMode }) {
     });
   }
 
-  // The Yjs page store (`blockeditor`, and its split parts `blockeditor.1`, `blockeditor.2`, …) holds upload paths
-  // inside base64 updates, where no text rewrite reaches them. A copy that leaves this host
-  // leaves those tags out, as Hyperclay's own download does: the article names every upload
-  // in full, and the editor that opens the copy seeds the page from it.
-  const PAGE_STORE_TAG = /<script\b[^>]*>[\s\S]*?<\/script>\n?/gi;
-  const isPageStoreTag = (tag) => {
-    const open = tag.slice(0, tag.indexOf(">") + 1);
-    return /\bmerge="blockeditor(?:\.\d+)?"/.test(open) && /\bclay="[^"]*\blive\b/.test(open);
-  };
-  const withoutPageStore = (html) =>
-    /<article\b[^>]*\bdata-blockeditor\b/.test(html) ? html.replace(PAGE_STORE_TAG, (tag) => (isPageStoreTag(tag) ? "" : tag)) : html;
-
   // The copy is what a save would send now, unsaved edits included. A reader has no
   // unsaved edits, so the saved file is the same document.
   addItem({
@@ -211,12 +199,7 @@ export function attachActions({ addItem, note, currentMode }) {
           if (response.ok) html = await response.text();
         }
       } catch {}
-      // A copy that leaves this host keeps nothing that only resolves on it: the page store
-      // goes, and upload paths are named in full. A file: copy has no host to leave.
-      if (typeof html === "string" && /^https?:$/.test(location.protocol)) {
-        html = withoutPageStore(html);
-        html = html.replace(/(^|[^\w./:-])\/_\/uploads\//g, `$1${location.origin}/_/uploads/`);
-      }
+      html = portableHtml(html);
       if (typeof html !== "string" || !(await downloadHtml({ html, name: `${documentName()}.html` }))) {
         note("Couldn't build the download. Try again.");
       }
