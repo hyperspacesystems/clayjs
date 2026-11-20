@@ -177,9 +177,15 @@ function recoveryControlsPlugin() {
         // esbuild hashes a plugin namespace's path as given, so an absolute path would make
         // every chunk name depend on the folder the build runs in. Keep it root-relative.
         const root = build.initialOptions.absWorkingDir;
-        return { path: path.relative(root, path.resolve(args.resolveDir, args.path)).split(path.sep).join("/"), namespace: "recovery-controls" };
+        // New blank document gets its own namespace, so it inlines its own copy: one module both
+        // imported would be split into a chunk they share.
+        const namespace = /new-document\.js$/.test(args.importer) ? "new-document-controls" : "recovery-controls";
+        return { path: path.relative(root, path.resolve(args.resolveDir, args.path)).split(path.sep).join("/"), namespace };
       });
       build.onLoad({ filter: /.*/, namespace: "recovery-controls" }, async (args) => ({
+        contents: await readFile(path.resolve(build.initialOptions.absWorkingDir, args.path), "utf8"), loader: "js",
+      }));
+      build.onLoad({ filter: /.*/, namespace: "new-document-controls" }, async (args) => ({
         contents: await readFile(path.resolve(build.initialOptions.absWorkingDir, args.path), "utf8"), loader: "js",
       }));
     },

@@ -87,7 +87,8 @@ test("carries the core, every plugin and every satellite", () => {
   // formats (numfmt) and the sheet's function help (2026-11-19, 6.92 MB measured), then to 8.5 MB for
   // ExcelJS, the sheet's .xlsx import and export (2026-11-19, 8.38 MB measured: its 864 KB minified
   // bundle prints at about 1.4 MB here, since the single-file build does not minify).
-  expect(bundle.length).toBeLessThan(8_500_000);
+  // New blank document (2026-11-20, 8.53 MB measured on the box after the sheet's filters also landed).
+  expect(bundle.length).toBeLessThan(8_600_000);
 });
 
 // The chunk build adds a generated bootstrap per entry that has a target, plus the
