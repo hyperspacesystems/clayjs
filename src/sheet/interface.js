@@ -290,6 +290,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       }),
     onLazyFail,
   );
+  const xlsxTool = lazyModule(loaders.xlsx ?? (() => import("./xlsx.js")), onLazyFail);
   let pendingLazy = null;
 
   function runLazy(holder, fn, { guardSel = false } = {}) {
@@ -537,6 +538,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     showDialog,
     clearDialog,
     applyPasteData,
+    // Not through runLazy: a picked file must reach the import even if another lazy action starts
+    // while xlsx.js loads.
+    xlsx: (fn) => xlsxTool.load().then((mod) => mod && alive() && fn(mod)),
     platform: platform ?? win.navigator?.platform ?? "",
     isMac,
     measureText,

@@ -87,6 +87,15 @@ or carry third-party code, and keep their original licenses.
 - Copyright (c) 2006 Ivan Sagalaev
 - https://github.com/highlightjs/highlight.js
 
+## ExcelJS 4.4.0 (MIT)
+
+- File: src/vendor/exceljs.vendor.js (the browser build without polyfills, wrapped as an
+  ES module by scripts/build-exceljs-vendor.mjs, which checks the npm tarball's sha512)
+- Loaded only when someone imports or downloads an .xlsx file in a sheet. Its browser
+  build carries its own MIT dependencies (JSZip, SAX and others) under their licenses.
+- Copyright (c) 2014-2019 Guyon Roche
+- https://github.com/exceljs/exceljs
+
 ## First-party vendored modules
 
 The remaining files in src/vendor/ (hypercms, hyper-morph, hyper-undo, quickcrop,

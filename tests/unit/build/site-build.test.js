@@ -32,15 +32,24 @@ let site;
 // test that wrongly unpacked a seed here also fails every refusal after it.
 let refused;
 
+// The bootstrap's manifest is the JSON object after "})({". Bundled third-party code can hold the
+// same four characters (ExcelJS's browserify loader ends "})({1:[function"), so the first one
+// that reads as JSON is the manifest; a file with none (the single-file build) has no manifest.
 function embedded(code) {
-  const start = code.indexOf("})({");
-  if (start < 0) return null;
-  let depth = 0;
-  for (let i = start + 3; i < code.length; i++) {
-    if (code[i] === "{") depth++;
-    else if (code[i] === "}" && --depth === 0) return JSON.parse(code.slice(start + 3, i + 1));
+  for (let start = code.indexOf("})({"); start >= 0; start = code.indexOf("})({", start + 1)) {
+    let depth = 0;
+    for (let i = start + 3; i < code.length; i++) {
+      if (code[i] === "{") depth++;
+      else if (code[i] === "}" && --depth === 0) {
+        try {
+          return JSON.parse(code.slice(start + 3, i + 1));
+        } catch {
+          break;
+        }
+      }
+    }
   }
-  throw new Error("unterminated embedded manifest");
+  return null;
 }
 
 async function bootstrapFiles() {

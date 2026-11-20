@@ -84,8 +84,10 @@ test("carries the core, every plugin and every satellite", () => {
   // (2026-11-18, 6.21 MB measured), then to 6.5 MB for the sheet interface (2026-11-18, 6.39 MB measured), then to 6.6 MB for the sheet's formatting
   // commands and sapjs's locales (2026-11-19, 6.55 MB measured), then to 6.7 MB for the sheet's fill, find and CSV
   // modules (2026-11-19, 6.63 MB measured), then to 7.0 MB for sapjs's function pack and number
-  // formats (numfmt) and the sheet's function help (2026-11-19, 6.92 MB measured).
-  expect(bundle.length).toBeLessThan(7_000_000);
+  // formats (numfmt) and the sheet's function help (2026-11-19, 6.92 MB measured), then to 8.5 MB for
+  // ExcelJS, the sheet's .xlsx import and export (2026-11-19, 8.38 MB measured: its 864 KB minified
+  // bundle prints at about 1.4 MB here, since the single-file build does not minify).
+  expect(bundle.length).toBeLessThan(8_500_000);
 });
 
 // The chunk build adds a generated bootstrap per entry that has a target, plus the

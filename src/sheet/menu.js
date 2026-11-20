@@ -534,7 +534,7 @@ export function mountSheetDialog(doc, shell, { title, confirmLabel, confirmVaria
   let pressedBackdrop = false;
 
   const focusables = () =>
-    [...shell.panel.querySelectorAll('input:not([disabled]), select:not([disabled]), button:not([disabled])')].filter(
+    [...shell.panel.querySelectorAll('input:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex="0"]')].filter(
       (el) => !el.hidden && el.getAttribute("aria-disabled") !== "true",
     );
 

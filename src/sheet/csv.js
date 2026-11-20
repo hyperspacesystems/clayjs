@@ -11,6 +11,8 @@ export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 export const MAX_IMPORT_CELLS = 200_000;
 export const PREVIEW_ROW_LIMIT = 20;
 export const CSV_FILE_ACCEPT = ".csv,.tsv,.txt,text/csv,text/tab-separated-values";
+export const MAX_XLSX_BYTES = 20 * 1024 * 1024;
+export const XLSX_FILE_ACCEPT = ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 const DELIMITER_CHOICES = [
   { value: ",", label: "Comma (,)" },
@@ -161,12 +163,14 @@ export function exportTabDelimited(grid, tabName, delimiter = ",", { doc = docum
 export const importCsvIntoGrid = (grid, text, at, { delimiter, types }) =>
   grid.importDelimited(text, at, { delimiter, types, formulas: false });
 
-export function importExportMenuItems({ onImportPick, onExportCsv, onExportTsv }) {
+export function importExportMenuItems({ onImportPick, onImportXlsx, onExportCsv, onExportTsv, onExportXlsx }) {
   return [
     { id: "import-delimited", label: "Import CSV or TSV…", onSelect: onImportPick },
+    ...(onImportXlsx ? [{ id: "import-xlsx", label: "Import Excel file (.xlsx)…", onSelect: onImportXlsx }] : []),
     { type: "separator" },
     { id: "export-csv", label: "Download this tab as CSV", onSelect: onExportCsv },
     { id: "export-tsv", label: "Download this tab as TSV", onSelect: onExportTsv },
+    ...(onExportXlsx ? [{ id: "export-xlsx", label: "Download all tabs as Excel file (.xlsx)", onSelect: onExportXlsx }] : []),
   ];
 }
 
@@ -188,6 +192,33 @@ function decodeFileBytes(buffer) {
   } catch {
     return new TextDecoder("windows-1252").decode(bytes);
   }
+}
+
+// The picker opens inside the click; the .xlsx tools load only once a file is chosen.
+export function openXlsxFilePicker({ doc = document, container, onPickFile, onNotice }) {
+  container?.querySelector?.("[data-xlsx-file-input]")?.remove();
+  const input = doc.createElement("input");
+  input.type = "file";
+  input.accept = XLSX_FILE_ACCEPT;
+  input.hidden = true;
+  input.setAttribute("data-xlsx-file-input", "");
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0] ?? null;
+    input.remove();
+    if (!file) return;
+    if (typeof file.size === "number" && file.size > MAX_XLSX_BYTES) {
+      onNotice?.("This file is over 20 MB and cannot be imported.");
+      return;
+    }
+    try {
+      onPickFile?.({ name: file.name || "Imported.xlsx", bytes: new Uint8Array(await readFileBytes(file)) });
+    } catch {
+      onNotice?.("Could not read the selected file.");
+    }
+  });
+  (container ?? doc.body).append(input);
+  input.click();
+  return input;
 }
 
 async function readFileText(file) {
@@ -570,8 +601,21 @@ export function openCsvMenu(ctx, menu) {
           onNotice: (msg) => chrome.showNotice(msg),
           onPickFile: handlePicked,
         }),
+      onImportXlsx: ctx.xlsx
+        ? () =>
+            openXlsxFilePicker({
+              doc,
+              container: chrome.topRoot,
+              onNotice: (msg) => chrome.showNotice(msg),
+              onPickFile: (picked) => {
+                chrome.showNotice("Reading the file...");
+                ctx.xlsx((x) => x.importXlsxFile(ctx, picked));
+              },
+            })
+        : undefined,
       onExportCsv: () => runExport(","),
       onExportTsv: () => runExport("\t"),
+      onExportXlsx: ctx.xlsx ? () => ctx.xlsx((x) => x.downloadXlsx(ctx)) : undefined,
     }),
   });
 }

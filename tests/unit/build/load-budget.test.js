@@ -452,7 +452,8 @@ test("sheet edit: the blank sheet's exact module list", async () => {
     "src/sheet/paste-special.js",
     "src/sheet/sheet-view.js",
     "src/sheet/shortcuts.js",
+    "src/sheet/xlsx.js",
   ]);
   expect(paths.filter((path) => /\/sheet\/features\//.test(path))).toEqual([]);
-  expect(paths.filter((path) => /yjs|prosemirror/.test(path))).toEqual([]);
+  expect(paths.filter((path) => /yjs|prosemirror|exceljs/.test(path))).toEqual([]);
 }, 180000);

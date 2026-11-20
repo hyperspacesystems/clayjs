@@ -722,7 +722,7 @@ export function duplicateTableHtml(tabId, table, sapGrid) {
   return sapGrid.createSheetWriter().table(tabId, sheet);
 }
 
-function frozenOf(table) {
+export function frozenOf(table) {
   const rows = table?.tHead?.rows.length ?? 0;
   const rawCols = Number.parseInt(table?.getAttribute("freeze-cols") ?? "", 10);
   const cols = Number.isInteger(rawCols) && rawCols > 0 ? rawCols : 0;
