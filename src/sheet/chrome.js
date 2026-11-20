@@ -90,6 +90,7 @@ export function layoutFor(width) {
 const PHONE_ORDER = ["undo", "bold", "number-format", "filter", "insert-row"];
 const PHONE_ONLY = new Set(["insert-row"]);
 const MORE_ONLY = new Set(["dropdown", "conditional-format"]);
+const ALWAYS_IN_MORE = new Set(["chart"]);
 const COMPACT_MORE_GROUPS = new Set(["data"]);
 const PHONE_LABELS = { "number-format": "$%" };
 const QUICK_KEYS = ["=", "(", ")", ":", "+", "$"];
@@ -254,7 +255,7 @@ export function createChrome({
     if (at === "compact") return !COMPACT_MORE_GROUPS.has(toolGroup.get(id));
     return true;
   };
-  const inMore = (id) => !PHONE_ONLY.has(id) && !shownIn(id);
+  const inMore = (id) => ALWAYS_IN_MORE.has(id) || (!PHONE_ONLY.has(id) && !shownIn(id));
 
   const moreBtn = makeToolButton(["more", "More tools", "more"], theme, () => onMoreMenu?.(moreItems(), moreBtn)).btn;
   moreBtn.setAttribute("aria-haspopup", "menu");

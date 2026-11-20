@@ -780,6 +780,9 @@ export function createCommandActions({
   onShortcuts,
   onDropdown,
   onConditionalFormat,
+  onInsertChart,
+  onEditChart,
+  onDeleteChart,
   isMac = () => false,
   measureText: customMeasure = null,
 }) {
@@ -1103,6 +1106,7 @@ export function createCommandActions({
               { type: "separator" },
               { id: "dropdown", label: "Dropdown…", disabled: editor.editing || !box, onSelect: () => onDropdown?.() },
               { id: "conditional-format", label: "Conditional formatting…", disabled: editor.editing, onSelect: () => onConditionalFormat?.() },
+              { id: "chart", label: "Insert chart", disabled: editor.editing || !box, onSelect: () => onInsertChart?.() },
             ]
           : []),
         { type: "separator" },
@@ -1112,6 +1116,19 @@ export function createCommandActions({
           detail: mac ? "⌘/" : "Ctrl+/",
           onSelect: () => onShortcuts?.(),
         },
+      ],
+    });
+  }
+
+  function openChartContextMenu(ruleId, x, y) {
+    if (!ensureReadyForAction()) return;
+    menu.open({
+      x: x ?? 0,
+      y: y ?? 0,
+      label: "Chart options",
+      items: [
+        { id: "edit-chart", label: "Edit chart…", onSelect: () => onEditChart?.(ruleId) },
+        { id: "delete-chart", label: "Delete chart", danger: true, onSelect: () => onDeleteChart?.(ruleId) },
       ],
     });
   }
@@ -1572,6 +1589,7 @@ export function createCommandActions({
     openRowHeaderMenu,
     openColHeaderMenu,
     openCellContextMenu,
+    openChartContextMenu,
     handleAddTab,
     openTabContextMenu,
     openNumberFormatMenu,

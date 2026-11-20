@@ -91,16 +91,16 @@ export function createGeometry(table, { measured = new Map() } = {}) {
     group: (g) => groups[g],
     groupRows: (g) => [groupStart[g], groupStart[g + 1] ?? rows.length],
     indexOf: (id) => indexOf.get(id) ?? -1,
-    rowTop: (i) => index.sum(i),
-    rowHeight: (i) => heights[i],
+    rowTop: (i) => (i <= rows.length ? index.sum(i) : index.sum(rows.length) + (i - rows.length) * ROW_ESTIMATE),
+    rowHeight: (i) => heights[i] ?? ROW_ESTIMATE,
     // The row under y (body coordinates); the last row for y past the end, -1 with no rows.
     rowAt: (y) => (rows.length === 0 ? -1 : Math.min(index.find(Math.max(0, y)), rows.length - 1)),
     total: () => index.sum(rows.length),
     groupOfRow: (i) => groupOf[i],
     groupTop: (g) => index.sum(groupStart[g]),
     groupHeights: () => groupHeights,
-    colLeft: (c) => lefts[c],
-    colWidth: (c) => widths[c],
+    colLeft: (c) => (c < widths.length ? lefts[c] : width + (c - widths.length) * COL_DEFAULT),
+    colWidth: (c) => widths[c] ?? COL_DEFAULT,
     // The column under x; the last column for x past the end, -1 with no columns.
     colAt(x) {
       if (widths.length === 0) return -1;
@@ -126,6 +126,80 @@ export function createGeometry(table, { measured = new Map() } = {}) {
       return delta;
     },
   };
+}
+
+export function tableMetrics(table, win) {
+  const headRows = table.tHead?.rows.length ?? 0;
+  const geom = win ? win.geometry : createGeometry(table);
+  const tBox = table.getBoundingClientRect();
+  const headHeight = table.tHead?.offsetHeight ?? headRows * ROW_ESTIMATE;
+
+  function cellBox(r, c) {
+    if (r >= headRows && win) return win.cellBox(r - headRows, c);
+    if (r < headRows) {
+      const tr = table.tHead.rows[r];
+      const trBox = tr.getBoundingClientRect();
+      const styleH = parseFloat(tr.style?.height);
+      const fallbackH = tr.hidden ? 0 : (Number.isFinite(styleH) ? styleH : ROW_ESTIMATE);
+      const top = trBox.height > 0 ? trBox.top : tBox.top + r * ROW_ESTIMATE;
+      const height = trBox.height > 0 ? trBox.height : fallbackH;
+      return { left: tBox.left + geom.colLeft(c), top, width: geom.colWidth(c), height };
+    }
+    const br = r - headRows;
+    return {
+      left: tBox.left + geom.colLeft(c),
+      top: tBox.top + headHeight + geom.rowTop(br),
+      width: geom.colWidth(c),
+      height: geom.rowHeight(br),
+    };
+  }
+
+  function spanBox(top, left, bottom, right) {
+    const tl = cellBox(top, left);
+    const br = cellBox(bottom, right);
+    return {
+      left: tl.left,
+      top: tl.top,
+      width: Math.max(0, br.left + br.width - tl.left),
+      height: Math.max(0, br.top + br.height - tl.top),
+    };
+  }
+
+  function visibleRows(totalRows) {
+    const list = [];
+    for (let r = 0; r < Math.min(headRows, totalRows); r++) list.push(r);
+    if (win?.shown && win.shown.last >= win.shown.first) {
+      for (let g = win.shown.first - 1; g <= win.shown.last - 1; g++) {
+        const [start, end] = geom.groupRows(g);
+        for (let i = start; i < end && headRows + i < totalRows; i++) list.push(headRows + i);
+      }
+      return list;
+    }
+    for (let r = headRows; r < totalRows; r++) list.push(r);
+    return list;
+  }
+
+  function cellAt(x, y) {
+    if (headRows > 0 && x >= tBox.left && x < tBox.left + geom.width && y >= tBox.top && y < tBox.top + headHeight) {
+      const c = geom.colAt(x - tBox.left);
+      if (c === -1) return null;
+      for (let r = 0; r < headRows; r++) {
+        const b = cellBox(r, c);
+        if (y >= b.top && y < b.top + b.height) return { r, c };
+      }
+    }
+    if (win) {
+      const hit = win.cellAt(x, y);
+      return hit ? { r: hit.r + headRows, c: hit.c } : null;
+    }
+    const bodyTop = tBox.top + headHeight;
+    if (x < tBox.left || x >= tBox.left + geom.width || y < bodyTop || y >= bodyTop + geom.total()) return null;
+    const br = geom.rowAt(y - bodyTop);
+    const c = geom.colAt(x - tBox.left);
+    return br === -1 || c === -1 ? null : { r: br + headRows, c };
+  }
+
+  return { cellBox, spanBox, visibleRows, cellAt, width: geom.width, totalHeight: headHeight + geom.total() };
 }
 
 // Rows this viewer filtered out, per table: a view of the sheet, never saved and never shared.
@@ -233,7 +307,7 @@ export function inputRuleAt(grid, row, col) {
   return null;
 }
 
-function tableNamed(table, name) {
+export function tableNamed(table, name) {
   const book = table.closest("[sheet-workbook]");
   for (const section of book?.querySelectorAll(":scope > section[item]") ?? []) {
     const label = section.querySelector(':scope > [bind="name"]')?.textContent.trim();

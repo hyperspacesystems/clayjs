@@ -237,16 +237,16 @@ test("the tab strip lists the tabs in page order and switching tabs changes only
   ui.dispose();
 });
 
-// Bug: unimplemented toolbar commands (undo, merge on one cell, sort, chart, import) were clickable without aria-disabled="true".
+// Bug: unimplemented toolbar commands (undo, merge on one cell, sort) were clickable without aria-disabled="true".
 test("buttons for commands that cannot act or land in later milestones are drawn and disabled with aria-disabled", async () => {
   const { ui, inst } = await start();
 
-  for (const id of ["undo", "redo", "merge", "sort", "chart"]) {
+  for (const id of ["undo", "redo", "merge", "sort"]) {
     const btn = inst.chrome.topShadow.querySelector(`[data-command="${id}"]`);
     expect(btn).not.toBeNull();
     expect(btn.getAttribute("aria-disabled")).toBe("true");
   }
-  for (const id of ["number-format", "currency", "bold", "borders", "find", "import", "filter", "checkbox"]) {
+  for (const id of ["number-format", "currency", "bold", "borders", "find", "import", "filter", "checkbox", "chart"]) {
     const btn = inst.chrome.topShadow.querySelector(`[data-command="${id}"]`);
     expect(btn).not.toBeNull();
     expect(btn.getAttribute("aria-disabled")).toBeNull();
@@ -4396,5 +4396,459 @@ test("Alt+ArrowDown on a filtered header cell of a whole-column dropdown opens t
   await turn();
   expect(inst.chrome.topShadow.querySelector("[data-pick-list]")).toBeNull();
   expect(inst.chrome.topShadow.querySelector("[data-filter-panel]")).not.toBeNull();
+  ui.dispose();
+});
+
+// Bug: Insert chart wrote the wrong range or source, ordered its pos before an existing rule, or took more than one undo step.
+test("Insert chart over A1:B4 writes one chart rule at D1:I15 with type column, opens the panel, and one undo removes it", async () => {
+  const { Sap, book, ui, inst } = await start(SLICE_BOOK());
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight", { shiftKey: true });
+  press(textarea, "ArrowDown", { shiftKey: true });
+  press(textarea, "ArrowDown", { shiftKey: true });
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.textContent).toBe("A1:B4");
+
+  const chartBtn = inst.chrome.topShadow.querySelector('[data-command="chart"]');
+  typeInto(textarea, "editing");
+  expect(chartBtn.getAttribute("aria-disabled")).toBe("true");
+  press(textarea, "Escape");
+  expect(chartBtn.getAttribute("aria-disabled")).toBeNull();
+
+  const rev = book.revision;
+  chartBtn.click();
+  await turn();
+  await turn();
+
+  expect(book.revision).toBe(rev + 1);
+  expect(grid.rules()).toEqual([
+    {
+      id: expect.stringMatching(/^k/),
+      pos: "V",
+      kind: "chart",
+      range: "D1:I15",
+      source: "A1:B4",
+      type: "column",
+    },
+  ]);
+  expect(table.parentElement.querySelectorAll(":scope > figure[chart]")).toHaveLength(1);
+  expect(inst.overlays.chartRing.hidden).toBe(false);
+  expect(inst.overlays.chartHandle.hidden).toBe(false);
+  expect(inst.chrome.topShadow.querySelector("[data-chart-panel]")).not.toBeNull();
+
+  press(inst.chrome.topShadow.querySelector("[data-chart-panel]"), "Escape");
+  expect(inst.chrome.topShadow.querySelector("[data-chart-panel]")).toBeNull();
+
+  press(textarea, "z", { metaKey: true });
+  expect(grid.rules()).toEqual([]);
+  expect(table.parentElement.querySelectorAll(":scope > figure[chart]")).toHaveLength(0);
+  expect(inst.overlays.chartRing.hidden).toBe(true);
+
+  // Whole-column selection writes open-ended columns, and a new chart's pos comes after existing rules.
+  grid.setRules({ set: [{ id: "k0", pos: "t", kind: "check", range: "F1" }] });
+  inst.overlays.shadow
+    .querySelector('[data-col="0"]')
+    .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  inst.overlays.shadow
+    .querySelector('[data-col="2"]')
+    .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+
+  inst.chrome.topShadow.querySelector('[data-command="more"]').click();
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="chart"]').click();
+  await turn();
+  await turn();
+
+  const charts = grid.rules().filter((r) => r.kind === "chart");
+  expect(charts).toHaveLength(1);
+  expect(charts[0].source).toBe("A:C");
+  expect(charts[0].pos > "t").toBe(true);
+
+  ui.dispose();
+});
+
+// Bug: pressing inside a chart selected the cell under it instead of the chart, or Delete cleared cells instead of removing the chart rule.
+test("a press inside a chart's box selects the chart rather than the cell under it, Escape clears it, and Delete removes the rule", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  const textarea = inst.editor.textarea;
+
+  grid.setRules({
+    set: [{ id: "c1", pos: "V", kind: "chart", range: "B2:D6", source: "A1:B3", type: "column" }],
+  });
+  await turn();
+  await turn();
+
+  expect(inst.chrome.nameBox.textContent).toBe("A1");
+  expect(inst.overlays.chartRing.hidden).toBe(true);
+
+  // Cell B2 spans x: 100..200, y: 26..52, inside B2:D6.
+  table.rows[1].cells[1].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 150, clientY: 40 }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 150, clientY: 40 }));
+
+  expect(inst.chrome.nameBox.textContent).toBe("A1");
+  expect(inst.overlays.chartRing.hidden).toBe(false);
+  expect(inst.overlays.chartHandle.hidden).toBe(false);
+
+  press(textarea, "Escape");
+  expect(inst.overlays.chartRing.hidden).toBe(true);
+
+  // Select chart again, then press on A1 outside the chart clears it.
+  table.rows[1].cells[1].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 150, clientY: 40 }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 150, clientY: 40 }));
+  expect(inst.overlays.chartRing.hidden).toBe(false);
+
+  table.rows[0].cells[0].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 20, clientY: 10 }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 20, clientY: 10 }));
+  expect(inst.overlays.chartRing.hidden).toBe(true);
+
+  // Select chart and press Delete: removes the chart rule in one undo step without clearing A1.
+  table.rows[1].cells[1].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 150, clientY: 40 }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 150, clientY: 40 }));
+  press(textarea, "Delete");
+
+  expect(grid.rules()).toEqual([]);
+  expect(grid.get("A1")).toBe(1);
+  expect(inst.overlays.chartRing.hidden).toBe(true);
+
+  press(textarea, "z", { metaKey: true });
+  expect(grid.rules()).toHaveLength(1);
+
+  // Right-click on the chart offers Edit chart… and Delete chart.
+  table.rows[1].cells[1].dispatchEvent(
+    new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 150, clientY: 40 }),
+  );
+  await turn();
+  await turn();
+  expect(inst.chrome.topShadow.querySelector('[data-menu-item="edit-chart"]')?.textContent).toBe("Edit chart…");
+  const delItem = inst.chrome.topShadow.querySelector('[data-menu-item="delete-chart"]');
+  expect(delItem?.textContent).toBe("Delete chart");
+  delItem.click();
+  expect(grid.rules()).toEqual([]);
+
+  ui.dispose();
+});
+
+// Bug: dragging a chart failed to snap by whole cells, ignored the 4 px slop threshold, or failed to enforce the 2x4 resize floor.
+test("dragging a chart by two columns writes a range moved by two columns, while a 2 px drag writes nothing", async () => {
+  const { Sap, book, ui, inst } = await start(SLICE_BOOK());
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  const textarea = inst.editor.textarea;
+
+  grid.setRules({
+    set: [{ id: "c1", pos: "V", kind: "chart", range: "B2:D6", source: "A1:B3", type: "column" }],
+  });
+  await turn();
+  await turn();
+
+  const rev = book.revision;
+
+  // A 2 px drag is under the 4 px threshold and writes nothing.
+  table.rows[1].cells[1].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 150, clientY: 40 }),
+  );
+  window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 152, clientY: 40 }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 152, clientY: 40 }));
+  expect(book.revision).toBe(rev);
+  expect(grid.rules()[0].range).toBe("B2:D6");
+
+  // Drag right by two columns (200 px, COL_DEFAULT = 100): B2:D6 -> D2:F6.
+  table.rows[1].cells[1].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 150, clientY: 40 }),
+  );
+  window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 350, clientY: 40 }));
+  expect(inst.overlays.chartRing.style.left).toBe("300px");
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 350, clientY: 40 }));
+
+  expect(book.revision).toBe(rev + 1);
+  expect(grid.rules()[0].range).toBe("D2:F6");
+
+  // Escape during a drag cancels without writing.
+  table.dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 350, clientY: 40 }),
+  );
+  window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 150, clientY: 40 }));
+  press(textarea, "Escape");
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 150, clientY: 40 }));
+  expect(grid.rules()[0].range).toBe("D2:F6");
+
+  // Dragging the corner handle shrinks no smaller than 2 columns by 4 rows (D2:E5).
+  inst.overlays.chartHandle.dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 600, clientY: 156 }),
+  );
+  window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 310, clientY: 30 }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 310, clientY: 30 }));
+  expect(grid.rules()[0].range).toBe("D2:E5");
+
+  ui.dispose();
+});
+
+// Bug: the chart panel replaced id, pos or range on Done, kept stacked on a line chart, or wrote an unreadable data range without a notice.
+test("the chart panel's Done writes type and title while keeping id, pos and range, and refuses an unreadable data range with the notice", async () => {
+  const { Sap, book, ui, inst } = await start(SLICE_BOOK());
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  const textarea = inst.editor.textarea;
+
+  grid.setRules({
+    set: [{ id: "k9", pos: "l", kind: "chart", range: "D1:I15", source: "A1:B3", type: "column", stacked: true }],
+  });
+  await turn();
+  await turn();
+
+  // Select chart and press Enter to open the chart panel.
+  table.dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 350, clientY: 40 }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 350, clientY: 40 }));
+  press(textarea, "Enter");
+  await turn();
+  await turn();
+
+  const panel = inst.chrome.topShadow.querySelector("[data-chart-panel]");
+  expect(panel).not.toBeNull();
+  const typeSelect = panel.querySelector("[data-chart-type]");
+  const sourceInput = panel.querySelector("[data-chart-source]");
+  const titleInput = panel.querySelector("[data-chart-title]");
+  const stackedInput = panel.querySelector("[data-chart-stacked]");
+  expect(stackedInput.closest("label").hidden).toBe(false);
+
+  const rev = book.revision;
+  sourceInput.value = "nonsense!!";
+  panel.querySelector("[data-chart-done]").click();
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(inst.chrome.noticeBar.textContent).toContain("Enter a data range, like A1:C10.");
+  expect(book.revision).toBe(rev);
+  expect(grid.rules()[0].source).toBe("A1:B3");
+  expect(inst.chrome.topShadow.querySelector("[data-chart-panel]")).toBe(panel);
+
+  sourceInput.value = "A1:C3";
+  typeSelect.value = "line";
+  typeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  expect(stackedInput.closest("label").hidden).toBe(true);
+  titleInput.value = "Sales";
+
+  // Tab stays trapped inside the panel.
+  const doneBtn = panel.querySelector("[data-chart-done]");
+  doneBtn.focus();
+  press(doneBtn, "Tab");
+  expect(inst.chrome.topShadow.activeElement).toBe(typeSelect);
+
+  doneBtn.click();
+  expect(inst.chrome.topShadow.querySelector("[data-chart-panel]")).toBeNull();
+  expect(book.revision).toBe(rev + 1);
+  expect(grid.rules()).toEqual([
+    {
+      id: "k9",
+      pos: "l",
+      kind: "chart",
+      range: "D1:I15",
+      source: "A1:C3",
+      type: "line",
+      title: "Sales",
+    },
+  ]);
+
+  ui.dispose();
+});
+
+// Bug: interface.js imported or loaded chart-panel.js before Insert chart or the chart panel ran.
+test("chart-panel.js is loaded only when Insert chart or the chart panel runs", async () => {
+  let chartPanelLoads = 0;
+  const { Sap, ui, inst } = await start(SLICE_BOOK(), {
+    loaders: {
+      chartPanel: () => {
+        chartPanelLoads += 1;
+        return import("../../../src/sheet/chart-panel.js");
+      },
+    },
+  });
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  typeInto(textarea, "12");
+  press(textarea, "Escape");
+  clickCell(table.rows[0].cells[0], "mouse");
+  grid.setRules({
+    set: [{ id: "c1", pos: "V", kind: "chart", range: "B2:D6", source: "A1:B3", type: "column" }],
+  });
+  await turn();
+  await turn();
+
+  // Selecting and deleting a chart on the sheet still does not load chart-panel.js.
+  table.rows[1].cells[1].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 150, clientY: 40 }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 150, clientY: 40 }));
+  press(textarea, "Delete");
+  await turn();
+  expect(chartPanelLoads).toBe(0);
+
+  inst.chrome.topShadow.querySelector('[data-command="chart"]').click();
+  await turn();
+  await turn();
+  expect(chartPanelLoads).toBe(1);
+  expect(grid.rules()).toHaveLength(1);
+
+  ui.dispose();
+});
+
+// Bug: a filter hid rows but left them in the chart, and turning the filter off left them out
+// of the chart until the next edit.
+test("filtering a row redraws the chart at once, and clearing the filter brings the row back", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  grid.setRules({ set: [{ id: "c1", pos: "V", kind: "chart", range: "A1:B3", source: "A1:C4", type: "column" }] });
+  await turn();
+  await turn();
+
+  const figure = table.parentElement.querySelector(":scope > figure[chart]");
+  expect(figure).not.toBeNull();
+  const desc = () => figure.querySelector("svg > desc").textContent;
+  expect(desc()).toContain("10");
+
+  const textarea = inst.editor.textarea;
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  const panel = await openFilterPanel(inst, 1);
+  panel.querySelector('[data-filter-value="5"] input').click();
+  panel.querySelector("[data-filter-apply]").click();
+  await turn();
+  expect(desc()).not.toContain("10");
+
+  const again = await openFilterPanel(inst, 1);
+  again.querySelector("[data-filter-all]").click();
+  again.querySelector("[data-filter-apply]").click();
+  await turn();
+  expect(desc()).toContain("10");
+  ui.dispose();
+});
+
+// Bug: with a chart selected, Cut wiped the unmarked cells under it and a typed letter opened
+// an editor over them.
+test("a selected chart leaves the cells alone: Cut takes nothing and a typed letter opens no editor", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  grid.setRules({ set: [{ id: "c1", pos: "V", kind: "chart", range: "B2:D6", source: "A1:B3", type: "column" }] });
+  await turn();
+  await turn();
+
+  table.rows[1].cells[1].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 150, clientY: 40 }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 150, clientY: 40 }));
+  expect(inst.overlays.chartRing.hidden).toBe(false);
+
+  const textarea = inst.editor.textarea;
+  const cut = clipEvent("cut");
+  textarea.dispatchEvent(cut);
+  expect(cut.defaultPrevented).toBe(true);
+  expect(cut.clipboardData.getData("text/plain")).toBe("");
+  expect(grid.get("A1")).toBe(1);
+
+  press(textarea, "a");
+  expect(inst.editor.editing).toBe(false);
+  expect(grid.get("A1")).toBe(1);
+
+  const copy = clipEvent("copy");
+  textarea.dispatchEvent(copy);
+  expect(copy.defaultPrevented).toBe(true);
+  expect(copy.clipboardData.getData("text/plain")).toBe("");
+  ui.dispose();
+});
+
+// Bug: Insert chart after Cmd+A or a whole-row selection put the box past the sheet's last
+// column, off screen, and a whole-row selection read every column to the sheet's end.
+test("Insert chart puts the box beside the data, and a whole-row selection reads whole rows", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  const charts = () => grid.rules().filter((rule) => rule.kind === "chart");
+
+  press(inst.editor.textarea, "a", { metaKey: true });
+  expect(inst.chrome.nameBox.textContent).toBe("A1:F6");
+  inst.chrome.topShadow.querySelector('[data-command="chart"]').click();
+  await turn();
+  await turn();
+  expect(charts()[0].range).toBe("E1:J15");
+  press(inst.chrome.topShadow.querySelector("[data-chart-panel]"), "Escape");
+
+  const header = (row) => inst.overlays.shadow.querySelector(`[data-row="${row}"]`);
+  header(0).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  header(2).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  expect(inst.chrome.nameBox.textContent).toBe("A1:F3");
+
+  inst.chrome.topShadow.querySelector('[data-command="chart"]').click();
+  await turn();
+  await turn();
+  expect(charts()[1].source).toBe("1:3");
+  expect(charts()[1].range).toBe("E1:J15");
+  ui.dispose();
+});
+
+// Bug: pressing Enter in the Chart panel's Title did nothing, so the typed title was lost.
+test("Enter in the chart panel's Title applies it", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  grid.setRules({ set: [{ id: "c1", pos: "V", kind: "chart", range: "B2:D6", source: "A1:B3", type: "column" }] });
+  await turn();
+  await turn();
+
+  table.rows[1].cells[1].dispatchEvent(
+    new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: 150, clientY: 40 }),
+  );
+  await turn();
+  await turn();
+  const panel = inst.chrome.topShadow.querySelector("[data-chart-panel]");
+  expect(panel).not.toBeNull();
+
+  const title = panel.querySelector("[data-chart-title]");
+  typeInto(title, "Revenue");
+  press(title, "Enter");
+  await turn();
+  await turn();
+  expect(grid.rules()[0].title).toBe("Revenue");
+  ui.dispose();
+});
+
+// Bug: a keyboard user could not reach the chart over the active cell.
+test("Shift+F10 over a chart's box opens that chart's menu", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const grid = Sap.grid(tableOf("s1"));
+  grid.setRules({ set: [{ id: "c1", pos: "V", kind: "chart", range: "A1:B3", source: "A1:B3", type: "column" }] });
+  await turn();
+  await turn();
+
+  press(inst.editor.textarea, "F10", { shiftKey: true });
+  await turn();
+  const menu = inst.chrome.topShadow.querySelector('[data-menu-item="edit-chart"]');
+  expect(menu).not.toBeNull();
+  expect(inst.overlays.chartRing.hidden).toBe(false);
   ui.dispose();
 });

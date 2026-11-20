@@ -306,6 +306,12 @@ function createBook(root, { onRebuild, notify }) {
     build,
     serialize,
     merge,
+    // A chart drawn on open that differs from its saved drawing: one change for the page, so the
+    // next save writes it, never an edit of a tab (a merge must not count it as ours).
+    redrawn() {
+      revision += 1;
+      notify(root);
+    },
     captured,
     saved,
     get built() {
@@ -381,5 +387,8 @@ export function ownWorkbooks({ onRebuild = () => {} } = {}) {
       });
     },
   );
-  return { books, ready };
+  // A chart the lazy charts.js drew that differs from the drawing the file holds: the page has a
+  // change to save, and no tab is edited by it.
+  const redrawn = (table) => books.get(table.closest(WORKBOOK))?.redrawn();
+  return { books, ready, redrawn };
 }

@@ -444,6 +444,8 @@ test("sheet edit: the blank sheet's exact module list", async () => {
     "src/vendor/sap-ownership.vendor.js",
   ]);
   expect(measured.lazy.filter((path) => path.startsWith("src/sheet/")).sort()).toEqual([
+    "src/sheet/chart-panel.js",
+    "src/sheet/charts.js",
     "src/sheet/csv.js",
     "src/sheet/fill.js",
     "src/sheet/filter.js",

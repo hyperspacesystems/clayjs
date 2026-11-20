@@ -2,10 +2,11 @@ import { a1, colIndex, rowIndex, tabTable } from "./commit.js";
 import { createChrome } from "./chrome.js";
 import { copyParts, fillBlock, fillFormula, pasteBlock, transposeMatrix } from "./clipboard.js";
 import { createEditor } from "./editor.js";
-import { allowedInList, boundRange, filteredRows, inputRuleAt, listItems, parseRuleStyle, ROW_ESTIMATE, rowOutOfSight, setFilteredRows } from "./geometry.js";
+import { allowedInList, boundRange, COL_DEFAULT, createGeometry, filteredRows, inputRuleAt, listItems, parseRuleStyle, ROW_ESTIMATE, rowOutOfSight, setFilteredRows, tableMetrics } from "./geometry.js";
 import { createHistory } from "./history.js";
 import { keyIntent } from "./keys.js";
 import { createOverlays } from "./overlays.js";
+import { loadCharts, peekCharts } from "./shell.js";
 import {
   axisSpan,
   clipSelection,
@@ -273,6 +274,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   let findCtrl = null;
   let fnHelp = null;
   let fillDrag = null;
+  let selectedChart = null;
+  let chartDrag = null;
   let statusCache = "";
 
   const alive = () => !disposed;
@@ -297,6 +300,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   const xlsxTool = lazyModule(loaders.xlsx ?? (() => import("./xlsx.js")), onLazyFail);
   const filterTool = lazyModule(loaders.filter ?? (() => import("./filter.js")), onLazyFail);
   const rulesTool = lazyModule(loaders.rules ?? (() => import("./rule-panels.js")), onLazyFail);
+  const chartPanelTool = lazyModule(loaders.chartPanel ?? (() => import("./chart-panel.js")), onLazyFail);
   let pendingLazy = null;
 
   function runLazy(holder, fn, { guardSel = false } = {}) {
@@ -452,6 +456,139 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     });
   }
 
+  const CHART_BIG = { rows: 10000000, cols: 16384 };
+  const MAX_CHART_COL = 16383;
+  const MAX_CHART_ROW = 9999998;
+  const CHART_DRAG_SLOP = 4;
+
+  function activeChart() {
+    if (!selectedChart || selectedChart.tab !== tabs.activeId) return null;
+    const table = tabTable(workbook, selectedChart.tab);
+    const grid = gridOf(table);
+    const rule = grid?.rules?.().find((r) => r.kind === "chart" && r.id === selectedChart.id) ?? null;
+    if (!rule) {
+      selectedChart = null;
+      return null;
+    }
+    return { tab: selectedChart.tab, table, grid, rule };
+  }
+
+  function chartUnderActiveCell() {
+    const table = sel ? tabTable(workbook, sel.tab) : null;
+    const grid = gridOf(table);
+    const box = sel ? selectionBox(viewOf(sel.tab), sel) : null;
+    if (!grid || !box) return null;
+    const rules = grid.rules?.() ?? [];
+    for (let i = rules.length - 1; i >= 0; i--) {
+      const rule = rules[i];
+      if (rule.kind !== "chart") continue;
+      const r = boundRange(rule.range, CHART_BIG);
+      if (r && box.active.r >= r.r0 && box.active.r <= r.r1 && box.active.c >= r.c0 && box.active.c <= r.c1) {
+        return { tab: sel.tab, table, grid, rule };
+      }
+    }
+    return null;
+  }
+
+  function chartHitAt(clientX, clientY) {
+    const table = tabTable(workbook, tabs.activeId);
+    if (!table) return null;
+    return peekCharts()?.chartAt(clientX, clientY, table) ?? null;
+  }
+
+  function watchTabCharts(table, grid) {
+    const ready = peekCharts();
+    if (ready) {
+      ready.watch(table, grid, () => windowOf(table));
+      return;
+    }
+    loadCharts().then((charts) => {
+      if (!alive()) return;
+      charts.watch(table, grid, () => windowOf(table));
+      syncUI({ announce: false });
+    });
+  }
+
+  function openChartPanel(ruleId, anchor = null) {
+    if (!ensureReadyForAction()) return;
+    const tabId = tabs.activeId;
+    closeTransient();
+    runLazy(chartPanelTool, (mod) => {
+      ruleSurface = mod.openChartPanel(sharedCtx(), { tab: tabId, id: ruleId }, anchor);
+    });
+  }
+
+  function runInsertChart() {
+    if (!ensureReadyForAction() || !sel) return;
+    const view = viewOf(sel.tab);
+    if (!selectionBox(view, sel)) return;
+    closeTransient();
+    loadCharts();
+    runLazy(chartPanelTool, (mod) => {
+      ruleSurface = mod.insertChart(sharedCtx(), chrome.getButton("chart"));
+    });
+  }
+
+  function deleteChartById(tabId, ruleId) {
+    if (!ensureReadyForAction()) return;
+    const table = tabTable(workbook, tabId);
+    const grid = gridOf(table);
+    if (!grid) return;
+    if (!writeGrid(() => grid.setRules({ remove: [ruleId] }))) return;
+    if (selectedChart?.id === ruleId) selectedChart = null;
+    chartDrag = null;
+    refreshStatus();
+    syncUI({ announce: true });
+    editor.focus();
+  }
+
+  function nearestGridLine(table, rw, clientX, clientY) {
+    const headRows = table.tHead?.rows.length ?? 0;
+    const geom = rw ? rw.geometry : createGeometry(table);
+    const metrics = tableMetrics(table, rw);
+    const first = metrics.cellBox(0, 0);
+    const colCount = tableCols(table).length;
+
+    let col = 0;
+    const relX = clientX - first.left;
+    if (relX <= 0) {
+      col = 0;
+    } else if (colCount > 0 && relX < geom.width) {
+      const c = geom.colAt(relX);
+      const cb = metrics.cellBox(0, c);
+      col = clientX >= cb.left + cb.width / 2 ? c + 1 : c;
+    } else {
+      col = colCount + Math.round((relX - geom.width) / COL_DEFAULT);
+    }
+
+    let row = 0;
+    const bodyFirst = metrics.cellBox(headRows, 0);
+    if (clientY <= first.top) {
+      row = 0;
+    } else if (headRows > 0 && clientY < bodyFirst.top) {
+      for (let r = 0; r < headRows; r++) {
+        const hb = metrics.cellBox(r, 0);
+        if (clientY < hb.top + hb.height) {
+          row = clientY >= hb.top + hb.height / 2 ? r + 1 : r;
+          break;
+        }
+        row = r + 1;
+      }
+    } else {
+      const relY = clientY - bodyFirst.top;
+      if (relY <= 0) {
+        row = headRows;
+      } else if (geom.rowCount > 0 && relY < geom.total()) {
+        const br = geom.rowAt(relY);
+        const rb = metrics.cellBox(headRows + br, 0);
+        row = headRows + (clientY >= rb.top + rb.height / 2 ? br + 1 : br);
+      } else {
+        row = headRows + geom.rowCount + Math.round((relY - geom.total()) / ROW_ESTIMATE);
+      }
+    }
+    return { row: Math.max(0, row), col: Math.max(0, col) };
+  }
+
   function onForeignChange(tabId) {
     if (liveMenu?.isOpen && tabId === sel?.tab) liveMenu.close({ restoreFocus: false });
     if (ruleSurface && ruleSurface.tab === tabId) closeRuleSurface();
@@ -486,6 +623,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (!table) return;
     setFilteredRows(table, ids);
     windowOf(table)?.refresh?.();
+    peekCharts()?.refresh(table);
     refreshStatus();
     syncUI();
   }
@@ -601,6 +739,11 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   function runFormat(fn) {
     if (editor.editing || !sel) return false;
+    if (activeChart()) {
+      selectedChart = null;
+      syncUI({ announce: false });
+      return false;
+    }
     const table = tabTable(workbook, sel.tab);
     const grid = gridOf(table);
     if (!grid) return false;
@@ -651,6 +794,18 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     showDialog,
     clearDialog,
     applyPasteData,
+    chartRect: (table, id) => peekCharts()?.chartRect(table, id) ?? null,
+    onChartInserted(tabId, table, grid, rule) {
+      selectedChart = { tab: tabId, id: rule.id };
+      chartDrag = null;
+      watchTabCharts(table, grid);
+      refreshStatus();
+      syncUI({ announce: true });
+    },
+    clearChartSelection(id) {
+      if (!id || selectedChart?.id === id) selectedChart = null;
+      chartDrag = null;
+    },
     // Not through runLazy: a picked file must reach the import even if another lazy action starts
     // while xlsx.js loads.
     xlsx: (fn) => xlsxTool.load().then((mod) => mod && alive() && fn(mod)),
@@ -676,6 +831,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       onShortcuts: () => runLazy(shortcutsTool, (s) => s.showShortcutsDialog(sharedCtx())),
       onDropdown: () => openRulePanel("dropdown"),
       onConditionalFormat: () => openRulePanel("conditional"),
+      onInsertChart: () => (typeof externalCommands.chart === "function" ? externalCommands.chart() : runInsertChart()),
+      onEditChart: (ruleId) => openChartPanel(ruleId),
+      onDeleteChart: (ruleId) => deleteChartById(tabs.activeId, ruleId),
     });
     return { menu: liveMenu, actions: cmdActions };
   }
@@ -770,6 +928,30 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       if (!ensureReadyForAction()) return;
       if (!filters.get(tabs.activeId)) return;
       openFilterAt(tabs.activeId, c, el);
+    },
+    onChartResizeDown(e) {
+      const chart = activeChart();
+      if (!chart || editor.editing) return;
+      const origBox = boundRange(chart.rule.range, CHART_BIG);
+      const rect =
+        peekCharts()?.chartRect(chart.table, chart.rule.id) ??
+        (origBox ? tableMetrics(chart.table, windowOf(chart.table)).spanBox(origBox.r0, origBox.c0, origBox.r1, origBox.c1) : null);
+      if (!origBox || !rect) return;
+      const startX = e.clientX ?? 0;
+      const startY = e.clientY ?? 0;
+      chartDrag = {
+        mode: "resize",
+        tab: chart.tab,
+        id: chart.rule.id,
+        origBox,
+        box: { ...origBox },
+        startX,
+        startY,
+        offsetX: startX - (rect.left + rect.width),
+        offsetY: startY - (rect.top + rect.height),
+        moved: false,
+      };
+      editor.focus({ preventScroll: true });
     },
   });
 
@@ -934,10 +1116,19 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
         : null,
     );
 
-    for (const extraId of ["sort", "chart"]) {
-      const ext = externalCommands[extraId];
-      chrome.registerCommand(extraId, !editor.editing && typeof ext === "function" ? ext : null);
-    }
+    const extChart = externalCommands.chart;
+    chrome.registerCommand(
+      "chart",
+      !editor.editing
+        ? typeof extChart === "function"
+          ? extChart
+          : canEdit && hasSel
+            ? () => runInsertChart()
+            : null
+        : null,
+    );
+    const extSort = externalCommands.sort;
+    chrome.registerCommand("sort", !editor.editing && typeof extSort === "function" ? extSort : null);
   }
 
   function syncUI({ announce = false, enteredTab = false } = {}) {
@@ -974,6 +1165,21 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       }
     }
 
+    let chartOverlayBox = null;
+    if (chartDrag?.tab === shownId && chartDrag.moved && chartDrag.box && table) {
+      const b = chartDrag.box;
+      chartOverlayBox = tableMetrics(table, windowOf(table)).spanBox(b.r0, b.c0, b.r1, b.c1);
+    } else {
+      const chart = activeChart();
+      if (chart && table) {
+        chartOverlayBox = peekCharts()?.chartRect(table, chart.rule.id) ?? null;
+        if (!chartOverlayBox) {
+          const b = boundRange(chart.rule.range, CHART_BIG);
+          if (b) chartOverlayBox = tableMetrics(table, windowOf(table)).spanBox(b.r0, b.c0, b.r1, b.c1);
+        }
+      }
+    }
+
     overlays.render({
       table,
       win: windowOf(table),
@@ -987,6 +1193,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       linkUrl,
       touch: isTouch(),
       filterButtons,
+      chartBox: chartOverlayBox,
     });
     findCtrl?.syncTab();
     syncFunctionHelp();
@@ -1029,6 +1236,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   function applySelection(nextSel, { announce = true, enteredTab = false } = {}) {
+    selectedChart = null;
+    chartDrag = null;
     sel = nextSel;
     if (!editor.editing && tabs.activeId !== sel.tab) tabs.show(sel.tab);
     writeSelection(storage, path, sel);
@@ -1291,6 +1500,10 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   function onCopy(event) {
     if (disposed || editor.editing || !sel || !event.clipboardData) return;
+    if (activeChart()) {
+      event.preventDefault();
+      return;
+    }
     const copied = copySelection();
     if (!copied) return;
     event.preventDefault();
@@ -1300,6 +1513,10 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   function onCut(event) {
     if (disposed || editor.editing || !sel || !event.clipboardData) return;
+    if (activeChart()) {
+      event.preventDefault();
+      return;
+    }
     const copied = copySelection(true);
     if (!copied) return;
     event.preventDefault();
@@ -1446,6 +1663,10 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   function onPaste(event) {
     if (disposed || editor.editing || !sel) return;
+    if (activeChart()) {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     try {
       const html = event.clipboardData?.getData("text/html") ?? "";
@@ -1462,6 +1683,39 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
     if (ruleSurface?.handleKeyDown?.(event)) return;
     if (editor.editing && fnHelp?.handleKeyDown(event)) return;
+
+    if (!editor.editing) {
+      const plainKey = !event.ctrlKey && !event.metaKey && !event.altKey;
+      if (chartDrag && event.key === "Escape" && plainKey) {
+        event.preventDefault();
+        chartDrag = null;
+        syncUI({ announce: false });
+        return;
+      }
+      const curChart = activeChart();
+      if (curChart && plainKey) {
+        if (event.key === "Escape" && !event.shiftKey) {
+          event.preventDefault();
+          selectedChart = null;
+          syncUI({ announce: false });
+          return;
+        }
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          openChartPanel(curChart.rule.id);
+          return;
+        }
+        if (event.key === "Delete" || event.key === "Backspace") {
+          event.preventDefault();
+          deleteChartById(curChart.tab, curChart.rule.id);
+          return;
+        }
+        if (event.key.length === 1) {
+          event.preventDefault();
+          return;
+        }
+      }
+    }
 
     const intent = keyIntent(event, {
       platform: platform ?? win.navigator?.platform ?? "",
@@ -1594,9 +1848,16 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       case "deleteAxis":
         runLazy(cmdTool, (b) => ensureCommands(b).actions.handleDeleteAxisShortcut());
         break;
-      case "contextMenu":
+      case "contextMenu": {
+        const curChart = activeChart() ?? chartUnderActiveCell();
+        if (curChart) {
+          const rect = peekCharts()?.chartRect(curChart.table, curChart.rule.id);
+          openChartMenuAt(curChart.rule.id, rect?.left ?? 0, (rect?.top ?? 0) + (rect?.height ?? 0));
+          break;
+        }
         runLazy(cmdTool, (b) => ensureCommands(b).actions.handleContextMenuShortcut());
         break;
+      }
       case "edit":
         openEdit();
         break;
@@ -1709,7 +1970,27 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     longPress = null;
   }
 
+  const isOverlayOrChromeTarget = (event) => {
+    const t = event?.target;
+    if (!t || typeof t !== "object") return false;
+    return Boolean(overlays.host?.contains?.(t) || chrome.topHost?.contains?.(t) || chrome.bottomHost?.contains?.(t));
+  };
+
+  // A press on the scroller's own scrollbar is not a press on a cell or a chart.
+  const isScrollbarTarget = (event) => {
+    if (event?.target !== scrollBox) return false;
+    const rect = scrollBox.getBoundingClientRect?.();
+    if (!rect || !(scrollBox.clientWidth > 0 || scrollBox.clientHeight > 0)) return false;
+    const x = event.clientX ?? 0;
+    const y = event.clientY ?? 0;
+    return (
+      x >= rect.left + (scrollBox.clientLeft ?? 0) + (scrollBox.clientWidth ?? 0) ||
+      y >= rect.top + (scrollBox.clientTop ?? 0) + (scrollBox.clientHeight ?? 0)
+    );
+  };
+
   function onPointerDown(event) {
+    if (isOverlayOrChromeTarget(event) || isScrollbarTarget(event)) return;
     const wasTouch = isTouch();
     lastPointer = event.pointerType || "mouse";
     suppressTap = false;
@@ -1717,10 +1998,23 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     chrome.setTouch(isTouch());
     if (wasTouch !== isTouch()) syncUI();
     if (!isTouch() || event.isPrimary === false) return;
-    const hit = locateCellEvent(event);
-    if (!hit) return;
     const x = event.clientX ?? 0;
     const y = event.clientY ?? 0;
+    const chartHit = chartHitAt(x, y);
+    if (chartHit) {
+      longPress = {
+        x,
+        y,
+        chartId: chartHit.rule.id,
+        timer: win.setTimeout(() => {
+          longPress = null;
+          fireChartLongPress(chartHit.rule.id, x, y);
+        }, LONG_PRESS_MS),
+      };
+      return;
+    }
+    const hit = locateCellEvent(event);
+    if (!hit) return;
     longPress = {
       x,
       y,
@@ -1730,6 +2024,14 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
         fireLongPress(hit, x, y);
       }, LONG_PRESS_MS),
     };
+  }
+
+  function fireChartLongPress(chartId, x, y) {
+    if (disposed || editor.editing) return;
+    suppressTap = true;
+    touchTapCell = null;
+    pendingTick = null;
+    openChartMenuAt(chartId, x, y);
   }
 
   function fireLongPress(hit, x, y) {
@@ -1854,11 +2156,45 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   function onMouseDown(event) {
+    if (isOverlayOrChromeTarget(event) || isScrollbarTarget(event)) return;
     pendingTick = null;
     if (event.button !== undefined && event.button !== 0) return;
     if (suppressTap) {
       event.preventDefault();
       return;
+    }
+    const plain = !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+    if (plain && !(editor.editing && editor.canPick())) {
+      const startX = event.clientX ?? 0;
+      const startY = event.clientY ?? 0;
+      const chartHit = chartHitAt(startX, startY);
+      if (chartHit) {
+        editor.settle();
+        if (editor.editing && !commitEdit().ok) return;
+        chrome.commitRename();
+        event.preventDefault();
+        handledPointerDown = true;
+        dragging = false;
+        selectedChart = { tab: tabs.activeId, id: chartHit.rule.id };
+        const origBox = boundRange(chartHit.rule.range, CHART_BIG);
+        chartDrag = origBox && !isTouch()
+          ? {
+              mode: "move",
+              tab: tabs.activeId,
+              id: chartHit.rule.id,
+              origBox,
+              box: { ...origBox },
+              startX,
+              startY,
+              offsetX: startX - chartHit.rect.left,
+              offsetY: startY - chartHit.rect.top,
+              moved: false,
+            }
+          : null;
+        syncUI({ announce: false });
+        editor.focus({ preventScroll: true });
+        return;
+      }
     }
     const hit = locateCellEvent(event);
     if (!hit) return;
@@ -1902,6 +2238,30 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   function onMouseMove(event) {
+    if (chartDrag) {
+      const cx = event.clientX ?? 0;
+      const cy = event.clientY ?? 0;
+      if (!chartDrag.moved && Math.hypot(cx - chartDrag.startX, cy - chartDrag.startY) < CHART_DRAG_SLOP) return;
+      const table = tabTable(workbook, chartDrag.tab);
+      if (!table) return;
+      chartDrag.moved = true;
+      const { origBox } = chartDrag;
+      if (chartDrag.mode === "move") {
+        const colSpan = origBox.c1 - origBox.c0;
+        const rowSpan = origBox.r1 - origBox.r0;
+        const { row, col } = nearestGridLine(table, windowOf(table), cx - chartDrag.offsetX, cy - chartDrag.offsetY);
+        const nextC0 = Math.min(col, MAX_CHART_COL - colSpan);
+        const nextR0 = Math.min(row, MAX_CHART_ROW - rowSpan);
+        chartDrag.box = { r0: nextR0, c0: nextC0, r1: nextR0 + rowSpan, c1: nextC0 + colSpan };
+      } else {
+        const { row, col } = nearestGridLine(table, windowOf(table), cx - chartDrag.offsetX, cy - chartDrag.offsetY);
+        const nextC1 = Math.min(MAX_CHART_COL, Math.max(origBox.c0 + 1, col - 1));
+        const nextR1 = Math.min(MAX_CHART_ROW, Math.max(origBox.r0 + 3, row - 1));
+        chartDrag.box = { r0: origBox.r0, c0: origBox.c0, r1: nextR1, c1: nextC1 };
+      }
+      syncUI({ announce: false });
+      return;
+    }
     if (fillDrag) {
       const hit = locateCellEvent(event);
       if (!hit || hit.tab !== fillDrag.tab) return;
@@ -1938,6 +2298,26 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   function onMouseUp(event) {
     const tick = pendingTick;
     pendingTick = null;
+    if (chartDrag) {
+      const done = chartDrag;
+      chartDrag = null;
+      dragging = false;
+      if (done.moved && done.box) {
+        const table = tabTable(workbook, done.tab);
+        const grid = gridOf(table);
+        const rule = grid?.rules?.().find((r) => r.kind === "chart" && r.id === done.id) ?? null;
+        const nextRange =
+          done.box.r0 === done.box.r1 && done.box.c0 === done.box.c1
+            ? a1(done.box.r0, done.box.c0)
+            : `${a1(done.box.r0, done.box.c0)}:${a1(done.box.r1, done.box.c1)}`;
+        if (rule && nextRange !== rule.range && writeGrid(() => grid.setRules({ set: [{ ...rule, range: nextRange }] }))) {
+          refreshStatus();
+        }
+        syncUI({ announce: true });
+        editor.focus({ preventScroll: true });
+      }
+      return;
+    }
     if (fillDrag) {
       const done = fillDrag;
       fillDrag = null;
@@ -1967,10 +2347,23 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   function onClick(event) {
+    if (isOverlayOrChromeTarget(event) || isScrollbarTarget(event)) return;
     if (suppressTap) return;
     if (handledPointerDown) {
       handledPointerDown = false;
       return;
+    }
+    const plain = !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+    if (plain && !(editor.editing && editor.canPick())) {
+      const chartHit = chartHitAt(event.clientX ?? 0, event.clientY ?? 0);
+      if (chartHit) {
+        editor.settle();
+        if (editor.editing && !commitEdit().ok) return;
+        selectedChart = { tab: tabs.activeId, id: chartHit.rule.id };
+        syncUI({ announce: false });
+        editor.focus({ preventScroll: true });
+        return;
+      }
     }
     const hit = locateCellEvent(event);
     if (!hit) return;
@@ -1983,13 +2376,35 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   function onDblClick(event) {
+    if (isOverlayOrChromeTarget(event) || isScrollbarTarget(event)) return;
     if (editor.editing && editor.canPick()) return;
+    const chartHit = chartHitAt(event.clientX ?? 0, event.clientY ?? 0);
+    if (chartHit) {
+      if (!ensureReadyForAction()) return;
+      event.preventDefault();
+      chartDrag = null;
+      selectedChart = { tab: tabs.activeId, id: chartHit.rule.id };
+      syncUI({ announce: false });
+      openChartPanel(chartHit.rule.id, chartHit.rect);
+      return;
+    }
     const hit = locateCellEvent(event);
     if (hit) {
       if (editor.editing && !commitEdit().ok) return;
       applySelection(selectCell(viewOf(hit.tab), { ...sel, tab: hit.tab }, hit.r, hit.c, { extend: false }));
     }
     if (!editor.editing) openEdit();
+  }
+
+  function openChartMenuAt(ruleId, cx, cy) {
+    pendingTick = null;
+    chartDrag = null;
+    if (!ensureReadyForAction()) return;
+    selectedChart = { tab: tabs.activeId, id: ruleId };
+    syncUI({ announce: false });
+    runLazy(cmdTool, (b) => {
+      ensureCommands(b).actions.openChartContextMenu(ruleId, cx, cy);
+    });
   }
 
   function openCellMenuAt(hit, cx, cy, { touch = false } = {}) {
@@ -1999,6 +2414,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     const box = hit.tab === sel.tab ? selectionBox(view, sel) : null;
     if (!box || hit.r < box.top || hit.r > box.bottom || hit.c < box.left || hit.c > box.right) {
       actOnCellPointer(hit, { extend: false });
+    } else {
+      selectedChart = null;
+      syncUI({ announce: false });
     }
     const span = hit.tab === sel.tab ? axisSpan(viewOf(sel.tab), sel) : null;
     runLazy(cmdTool, (b) => {
@@ -2010,6 +2428,22 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   function onContextMenu(event) {
+    if (isOverlayOrChromeTarget(event) || isScrollbarTarget(event)) return;
+    const cx = event.clientX ?? 0;
+    const cy = event.clientY ?? 0;
+    const chartHit = chartHitAt(cx, cy);
+    if (chartHit) {
+      event.preventDefault();
+      if (isTouch()) {
+        if (longPress) {
+          cancelLongPress();
+          fireChartLongPress(chartHit.rule.id, cx, cy);
+        }
+        return;
+      }
+      openChartMenuAt(chartHit.rule.id, cx, cy);
+      return;
+    }
     const hit = locateCellEvent(event);
     if (!hit) return;
     event.preventDefault();
@@ -2018,11 +2452,12 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       if (longPress) {
         const pending = longPress;
         cancelLongPress();
-        fireLongPress(pending.hit, pending.x, pending.y);
+        if (pending.chartId) fireChartLongPress(pending.chartId, pending.x, pending.y);
+        else fireLongPress(pending.hit, pending.x, pending.y);
       }
       return;
     }
-    openCellMenuAt(hit, event.clientX ?? 0, event.clientY ?? 0);
+    openCellMenuAt(hit, cx, cy);
   }
 
   function subscribeGrids() {
@@ -2191,6 +2626,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     disposed = true;
     cancelLongPress();
     fillDrag = null;
+    chartDrag = null;
+    selectedChart = null;
     closeFilterPanel();
     closeRuleSurface();
     closeDialog();

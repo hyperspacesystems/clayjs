@@ -58,6 +58,10 @@ async function start(body = BOOK()) {
 
 const tableOf = (id) => document.querySelector(`section[data-id="${id}"] table[grid]`);
 
+const FIGURE = '<figure chart="k1" sap-ignore=""><svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 120 80" role="img" aria-label="Chart: column"><title>Chart: column</title><desc>Series 1: 1: 3</desc><g><rect x="10" y="10" width="20" height="60" fill="#3170b8"></rect></g></svg></figure>';
+
+const withFigure = () => BOOK().replace("</tbody></table></section>", `</tbody></table>\n${FIGURE}</section>`);
+
 function docOf(inner) {
   return new DOMParser().parseFromString(
     `<!doctype html><html><body><main sap plugins="grid"><div items="sheets" sheet-workbook>${inner}</div></main></body></html>`,
@@ -346,3 +350,30 @@ test("this tab's own state and parts no save keeps stay out of the bytes", async
   expect(bytes).toContain('<section item="" data-id="s1" data-pos="V">');
 });
 
+// Bug: a tab's saved drawing was written from the Grid's backing alone, so the figure the file
+// held never reached the next save.
+test("a tab's saved figure goes after its table, byte for byte", async () => {
+  const { book, root } = await start(withFigure());
+
+  const figure = root.querySelector('section[data-id="s1"] figure[chart]');
+  expect(figure.outerHTML).toBe(FIGURE);
+  const bytes = book.serialize({ purpose: "save" });
+  expect(bytes).toContain(`</table>\n${FIGURE}</section>`);
+  expect(bytes).toContain(FIGURE);
+});
+
+// Bug: a drawing that differed on open counted as an edit of its tab, so a peer's change to that
+// tab clashed with work nobody did.
+test("redrawn moves the revision and leaves every tab unedited", async () => {
+  const { books, book } = await start(withFigure());
+  const saved = book.serialize({ purpose: "save" });
+  const revised = book.revision;
+
+  books.redrawn(tableOf("s1"));
+
+  expect(book.revision).toBe(revised + 1);
+  expect(book.merge({ document: withCell(saved, "s1", "r1", 1, "9") })()).toBe(false);
+  const bytes = book.serialize({});
+  expect(bytes).toContain(">9<");
+  expect(bytes).toContain(FIGURE);
+});

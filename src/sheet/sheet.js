@@ -1,4 +1,4 @@
-import { startShell } from "./shell.js";
+import { sheetHooks, startShell } from "./shell.js";
 import { ownWorkbooks } from "./workbook.js";
 import { startInterface } from "./interface.js";
 
@@ -15,6 +15,7 @@ const books = ownWorkbooks({
     else if (mounted) ui = startInterface({ shell });
   },
 });
+sheetHooks.chartRedrawn = (table) => books.redrawn(table);
 
 export const sheet = {
   windows: shell.windows,

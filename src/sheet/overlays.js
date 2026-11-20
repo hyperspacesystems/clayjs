@@ -1,4 +1,4 @@
-import { createGeometry, ROW_ESTIMATE } from "./geometry.js";
+import { ROW_ESTIMATE, tableMetrics } from "./geometry.js";
 import { colName } from "./commit.js";
 import { FONT_MONO, FONT_SANS, TOKENS } from "../ui/bevel.js";
 import { resolveTheme } from "../ui/theme.js";
@@ -148,6 +148,22 @@ const OVERLAY_CSS = `
   border: 1.5px dashed var(--sheet-sel);
   z-index: 5;
 }
+.sheet-chart-ring {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid var(--sheet-sel);
+  z-index: 8;
+}
+.sheet-chart-handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: var(--sheet-sel);
+  border: 1.5px solid var(--sheet-surface);
+  cursor: nwse-resize;
+  pointer-events: auto;
+  z-index: 9;
+}
 .sheet-link-chip {
   position: absolute;
   z-index: 7;
@@ -222,80 +238,6 @@ function placeBox(el, origin, box) {
   el.style.height = `${box.height}px`;
 }
 
-function tableMetrics(table, win) {
-  const headRows = table.tHead?.rows.length ?? 0;
-  const geom = win ? win.geometry : createGeometry(table);
-  const tBox = table.getBoundingClientRect();
-  const headHeight = table.tHead?.offsetHeight ?? headRows * ROW_ESTIMATE;
-
-  function cellBox(r, c) {
-    if (r >= headRows && win) return win.cellBox(r - headRows, c);
-    if (r < headRows) {
-      const tr = table.tHead.rows[r];
-      const trBox = tr.getBoundingClientRect();
-      const styleH = parseFloat(tr.style?.height);
-      const fallbackH = tr.hidden ? 0 : (Number.isFinite(styleH) ? styleH : ROW_ESTIMATE);
-      const top = trBox.height > 0 ? trBox.top : tBox.top + r * ROW_ESTIMATE;
-      const height = trBox.height > 0 ? trBox.height : fallbackH;
-      return { left: tBox.left + geom.colLeft(c), top, width: geom.colWidth(c), height };
-    }
-    const br = r - headRows;
-    return {
-      left: tBox.left + geom.colLeft(c),
-      top: tBox.top + headHeight + geom.rowTop(br),
-      width: geom.colWidth(c),
-      height: geom.rowHeight(br),
-    };
-  }
-
-  function spanBox(top, left, bottom, right) {
-    const tl = cellBox(top, left);
-    const br = cellBox(bottom, right);
-    return {
-      left: tl.left,
-      top: tl.top,
-      width: Math.max(0, br.left + br.width - tl.left),
-      height: Math.max(0, br.top + br.height - tl.top),
-    };
-  }
-
-  function visibleRows(totalRows) {
-    const list = [];
-    for (let r = 0; r < Math.min(headRows, totalRows); r++) list.push(r);
-    if (win?.shown && win.shown.last >= win.shown.first) {
-      for (let g = win.shown.first - 1; g <= win.shown.last - 1; g++) {
-        const [start, end] = geom.groupRows(g);
-        for (let i = start; i < end && headRows + i < totalRows; i++) list.push(headRows + i);
-      }
-      return list;
-    }
-    for (let r = headRows; r < totalRows; r++) list.push(r);
-    return list;
-  }
-
-  function cellAt(x, y) {
-    if (headRows > 0 && x >= tBox.left && x < tBox.left + geom.width && y >= tBox.top && y < tBox.top + headHeight) {
-      const c = geom.colAt(x - tBox.left);
-      if (c === -1) return null;
-      for (let r = 0; r < headRows; r++) {
-        const b = cellBox(r, c);
-        if (y >= b.top && y < b.top + b.height) return { r, c };
-      }
-    }
-    if (win) {
-      const hit = win.cellAt(x, y);
-      return hit ? { r: hit.r + headRows, c: hit.c } : null;
-    }
-    const bodyTop = tBox.top + headHeight;
-    if (x < tBox.left || x >= tBox.left + geom.width || y < bodyTop || y >= bodyTop + geom.total()) return null;
-    const br = geom.rowAt(y - bodyTop);
-    const c = geom.colAt(x - tBox.left);
-    return br === -1 || c === -1 ? null : { r: br + headRows, c };
-  }
-
-  return { cellBox, spanBox, visibleRows, cellAt, width: geom.width, totalHeight: headHeight + geom.total() };
-}
-
 export function createOverlays(
   workbook,
   {
@@ -311,6 +253,7 @@ export function createOverlays(
     onFillHandleDblClick,
     onTouchHandleDown,
     onFilterButton,
+    onChartResizeDown,
   } = {},
 ) {
   const doc = workbook.ownerDocument ?? document;
@@ -517,6 +460,22 @@ export function createOverlays(
   const startHandle = makeTouchHandle("start");
   const endHandle = makeTouchHandle("end");
 
+  const chartRing = doc.createElement("div");
+  chartRing.className = "sheet-chart-ring";
+  chartRing.setAttribute("data-chart-ring", "");
+  chartRing.hidden = true;
+
+  const chartHandle = doc.createElement("div");
+  chartHandle.className = "sheet-chart-handle";
+  chartHandle.setAttribute("data-chart-handle", "");
+  chartHandle.hidden = true;
+  chartHandle.addEventListener("mousedown", (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onChartResizeDown?.(e);
+  });
+
   const linkChip = doc.createElement("div");
   linkChip.className = "sheet-link-chip";
   linkChip.setAttribute("data-sheet-link-chip", "");
@@ -538,7 +497,7 @@ export function createOverlays(
   live.setAttribute("aria-live", "polite");
   live.setAttribute("aria-atomic", "true");
 
-  root.append(corner, colsLayer, rowsLayer, refsLayer, filterLayer, selFill, activeRing, fillPreview, fillHandle, startHandle, endHandle, resizeGuide, linkChip, editorSlot, live);
+  root.append(corner, colsLayer, rowsLayer, refsLayer, filterLayer, selFill, activeRing, fillPreview, fillHandle, startHandle, endHandle, chartRing, chartHandle, resizeGuide, linkChip, editorSlot, live);
 
   const ui = mountEditorUI({
     name: "sheet-overlays",
@@ -576,6 +535,7 @@ export function createOverlays(
     linkUrl = null,
     touch = false,
     filterButtons = [],
+    chartBox = null,
   }) {
     lastState = { table, win, view };
     if (!table || !view || view.rows.length === 0 || view.cols.length === 0) {
@@ -588,6 +548,8 @@ export function createOverlays(
       fillHandle.hidden = true;
       startHandle.hidden = true;
       endHandle.hidden = true;
+      chartRing.hidden = true;
+      chartHandle.hidden = true;
       fillPreview.hidden = true;
       linkChip.hidden = true;
       corner.hidden = true;
@@ -697,6 +659,19 @@ export function createOverlays(
       }
     });
 
+    const hasChart = Boolean(chartBox && chartBox.width > 0 && chartBox.height > 0);
+    chartRing.hidden = !hasChart;
+    chartHandle.hidden = !hasChart;
+    if (hasChart) {
+      placeBox(chartRing, origin, chartBox);
+      placeBox(chartHandle, origin, {
+        left: chartBox.left + chartBox.width - 5,
+        top: chartBox.top + chartBox.height - 5,
+        width: 9,
+        height: 9,
+      });
+    }
+
     if (!box) {
       selFill.hidden = true;
       activeRing.hidden = true;
@@ -726,13 +701,24 @@ export function createOverlays(
       box.bottom !== box.active.r + box.active.rows - 1 ||
       box.right !== box.active.c + box.active.cols - 1;
 
+    placeBox(editorSlot, origin, activeBox);
+    if (hasChart) {
+      selFill.hidden = true;
+      activeRing.hidden = true;
+      fillHandle.hidden = true;
+      startHandle.hidden = true;
+      endHandle.hidden = true;
+      fillPreview.hidden = true;
+      linkChip.hidden = true;
+      return;
+    }
+
     selFill.hidden = !multi;
     if (multi) placeBox(selFill, origin, wholeBox);
 
     activeRing.hidden = false;
     activeRing.setAttribute("data-editing", editing ? "true" : "false");
     placeBox(activeRing, origin, activeBox);
-    placeBox(editorSlot, origin, activeBox);
 
     const showHandle = !editing && whole !== "rows" && whole !== "cols" && wholeBox.width > 0 && wholeBox.height > 0;
     fillHandle.hidden = !showHandle || touch;
@@ -778,6 +764,8 @@ export function createOverlays(
     resizeGuide,
     fillHandle,
     fillPreview,
+    chartRing,
+    chartHandle,
     linkChip,
     live,
     render,

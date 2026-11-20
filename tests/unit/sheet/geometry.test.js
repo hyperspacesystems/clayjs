@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
-import { createGeometry, ROW_ESTIMATE } from "../../../src/sheet/geometry.js";
+import { COL_DEFAULT, createGeometry, ROW_ESTIMATE } from "../../../src/sheet/geometry.js";
 
 // A <table grid> with the given <col> widths ("" for none) and groups of row counts.
 function tableOf(widths, groups, { hidden = [] } = {}) {
@@ -59,6 +59,14 @@ describe("sheet geometry", () => {
     const g = createGeometry(tableOf([], [3], { hidden: [1] }));
     expect([0, 1, 2].map(g.rowTop)).toEqual([0, 26, 26]);
     expect(g.rowAt(26)).toBe(2);
+  });
+
+  test("a chart's box past the last row or column keeps going at the estimate and default", () => {
+    const g = createGeometry(tableOf([120, 80], [2]));
+    expect(g.rowTop(5)).toBe(g.rowTop(2) + 3 * ROW_ESTIMATE);
+    expect(g.rowHeight(5)).toBe(ROW_ESTIMATE);
+    expect(g.colLeft(4)).toBe(g.width + 2 * COL_DEFAULT);
+    expect(g.colWidth(4)).toBe(COL_DEFAULT);
   });
 
   test("the index matches a plain sum over 1,000 random changes", () => {

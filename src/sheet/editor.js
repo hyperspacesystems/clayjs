@@ -458,8 +458,8 @@ export function createEditor({
     setAriaLabel(label) {
       if (textarea.getAttribute("aria-label") !== label) textarea.setAttribute("aria-label", label);
     },
-    focus() {
-      textarea.focus();
+    focus(opts) {
+      textarea.focus(opts);
     },
   };
 }

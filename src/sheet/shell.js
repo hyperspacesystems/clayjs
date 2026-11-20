@@ -1,4 +1,4 @@
-import { boundRange, isEmpty, listItems, matchKey, parseRuleStyle, readBox, readTexts } from "./geometry.js";
+import { boundRange, COL_DEFAULT, isEmpty, listItems, matchKey, parseRuleStyle, readBox, readTexts, ROW_ESTIMATE, rowOutOfSight, tableMetrics, tableParts, tableNamed } from "./geometry.js";
 import { canAdopt, createRowWindow, EARLY, scopeOf } from "./row-window.js";
 
 // sapjs's two grid extensions, carried by this release but addressed only on sheet pages, so a
@@ -38,27 +38,65 @@ function paintRulesSoon(table, grid) {
   });
 }
 
+// Charts draw through the lazy charts.js, loaded only once some tab's rules hold a chart (or the
+// editor inserts one). The editor sets `sheetHooks.chartRedrawn` so a drawing that differs from
+// the saved one on open counts as a change; readers never set it.
+export const sheetHooks = { chartRedrawn: null };
+let chartsModule = null;
+let chartsReady = null;
+const chartsWatched = new WeakSet();
+export const peekCharts = () => chartsReady;
+export function loadCharts() {
+  chartsModule ??= import("./charts.js").then((module) => {
+    chartsReady = module.createCharts({
+      boundRange, COL_DEFAULT, readBox, readTexts, ROW_ESTIMATE, rowOutOfSight, tableMetrics, tableParts, tableNamed,
+      scopeOf, canAdopt,
+      gridOf: window.Sap.grid,
+      editMode: () => Boolean(sheetHooks.chartRedrawn),
+      onRedrawn: (table) => sheetHooks.chartRedrawn?.(table),
+    });
+    // Charts follow every tab from the moment the module loads, so a chart that reads another
+    // tab's cells hears that tab's first edit.
+    for (const [table, entry] of watchedTables) {
+      if (!table.isConnected) continue;
+      chartsReady.watch(table, entry.grid, entry.windowOf);
+    }
+    return chartsReady;
+  });
+  return chartsModule;
+}
+function drawChartsSoon(table, grid, windowOf) {
+  const rules = grid?.rules?.();
+  if (!rules) return;
+  if (!chartsModule && !rules.some((rule) => rule.kind === "chart")) return;
+  if (chartsWatched.has(grid)) return;
+  chartsWatched.add(grid);
+  loadCharts().then((charts) => charts.watch(table, grid, windowOf));
+}
+
 // A dropdown may read another tab's range, so a change on the tab that holds the items repaints
 // the dropdowns that point at it: their red underlines go as the items arrive.
 function repaintListTabs(source) {
-  for (const [table, grid] of watchedTables) {
+  for (const [table, entry] of watchedTables) {
     if (table === source) continue;
     if (!table.isConnected) {
       watchedTables.delete(table);
       continue;
     }
-    const reads = grid.rules?.().some((rule) => rule.kind === "list" && String(rule.source ?? "").includes("!"));
-    if (reads) paintRulesSoon(table, grid);
+    const reads = entry.grid.rules?.().some((rule) => rule.kind === "list" && String(rule.source ?? "").includes("!"));
+    if (reads) paintRulesSoon(table, entry.grid);
   }
 }
 
-function watchRules(table, grid) {
+function watchRules(table, grid, windowOf) {
   paintRulesSoon(table, grid);
+  drawChartsSoon(table, grid, windowOf);
   if (watchedGrids.has(grid)) return;
   watchedGrids.add(grid);
-  watchedTables.set(table, grid);
+  watchedTables.set(table, { grid, windowOf });
   grid.on("change", () => {
     paintRulesSoon(table, grid);
+    drawChartsSoon(table, grid, windowOf);
     repaintListTabs(table);
   });
 }
@@ -216,7 +254,7 @@ export function startShell({ root = document, windowOptions = {} } = {}) {
     }
     for (const [table, winRow] of windows) {
       unsubscribe.push(gridOf(table).on("change", winRow.follow));
-      watchRules(table, gridOf(table));
+      watchRules(table, gridOf(table), () => windows.get(table) ?? null);
       winRow.follow({ rescanned: true });
     }
   }
