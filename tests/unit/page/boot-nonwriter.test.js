@@ -10,6 +10,7 @@ import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
 import { readYValue, writeYValue } from "../../../src/page/ybind/external.js";
 import { ADOPTION_TIMEOUT_MS } from "../../../src/page/adopt-boot.js";
+import { until } from "../../helpers/until.js";
 
 /**
  * A tab that is not the room's elected writer does not adopt a hand-edited
@@ -33,13 +34,6 @@ const ADOPTED = "Hello, edited by hand";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const flushAsync = async (turns = 60) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
-const until = async (check, tries = 400) => {
-  for (let i = 0; i < tries; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 
 const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value) => {
@@ -183,7 +177,7 @@ test("a nonwriter waits for the writer's adoption and then takes input", async (
   try {
     // Waiting, not blocked: the boot stays in adopting, the editor is staged and
     // read-only, and the saved article with the hand edit is still on screen.
-    expect(await until(() => page.status?.phase === "adopting")).toBe(true);
+    await until(() => page.status?.phase === "adopting", { what: "the boot to reach adopting" });
     await flushAsync();
     expect(page.status).toMatchObject({ phase: "adopting" });
     expect(page.view.isDestroyed).toBe(false);
@@ -227,7 +221,7 @@ test("a room that already holds the adopted article takes input at once", async 
     expect(page.view.isDestroyed).toBe(false);
     expect(page.view.editable).toBe(true);
     expect(editableNodes()).toBe(1);
-    expect(await until(() => page.view.state.doc.textContent.includes(ADOPTED))).toBe(true);
+    await until(() => page.view.state.doc.textContent.includes(ADOPTED), { what: "the adopted text in the editor" });
     expect(article.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
     expect(article.textContent).toContain(ADOPTED);
     expect(marks.at(-1)).toMatchObject({ name: "document:input-ready" });
@@ -255,7 +249,7 @@ test("a room a peer changed after the adoption takes input on the room's state",
     expect(page.status).toMatchObject({ phase: "ready" });
     expect(page.view.editable).toBe(true);
     expect(editableNodes()).toBe(1);
-    expect(await until(() => page.view.state.doc.textContent.includes(PEER))).toBe(true);
+    await until(() => page.view.state.doc.textContent.includes(PEER), { what: "the peer's text in the editor" });
     expect(page.view.state.doc.textContent).toContain(ADOPTED);
     expect(article.textContent).toContain(PEER);
     expect(article.textContent).not.toContain("Heading");
@@ -271,7 +265,7 @@ test("an adoption that never arrives blocks with the timeout", async () => {
   try {
     // The wait runs to the adoption bound itself: a writer that never lands the hand
     // edit must end the boot, not leave it waiting.
-    expect(await until(() => page.status?.phase === "blocked", 2400)).toBe(true);
+    await until(() => page.status?.phase === "blocked", { timeout: 12000, what: "the boot to end blocked" });
     await flushAsync();
 
     expect(page.status).toMatchObject({ phase: "blocked", reason: "adoption-timeout" });
@@ -292,7 +286,7 @@ test("an adoption that never arrives blocks with the timeout", async () => {
 test("a boot that ends while waiting leaves nothing running", async () => {
   const { page, article, ownerOf, registrations } = await open({ edit: handEdit, writer: "other" });
   try {
-    expect(await until(() => page.status?.phase === "adopting")).toBe(true);
+    await until(() => page.status?.phase === "adopting", { what: "the boot to reach adopting" });
 
     page.dispose();
     await page.ready;

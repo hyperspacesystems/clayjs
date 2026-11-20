@@ -4,6 +4,7 @@
  */
 import { jest } from "@jest/globals";
 import { readFileSync } from "node:fs";
+import { until } from "../helpers/until.js";
 
 /**
  * C2b/C3: an uncertain captured save is settled by durable history, and a fresh
@@ -266,31 +267,26 @@ const refusal = () => {
 
 // Wait for the lookup to have asked the host at least n times.
 const untilQuery = async (n = 1) => {
-  for (let i = 0; i < 100 && calls.queries.length < n; i += 1) await wait(2);
+  await until(() => calls.queries.length >= n, { what: `${n} history lookups` });
   return calls.queries.length;
 };
 
 // Wait for the lane to have framed at least n operations of a store.
 const untilPosted = async (name, n = 1) => {
-  for (let i = 0; i < 100 && posted(name).length < n; i += 1) await wait(2);
+  await until(() => posted(name).length >= n, { what: `${n} framed operations of ${name}` });
   return posted(name).length;
 };
 
 // Wait for the fresh read to be applied: the barrier clears only when a state
 // that passed the lane's read barrier was taken.
 const untilTaken = async () => {
-  for (let i = 0; i < 100 && refusal() !== null; i += 1) await wait(2);
+  await until(() => refusal() === null, { what: "the fresh read to clear the barrier" });
   return refusal();
 };
 
 const untilNotice = async (code) => {
-  for (let i = 0; i < 100 && !notices.some((notice) => notice.code === code); i += 1) await wait(10);
+  await until(() => notices.some((notice) => notice.code === code), { what: `a ${code} notice` });
   return notices.filter((notice) => notice.code === code).length;
-};
-
-const until = async (check, ms = 5000) => {
-  const deadline = Date.now() + ms;
-  while (!check() && Date.now() < deadline) await wait(10);
 };
 
 // Hold the next room read open until the test releases it.
@@ -847,7 +843,7 @@ test("unknown answers run the whole six-query window and then the existing uncer
   expect(ids).toHaveLength(2);
 
   // Round 0 runs as the last answer lands; later rounds are timed from it.
-  await until(() => calls.queries.length >= 6);
+  await until(() => calls.queries.length >= 6, { timeout: 5000, what: "six history lookups" });
   await wait(150);
   expect(calls.queries[0].at - calls.saves.at(-1).answeredAt).toBeLessThan(RECOVERY_ROUNDS_MS[1] / SCALE);
   const times = calls.queries.map((query) => query.at - calls.queries[0].at);
@@ -1079,7 +1075,7 @@ test("a lane that stops mid-lookup gives nothing up early and does not restart t
   expect(pendingIds(name)).toEqual([1]);
   expect(notices).toEqual([]);
 
-  await until(() => pendingIds(name).length === 0 && notices.some((notice) => notice.code === "save-uncertain"));
+  await until(() => pendingIds(name).length === 0 && notices.some((notice) => notice.code === "save-uncertain"), { timeout: 5000, what: "the pending save to be given up with a save-uncertain notice" });
   const times = calls.queries.map((query) => query.at);
   expect(calls.queries).toHaveLength(6);
   expect(Math.max(...times) - times[0]).toBeLessThan(RECOVERY_WINDOW_MS / SCALE);

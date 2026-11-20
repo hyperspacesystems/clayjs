@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../../helpers/until.js";
 import { history } from "../../../src/vendor/prosemirror.vendor.js";
 import { blockMap, REMOTE } from "../../../src/page/model.js";
 import { mediaKey, placeTr, removeTr, insertFiles, pickFiles, hostPlace, EMBED_MAX } from "../../../src/page/media.js";
@@ -13,7 +14,6 @@ import { editor, posOf, select } from "./view-helpers.js";
 afterEach(() => { document.body.innerHTML = ""; });
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-const until = async (done) => { for (let i = 0; i < 200 && !done(); i++) await new Promise((resolve) => setTimeout(resolve, 10)); };
 const file = (name = "a.png", type = "image/png", size = 10) => Object.defineProperty(new File(["x"], name, { type }), "size", { value: size });
 
 function fakeUpload() {
@@ -182,7 +182,7 @@ describe("when the upload does not succeed", () => {
   test("Keep this image inside the document embeds it as a data: URL and announces it", async () => {
     const { view } = await settled(fail("unsupported"));
     click(view, "embed");
-    await until(() => items(view).length === 0);
+    await until(() => items(view).length === 0, { what: "embedded image bookmark cleared" });
     expect(view.state.doc.child(1).type.name).toBe("image");
     expect(view.state.doc.child(1).attrs.src).toMatch(/^data:image\/png;base64,/);
     expect(items(view)).toEqual([]);

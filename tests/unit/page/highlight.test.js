@@ -1,3 +1,4 @@
+import { until } from "../../helpers/until.js";
 import { history } from "../../../src/vendor/prosemirror.vendor.js";
 import { langOf, tokenize, highlightKey } from "../../../src/page/highlight.js";
 import { editor, posOf, select, typeText } from "./view-helpers.js";
@@ -11,9 +12,6 @@ import { editor, posOf, select, typeText } from "./view-helpers.js";
 afterEach(() => { document.body.innerHTML = ""; });
 
 const wait = (ms = 20) => new Promise((r) => setTimeout(r, ms));
-const until = async (check, timeout = 10000) => {
-  for (const end = Date.now() + timeout; !check() && Date.now() < end;) await wait(10);
-};
 const fake = () => {
   const calls = [];
   const run = (code, lang) => {
@@ -35,7 +33,7 @@ test("a code block with a language gets colours without a document change or an 
   const view = editor([["c", "code_block", "const x = 1", { lang: "js" }]], { highlight: { tokenize: run, delay: 0 } });
   const depth = history.undoDepth(view.state);
   const doc = view.state.doc;
-  await until(() => calls.length === 1);
+  await until(() => calls.length === 1, { timeout: 10000, what: "code block tokenization" });
   expect(calls).toEqual([["const x = 1", "javascript"]]);
   expect(decos(view).map((d) => [d.from, d.to])).toEqual([[1, 6]]);
   expect(decos(view)[0].type.attrs.style).toBe("color: var(--blockeditor-code-token-keyword)");
@@ -83,12 +81,12 @@ test("the picker sets the language as one undo step, and Plain text clears the c
   picker.value = "python";
   picker.dispatchEvent(new Event("change"));
   expect(view.state.doc.child(0).attrs.lang).toBe("python");
-  await until(() => decos(view).length > 0);
+  await until(() => decos(view).length > 0, { timeout: 10000, what: "python highlight decorations" });
   expect(calls).toEqual([["print(1)", "python"]]);
   expect(decos(view).length).toBe(1);
   picker.value = "";
   picker.dispatchEvent(new Event("change"));
-  await until(() => decos(view).length === 0);
+  await until(() => decos(view).length === 0, { timeout: 10000, what: "highlight decorations cleared" });
   expect(decos(view)).toEqual([]);
   history.undo(view.state, view.dispatch);
   expect(view.state.doc.child(0).attrs.lang).toBe("python");
@@ -115,11 +113,11 @@ describe("review round 1", () => {
   test("turning a coloured code block into text drops its colours", async () => {
     const { run } = fake();
     const view = editor([["c", "code_block", "const x = 1", { lang: "javascript" }]], { highlight: { tokenize: run, delay: 0 } });
-    await until(() => decos(view).length === 1);
+    await until(() => decos(view).length === 1, { timeout: 10000, what: "initial highlight decoration" });
     expect(decos(view).length).toBe(1);
     const { turnInto, BLOCK_TYPES } = await import("../../../src/page/chrome.js");
     view.dispatch(turnInto(view.state, 0, BLOCK_TYPES[0]));
-    await until(() => decos(view).length === 0);
+    await until(() => decos(view).length === 0, { timeout: 10000, what: "decorations dropped on turnInto paragraph" });
     expect(view.state.doc.child(0).type.name).toBe("paragraph");
     expect(decos(view)).toEqual([]);
   });
@@ -133,7 +131,7 @@ describe("review round 1", () => {
     await wait();
     expect(decos(view)).toEqual([]);
     history.undo(view.state, view.dispatch);
-    await until(() => decos(view).length === 1);
+    await until(() => decos(view).length === 1, { timeout: 10000, what: "decorations restored on undo" });
     expect(decos(view).length).toBe(1);
     expect(calls.length).toBe(1);
   });
@@ -163,11 +161,11 @@ describe("review round 1", () => {
     try {
       const { run } = fake();
       const view = editor([["p", "paragraph", "P"], ["c", "code_block", "x", { lang: "javascript" }]], { highlight: { tokenize: run, delay: 0 } });
-      await until(() => observed.size === 1);
+      await until(() => observed.size === 1, { timeout: 10000, what: "code block observed" });
       expect(observed.size).toBe(1);
       const n = view.state.doc.child(0).nodeSize;
       view.dispatch(view.state.tr.delete(n, n + view.state.doc.child(1).nodeSize));
-      await until(() => observed.size === 0);
+      await until(() => observed.size === 0, { timeout: 10000, what: "deleted code block unobserved" });
       expect(observed.size).toBe(0);
     } finally {
       win.IntersectionObserver = prev;
@@ -179,9 +177,9 @@ test("typing in a coloured block keeps its colours until the new ones arrive, so
   const held = [];
   const run = (code) => new Promise((r) => held.push(() => r([[{ content: code.slice(0, 5), offset: 0, color: "var(--blockeditor-code-token-keyword)", fontStyle: 0 }]])));
   const view = editor([["c", "code_block", "const x = 1", { lang: "javascript" }]], { highlight: { tokenize: run, delay: 0 } });
-  await until(() => held.length === 1);
+  await until(() => held.length === 1, { timeout: 10000, what: "first tokenize call held" });
   held.shift()();
-  await until(() => decos(view).length === 1);
+  await until(() => decos(view).length === 1, { timeout: 10000, what: "first highlight decoration" });
   expect(decos(view).length).toBe(1);
   select(view, posOf(view, "c", true));
   for (const ch of " + 2") {
@@ -190,6 +188,6 @@ test("typing in a coloured block keeps its colours until the new ones arrive, so
     expect(decos(view).map((d) => [d.from, d.to])).toEqual([[1, 6]]);
   }
   while (held.length) held.shift()();
-  await until(() => decos(view).length === 1);
+  await until(() => decos(view).length === 1, { timeout: 10000, what: "updated highlight decoration" });
   expect(decos(view).length).toBe(1);
 });

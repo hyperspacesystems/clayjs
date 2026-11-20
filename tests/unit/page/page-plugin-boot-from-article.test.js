@@ -7,6 +7,7 @@ import { seedValue } from "../../../src/page/ybind/seed.js";
 import { projectInto, renderFromTags } from "../../../src/page/save-projection.js";
 import { seedPageFromArticle } from "../../../src/page/ybind/migrate.js";
 import { serializeLive } from "../../../src/live/ops.js";
+import { untilBaselineSettled } from "../../helpers/until.js";
 
 /**
  * A page saved without its merge state (HTML Clay stores nothing, an outside edit
@@ -60,12 +61,6 @@ const articleOf = (html) => new DOMParser().parseFromString(html, "text/html").q
 const expectedTagText = (html) => serializeLive(seedPageFromArticle(articleOf(html)));
 const pageTag = () => document.querySelector(TAG_SEL);
 
-// The load-time settle the autosave baseline waits for: the boot's own churn
-// (injected styles, the editor mounting) is absorbed here, not by a save.
-const settle = async (save, timeout = 4000) => {
-  const deadline = Date.now() + timeout;
-  while (!save.baselineSettled() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
-};
 
 const roomState = (room) => ({
   epoch: room.epoch, seq: room.seq, writer: room.writer, conn: 0,
@@ -210,7 +205,7 @@ test("an untouched page booted from its article does not read as unsaved", async
   const save = await import("../../../src/core/save.js");
 
   await page.ready;
-  await settle(save);
+  await untilBaselineSettled(save);
 
   expect(pageTag()).toBe(null);
   // The staged store is in no comparison domain, so it cannot be the reason a page
@@ -226,7 +221,7 @@ test("a live-data host makes no write when the page is opened, and no room is jo
 
   await page.ready;
   await flushAsync();
-  await settle(save);
+  await untilBaselineSettled(save);
 
   expect(page.view).toBeTruthy();
   expect(saves).toHaveLength(0);

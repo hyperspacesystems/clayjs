@@ -3,6 +3,7 @@
  * @jest-environment-options {"url": "https://example.com/notes.html"}
  */
 import { jest } from "@jest/globals";
+import { until } from "../../helpers/until.js";
 import * as realEditor from "../../../src/page/editor.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
@@ -32,11 +33,6 @@ const ARTICLE_SEL = "article[data-blockeditor]";
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const until = async (predicate, timeout = 4000) => {
-  const deadline = Date.now() + timeout;
-  while (!predicate() && Date.now() < deadline) await sleep(5);
-  return predicate();
-};
 const flush = async () => { for (let i = 0; i < 20; i++) await sleep(0); };
 const tick = async (turns = 40) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
 
@@ -210,7 +206,7 @@ async function load({
   const openReader = async (bytes, { etag = "stamp-1", seq = 1 } = {}) => {
     const { start } = await import("../../../src/page/view.js");
     const reader = start({ represented: { bytes, etag, seq }, documentURL: "https://example.com/notes.html" });
-    await until(() => sources.length > 0);
+    await until(() => sources.length > 0, { timeout: 4000, what: "reader EventSource to open" });
     await flush();
     return reader;
   };

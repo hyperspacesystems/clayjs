@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * A reader of a synced document downloads no presence code until a roster frame
@@ -90,13 +91,6 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
-const turn = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function until(check, ms = 2000) {
-  const deadline = Date.now() + ms;
-  while (!check() && Date.now() < deadline) await turn(5);
-}
-
 async function startedReader() {
   const sync = new LiveSync();
   sync.lane = "saved";
@@ -131,14 +125,14 @@ test("a frame that arrives during the download is applied, in order, once it lan
   frame(source, second);
 
   // The download starts on the first frame, so the frames above queue behind it.
-  await until(() => loads.presence === 1 && loads.marker === 1);
+  await until(() => loads.presence === 1 && loads.marker === 1, { what: "the presence and marker downloads to start" });
   expect(rosterUpdates).not.toHaveBeenCalled();
   expect(markerUpdates).not.toHaveBeenCalled();
   expect(realPresence.presence.roster).toEqual({ people: [], anonymous: 0 });
 
   gates.presence.release();
   gates.marker.release();
-  await until(() => rosterUpdates.mock.calls.length === 2);
+  await until(() => rosterUpdates.mock.calls.length === 2, { what: "both queued roster updates" });
 
   expect(rosterUpdates.mock.calls.map(([data]) => data)).toEqual([first, second]);
   expect(markerUpdates.mock.calls.map(([data]) => data)).toEqual([first, second]);
@@ -152,7 +146,7 @@ test("after the download a frame is applied straight away", async () => {
   const later = rosterOf([{ id: "p_ada", name: "Ada Lovelace", you: true }]);
 
   frame(sync.sse, later);
-  await until(() => rosterUpdates.mock.calls.length === 1);
+  await until(() => rosterUpdates.mock.calls.length === 1, { what: "the roster update" });
 
   expect(rosterUpdates.mock.calls[0][0]).toEqual(later);
   expect(markerUpdates.mock.calls[0][0]).toEqual(later);

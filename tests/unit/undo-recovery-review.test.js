@@ -15,6 +15,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 import { deserialize, serialize } from "node:v8";
 import { IDBFactory } from "fake-indexeddb";
 
@@ -34,13 +35,6 @@ const setText = (el, value) => {
   else el.textContent = value;
 };
 
-async function until(check, tries = 400) {
-  for (let at = 0; at < tries; at++) {
-    if (await check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-}
 
 let factory;
 let plugin;
@@ -116,7 +110,7 @@ async function skipStep() {
   expect(receipt).toMatchObject({ ok: false, code: "empty", direction: "undo" });
   expect(skipped).toEqual([{ entryId: id, label: "Edit", direction: "undo", code: "content-changed" }]);
   expect(refused).toEqual([]);
-  expect(await until(() => kept.length > 0)).toBe(true);
+  await until(() => kept.length > 0, { what: "skipped step kept in recovery" });
   return receipt;
 }
 
@@ -155,7 +149,7 @@ async function openNotice(trigger = null) {
   const notice = await import("../../src/core/conflict-notice-ui.js");
   open.push(() => notice.stop());
   notice.start(trigger);
-  expect(await until(() => buttonSaying(/^Review$/) !== undefined || panel() !== null)).toBe(true);
+  await until(() => buttonSaying(/^Review$/) !== undefined || panel() !== null, { what: "Review button or conflict panel" });
   return notice;
 }
 
@@ -172,7 +166,7 @@ async function review() {
   const review = buttonSaying(/^Review$/);
   expect(review).toBeDefined();
   review.click();
-  expect(await until(() => panel() !== null)).toBe(true);
+  await until(() => panel() !== null, { what: "conflict review panel" });
 }
 
 beforeEach(async () => {
@@ -226,7 +220,7 @@ test("copy takes the person's writing out as plain text", async () => {
   navigator.clipboard = { writeText: jest.fn().mockResolvedValue(undefined) };
   buttonSaying(/^Copy$/).click();
 
-  expect(await until(() => buttonSaying(/^Copied$/))).toBe(true);
+  await until(() => buttonSaying(/^Copied$/), { what: "Copied button confirmation" });
   expect(navigator.clipboard.writeText).toHaveBeenCalledWith("authored");
   expect(await records()).toHaveLength(1);
 });
@@ -241,7 +235,7 @@ test("download my copy carries the kept step as JSON", async () => {
   URL.revokeObjectURL = jest.fn();
 
   buttonSaying(/^Download my copy$/).click();
-  expect(await until(() => URL.createObjectURL.mock.calls.length === 1)).toBe(true);
+  await until(() => URL.createObjectURL.mock.calls.length === 1, { what: "download blob created" });
   expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
 
   const html = await new Promise((resolve) => {
@@ -264,8 +258,8 @@ test("dismiss removes the kept step", async () => {
   await review();
 
   buttonSaying(/^Dismiss$/).click();
-  expect(await until(async () => (await records()).length === 0)).toBe(true);
-  expect(await until(() => rows().length === 0)).toBe(true);
+  await until(async () => (await records()).length === 0, { what: "kept records cleared" });
+  await until(() => rows().length === 0, { what: "review rows cleared" });
   // A store with nothing left for review no longer asks the next boot for the notice.
   expect(storage.local.get("undo")).toBeUndefined();
 });
@@ -280,7 +274,7 @@ test("a revision that moved refuses to dismiss", async () => {
   await undo.keep({ key: "note", label: "Unsent note", payload: { text: "second" } });
 
   buttonSaying(/^Dismiss$/).click();
-  expect(await until(() => (root()?.textContent ?? "").includes("That copy could not be dismissed."))).toBe(true);
+  await until(() => (root()?.textContent ?? "").includes("That copy could not be dismissed."), { what: "stale dismiss refusal message" });
   const remaining = await records();
   expect(remaining).toHaveLength(1);
   expect(remaining[0].payload.text).toBe("second");
@@ -302,7 +296,7 @@ test("an app action that says ok and dismiss takes the row away", async () => {
   expect(row.textContent).toContain("kept by the app");
 
   buttonSaying(/^Keep as new$/).click();
-  expect(await until(async () => (await records()).length === 0)).toBe(true);
+  await until(async () => (await records()).length === 0, { what: "kept records cleared" });
   expect(seen).toEqual(["app:note"]);
 
   off();
@@ -333,7 +327,7 @@ test("an action activated twice while it runs runs once", async () => {
   expect(runs).toHaveLength(1);
 
   release();
-  expect(await until(() => panelText().includes("That action did not run."))).toBe(true);
+  await until(() => panelText().includes("That action did not run."), { what: "failed action notice" });
   expect(runs).toHaveLength(1);
   expect(await records()).toHaveLength(1);
 });
@@ -349,7 +343,7 @@ test("an action that throws leaves the row and says so", async () => {
   await review();
   buttonSaying(/^Keep as new$/).click();
 
-  expect(await until(() => panelText().includes("That action did not run. The copy is still here."))).toBe(true);
+  await until(() => panelText().includes("That action did not run. The copy is still here."), { what: "thrown action notice" });
   expect(await records()).toHaveLength(1);
   expect(rowSaying("Unsent note")).not.toBeNull();
 });
@@ -369,7 +363,7 @@ test("an action that clears its own copy answers ok without dismiss, and the pan
   await review();
   buttonSaying(/^Keep as new$/).click();
 
-  expect(await until(async () => (await records()).length === 1 && !rowSaying("Unsent note"))).toBe(true);
+  await until(async () => (await records()).length === 1 && !rowSaying("Unsent note"), { what: "cleared copy row removed" });
   expect(rowSaying("Other note")).not.toBeNull();
   expect(panelText()).not.toContain("That action did not run.");
 });
@@ -380,7 +374,7 @@ test("a kept skip offers review the moment it is kept", async () => {
 
   await skipStep();
 
-  expect(await until(() => buttonSaying(/^Review$/) !== undefined)).toBe(true);
+  await until(() => buttonSaying(/^Review$/) !== undefined, { what: "Review button shown" });
   await review();
   expect(panelText()).toContain('The undo of "peer" was not applied');
 });
@@ -425,7 +419,7 @@ test("a reload lists the kept step on the next edit session, and a view boot ope
   );
 
   await openShell();
-  expect(await until(() => buttonSaying(/^Review$/) !== undefined)).toBe(true);
+  await until(() => buttonSaying(/^Review$/) !== undefined, { what: "Review button shown" });
   await review();
   const row = rowSaying("not applied");
   expect(row).not.toBeNull();

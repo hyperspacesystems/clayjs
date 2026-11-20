@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../../helpers/until.js";
 
 /**
  * A reader opens a Document in view mode with `plugins=blockeditor`. The loader adds
@@ -15,10 +16,6 @@ const sources = [];
 
 const flush = async (times = 10) => {
   for (let i = 0; i < times; i++) await new Promise((resolve) => setTimeout(resolve, 0));
-};
-
-const until = async (check, times = 40) => {
-  for (let i = 0; i < times && !check(); i++) await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
 test("a view-mode boot follows the saved file through the reader's own transport", async () => {
@@ -48,7 +45,7 @@ test("a view-mode boot follows the saved file through the reader's own transport
 
   const { boot } = await import("../../../src/loader.js");
   const booting = boot("https://clayjs.com/v1", new URLSearchParams("plugins=blockeditor"), () => {});
-  await until(() => sources.length > 0);
+  await until(() => sources.length > 0, { what: "reader EventSource created" });
   expect(sources).toHaveLength(1);
 
   sources[0].onopen();
@@ -335,7 +332,7 @@ test("a first file another version wrote is refused, nothing applies and acquire
   expect(await pageView.acquired).toBeNull();
   expect(document.querySelector('[data-id="p1"]').textContent).toBe("Before");
   expect(document.querySelector('meta[name="hyper-version"]').getAttribute("content")).toBe("1.0.0");
-  await until(() => document.querySelector("[data-clay-conflict]")?.textContent.includes("This document was upgraded."));
+  await until(() => document.querySelector("[data-clay-conflict]")?.textContent.includes("This document was upgraded."), { what: "upgrade conflict banner" });
   expect(document.querySelector("[data-clay-conflict]").textContent).toContain("This document was upgraded.");
   pageView.stop();
 });

@@ -3,6 +3,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * A document that signs `clay-mode-switch="live"` enters edit without a reload, and the
@@ -17,13 +18,6 @@ const flush = async () => {
   for (let i = 0; i < 5; i++) await sleep(0);
 };
 
-const until = async (predicate) => {
-  for (let i = 0; i < 400; i++) {
-    if (predicate()) return true;
-    await sleep(5);
-  }
-  return false;
-};
 
 const posts = [];
 
@@ -70,7 +64,7 @@ test("a live entry into edit loads the tracker, which declares the shared edit m
   // The tracker is never imported here: only the loader's own import can register the
   // header, and the header appears once the tracker has its baseline.
   const tracking = () => core.buildSaveRequest("<p></p>", false, undefined, "probe", null).options.headers["Site-Data"] !== undefined;
-  expect(await until(tracking)).toBe(true);
+  await until(tracking, { what: "Site-Data header registered by tracker" });
 
   const told = [];
   document.addEventListener("clay:site-data", (event) => told.push(event.detail));

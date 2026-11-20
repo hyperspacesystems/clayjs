@@ -3,6 +3,7 @@
  * @jest-environment-options {"url": "https://example.com/notes.html"}
  */
 import { jest } from "@jest/globals";
+import { until } from "../../helpers/until.js";
 import { $ } from "../helpers/editor-ui.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { buildPageValue, seedClientId } from "../../../src/page/ybind/migrate.js";
@@ -28,7 +29,7 @@ const TOOLS_SEL = 'script[type="application/json"][merge="blockeditor.tools"][cl
 const REPLACED_TEXT = "This page was changed outside the editor. Reload to see it.";
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const flushAsync = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
-const until = async (done, timeout = 500) => {
+const poll = async (done, timeout = 500) => {
   const deadline = Date.now() + timeout;
   while (!done() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
 };
@@ -61,7 +62,7 @@ const toastActions = () => [...($("[data-clay-toast]", "toasts")?.querySelectorA
   .filter((b) => b.textContent).map((b) => b.textContent);
 // The toast stack arrives on the first toast, so a notice is waited for rather than
 // assumed to be in the same tick.
-const waitForToast = (fragment = "") => until(() => toastText().includes(fragment));
+const waitForToast = (fragment = "") => until(() => toastText().includes(fragment), { what: `toast "${fragment}"` });
 
 const syncFromDisk = async (html) => {
   let adopted = 0;
@@ -69,7 +70,7 @@ const syncFromDisk = async (html) => {
   document.addEventListener("clay:blockeditor-adopted", onAdopted);
   try {
     document.dispatchEvent(new CustomEvent("clay:sync-applied", { detail: { source: "disk", html } }));
-    await until(() => adopted > 0);
+    await poll(() => adopted > 0);
     await flushAsync();
     return adopted;
   } finally {
@@ -296,7 +297,7 @@ test("on a host with no rooms, an outside edit to one block merges into the tab"
 
   await page.ready;
   await syncFromDisk(outsideEdit(revOf(html), "Hello from outside"));
-  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello from outside");
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello from outside", { what: "outside edit merged into p" });
 
   expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello from outside");
   expect(toastText()).toBe("");
@@ -314,7 +315,7 @@ test("an outside edit and the tab's own typing in another block are both kept", 
   expect(blocksFromYValue(storeOf("blockeditor").value).h.c).toBe("Notes!");
 
   await syncFromDisk(outsideEdit(revOf(html), "Hello from outside"));
-  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello from outside");
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello from outside", { what: "outside edit merged into p" });
 
   expect(blocksFromYValue(storeOf("blockeditor").value).h.c).toBe("Notes!");
   expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello from outside");
@@ -345,7 +346,7 @@ test("an untouched older copy leaves the page as it is", async () => {
 
   await page.ready;
   await syncFromDisk(outsideEdit(revOf(html), "Hello from outside"));
-  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello from outside");
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello from outside", { what: "outside edit merged into p" });
   expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello from outside");
 
   await syncFromDisk(pageHtml(value));
@@ -362,7 +363,7 @@ test("a second outside save that kept the rev merges against the first, not the 
 
   await page.ready;
   await syncFromDisk(outsideEdit(rev, "Hello outside"));
-  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello outside");
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).p.c === "Hello outside", { what: "first outside edit merged into p" });
   expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello outside");
 
   // The tab types over the adopted text.
@@ -373,7 +374,7 @@ test("a second outside save that kept the rev merges against the first, not the 
   // A second outside save, the first edit plus a new block, with the rev kept.
   const second = docOf("", `<article data-blockeditor="1" data-rev="${rev}"><h1 data-id="h">Notes</h1><p data-id="p">Hello outside</p><p data-id="q">New from outside</p></article>`);
   await syncFromDisk(second);
-  await until(() => blocksFromYValue(storeOf("blockeditor").value).q?.c === "New from outside");
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).q?.c === "New from outside", { what: "second outside edit merged block q" });
 
   const blocks = Object.values(blocksFromYValue(storeOf("blockeditor").value));
   expect(blocks.map((b) => b.c)).toEqual(["Notes", "Hello there", "New from outside"]);
@@ -408,7 +409,7 @@ test("an outside edit made on the tab's own saved file merges without duplicatin
   article.querySelector('[data-id="h"]').textContent = "Notes from outside";
   await syncFromDisk(docOf("", article.outerHTML));
 
-  await until(() => blocksFromYValue(storeOf("blockeditor").value).h.c === "Notes from outside");
+  await until(() => blocksFromYValue(storeOf("blockeditor").value).h.c === "Notes from outside", { what: "outside edit merged into heading h" });
   const blocks = Object.values(blocksFromYValue(storeOf("blockeditor").value));
   expect(blocks.map((b) => b.c)).toEqual(["Notes from outside", "Hello there"]);
   expect(toastText()).toBe("");

@@ -4,6 +4,7 @@
 
 import { jest } from "@jest/globals";
 import { bootFixture } from "./helpers/mode-harness.js";
+import { until } from "../helpers/until.js";
 
 // A boot parses and mounts the real fixtures: the jsdom default is a boot's own time.
 jest.setTimeout(120000);
@@ -27,11 +28,6 @@ const SRC = "../../src/";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const flush = async () => {
   for (let i = 0; i < 20; i++) await sleep(0);
-};
-const until = async (predicate, timeout = 8000) => {
-  const deadline = Date.now() + timeout;
-  while (!(await predicate()) && Date.now() < deadline) await sleep(5);
-  return Boolean(await predicate());
 };
 
 const PAGE_HOST = { spec: 1, extensions: ["blockeditor", "live-data", "live-provenance", "sync", "upload"], document: {} };
@@ -92,7 +88,7 @@ test("a Document's clean second session keeps the newer file and the next entry 
       const held = await pageView.acquired;
       return held?.represented ?? held ?? null;
     };
-    expect(await until(async () => (await receipt())?.bytes)).toBe(true);
+    await until(async () => (await receipt())?.bytes, { timeout: 8000, what: "the page view's receipt to carry bytes" });
 
     const seen = [];
     clay.modeLifecycle.register({
@@ -110,7 +106,7 @@ test("a Document's clean second session keeps the newer file and the next entry 
     await flush();
     await clay.save();
     await flush();
-    expect(await until(() => save.acceptedReceipt()?.bytes)).toBe(true);
+    await until(() => save.acceptedReceipt()?.bytes, { timeout: 8000, what: "the accepted save receipt" });
     const first = save.acceptedReceipt();
     expect(first?.bytes).toContain("saved A");
     expect((await clay.setMode("view")).ok).toBe(true);
@@ -118,7 +114,7 @@ test("a Document's clean second session keeps the newer file and the next entry 
 
     const newer = otherTabFile(first.bytes);
     await sendFrame(boot, newer, 2);
-    expect(await until(() => paragraph()?.textContent === "from another tab")).toBe(true);
+    await until(() => paragraph()?.textContent === "from another tab", { timeout: 8000, what: "the other tab's text in the paragraph" });
 
     // A clean second session saves nothing: its exit must hand the reader the file it
     // was built from, not the first session's older save.
@@ -138,7 +134,7 @@ test("a Document's clean second session keeps the newer file and the next entry 
     await flush();
     await clay.save();
     await flush();
-    expect(await until(() => posts.some((entry) => /\/_\/save$/.test(entry.url)))).toBe(true);
+    await until(() => posts.some((entry) => /\/_\/save$/.test(entry.url)), { timeout: 8000, what: "the file save POST" });
     const filePost = posts.find((entry) => /\/_\/save$/.test(entry.url));
     const saved = new DOMParser().parseFromString(String(filePost.body), "text/html");
     expect(saved.querySelector('article[data-blockeditor] [data-id="p1"]')?.textContent).toBe("third");
@@ -163,7 +159,7 @@ test("a generic sync document's clean second session keeps the newer receipt", a
       `<!DOCTYPE html><html clay-mode-switch="live"><head><title>Test</title></head><body><p data-id="p1">${word}</p></body></html>`;
 
     frameFrom(source, doc("A"), 1, "E1");
-    expect(await until(() => sync._represented.bytes === doc("A"))).toBe(true);
+    await until(() => sync._represented.bytes === doc("A"), { timeout: 8000, what: "the reader to hold document A" });
 
     expect((await clay.setMode("edit")).ok).toBe(true);
     document.querySelector('[data-id="p1"]').textContent = "saved A";
@@ -177,7 +173,7 @@ test("a generic sync document's clean second session keeps the newer receipt", a
     await sync._ready;
     await flush();
     frameFrom(sync.sse._source, doc("B"), 2, "E2");
-    expect(await until(() => shown() === "B")).toBe(true);
+    await until(() => shown() === "B", { timeout: 8000, what: "document B to show" });
 
     expect((await clay.setMode("edit")).ok).toBe(true);
     expect((await clay.setMode("view")).ok).toBe(true);
@@ -209,7 +205,7 @@ test("a saved lane that starts with no bytes acquires the served file, so the ne
 
     expect((await clay.setMode("view")).ok).toBe(true);
     await sync._ready;
-    expect(await until(() => typeof sync._represented.bytes === "string")).toBe(true);
+    await until(() => typeof sync._represented.bytes === "string", { timeout: 8000, what: "the reader to hold the file's bytes" });
 
     const answer = await clay.setMode("edit");
     expect(answer).toEqual({ ok: true, mode: "edit", changed: true });
@@ -248,23 +244,23 @@ test("a live entry learns conditional saves and every session records the stamp 
     const clay = boot.clay;
     await routeHost({ ...PAGE_HOST, extensions: [...PAGE_HOST.extensions, "conditional"] });
     await sendFrame(boot, `<!DOCTYPE html>\n${document.documentElement.outerHTML}`, 1);
-    expect(await until(async () => {
+    await until(async () => {
       const held = await pageView.acquired;
       return (held?.represented ?? held)?.etag === "E1";
-    })).toBe(true);
+    }, { timeout: 8000, what: "the page view to hold stamp E1" });
     const paragraph = () => document.querySelector('article[data-blockeditor] [data-id="p1"]');
 
     // A live entry, not an edit boot: the stamp comes from the reader's receipt, and the
     // conditional capability from discovery. The first save must carry it.
     const posts = capturePosts();
     expect((await clay.setMode("edit")).ok).toBe(true);
-    expect(await until(() => etag.conditionalSaves())).toBe(true);
+    await until(() => etag.conditionalSaves(), { timeout: 8000, what: "conditional saves to be on" });
     expect(etag.lastSeenEtag()).toBe("E1");
     paragraph().textContent = "first";
     await flush();
     await clay.save();
     await flush();
-    await until(() => posts.some((entry) => /\/_\/save$/.test(entry.url)));
+    await until(() => posts.some((entry) => /\/_\/save$/.test(entry.url)), { timeout: 8000, what: "the first file save POST" });
     const first = posts.find((entry) => /\/_\/save$/.test(entry.url));
     expect(first.headers["If-Match"]).toBe("E1");
     expect((await clay.setMode("view")).ok).toBe(true);
@@ -274,17 +270,17 @@ test("a live entry learns conditional saves and every session records the stamp 
     // the advanced stamp, not the one the earlier session saved with.
     const advanced = otherTabFile(`<!DOCTYPE html>\n${document.documentElement.outerHTML}`);
     await sendFrame(boot, advanced, 2);
-    expect(await until(() => paragraph().textContent === "from another tab")).toBe(true);
-    expect(await until(() => etag.lastSeenEtag() === "E2")).toBe(true);
+    await until(() => paragraph().textContent === "from another tab", { timeout: 8000, what: "the other tab's text in the paragraph" });
+    await until(() => etag.lastSeenEtag() === "E2", { timeout: 8000, what: "stamp E2 to be seen" });
 
     expect((await clay.setMode("edit")).ok).toBe(true);
-    expect(await until(() => etag.conditionalSaves())).toBe(true);
+    await until(() => etag.conditionalSaves(), { timeout: 8000, what: "conditional saves to be on" });
     expect(etag.lastSeenEtag()).toBe("E2");
     paragraph().textContent = "second";
     await flush();
     await clay.save();
     await flush();
-    await until(() => posts.filter((entry) => /\/_\/save$/.test(entry.url)).length >= 2);
+    await until(() => posts.filter((entry) => /\/_\/save$/.test(entry.url)).length >= 2, { timeout: 8000, what: "the second file save POST" });
     const second = posts.filter((entry) => /\/_\/save$/.test(entry.url))[1];
     expect(second.headers["If-Match"]).toBe("E2");
     await clay.setMode("view");

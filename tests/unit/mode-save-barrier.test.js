@@ -3,6 +3,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until, untilBaselineSettled } from "../helpers/until.js";
 
 /**
  * The save barrier and the document-operation permit.
@@ -21,14 +22,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const flush = async () => {
   for (let i = 0; i < 5; i++) await sleep(0);
-};
-
-const until = async (predicate) => {
-  for (let i = 0; i < 300; i++) {
-    if (predicate()) return true;
-    await sleep(5);
-  }
-  return false;
 };
 
 let save, core, snapshot, warning, unsaved, transition;
@@ -109,7 +102,7 @@ beforeAll(async () => {
   transition = await import("../../src/core/mode-transition.js");
   save.setSaveGeneration(1);
   document.body.appendChild(document.createElement("span"));
-  for (let i = 0; i < 80 && !save.baselineSettled(); i++) await sleep(50);
+  await untilBaselineSettled(save);
   await sleep(50);
 }, 20000);
 
@@ -265,7 +258,7 @@ test("an accepted write is one answer carrying the host's stamp", async () => {
   await edit("accepted bytes");
 
   const barrier = transition.runSaveBarrier();
-  expect(await until(() => held.length === 1)).toBe(true);
+  await until(() => held.length === 1, { what: "the save POST to be held" });
   held[0].resolve(okResponse({ msg: "Saved", etag: '"E7"' }));
 
   expect(await barrier).toMatchObject({ ok: true, state: "saved", etag: '"E7"' });
@@ -279,7 +272,7 @@ test("a 412 is a conflict, not a failed save, and the bytes stay", async () => {
   const dirty = save.getLastSavedDirty();
 
   const barrier = transition.runSaveBarrier();
-  expect(await until(() => held.length === 1)).toBe(true);
+  await until(() => held.length === 1, { what: "the save POST to be held" });
   held[0].resolve(okResponse({ msg: "This document changed since you last loaded it.", code: "conflict" }, 412));
 
   expect(await barrier).toMatchObject({ ok: false, code: "conflict" });
@@ -296,7 +289,7 @@ test("a refused save is save-failed, and nothing advances", async () => {
   const dirty = save.getLastSavedDirty();
 
   const barrier = transition.runSaveBarrier();
-  expect(await until(() => held.length === 1)).toBe(true);
+  await until(() => held.length === 1, { what: "the save POST to be held" });
   held[0].resolve(okResponse({ msg: "The host is down" }, 500));
 
   expect(await barrier).toMatchObject({ ok: false, code: "save-failed" });
@@ -313,7 +306,7 @@ test("a write that never answers times out, and keeps its own outcome on the wir
 
   try {
     const barrier = transition.runSaveBarrier({ timeoutMs: 80 });
-    expect(await until(() => held.length === 1)).toBe(true);
+    await until(() => held.length === 1, { what: "the save POST to be held" });
 
     // On a loaded machine the flush's timer can fire before the wall clock reaches the
     // barrier's deadline. Frozen here, the clock never reaches it.
@@ -328,7 +321,7 @@ test("a write that never answers times out, and keeps its own outcome on the wir
     // The request was not aborted to manufacture an answer: the host's answer still
     // lands, and it still counts.
     held[0].resolve(okResponse());
-    expect(await until(() => save.getLastSavedDirty() === snapshot.captureForDirtyCheck())).toBe(true);
+    await until(() => save.getLastSavedDirty() === snapshot.captureForDirtyCheck(), { what: "the late answer to settle the saved baseline" });
     expect(posts.length).toBe(1);
     expect(warning.hasUnsavedChanges()).toBe(false);
   } finally {
@@ -345,7 +338,7 @@ test("an unknown fate is save-unknown, not a failed save", async () => {
 
   try {
     const barrier = transition.runSaveBarrier();
-    expect(await until(() => held.length === 1)).toBe(true);
+    await until(() => held.length === 1, { what: "the save POST to be held" });
     held[0].reject(Object.assign(new Error("The operation was aborted."), { name: "AbortError" }));
 
     expect(await barrier).toMatchObject({ ok: false, code: "save-unknown" });
@@ -362,7 +355,7 @@ test("input typed while the request is on the wire is written too", async () => 
   await edit("first");
 
   const barrier = transition.runSaveBarrier();
-  expect(await until(() => held.length === 1)).toBe(true);
+  await until(() => held.length === 1, { what: "the save POST to be held" });
   await edit("second");
   // The retry the barrier needs is answered at once; only the first request is held.
   holdPosts = false;
@@ -383,7 +376,7 @@ test("a simultaneous whole-document replacement and a barrier exclude each other
   holdPosts = true;
   await edit("mid-barrier edit");
   const barrier = transition.runSaveBarrier();
-  expect(await until(() => held.length === 1)).toBe(true);
+  await until(() => held.length === 1, { what: "the save POST to be held" });
   expect(await core.replacePageWith("/other-template.html")).toMatchObject({ ok: false, msgType: "skipped" });
   expect(gets.length).toBe(0);
   holdPosts = false;
@@ -394,7 +387,7 @@ test("a simultaneous whole-document replacement and a barrier exclude each other
   // writes nothing of its own.
   holdGets = true;
   const replacing = core.replacePageWith("/next-template.html");
-  expect(await until(() => gets.length === 1)).toBe(true);
+  await until(() => gets.length === 1, { what: "the replacement GET to be held" });
   await edit("an edit during the replacement");
 
   expect(await transition.runSaveBarrier()).toMatchObject({ ok: false, code: "busy" });
@@ -517,7 +510,7 @@ test("a source that fails beside a conflict keeps the conflict refusal", async (
     flush: async () => {
       holdPosts = true;
       const saving = save.savePage();
-      expect(await until(() => held.length === 1)).toBe(true);
+      await until(() => held.length === 1, { what: "the save POST to be held" });
       held[0].resolve(okResponse({ msg: "This document changed since you last loaded it.", code: "conflict" }, 412));
       await saving;
       return { ok: false, code: "conflict" };
@@ -540,7 +533,7 @@ test("a source that fails beside an unknown fate keeps the save-unknown refusal"
     flush: async () => {
       holdPosts = true;
       const saving = save.savePage();
-      expect(await until(() => held.length === 1)).toBe(true);
+      await until(() => held.length === 1, { what: "the save POST to be held" });
       held[0].reject(Object.assign(new Error("The operation was aborted."), { name: "AbortError" }));
       await saving;
       return { ok: false, code: "save-unknown" };

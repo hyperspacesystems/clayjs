@@ -3,6 +3,7 @@
  * @jest-environment-options {"url": "https://example.com/notes.html"}
  */
 import { jest } from "@jest/globals";
+import { until, untilBaselineSettled } from "../../helpers/until.js";
 import * as realEditor from "../../../src/page/editor.js";
 import * as realToolPart from "../../../src/page/features/tool.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
@@ -32,15 +33,6 @@ const deferred = () => {
   let resolve, reject;
   const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
   return { promise, resolve, reject };
-};
-const until = async (predicate, timeout = 4000) => {
-  const deadline = Date.now() + timeout;
-  while (!predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
-  return predicate();
-};
-const settle = async (save, timeout = 4000) => {
-  const deadline = Date.now() + timeout;
-  while (!save.baselineSettled() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
 };
 const tick = async (turns = 20) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
 
@@ -213,7 +205,7 @@ test("a session stages a tagless page and takes no input or write until the comm
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
 
     // Prepared: the editor is mounted over the page and nothing types into it.
     expect(page.view).toBeTruthy();
@@ -244,7 +236,7 @@ test("a session stages a tagless page and takes no input or write until the comm
 
     // Admitted now: the same edit writes once, as this page's first write.
     checkpointWithin(0);
-    expect(await until(() => saves.length > 0)).toBe(true);
+    await until(() => saves.length > 0, { timeout: 4000, what: "page save request" });
     expect(saves).toHaveLength(1);
     expect(saves[0].headers["Blockeditor-Write"]).toBe("v1");
   } finally {
@@ -259,7 +251,7 @@ test("a tagged document prepares the state the file already has", async () => {
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
 
     expect(page.view.editable).toBe(false);
     expect(saves).toHaveLength(0);
@@ -281,7 +273,7 @@ test("a view part still on the wire keeps preparation open and the saved article
   const save = await import("../../../src/core/save.js");
   const lease = preparePageSession(context());
   try {
-    expect(await until(() => !!page.view)).toBe(true);
+    await until(() => !!page.view, { timeout: 4000, what: "page editor view" });
     await tick();
     // The part the article demands is not in yet, so the commit has nothing to open.
     expect(inputReady()).toHaveLength(0);
@@ -292,7 +284,7 @@ test("a view part still on the wire keeps preparation open and the saved article
 
     MODE.toolGate.resolve();
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
     expect(page.view.editable).toBe(false);
     expect(saves).toHaveLength(0);
 
@@ -319,8 +311,8 @@ test("a part the room adds while the page prepares is in before the commit", asy
   try {
     // The room's page carries a part the saved article never had: preparation waits
     // for it, and the commit is what opens input.
-    expect(await until(() => page.view?.state.doc.toString().includes("tool"))).toBe(true);
-    await settle(save);
+    await until(() => page.view?.state.doc.toString().includes("tool"), { timeout: 4000, what: "room tool block in doc" });
+    await untilBaselineSettled(save);
     expect(inputReady()).toHaveLength(0);
     expect(page.view.editable).toBe(false);
 
@@ -342,7 +334,7 @@ test("a pending composition refuses the exit and keeps the typed text", async ()
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
     lease.enable();
 
     const view = page.view;
@@ -367,7 +359,7 @@ test("a pending composition refuses the exit and keeps the typed text", async ()
     lease.resume();
     expect(view.editable).toBe(true);
     expect(view.dom.textContent).toContain("Hello there");
-    expect(await until(() => saves.length > 0)).toBe(true);
+    await until(() => saves.length > 0, { timeout: 4000, what: "page save request" });
     expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello there");
   } finally {
     lease.dispose();
@@ -380,7 +372,7 @@ test("a refused checkpoint during preparation writes nothing and keeps the edit"
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
     const view = page.view;
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
     checkpointWithin(0);
@@ -392,7 +384,7 @@ test("a refused checkpoint during preparation writes nothing and keeps the edit"
 
     lease.enable();
     checkpointWithin(0);
-    expect(await until(() => saves.length > 0)).toBe(true);
+    await until(() => saves.length > 0, { timeout: 4000, what: "page save request" });
     expect(saves).toHaveLength(1);
   } finally {
     lease.dispose();
@@ -406,7 +398,7 @@ test("a page with a tool prepares it inside the session and gives it back on the
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
     expect(page.view.editable).toBe(false);
     // The store the tool keeps its state in is open, and the tool renders with the
     // page rather than waiting for the commit.
@@ -445,7 +437,7 @@ test("a session cancelled before its commit leaves nothing behind, however often
   const lease = preparePageSession(context(9));
   try {
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
     lease.enable();
     expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(1);
     expect(page.view.editable).toBe(true);
@@ -474,14 +466,14 @@ test("a refused first write re-reads the file once, re-seeds, replays the edit a
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
     lease.enable();
 
     const view = page.view;
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
     checkpointWithin(0);
-    expect(await until(() => reads.length > 0)).toBe(true);
-    expect(await until(() => saves.length > 1)).toBe(true);
+    await until(() => reads.length > 0, { timeout: 4000, what: "stored document re-read" });
+    await until(() => saves.length > 1, { timeout: 4000, what: "retried page save" });
 
     // The stored document was read exactly once, and the offered body carries its
     // article plus this tab's own edit, conditional on the version just read.
@@ -501,7 +493,7 @@ test("a refused first write re-reads the file once, re-seeds, replays the edit a
     expect(page.view).toBe(view);
     expect(view.editable).toBe(true);
     expect(view.dom.textContent).toContain("Hello there");
-    expect(await until(() => storeOf("blockeditor").handle.status.mode === "fast")).toBe(true);
+    await until(() => storeOf("blockeditor").handle.status.mode === "fast", { timeout: 4000, what: "blockeditor store in fast mode" });
   } finally {
     document.removeEventListener("clay:save-conflict", onConflict);
     lease.dispose();
@@ -524,14 +516,14 @@ test("a re-read page stamps its own version, never the weak HTTP etag that answe
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
     lease.enable();
 
     const view = page.view;
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
     checkpointWithin(0);
-    expect(await until(() => reads.length > 0)).toBe(true);
-    expect(await until(() => saves.length > 1)).toBe(true);
+    await until(() => reads.length > 0, { timeout: 4000, what: "stored document re-read" });
+    await until(() => saves.length > 1, { timeout: 4000, what: "retried page save" });
 
     // The retry is conditional on the version the stored page states, not on the weak
     // header, which no write can ever match.
@@ -559,14 +551,14 @@ test("a re-read page with only a weak HTTP etag retries against the refusal\'s o
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
     lease.enable();
 
     const view = page.view;
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
     checkpointWithin(0);
-    expect(await until(() => reads.length > 0)).toBe(true);
-    expect(await until(() => saves.length > 1)).toBe(true);
+    await until(() => reads.length > 0, { timeout: 4000, what: "stored document re-read" });
+    await until(() => saves.length > 1, { timeout: 4000, what: "retried page save" });
 
     // Nothing in the answer names the document, so the retry falls back to the stamp the
     // refusal itself carried.
@@ -592,20 +584,20 @@ test("a seed the host refuses for its lineage is offered again over the stored a
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
     lease.enable();
 
     const view = page.view;
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
     checkpointWithin(0);
-    expect(await until(() => saves.length > 1)).toBe(true);
+    await until(() => saves.length > 1, { timeout: 4000, what: "retried page save" });
 
     expect(reads).toHaveLength(1);
     expect(saves).toHaveLength(2);
     expect(saves[1].headers["If-Match"]).toBe("stamp-2");
     const saved = new DOMParser().parseFromString(saves[1].body, "text/html");
     expect(blocksFromYValue(JSON.parse(saved.querySelector(TAG_SEL).textContent)).p.c).toBe("Hello there");
-    expect(await until(() => storeOf("blockeditor").handle.status.mode === "fast")).toBe(true);
+    await until(() => storeOf("blockeditor").handle.status.mode === "fast", { timeout: 4000, what: "blockeditor store in fast mode" });
     expect(view.dom.textContent).toContain("Hello there");
   } finally {
     lease.dispose();
@@ -623,13 +615,13 @@ test("a second refusal keeps the text and shows the conflict instead of writing 
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
     lease.enable();
 
     const view = page.view;
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
     checkpointWithin(0);
-    expect(await until(() => saves.length > 1)).toBe(true);
+    await until(() => saves.length > 1, { timeout: 4000, what: "retried page save" });
     await tick(60);
 
     // One re-read, one retry, and the refusal stands with the text kept.

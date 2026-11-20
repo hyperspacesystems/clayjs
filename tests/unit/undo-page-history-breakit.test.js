@@ -3,6 +3,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 import { deserialize, serialize } from "node:v8";
 import { IDBFactory } from "fake-indexeddb";
 
@@ -48,13 +49,6 @@ const rest = async () => {
   await tick(20);
 };
 
-async function until(check, tries = 400) {
-  for (let at = 0; at < tries; at++) {
-    if (await check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-}
 
 function clearRoot() {
   const root = document.documentElement;
@@ -276,7 +270,7 @@ test("a skipped step in a plain field is kept as a recovery copy that holds the 
   const receipt = clay.undo.undo();
   expect(receipt.code).toBe("empty");
   expect(note.textContent).toBe("A peer's words");
-  expect(await until(() => kept.length > 0)).toBe(true);
+  await until(() => kept.length > 0, { what: "skipped step kept in recovery" });
   const listed = await clay.undo.kept();
   expect(JSON.stringify(listed.records.map((record) => record.payload.steps))).toContain("Note text Mine.");
 });
@@ -299,7 +293,7 @@ test("a redo that is skipped is kept as a recovery copy that holds the words red
   expect(receipt.ok).toBe(false);
   expect(skipped.map((item) => item.direction)).toEqual(["redo"]);
   expect(saved(clay, "r1")).toContain("A peer's words");
-  expect(await until(() => kept.length > 0)).toBe(true);
+  await until(() => kept.length > 0, { what: "skipped step kept in recovery" });
   const listed = await clay.undo.kept();
   expect(listed.records).toHaveLength(1);
   expect(listed.records[0].payload.steps[0].after).toBe(typed);
@@ -316,7 +310,7 @@ test("one press that skips three stale steps keeps three recovery copies", async
   await rest();
   clay.undo.undo();
   await rest();
-  expect(await until(() => kept.length >= 3)).toBe(true);
+  await until(() => kept.length >= 3, { what: "three skipped steps kept in recovery" });
   const listed = await clay.undo.kept();
   expect({ skipped: skipped.length, copies: listed.records.length, text: saved(clay, "r1").includes("Three.") }).toEqual({ skipped: 3, copies: 3, text: true });
 });

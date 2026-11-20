@@ -3,6 +3,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 jest.setTimeout(120000);
 
@@ -23,12 +24,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const flush = async () => {
   for (let i = 0; i < 20; i++) await sleep(0);
-};
-
-const until = async (predicate, timeout = 8000) => {
-  const deadline = Date.now() + timeout;
-  while (!predicate() && Date.now() < deadline) await sleep(5);
-  return predicate();
 };
 
 function okResponse() {
@@ -80,8 +75,7 @@ async function bootPage(body) {
   const { boot } = await import("../../src/loader.js");
   await new Promise((resolve) => boot(null, new URLSearchParams("exclude=richclay,source"), resolve));
 
-  const save = await import("../../src/core/save.js");
-  await until(() => save.baselineSettled());
+  await import("../../src/core/save.js");
   await flush();
   return window.clay;
 }
@@ -122,7 +116,7 @@ test.each(CASES)("a boolean spelled %s is saved as written and leaves the page c
     expect(document.getElementById("field").hasAttribute(name)).toBe(false);
 
     await type("typed once");
-    expect(await until(() => warning.hasUnsavedChanges())).toBe(true);
+    await until(() => warning.hasUnsavedChanges(), { timeout: 8000, what: "the typed edit to count as unsaved" });
 
     await leave(clay);
 

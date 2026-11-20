@@ -6,14 +6,10 @@ import { createStore } from "../../../src/live/store.js";
 import { cloneJson } from "../../../src/live/ops.js";
 import { createFastLane, MIN_GAP_MS, RETRY_MS } from "../../../src/live/fast-lane.js";
 import { fetchLiveState } from "../../../src/live/server-lane.js";
+import { until } from "../../helpers/until.js";
 
 const TEMPLATE = new URL("../../fixtures/ypage-template.html", import.meta.url);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const until = async (done, what) => {
-  for (const started = Date.now(); !done(); await sleep(5)) {
-    if (Date.now() - started > 10000) throw new Error(`timed out waiting for ${what}`);
-  }
-};
 
 let clients = 900;
 const insert = (text, client = (clients += 1)) => {
@@ -97,9 +93,9 @@ test("a checkpoint-required frame is retried as soon as the compactor's frame ar
   expect(t.page.handle.status.mode).toBe("fast");
 
   t.page.handle.set(["y", "u1-a-new"], insert("new text"));
-  await until(() => t.sends.some((s) => s.answer.status === 503), "the 503");
+  await until(() => t.sends.some((s) => s.answer.status === 503), { timeout: 10000, what: "the 503" });
   const waiting = () => held.filter((h) => !h.cleared && h.ms <= RETRY_MS);
-  await until(() => waiting().length === 1, "the backoff after the 503");
+  await until(() => waiting().length === 1, { timeout: 10000, what: "the backoff after the 503" });
   const backoff = waiting()[0];
   const refused = t.sends.filter((s) => s.answer.status === 503);
   expect(refused).toHaveLength(1);
@@ -112,7 +108,7 @@ test("a checkpoint-required frame is retried as soon as the compactor's frame ar
   expect(frame.from).toBe("compactor");
   const frameAt = Date.now();
   t.handlers().frame(frame);
-  await until(() => t.sends.some((s) => s.answer.status === 200 && s.frame.n === refused[0].frame.n), "the retry");
+  await until(() => t.sends.some((s) => s.answer.status === 200 && s.frame.n === refused[0].frame.n), { timeout: 10000, what: "the retry" });
 
   const retried = t.sends.filter((s) => s.frame.n === refused[0].frame.n && s.answer.status === 200);
   expect(retried).toHaveLength(1);

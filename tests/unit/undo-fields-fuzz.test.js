@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 import { deserialize, serialize } from "node:v8";
 import { IDBFactory } from "fake-indexeddb";
 
@@ -65,13 +66,6 @@ const rest = async () => {
   await tick(20);
 };
 
-async function until(check, tries = 400) {
-  for (let at = 0; at < tries; at++) {
-    if (await check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-}
 
 function clearRoot() {
   const root = document.documentElement;
@@ -571,7 +565,7 @@ const executeCase = async (seed, given = null) => {
 
   // A skipped step's recovery copy is written behind the press; the page must finish it
   // before this case's window goes away.
-  await until(() => kept.length >= skips.length, 120);
+  await until(() => kept.length >= skips.length, { what: "skipped undo recovery copies written" });
   await rest();
 
   console.log(`seed ${seed}: ${ops.length} operations, ${undos} undos, ${redos} redos, ${(performance.now() - started).toFixed(0)} ms`);

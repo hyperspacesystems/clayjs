@@ -5,6 +5,7 @@
 import { webcrypto } from "node:crypto";
 import { IDBFactory } from "fake-indexeddb";
 import { jest } from "@jest/globals";
+import { until, untilBaselineSettled } from "../../helpers/until.js";
 import { $$ } from "../helpers/editor-ui.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
@@ -36,11 +37,6 @@ const ARTICLE_SEL = "article[data-blockeditor]";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const tick = async (turns = 40) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
-const until = async (done, timeout = 5000) => {
-  const deadline = Date.now() + timeout;
-  while (!done() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 5));
-  return done();
-};
 
 const pageHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
@@ -268,10 +264,6 @@ const drawn = async () => {
   for (let i = 0; i < 50; i++) await Promise.resolve();
 };
 const context = (generation = 1) => ({ generation, destination: "host", signal: new AbortController().signal, isCurrent: () => true });
-const settle = async (save, timeout = 5000) => {
-  const deadline = Date.now() + timeout;
-  while (!save.baselineSettled() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
-};
 
 // The table, in the one order that never overstates the evidence, and the quiet the
 // indicator keeps for every one of these five states: where the typing lives is not a save.
@@ -363,8 +355,8 @@ test("nothing is Stored before the transaction commits, and a room's word is not
   gate.manual = true;
 
   await page.ready;
-  await settle(harness.save);
-  await until(() => !!page.view);
+  await untilBaselineSettled(harness.save);
+  await until(() => !!page.view, { timeout: 5000, what: "page editor view" });
 
   const view = page.view;
   view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
@@ -376,7 +368,7 @@ test("nothing is Stored before the transaction commits, and a room's word is not
   expect(states).not.toContain("checkpointed");
 
   commitNext();
-  expect(await until(() => states.includes("journaled"))).toBe(true);
+  await until(() => states.includes("journaled"), { timeout: 5000, what: "journaled save state" });
   expect(states).not.toContain("checkpointed");
 
   // The room's confirmation is metadata: Shared, still not Saved.
@@ -396,18 +388,18 @@ test("only a checkpoint that covers the records says Saved, and a save that prov
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(harness.save);
+    await untilBaselineSettled(harness.save);
     lease.enable();
     const view = page.view;
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
-    await until(() => states.includes("journaled"));
+    await until(() => states.includes("journaled"), { timeout: 5000, what: "journaled save state" });
     const stored = recordsOf("page.yjs").length;
     expect(stored).toBeGreaterThan(0);
 
     // An accepted save with no ETag proves no stored pair: the records stay and no
     // state ever claims Saved.
     checkpointWithin(0);
-    expect(await until(() => harness.saves.length > 0)).toBe(true);
+    await until(() => harness.saves.length > 0, { timeout: 5000, what: "save request" });
     await tick(120);
     expect(calls.checkpoints).toEqual([]);
     expect(recordsOf("page.yjs").length).toBe(stored);
@@ -425,25 +417,25 @@ test("a checkpoint that covers the records retires them and only then says Saved
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(harness.save);
+    await untilBaselineSettled(harness.save);
     lease.enable();
     const view = page.view;
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
-    await until(() => states.includes("journaled"));
+    await until(() => states.includes("journaled"), { timeout: 5000, what: "journaled save state" });
     expect(recordsOf("page.yjs").length).toBeGreaterThan(0);
 
     // The save's own ETag and the state pinned to its capture are the pair the proof
     // needs: it covers the records it names, the channel retires those, and no others.
     checkpointWithin(0);
-    expect(await until(() => recordsOf("page.yjs").length === 0)).toBe(true);
-    expect(await until(() => states.includes("checkpointed"))).toBe(true);
+    await until(() => recordsOf("page.yjs").length === 0, { timeout: 5000, what: "journal records retired" });
+    await until(() => states.includes("checkpointed"), { timeout: 5000, what: "checkpointed save state" });
     expect(calls.checkpoints.length).toBeGreaterThan(0);
     expect(states).not.toContain("unavailable");
 
     // A new edit after the checkpoint is work no checkpoint covers: Stored again, and
     // never Saved on the strength of the earlier one.
     view.dispatch(view.state.tr.insertText("?", view.state.doc.content.size - 1));
-    expect(await until(() => states.lastIndexOf("journaled") > states.indexOf("checkpointed"))).toBe(true);
+    await until(() => states.lastIndexOf("journaled") > states.indexOf("checkpointed"), { timeout: 5000, what: "new journaled state after checkpoint" });
   } finally {
     lease.dispose();
   }
@@ -455,26 +447,26 @@ test("a journal that cannot write says so once, and the copy it offers holds the
   watchStates();
 
   await page.ready;
-  await settle(harness.save);
-  await until(() => !!page.view);
+  await untilBaselineSettled(harness.save);
+  await until(() => !!page.view, { timeout: 5000, what: "page editor view" });
   const view = page.view;
   view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
-  await until(() => states.includes("journaled"));
+  await until(() => states.includes("journaled"), { timeout: 5000, what: "journaled save state" });
 
   // The device refuses the next bytes: Unavailable, and nothing is called saved.
   gate.fail = "quota";
   view.dispatch(view.state.tr.insertText("!", view.state.doc.content.size - 1));
-  expect(await until(() => states.includes("unavailable"))).toBe(true);
+  await until(() => states.includes("unavailable"), { timeout: 5000, what: "unavailable save state" });
   expect(states).not.toContain("checkpointed");
   expect(states).not.toContain("saved");
   // Not silently evicted: the records the store did confirm are still there.
   expect(harness.recordsOf("page.yjs").length).toBeGreaterThan(0);
   expect(storeOf("blockeditor").value).toBeTruthy();
 
-  const action = await until(() => $$("button", "toasts").find((button) => button.textContent === "Download copy"));
+  const action = await until(() => $$("button", "toasts").find((button) => button.textContent === "Download copy"), { timeout: 5000, what: "Download copy toast button" });
   expect(action).toBeTruthy();
   action.click();
-  expect(await until(() => downloads.length > 0)).toBe(true);
+  await until(() => downloads.length > 0, { timeout: 5000, what: "downloaded copy" });
   // The copy is the blocked edit, not the last file the host took.
   expect(downloads[0].html).toContain("Hello there!");
   expect(harness.saves.at(-1)?.body ?? "").not.toContain("Hello there!");
@@ -504,9 +496,9 @@ test("a journal that cannot open says so in edit, and leaving edit takes its toa
     const first = preparePageSession(context());
     try {
       await first.ready;
-      await settle(harness.save);
+      await untilBaselineSettled(harness.save);
       first.enable();
-      expect(await until(() => storageToasts().length === 1)).toBe(true);
+      await until(() => storageToasts().length === 1, { timeout: 5000, what: "storage warning toast" });
     } finally {
       first.dispose();
     }
@@ -516,9 +508,9 @@ test("a journal that cannot open says so in edit, and leaving edit takes its toa
 
     second = preparePageSession(context());
     await second.ready;
-    await settle(harness.save);
+    await untilBaselineSettled(harness.save);
     second.enable();
-    expect(await until(() => storageToasts().length === 1)).toBe(true);
+    await until(() => storageToasts().length === 1, { timeout: 5000, what: "storage warning toast" });
     await tick(40);
     expect(storageToasts()).toHaveLength(1);
   } finally {
@@ -534,14 +526,14 @@ test("the journal compacts at sixty-four batches, and a refused compaction evict
   gate.compactFails = true;
 
   await page.ready;
-  await settle(harness.save);
-  await until(() => !!page.view);
+  await untilBaselineSettled(harness.save);
+  await until(() => !!page.view, { timeout: 5000, what: "page editor view" });
   const view = page.view;
   for (let i = 0; i < 64; i++) {
     view.dispatch(view.state.tr.insertText("x", view.state.doc.content.size - 1));
     await tick(4);
   }
-  expect(await until(() => calls.compactions.length > 0)).toBe(true);
+  await until(() => calls.compactions.length > 0, { timeout: 5000, what: "journal compaction" });
   // Bounded: the first compaction names the sixty-four batches it holds.
   expect(calls.compactions[0]).toBe(64);
   await tick(80);
@@ -556,8 +548,8 @@ test("an exit waits for every append the journal handed over", async () => {
   gate.manual = true;
 
   await page.ready;
-  await settle(harness.save);
-  await until(() => !!page.view);
+  await untilBaselineSettled(harness.save);
+  await until(() => !!page.view, { timeout: 5000, what: "page editor view" });
   const view = page.view;
   view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
   await tick();
@@ -585,7 +577,7 @@ test("edit, view, edit leaves one observer and one panel", async () => {
   const first = preparePageSession(context());
   try {
     await first.ready;
-    await settle(harness.save);
+    await untilBaselineSettled(harness.save);
     first.enable();
     expect(rqa(".blockeditor-recovery")).toHaveLength(1);
     const firstPanel = rq(".blockeditor-recovery-panel");
@@ -608,7 +600,7 @@ test("edit, view, edit leaves one observer and one panel", async () => {
     const second = preparePageSession(context());
     try {
       await second.ready;
-      await settle(harness.save);
+      await untilBaselineSettled(harness.save);
       second.enable();
       expect(rqa(".blockeditor-recovery")).toHaveLength(1);
       expect(rqa(".blockeditor-recovery-panel")).toHaveLength(1);
@@ -637,12 +629,12 @@ test("a refused exit resumes the same document and the same records", async () =
   const lease = preparePageSession(context());
   try {
     await lease.ready;
-    await settle(harness.save);
+    await untilBaselineSettled(harness.save);
     lease.enable();
     const view = page.view;
     const panel = rq(".blockeditor-recovery-panel");
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
-    expect(await until(() => states.includes("journaled"))).toBe(true);
+    await until(() => states.includes("journaled"), { timeout: 5000, what: "journaled save state" });
     const records = harness.recordsOf("page.yjs").length;
 
     // A refused exit closes admission and gives everything back exactly as it was.

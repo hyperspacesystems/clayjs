@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * A hidden edit tab takes in a peer's save while it is hidden.
@@ -112,13 +113,6 @@ afterEach(() => {
 });
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const until = async (predicate, what, ms = 5000) => {
-  const deadline = Date.now() + ms;
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error("timed out waiting for " + what);
-    await wait(10);
-  }
-};
 
 const BOARD = '<p class="card" data-id="one">One</p><p class="card" data-id="two">Two</p>';
 
@@ -144,7 +138,7 @@ test("a hidden tab applies a peer's stamped frame without an animation frame, an
   try {
     hidden = true;
     sync.sse.onmessage(peerFrame(10, "E1"));
-    await until(() => etag.lastSeenEtag() === "E1", "the peer's stamp");
+    await until(() => etag.lastSeenEtag() === "E1", { timeout: 5000, what: "the peer's stamp" });
     expect(document.querySelector('[data-id="two"]').textContent).toBe("Two FROM PEER");
     expect(window.requestAnimationFrame).not.toHaveBeenCalled();
 
@@ -172,7 +166,7 @@ test("a frame waiting for an animation frame when the page is hidden is applied 
 
     hidden = true;
     document.dispatchEvent(new Event("visibilitychange"));
-    await until(() => etag.lastSeenEtag() === "E1", "the peer's stamp after hiding");
+    await until(() => etag.lastSeenEtag() === "E1", { timeout: 5000, what: "the peer's stamp after hiding" });
     expect(window.cancelAnimationFrame).toHaveBeenCalledWith(7);
     expect(document.querySelector('[data-id="two"]').textContent).toBe("Two FROM PEER");
   } finally {

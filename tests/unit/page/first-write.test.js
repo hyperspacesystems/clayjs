@@ -3,6 +3,7 @@
  * @jest-environment-options {"url": "https://example.com/notes.html"}
  */
 import { jest } from "@jest/globals";
+import { until, untilBaselineSettled } from "../../helpers/until.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
 import { seedPageFromArticle } from "../../../src/page/ybind/migrate.js";
@@ -49,17 +50,6 @@ const peerValue = (html) => {
   return value;
 };
 const taggedPage = (value) => pageHtml(value) + `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
-
-const settle = async (save, timeout = 4000) => {
-  const deadline = Date.now() + timeout;
-  while (!save.baselineSettled() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
-};
-
-const until = async (predicate, timeout = 4000) => {
-  const deadline = Date.now() + timeout;
-  while (!predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
-  return predicate();
-};
 
 const roomState = (room) => ({
   epoch: room.epoch, seq: room.seq, writer: room.writer, conn: 0,
@@ -144,7 +134,7 @@ async function load({ html = pageHtml(), liveData = true, storedState = null, st
           return key ? headers[key] : null;
         },
       },
-      text: async () => JSON.stringify(reply.body ?? {}),
+    text: async () => JSON.stringify(reply.body ?? {}),
     };
   });
 
@@ -173,7 +163,7 @@ test("a tagless page stages its seed in memory: no tag, no request, no room", as
   const warning = await import("../../../src/core/unsaved-warning.js");
 
   await page.ready;
-  await settle(save);
+  await untilBaselineSettled(save);
 
   expect(page.view).toBeTruthy();
   expect(page.view.editable).toBe(true);
@@ -199,7 +189,7 @@ test("the first edit saves seed plus that edit against the version it staged fro
   const { stageStore } = await import("../../../src/plugins/live.js");
 
   await page.ready;
-  await settle(save);
+  await untilBaselineSettled(save);
   const staged = stageStore ? null : null;
   expect(staged).toBe(null);
   expect(saves).toHaveLength(0);
@@ -210,7 +200,7 @@ test("the first edit saves seed plus that edit against the version it staged fro
   expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello there");
 
   checkpointWithin(0);
-  expect(await until(() => saves.length > 0)).toBe(true);
+  await until(() => saves.length > 0, { timeout: 4000, what: "first save request" });
 
   // One conditional save, declared as a page write, carrying the seed's own client.
   expect(saves).toHaveLength(1);
@@ -231,7 +221,7 @@ test("the first edit saves seed plus that edit against the version it staged fro
   expect(saved.querySelector("article").getAttribute("data-rev")).toBe(projected.rev);
 
   // The accepted write opens the room and the page store follows it.
-  expect(await until(() => storeOf("blockeditor").handle.status.mode === "fast")).toBe(true);
+  await until(() => storeOf("blockeditor").handle.status.mode === "fast", { timeout: 4000, what: "blockeditor store in fast mode" });
   expect(room.stores.blockeditor).toBeTruthy();
   expect(pageTag()).toBe(null);
 
@@ -240,7 +230,7 @@ test("the first edit saves seed plus that edit against the version it staged fro
   const framesBefore = sent.length;
   const at = view.state.doc.content.size - 1;
   view.dispatch(view.state.tr.insertText("!", at));
-  expect(await until(() => sent.length > framesBefore)).toBe(true);
+  await until(() => sent.length > framesBefore, { timeout: 4000, what: "post-save live frame" });
   expect(sent.at(-1).name).toBe("blockeditor");
   expect(sent.at(-1).ops.length).toBeGreaterThan(0);
   expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello there!");
@@ -260,12 +250,12 @@ test("a losing first write keeps the typed text in this tab", async () => {
     document.addEventListener("clay:save-conflict", onConflict);
 
     await page.ready;
-    await settle(save);
+    await untilBaselineSettled(save);
     const view = page.view;
     view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
     checkpointWithin(0);
-    expect(await until(() => saves.length > 0)).toBe(true);
-    expect(await until(() => conflicts.length > 0)).toBe(true);
+    await until(() => saves.length > 0, { timeout: 4000, what: "conflicting save request" });
+    await until(() => conflicts.length > 0, { timeout: 4000, what: "save-conflict event" });
 
     expect(reload).not.toHaveBeenCalled();
     expect(page.view).toBe(view);
@@ -286,7 +276,7 @@ test("a host that keeps no page data saves through the file lane at the first re
   const save = await import("../../../src/core/save.js");
 
   await page.ready;
-  await settle(save);
+  await untilBaselineSettled(save);
 
   expect(page.view).toBeTruthy();
   expect(pageTag()).toBe(null);
@@ -296,7 +286,7 @@ test("a host that keeps no page data saves through the file lane at the first re
   const view = page.view;
   view.dispatch(view.state.tr.insertText(" there", view.state.doc.content.size - 1));
   checkpointWithin(0);
-  expect(await until(() => saves.length > 0)).toBe(true);
+  await until(() => saves.length > 0, { timeout: 4000, what: "file-lane save request" });
 
   expect(saves).toHaveLength(1);
   expect(saves[0].headers["Blockeditor-Write"]).toBe("v1");
@@ -315,7 +305,7 @@ test("the staged store is pending only after an edit, and its flush is the first
   const save = await import("../../../src/core/save.js");
 
   await page.ready;
-  await settle(save);
+  await untilBaselineSettled(save);
 
   const staged = stageStore("blockeditor");
   expect(staged.handle).toBe(window.clay.live("blockeditor"));
@@ -347,7 +337,7 @@ test("a staged editor takes a peer's first saved state without requiring its own
   await page.ready;
   const { receiveFrame } = await import("../../../src/plugins/live.js");
   receiveFrame(taggedPage(peer));
-  expect(await until(() => page.view.dom.textContent.includes("Hello peer"))).toBe(true);
+  await until(() => page.view.dom.textContent.includes("Hello peer"), { timeout: 4000, what: "peer saved text rendered" });
   expect(page.view.editable).toBe(true);
   expect(blocksFromYValue(storeOf("blockeditor").value).p.c).toBe("Hello peer");
 });
@@ -364,7 +354,7 @@ test("a refused first save merges the stored Yjs lineage and preserves both edit
   });
   await page.ready;
   const save = await import("../../../src/core/save.js");
-  await settle(save);
+  await untilBaselineSettled(save);
   const saveFetch = global.fetch;
   global.fetch = jest.fn((url, options) => options?.method === "POST"
     ? saveFetch(url, options)
@@ -372,8 +362,8 @@ test("a refused first save merges the stored Yjs lineage and preserves both edit
   const view = page.view;
   view.dispatch(view.state.tr.insertText(" local", view.state.doc.content.size - 1));
   checkpointWithin(0);
-  expect(await until(() => saves.length === 2)).toBe(true);
-  expect(await until(() => storeOf("blockeditor").pending.length === 0)).toBe(true);
+  await until(() => saves.length === 2, { timeout: 4000, what: "retried merged save" });
+  await until(() => storeOf("blockeditor").pending.length === 0, { timeout: 4000, what: "pending edits cleared" });
   expect(view.editable).toBe(true);
   const value = JSON.parse(new DOMParser().parseFromString(saves[1].body, "text/html").querySelector(TAG_SEL).textContent);
   const text = blocksFromYValue(value).p.c;

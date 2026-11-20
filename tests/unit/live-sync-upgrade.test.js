@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * Two template versions never merge (plan 05, Step 5). A saved frame states the
@@ -62,17 +63,6 @@ afterEach(() => {
   notice._test.resetUpgrade();
   notice._test.render();
 });
-
-const tick = () => new Promise((r) => setTimeout(r, 0));
-
-async function until(predicate, ms = 2000) {
-  const started = Date.now();
-  while (Date.now() - started < ms) {
-    if (predicate()) return true;
-    await tick();
-  }
-  return false;
-}
 
 function makeSync() {
   const sync = new LiveSync();
@@ -143,7 +133,7 @@ test("a frame carrying another version is not applied, saves are held, and the n
   expect(save.savesHeld()).toBe(true);
   expect(save.saveHoldReason()).toBe(versionGuard.UPGRADED_MESSAGE);
 
-  expect(await until(() => noticeText().includes("This document was upgraded."))).toBe(true);
+  await until(() => noticeText().includes("This document was upgraded."), { what: "the upgrade notice" });
   expect(noticeButton("Reload")).toBeTruthy();
   sync.stop();
 });
@@ -178,7 +168,7 @@ test("a live-lane frame carrying another version is not merged, the meta stays, 
   expect(document.querySelector('meta[name="hyper-version"]').getAttribute("content")).toBe("1.0.0");
   expect(save.savesHeld()).toBe(true);
   expect(save.saveHoldReason()).toBe(versionGuard.UPGRADED_MESSAGE);
-  expect(await until(() => noticeText().includes("This document was upgraded."))).toBe(true);
+  await until(() => noticeText().includes("This document was upgraded."), { what: "the upgrade notice" });
   expect(noticeButton("Reload")).toBeTruthy();
   sync.stop();
 });

@@ -5,6 +5,7 @@
 import { jest } from "@jest/globals";
 import { seedPageFromArticle } from "../../src/page/ybind/migrate.js";
 import { bootFixture, TEMPLATES } from "./helpers/mode-harness.js";
+import { until } from "../helpers/until.js";
 
 // A Document boot parses a 300 KB page and mounts its reader: the jsdom default of 5 s is
 // a boot's own time, not a transition's.
@@ -28,11 +29,6 @@ jest.setTimeout(120000);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const flush = async () => {
   for (let i = 0; i < 20; i++) await sleep(0);
-};
-const until = async (predicate, timeout = 8000) => {
-  const deadline = Date.now() + timeout;
-  while (!predicate() && Date.now() < deadline) await sleep(5);
-  return predicate();
 };
 
 // The reload the guarded road takes: every transition here is asserted not to reach it.
@@ -207,7 +203,7 @@ for (const name of TEMPLATES) {
       await flush();
       await clay.save();
       await flush();
-      expect(await until(() => fileSaves(boot) > before)).toBe(true);
+      await until(() => fileSaves(boot) > before, { timeout: 8000, what: "the file save" });
       expect({ saves: fileSaves(boot) - before }).toEqual({ saves: 1 });
       await leave(clay);
 
@@ -267,7 +263,7 @@ for (const name of TEMPLATES) {
       await flush();
       await clay.save();
       await flush();
-      expect(await until(() => fileSaves(boot) > before)).toBe(true);
+      await until(() => fileSaves(boot) > before, { timeout: 8000, what: "the file save" });
       expect({ saves: fileSaves(boot) - before }).toEqual({ saves: 1 });
 
       // The session's last accepted save is the receipt an exit hands the reader.
@@ -323,14 +319,14 @@ for (const name of TEMPLATES) {
         await clay.save();
         await flush();
         const save = await import("../../src/core/save.js");
-        expect(await until(() => typeof save.acceptedReceipt()?.bytes === "string")).toBe(true);
+        await until(() => typeof save.acceptedReceipt()?.bytes === "string", { timeout: 8000, what: "the accepted save receipt" });
         await leave(clay);
 
         // Another tab saves the page: the file the reader holds changes under this one.
         const bytes = otherTabFile(save.acceptedReceipt().bytes);
         await sendFrame(boot, bytes, 2);
         const paragraph = () => document.querySelector('article[data-blockeditor] [data-id="p1"]');
-        expect(await until(() => paragraph()?.textContent === "from another tab")).toBe(true);
+        await until(() => paragraph()?.textContent === "from another tab", { timeout: 8000, what: "the other tab's text in the paragraph" });
 
         await enter(clay);
         const second = storeOf("blockeditor");

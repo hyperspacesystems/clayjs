@@ -3,6 +3,7 @@
  * @jest-environment-options {"url": "https://fixture.invalid/document.html"}
  */
 import { jest } from "@jest/globals";
+import { until, untilBaselineSettled } from "../helpers/until.js";
 
 /**
  * parse5 loads only for a page that writes an owned style.
@@ -46,13 +47,6 @@ let save, snapshot, warning, style, bootPhase;
 
 const posts = [];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const until = async (predicate) => {
-  for (let n = 0; n < 500; n++) {
-    if (predicate()) return;
-    await sleep(10);
-  }
-  throw new Error("test timed out");
-};
 const warn = () => {
   const event = new window.Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
@@ -112,7 +106,7 @@ test("a style written at boot is clean after the baseline settles", async () => 
   // The stripper is loading, and until it lands the stored baselines still carry the
   // tag: the page really does compare dirty. The warning is quiet anyway.
   expect(snapshot.captureForDirtyCheck()).not.toBe(save.getLastSavedDirty());
-  await until(() => requested.length === 1);
+  await until(() => requested.length === 1, { timeout: 5000, what: "style stripper requested" });
   expect(snapshot.captureForDirtyCheck()).not.toBe(save.getLastSavedDirty());
   expect(window.clay.hasUnsavedChanges()).toBe(false);
   expect(warn()).toBe(false);
@@ -123,7 +117,7 @@ test("a style written at boot is clean after the baseline settles", async () => 
   expect(window.clay.hasUnsavedChanges()).toBe(false);
 
   save.releaseBootSettle();
-  await until(() => save.baselineSettled());
+  await untilBaselineSettled(save);
   expect(snapshot.captureForDirtyCheck()).toBe(save.getLastSavedDirty());
   expect(warn()).toBe(false);
   expect(posts).toEqual([]);

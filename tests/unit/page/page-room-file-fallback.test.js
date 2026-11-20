@@ -3,6 +3,7 @@
  * @jest-environment-options {"url": "https://example.com/notes.html"}
  */
 import { jest } from "@jest/globals";
+import { until } from "../../helpers/until.js";
 import * as Y from "../../../src/vendor/yjs.vendor.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { entriesOf } from "../../../src/page/ybind/parts.js";
@@ -30,12 +31,6 @@ const PART_KEY = /^.+\.\d+\.\d+$/;
 const ROOM_ROUTE = "/_/sync/data";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const until = async (predicate, timeout = 6000) => {
-  const deadline = Date.now() + timeout;
-  while (!predicate() && Date.now() < deadline) await sleep(5);
-  return predicate();
-};
 
 const renderOf = (value) => renderFromTags([JSON.stringify(value)]);
 const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
@@ -234,7 +229,7 @@ async function load({ liveData = false, value = seedValue(BLOCKS) } = {}) {
   save.adoptEntryBaseline({ represented: null });
   liveLease.enable();
   pageLease.enable();
-  await until(() => pageModule.page.view !== null);
+  await until(() => pageModule.page.view !== null, { timeout: 6000, what: "page editor view" });
   return {
     ...liveModule,
     save,
@@ -267,7 +262,7 @@ const accepted = (harness, text) => until(() => {
   } catch {
     return false;
   }
-});
+}, { timeout: 6000, what: `room acceptance of ${JSON.stringify(text)}` });
 
 afterEach(() => {
   document.head.innerHTML = "";
@@ -286,13 +281,13 @@ test("a page on a host without live-data saves and reopens with its whole page v
   expect(harness.page.view.editable).toBe(true);
 
   // The lane this tab runs is the local one, in the document's room scope.
-  expect(await until(() => harness.localLane() !== null)).toBe(true);
+  await until(() => harness.localLane() !== null, { timeout: 6000, what: "local lane created" });
   expect(harness.localLane().scope).toContain("blockeditor-rooms:2");
-  expect(await until(() => harness.localLane().isSequencer === true)).toBe(true);
+  await until(() => harness.localLane().isSequencer === true, { timeout: 6000, what: "local lane elected sequencer" });
 
   type(harness.page, typed);
   expect(blocksFromYValue(harness.storeOf("blockeditor").value).p.c).toContain(typed);
-  expect(await accepted(harness, typed)).toBe(true);
+  await accepted(harness, typed);
 
   const result = await harness.save.savePageForce();
   expect(result.ok).toBe(true);
@@ -345,16 +340,16 @@ test("a file saved by a compacting room opens and saves on a host without compac
   for (const host of [{ name: "a legacy room", liveData: true }, { name: "the local lane", liveData: false }]) {
     const harness = await load({ liveData: host.liveData, value: compacted.value });
     expect(harness.page.view).toBeTruthy();
-    expect(await until(() => harness.storeOf("blockeditor")?.handle.status.mode === "fast")).toBe(true);
+    await until(() => harness.storeOf("blockeditor")?.handle.status.mode === "fast", { timeout: 6000, what: "blockeditor store in fast mode" });
     expect(Object.keys(harness.storeOf("blockeditor").authoritative.y).sort()).toEqual([...compacted.keys].sort());
 
     // The file-only host runs the same room in this tab, and asks no route for it.
     if (!host.liveData) {
-      expect(await until(() => harness.localLane()?.scope?.includes("blockeditor-rooms:2") === true)).toBe(true);
+      await until(() => harness.localLane()?.scope?.includes("blockeditor-rooms:2") === true, { timeout: 6000, what: "local lane room scope" });
     }
 
     type(harness.page, typed);
-    expect(await accepted(harness, typed)).toBe(true);
+    await accepted(harness, typed);
 
     const result = await harness.save.savePageForce();
     expect(result.ok).toBe(true);

@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * The peer lane's merge base advances when the HOST ACCEPTS a save, not when the
@@ -163,10 +164,6 @@ async function settle(body) {
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const until = async (done, ms = 10000) => {
-  const deadline = Date.now() + ms;
-  while (!done() && Date.now() < deadline) await wait(5);
-};
 
 // What a save's own snapshot-ready dispatch does, through the real listener:
 // sets _saveTicket and _savedSnapshot. Returns the snapshot it stored.
@@ -697,7 +694,7 @@ describe("a sliced save's sync serialization runs across tasks", () => {
       // What the save does to its clone once the event returns.
       clone.querySelector('[data-id="p0"]').remove();
 
-      await until(() => held.html !== null);
+      await until(() => held.html !== null, { timeout: 10000, what: "the background capture to finish serializing" });
       expect(held.html).toBe(expected);
       expect(held.steps).toBeNull();
       expect(turns.count).toBeGreaterThan(1);
@@ -725,7 +722,7 @@ describe("a sliced save's sync serialization runs across tasks", () => {
     }
 
     expect(sync._savedSnapshot).toBeNull();
-    await until(() => relayPosts.length > 0);
+    await until(() => relayPosts.length > 0, { timeout: 10000, what: "the relay POST" });
     expect(relayPosts).toHaveLength(1);
     expect(relayPosts[0].body.snapshot).toBe(expected);
   });

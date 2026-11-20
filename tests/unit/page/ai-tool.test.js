@@ -8,6 +8,7 @@ import { installPageFeature } from "../../../src/page/editor.js";
 import * as toolFeature from "../../../src/page/features/tool.js";
 import { createToolHost } from "../../../src/page/tools.js";
 import { editor, ids, posOf, select, typeText } from "./view-helpers.js";
+import { until } from "../../helpers/until.js";
 
 /**
  * /ai tools as contract A targets: what goes over the `blockeditor-tool` helper, what the
@@ -45,13 +46,6 @@ const TICKER = {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const waitFor = async (check) => {
-  for (let i = 0; i < 100; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 
 const baseClay = window.clay;
 let view, ai, live, sent, acceptState, saveResult, toolHost;
@@ -405,7 +399,7 @@ test("a tool that writes its own data on a schedule is paused for its revision a
     mountTools: true,
   });
   const output = () => view.dom.querySelector(".blockeditor-tool-content output");
-  expect(await waitFor(() => output() && Number(output().textContent) > 0)).toBe(true);
+  await until(() => output() && Number(output().textContent) > 0, { what: "the mounted tool to count above zero" });
 
   const target = ai.reviseTool("t");
   const started = await target.start("make it bigger");
@@ -425,7 +419,7 @@ test("a tool that writes its own data on a schedule is paused for its revision a
   expect(await target.keep()).toEqual({ status: "kept" });
   expect(view.state.doc.child(0).attrs.artifact.title).toBe("Made");
   // The kept block mounts its new revision exactly as before.
-  expect(await waitFor(() => output()?.textContent === "Made")).toBe(true);
+  await until(() => output()?.textContent === "Made", { what: "the kept revision to mount" });
 });
 
 test("Discard remounts a paused tool from its saved data", async () => {
@@ -435,7 +429,7 @@ test("Discard remounts a paused tool from its saved data", async () => {
     mountTools: true,
   });
   const output = () => view.dom.querySelector(".blockeditor-tool-content output");
-  expect(await waitFor(() => output())).toBe(true);
+  await until(() => output(), { what: "the tool to mount its output" });
   const target = ai.reviseTool("t");
   await target.start("make it bigger");
   expect(output()).toBe(null);
@@ -443,9 +437,9 @@ test("Discard remounts a paused tool from its saved data", async () => {
 
   target.discard();
 
-  expect(await waitFor(() => output())).toBe(true);
+  await until(() => output(), { what: "the tool to mount its output" });
   expect(Number(output().textContent)).toBeGreaterThanOrEqual(paused);
-  expect(await waitFor(() => live.data.t.r1.count > paused)).toBe(true);
+  await until(() => live.data.t.r1.count > paused, { what: "the remounted tool to count past its paused value" });
 });
 
 test("a failed Keep remounts a paused tool from its saved data", async () => {
@@ -456,7 +450,7 @@ test("a failed Keep remounts a paused tool from its saved data", async () => {
     mountTools: true,
   });
   const output = () => view.dom.querySelector(".blockeditor-tool-content output");
-  expect(await waitFor(() => output())).toBe(true);
+  await until(() => output(), { what: "the tool to mount its output" });
   const target = ai.reviseTool("t");
   const { outcome } = await generate(target, "make it bigger");
   await target.propose(outcome.result);
@@ -465,7 +459,7 @@ test("a failed Keep remounts a paused tool from its saved data", async () => {
   const kept = await target.keep();
 
   expect(kept).toEqual({ status: "failed", message: "The tool could not be saved, so it was not added. Try again." });
-  expect(await waitFor(() => output())).toBe(true);
+  await until(() => output(), { what: "the tool to mount its output" });
   expect(Number(output().textContent)).toBeGreaterThanOrEqual(paused);
 });
 

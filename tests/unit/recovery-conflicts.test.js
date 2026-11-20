@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 import { deserialize, serialize } from "node:v8";
 import { IDBFactory } from "fake-indexeddb";
 
@@ -143,13 +144,6 @@ function startApply(overrides = {}) {
   });
 }
 
-async function until(check, tries = 300) {
-  for (let at = 0; at < tries; at++) {
-    if (await check()) return true;
-    await new Promise((r) => setTimeout(r, 5));
-  }
-  return false;
-}
 
 const stored = () => store.listConflicts();
 
@@ -161,7 +155,7 @@ test("several hunks of one apply are stored with one recovery root", async () =>
   ], { ticket: 1 });
 
   expect(ids).toHaveLength(2);
-  expect(await until(async () => (await stored()).records.length === 1)).toBe(true);
+  await until(async () => (await stored()).records.length === 1, { what: "conflict record stored" });
   const [record] = (await stored()).records;
 
   expect(record.root).toEqual(expect.stringContaining("Walk by the river."));
@@ -176,7 +170,7 @@ test("several hunks of one apply are stored with one recovery root", async () =>
 test("no DOM node and no function reaches the record", async () => {
   const applyId = startApply();
   ledger.completeApply(applyId, [engineConflict()], { ticket: 2 });
-  expect(await until(async () => (await stored()).records.length === 1)).toBe(true);
+  await until(async () => (await stored()).records.length === 1, { what: "conflict record stored" });
   const [record] = (await stored()).records;
 
   const raw = JSON.parse(JSON.stringify(record));
@@ -205,7 +199,7 @@ test("an uncloneable field is named and dropped, and the rest of the record is k
     }],
   });
   expect(staged.revision).toBeGreaterThan(0);
-  expect(await until(async () => (await stored()).records.length === 1)).toBe(true);
+  await until(async () => (await stored()).records.length === 1, { what: "conflict record stored" });
   const [record] = (await stored()).records;
 
   expect(record.conflicts[0].yours).toBe("Walk by the river.");
@@ -222,7 +216,7 @@ test("a stored root carries no save token, no file id and no runtime-only chrome
 
   const applyId = startApply();
   ledger.completeApply(applyId, [engineConflict()], { ticket: 3 });
-  expect(await until(async () => (await stored()).records.length === 1)).toBe(true);
+  await until(async () => (await stored()).records.length === 1, { what: "conflict record stored" });
   const [record] = (await stored()).records;
 
   expect(record.root).toEqual(expect.stringContaining("Walk by the river."));
@@ -234,7 +228,7 @@ test("a stored root carries no save token, no file id and no runtime-only chrome
 test("a reload finds the losing text in the store, without the live ledger", async () => {
   const applyId = startApply();
   ledger.completeApply(applyId, [engineConflict()], { ticket: 4 });
-  expect(await until(async () => (await stored()).records.length === 1)).toBe(true);
+  await until(async () => (await stored()).records.length === 1, { what: "conflict record stored" });
 
   jest.resetModules();
   document.body.innerHTML = PAGE;
@@ -259,7 +253,7 @@ test("a reload finds the losing text in the store, without the live ledger", asy
 test("a normal save does not clear a stored conflict", async () => {
   const applyId = startApply();
   ledger.completeApply(applyId, [engineConflict()], { ticket: 5 });
-  expect(await until(async () => (await stored()).records.length === 1)).toBe(true);
+  await until(async () => (await stored()).records.length === 1, { what: "conflict record stored" });
 
   recovery.noteRecoveryCapture({ captureId: 11, html: document.documentElement.outerHTML });
   recovery.noteRecoverySettled({ captureId: 11, ok: true, etag: "E2" });
@@ -278,14 +272,14 @@ test("acknowledging one conflict leaves the other one's text, and its root", asy
     engineConflict(),
     engineConflict({ node: document.getElementById("other"), local: "Read a book.", remote: "Read a long book." }),
   ], { ticket: 6 });
-  expect(await until(async () => (await stored()).records.length === 1)).toBe(true);
+  await until(async () => (await stored()).records.length === 1, { what: "conflict record stored" });
 
   ledger.conflicts.acknowledge([first], { reason: "accepted" });
 
-  expect(await until(async () => {
+  await until(async () => {
     const listed = await stored();
     return listed.records.length === 1 && listed.records[0].conflicts.length === 1;
-  })).toBe(true);
+  }, { what: "first conflict acknowledged in store" });
   const [record] = (await stored()).records;
   expect(record.conflicts.map((entry) => entry.id)).toEqual([second]);
   expect(record.conflicts[0].yours).toBe("Read a book.");
@@ -293,7 +287,7 @@ test("acknowledging one conflict leaves the other one's text, and its root", asy
   expect(ledger.conflicts.size).toBe(1);
 
   ledger.conflicts.acknowledge([second], { reason: "reverted" });
-  expect(await until(async () => (await stored()).records.length === 0)).toBe(true);
+  await until(async () => (await stored()).records.length === 0, { what: "all conflict records cleared" });
   expect(store.pendingConflicts()).toBe(0);
 });
 
@@ -304,11 +298,11 @@ test("acknowledging one apply's conflict does not clear another apply's", async 
   const [second] = ledger.completeApply(secondApply, [
     engineConflict({ node: document.getElementById("other"), local: "Read a book.", remote: "Read a long book." }),
   ], { ticket: 8 });
-  expect(await until(async () => (await stored()).records.length === 2)).toBe(true);
+  await until(async () => (await stored()).records.length === 2, { what: "two conflict records stored" });
 
   ledger.conflicts.acknowledge([first], { reason: "accepted" });
 
-  expect(await until(async () => (await stored()).records.length === 1)).toBe(true);
+  await until(async () => (await stored()).records.length === 1, { what: "conflict record stored" });
   const [record] = (await stored()).records;
   expect(record.conflicts.map((entry) => entry.id)).toEqual([second]);
   expect(record.conflicts[0].yours).toBe("Read a book.");
@@ -333,17 +327,17 @@ test("a refused write leaves the live conflict and its material exactly where th
   expect(apply).not.toBeNull();
   expect(apply.root.textContent).toEqual(expect.stringContaining("Walk by the river."));
 
-  expect(await until(async () => {
+  await until(async () => {
     const listed = await stored();
     return listed.ok === false || listed.records.length === 0;
-  })).toBe(true);
+  }, { what: "refused conflict write settled" });
   expect(store.pendingConflicts()).toBe(0);
 });
 
 test("a claimed conflict stays in the store until it is acknowledged", async () => {
   const applyId = startApply();
   const [id] = ledger.completeApply(applyId, [engineConflict()], { ticket: 12 });
-  expect(await until(async () => (await stored()).records.length === 1)).toBe(true);
+  await until(async () => (await stored()).records.length === 1, { what: "conflict record stored" });
 
   const claim = ledger.conflicts.claim([id], { owner: "writer" });
   await new Promise((r) => setTimeout(r, 20));
@@ -358,7 +352,7 @@ test("a claimed conflict stays in the store until it is acknowledged", async () 
 test("a stored conflict has no live target to replay", async () => {
   const applyId = startApply();
   ledger.completeApply(applyId, [engineConflict()], { ticket: 10 });
-  expect(await until(async () => (await stored()).records.length === 1)).toBe(true);
+  await until(async () => (await stored()).records.length === 1, { what: "conflict record stored" });
   const [entry] = (await stored()).records[0].conflicts;
 
   expect(entry).not.toHaveProperty("target");
@@ -375,7 +369,7 @@ test("the notice draws a reloaded conflict from the store, and dismisses only th
     engineConflict(),
     engineConflict({ node: document.getElementById("other"), local: "Read a book.", remote: "Read a long book." }),
   ], { ticket: 11 });
-  expect(await until(async () => (await stored()).records.length === 1)).toBe(true);
+  await until(async () => (await stored()).records.length === 1, { what: "conflict record stored" });
 
   jest.resetModules();
   document.body.innerHTML = PAGE;
@@ -388,7 +382,7 @@ test("the notice draws a reloaded conflict from the store, and dismisses only th
 
   const frame = () => new Promise((r) => setTimeout(() => requestAnimationFrame(() => setTimeout(r, 0)), 0));
   notice.start(null);
-  expect(await until(() => document.querySelector("[data-clay-conflict]") !== null)).toBe(true);
+  await until(() => document.querySelector("[data-clay-conflict]") !== null, { what: "conflict notice root mounted" });
   await frame();
 
   const root = () => document.querySelector("[data-clay-conflict]");
@@ -418,7 +412,7 @@ test("the notice draws a reloaded conflict from the store, and dismisses only th
 
   const dismiss = [...panel().querySelectorAll("button")].filter((b) => b.textContent === "Dismiss")[0];
   dismiss.click();
-  expect(await until(async () => (await stored()).records[0]?.conflicts.length === 1)).toBe(true);
+  await until(async () => (await stored()).records[0]?.conflicts.length === 1, { what: "dismissed conflict removed from store" });
   expect((await stored()).records[0].conflicts[0].id).toBe(second);
   expect(store.pendingConflicts()).toBe(1);
   expect(ledger.conflicts.size).toBe(0);

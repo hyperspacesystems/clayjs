@@ -26,6 +26,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 import { deserialize, serialize } from "node:v8";
 import { IDBFactory } from "fake-indexeddb";
 
@@ -52,13 +53,6 @@ const drainMicrotasks = async (turns = 60) => { for (let i = 0; i < turns; i++) 
 const setText = (text) => { document.getElementById("c").textContent = text; };
 const lastPost = () => posts[posts.length - 1] ?? "";
 
-const waitFor = async (check, timeoutMs = 5000) => {
-  const deadline = Date.now() + timeoutMs;
-  while (!check()) {
-    if (Date.now() > deadline) throw new Error("timed out waiting for the condition");
-    await sleep(10);
-  }
-};
 
 function okJson(body) {
   return { ok: true, status: 200, statusText: "OK", headers: { get: () => null }, text: async () => JSON.stringify(body), json: async () => body };
@@ -342,7 +336,7 @@ test("a cancelled sliced save sends the save queued behind it", async () => {
     expect(result.msgType).toBe("skipped");
     expect(result.msg).toMatch(/cancelled/);
 
-    await waitFor(() => posts.length > sentBefore);
+    await until(() => posts.length > sentBefore, { timeout: 5000, what: "queued save post" });
     expect(posts.length).toBe(sentBefore + 1);
     expect(lastPost()).toContain("queued-B");
   } finally {
@@ -375,7 +369,7 @@ test("a cancelled sliced save settles the save.soon() waiter queued behind it", 
 
     const answer = await soon;
     expect(answer.ok).toBe(true);
-    await waitFor(() => posts.length > sentBefore);
+    await until(() => posts.length > sentBefore, { timeout: 5000, what: "queued save post" });
     expect(posts.length).toBe(sentBefore + 1);
     expect(lastPost()).toContain("soon-B");
   } finally {
@@ -407,7 +401,7 @@ test("a cancellation drains an autosave that parked behind the prepared save", a
     expect(result.msgType).toBe("skipped");
     expect(result.msg).toMatch(/cancelled/);
 
-    await waitFor(() => posts.length > sentBefore, 15000);
+    await until(() => posts.length > sentBefore, { timeout: 15000, what: "parked autosave post" });
     expect(posts.length).toBe(sentBefore + 1);
     expect(lastPost()).toContain("parked-autosave-B");
   } finally {

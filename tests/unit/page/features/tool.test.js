@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { jest } from "@jest/globals";
+import { until } from "../../../helpers/until.js";
 import { $$ } from "../../helpers/editor-ui.js";
 import * as Y from "../../../../src/vendor/yjs.vendor.js";
 import { state as pmState } from "../../../../src/vendor/prosemirror.vendor.js";
@@ -37,13 +38,6 @@ afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
 });
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const waitFor = async (check) => {
-  for (let i = 0; i < 100; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 const realLoad = (id) => FEATURES[id].load();
 const toolsHandle = (value) => createStore({ name: "blockeditor.tools", value: clone(value) }).handle;
 
@@ -105,7 +99,7 @@ test("a document with a tool boots with the tool view part loaded and mounts fro
   const { view, calls } = openTab(seedValue([PARAGRAPH, TOOL]), { tools: { tally: { r1: { count: 3 } } } });
   expect(calls).toEqual(["tool"]);
   expect(view.dom.querySelector(".blockeditor-tool-block")).toBe(null);
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-tool-block"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-tool-block"), { what: "tool block view to mount" });
   expect(view.dom.querySelector(".blockeditor-tool-block output").textContent).toBe("3");
   expect(view.dom.querySelector(".blockeditor-tool-settings")).not.toBe(null);
 });
@@ -117,7 +111,7 @@ test("a tool inserted while editing loads the view part once", async () => {
   addTool(tab, "tally");
   expect(toolBlocks(view)).toHaveLength(1);
   expect(calls).toEqual(["tool"]);
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-tool-block output"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-tool-block output"), { what: "tool block output to mount" });
   expect(calls).toEqual(["tool"]);
   expect(toolBlocks(view)).toHaveLength(1);
 });
@@ -126,7 +120,7 @@ test("a tool block is suspended to its fallback and resumes from its saved data"
   const tab = openTab(seedValue([PARAGRAPH]), { tools: { ticker: { r1: { count: 0 } } } });
   addTool(tab, "ticker", TICKER);
   const output = () => tab.view.dom.querySelector(".blockeditor-tool-block output");
-  expect(await waitFor(() => output() && Number(output().textContent) > 0)).toBe(true);
+  await until(() => output() && Number(output().textContent) > 0, { what: "ticker output count > 0" });
   const block = toolBlockViews.get(tab.view).get("ticker");
   expect(block).toBeTruthy();
 
@@ -140,9 +134,9 @@ test("a tool block is suspended to its fallback and resumes from its saved data"
 
   block.resume();
 
-  expect(await waitFor(() => output())).toBe(true);
+  await until(() => output(), { what: "ticker output to remount" });
   expect(Number(output().textContent)).toBeGreaterThanOrEqual(paused);
-  expect(await waitFor(() => tab.toolStore.data.ticker.r1.count > paused)).toBe(true);
+  await until(() => tab.toolStore.data.ticker.r1.count > paused, { what: "ticker count to advance after resume" });
 });
 
 test("a tool that arrives from a peer opens the view part once", async () => {
@@ -153,11 +147,11 @@ test("a tool that arrives from a peer opens the view part once", async () => {
   addTool(a, "tally");
   send(a, b, "peer-1");
   expect(b.calls).toEqual(["tool"]);
-  expect(await waitFor(() => b.view.dom.querySelector(".blockeditor-tool-block output"))).toBe(true);
+  await until(() => b.view.dom.querySelector(".blockeditor-tool-block output"), { what: "peer tool output to mount" });
   expect(toolBlocks(b.view)).toHaveLength(1);
   addTool(a, "other");
   send(a, b, "peer-2");
-  expect(await waitFor(() => toolBlocks(b.view).length === 2)).toBe(true);
+  await until(() => toolBlocks(b.view).length === 2, { what: "second peer tool block" });
   expect(b.calls).toEqual(["tool"]);
 });
 
@@ -179,8 +173,8 @@ test("destroying one editor keeps another editor\u2019s tool host working", asyn
   const second = openTab(seedValue([PARAGRAPH]), { tools: { tally: { r1: { count: 3 } } } });
   addTool(first, "tally");
   addTool(second, "tally");
-  expect(await waitFor(() => first.view.dom.querySelector(".blockeditor-tool-block"))).toBe(true);
-  expect(await waitFor(() => second.view.dom.querySelector(".blockeditor-tool-block"))).toBe(true);
+  await until(() => first.view.dom.querySelector(".blockeditor-tool-block"), { what: "first editor tool block" });
+  await until(() => second.view.dom.querySelector(".blockeditor-tool-block"), { what: "second editor tool block" });
   expect(toolViews.get(first.view)).toBe(first.host);
   const changed = jest.spyOn(first.host, "tablesChanged");
   second.view.destroy();
@@ -201,7 +195,7 @@ test("selection, the undo stack and the save output are the same before and afte
   });
   const before = snap();
   release();
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-tool-block"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-tool-block"), { what: "tool block view to mount" });
   expect(snap()).toEqual(before);
   expect(binding.undo()).toBe(true);
   await flush();
@@ -214,7 +208,7 @@ test("after relaying both ways, two peers have the same projection", async () =>
   const b = openTab(clone(initial), { tools: { tally: { r1: { count: 3 } } } });
   addTool(a, "tally");
   send(a, b, "peer-1");
-  await waitFor(() => b.view.dom.querySelector(".blockeditor-tool-block"));
+  await until(() => b.view.dom.querySelector(".blockeditor-tool-block"), { what: "peer B tool block view" });
   b.view.dispatch(b.view.state.tr.insertText("!", 2));
   addTool(b, "other");
   send(b, a, "peer-2");
@@ -383,11 +377,11 @@ test("a tool arriving from a peer opens the page.tools store once", async () => 
   expect(opened("blockeditor.tools")).toBe(0);
   expect(toolsTag()).toBe(null);
   peer.insertTool("tally");
-  expect(await waitFor(() => page.view.dom.querySelector('.blockeditor-tool-block[data-id="tally"]'))).toBe(true);
+  await until(() => page.view.dom.querySelector('.blockeditor-tool-block[data-id="tally"]'), { what: "peer tally tool block" });
   expect(opened("blockeditor.tools")).toBe(1);
   expect(toolsTag().textContent).toBe("{}");
   peer.insertTool("second");
-  expect(await waitFor(() => page.view.dom.querySelector('.blockeditor-tool-block[data-id="second"]'))).toBe(true);
+  await until(() => page.view.dom.querySelector('.blockeditor-tool-block[data-id="second"]'), { what: "second peer tool block" });
   expect(opened("blockeditor.tools")).toBe(1);
 });
 
@@ -413,11 +407,6 @@ test("the file's page.tools tag is byte-identical after a save with and without 
 });
 
 const toastWith = (text) => $$("[data-clay-toast]", "toasts").find((el) => el.textContent.includes(text));
-const until = async (check, timeout = 1500) => {
-  const deadline = Date.now() + timeout;
-  while (!check() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
-  return check();
-};
 
 test("a failed install recovers through Retry and then renders the tool", async () => {
   setPage([PARAGRAPH, TOOL]);
@@ -434,13 +423,13 @@ test("a failed install recovers through Retry and then renders the tool", async 
   }));
   try {
     await page.install();
-    expect(await waitFor(() => toastWith("controls could not load"))).toBe(true);
+    await until(() => toastWith("controls could not load"), { what: "load error toast" });
     expect(page.view.dom.querySelector(".blockeditor-tool-block")).toBe(null);
     [...toastWith("controls could not load").querySelectorAll("button")].find((button) => button.textContent === "Retry").click();
-    expect(await waitFor(() => page.view.dom.querySelector(".blockeditor-tool-block output"))).toBe(true);
+    await until(() => page.view.dom.querySelector(".blockeditor-tool-block output"), { what: "tool block output after retry" });
     expect(attempts).toBe(2);
     expect(page.view.dom.querySelector(".blockeditor-tool-block output").textContent).toBe("3");
-    expect(await until(() => toastWith("controls could not load") === undefined)).toBe(true);
+    await until(() => toastWith("controls could not load") === undefined, { what: "load error toast to dismiss" });
   } finally {
     FEATURES.tool.load = realLoad;
   }
@@ -453,7 +442,7 @@ test("after a load fails, selection moves and typing make no further load attemp
   FEATURES.tool.load = () => { attempts += 1; return Promise.reject(new Error("no network")); };
   try {
     await page.install();
-    expect(await waitFor(() => attempts >= 1)).toBe(true);
+    await until(() => attempts >= 1, { what: "initial feature load attempt" });
     await tick();
     const view = page.view;
     for (let i = 0; i < 10; i += 1) view.dispatch(view.state.tr.setSelection(pmState.TextSelection.create(view.state.doc, 1)));
@@ -526,10 +515,10 @@ test("the first Make a tool click opens the composer when ai-edit installs after
   entry.click();
   // The page AI surface is up without ai-edit: the old code checked here and dropped
   // the click. The next click installs the plugin, and the waiting target opens it.
-  expect(await waitFor(() => page.ai)).toBe(true);
+  await until(() => page.ai, { what: "page AI surface" });
   expect(window.clay.aiEdit).toBeUndefined();
   const panel = sharedPanel();
-  expect(await waitFor(() => panel.opened.length === 1)).toBe(true);
+  await until(() => panel.opened.length === 1, { what: "AI composer panel to open" });
   expect(panel.opened[0].label).toBe("New tool");
 });
 
@@ -544,12 +533,12 @@ test("Keep on a first AI tool in a document with no page.tools tag saves the too
   const entry = [...page.view.dom.parentElement.querySelectorAll(".blockeditor-menu-item")].find((item) => item.textContent.includes("Make a tool with AI"));
   expect(entry).toBeTruthy();
   entry.click();
-  expect(await waitFor(() => panel.opened.length === 1)).toBe(true);
+  await until(() => panel.opened.length === 1, { what: "AI composer panel to open" });
   expect(panel.opened[0].aiTarget).toBe(true);
   expect(panel.opened[0].label).toBe("New tool");
   const target = await panel.generate("make a counter");
   expect(await target.keep()).toEqual({ status: "kept" });
-  expect(await waitFor(() => page.view.dom.querySelector(".blockeditor-tool-block"))).toBe(true);
+  await until(() => page.view.dom.querySelector(".blockeditor-tool-block"), { what: "kept AI tool block to mount" });
   expect(toolsTag()).not.toBe(null);
   const block = page.view.dom.querySelector(".blockeditor-tool-block");
   const node = page.view.state.doc.child(1);
@@ -576,10 +565,10 @@ test("text typed before the slash while the tool loads is kept, and only the sla
     expect(panel.opened).toHaveLength(0);
     view.dispatch(view.state.tr.insertText("AB", 1));
     release();
-    expect(await waitFor(() => panel.opened.length === 1)).toBe(true);
+    await until(() => panel.opened.length === 1, { what: "AI composer panel to open" });
     const target = await panel.generate("make a counter");
     expect(await target.keep()).toEqual({ status: "kept" });
-    expect(await waitFor(() => view.dom.querySelector(".blockeditor-tool-block"))).toBe(true);
+    await until(() => view.dom.querySelector(".blockeditor-tool-block"), { what: "kept AI tool block to mount" });
     expect(view.state.doc.child(0).textContent).toBe("ABHi ");
     expect(toolBlocks(view)).toHaveLength(1);
   } finally {
@@ -600,7 +589,7 @@ test("a replacement that lands during the boot feature wait leaves the editor re
   let installing = null;
   try {
     installing = page.install();
-    expect(await waitFor(() => page.view && attempts === 1)).toBe(true);
+    await until(() => page.view && attempts === 1, { what: "boot editor view and feature load attempt" });
     expect(page.view.editable).toBe(false);
     await tick();
     const replacement = '<!doctype html><html><head></head><body><article data-blockeditor="1" data-rev="outside"><p data-id="p">Elsewhere</p></article></body></html>';

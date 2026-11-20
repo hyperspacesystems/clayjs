@@ -4,6 +4,7 @@
 
 import { jest } from "@jest/globals";
 import { bootFixture } from "./helpers/mode-harness.js";
+import { until } from "../helpers/until.js";
 
 // A boot parses and mounts the real fixtures: the jsdom default is a boot's own time.
 jest.setTimeout(120000);
@@ -40,11 +41,6 @@ const SRC = "../../src/";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const flush = async () => {
   for (let i = 0; i < 20; i++) await sleep(0);
-};
-const until = async (predicate, timeout = 8000) => {
-  const deadline = Date.now() + timeout;
-  while (!(await predicate()) && Date.now() < deadline) await sleep(5);
-  return Boolean(await predicate());
 };
 
 const PAGE_HOST = { spec: 1, extensions: ["blockeditor", "live-data", "sync", "upload"], document: {} };
@@ -85,7 +81,7 @@ async function syncedPage() {
   const source = sync.sse._source;
   expect(source).toBeTruthy();
   frameFrom(source, savedFile("A"), 1, "E1");
-  expect(await until(() => sync._represented.bytes === savedFile("A"))).toBe(true);
+  await until(() => sync._represented.bytes === savedFile("A"), { timeout: 8000, what: "the reader to hold saved file A" });
   return { boot, sync, source };
 }
 
@@ -109,7 +105,7 @@ test("a saved frame queued while the entry prepares refuses it as stale and is a
     expect(builtFrom.etag).toBe("E1");
     expect(answer).toMatchObject({ ok: false, mode: "view", code: "stale-document" });
     // The queued frame is the reader's, not the refused session's: it applies it.
-    expect(await until(() => shown() === "B")).toBe(true);
+    await until(() => shown() === "B", { timeout: 8000, what: "file B to show" });
     expect(sync._represented.bytes).toBe(savedFile("B"));
     expect(sync._represented.etag).toBe("E2");
   } finally {
@@ -128,7 +124,7 @@ test("a plugins=blockeditor,sync Document's exit restarts the saved lane beside 
     const source = openStream(boot);
     expect(source).toBeTruthy();
     frameFrom(source, bytes, 1);
-    expect(await until(() => sync._represented.bytes === bytes)).toBe(true);
+    await until(() => sync._represented.bytes === bytes, { timeout: 8000, what: "the reader to hold the framed file" });
 
     expect((await boot.clay.setMode("edit")).ok).toBe(true);
     await flush();
@@ -142,12 +138,11 @@ test("a plugins=blockeditor,sync Document's exit restarts the saved lane beside 
     expect(sync.isDestroyed).toBe(false);
     expect(sync.lane).toBe("saved");
     expect(sync._represented.bytes).toBe(bytes);
-    const held = await until(async () => Boolean(await pageView.acquired));
-    expect(held).toBe(true);
+    await until(async () => Boolean(await pageView.acquired), { timeout: 8000, what: "the page view to acquire its document" });
 
     // A file another tab saves reaches the article through the restarted lane.
     frameFrom(openStream(boot), otherTabFile(bytes, "newer"), 2);
-    expect(await until(() => document.querySelector('article[data-blockeditor] [data-id="p1"]')?.textContent === "newer")).toBe(true);
+    await until(() => document.querySelector('article[data-blockeditor] [data-id="p1"]')?.textContent === "newer", { timeout: 8000, what: "the other tab's text in the article" });
   } finally {
     pageView.stop();
     sync.stop();
@@ -214,7 +209,7 @@ test("an enable that throws rolls the entry back and restarts the reader it reti
     expect(sync._represented.etag).toBe("E1");
 
     frameFrom(openStream(boot), savedFile("B"), 2, "E2");
-    expect(await until(() => shown() === "B")).toBe(true);
+    await until(() => shown() === "B", { timeout: 8000, what: "file B to show" });
   } finally {
     sync.stop();
     boot.stop();
@@ -258,7 +253,7 @@ test("a Document's enable that throws restarts its page reader from the entry re
     expect(boot.eventSources().open).toBe(1);
 
     frameFrom(openStream(boot), otherTabFile(bytes, "newer"), 2);
-    expect(await until(() => shown() === "newer")).toBe(true);
+    await until(() => shown() === "newer", { timeout: 8000, what: "the other tab's text to show" });
   } finally {
     pageView.stop();
     boot.stop();
@@ -298,8 +293,7 @@ test("an entry timeout releases the prepared Page before it returns view", async
     });
 
     const entry = boot.clay.setMode("edit");
-    for (let i = 0; i < 1000 && !reached; i++) await new Promise((resolve) => realSetTimeout(resolve, 1));
-    expect(reached).toBe(true);
+    await until(() => reached, { what: "the entry to reach the slow participant's prepare" });
     expect(deadlines.length).toBeGreaterThan(0);
     deadlines[0]();
     const answer = await entry;
@@ -416,7 +410,7 @@ test("an exit whose quiesce never settles fails with timeout inside the deadline
     expect((await boot.clay.setMode("edit")).ok).toBe(true);
     armed = true;
     const exit = boot.clay.setMode("view");
-    expect(await until(() => reached)).toBe(true);
+    await until(() => reached, { timeout: 8000, what: "the exit to reach the stuck quiesce" });
     await flush();
     // The one deadline this exit took at its start is all it is waiting on.
     expect(deadlines.length).toBe(1);
@@ -467,7 +461,7 @@ test("an exit whose pending-source flush never settles fails with timeout inside
 
     armed = true;
     const exit = boot.clay.setMode("view");
-    expect(await until(() => reached)).toBe(true);
+    await until(() => reached, { timeout: 8000, what: "the exit to reach the stuck flush" });
     // The barrier's own wait and the exit's deadline, and nothing without an end.
     expect(deadlines.length).toBeGreaterThan(0);
     for (const fire of [...deadlines]) fire();
@@ -574,7 +568,7 @@ test("an empty saved lane acquires a stamped served file, so the next entry goes
 
     expect((await clay.setMode("view")).ok).toBe(true);
     await sync._ready;
-    expect(await until(() => typeof sync._represented.bytes === "string", 5000)).toBe(true);
+    await until(() => typeof sync._represented.bytes === "string", { timeout: 5000, what: "the reader to hold the file's bytes" });
     expect(sync._represented.etag).toBe("v1");
 
     const answer = await clay.setMode("edit");

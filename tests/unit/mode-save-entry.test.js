@@ -3,6 +3,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * Step 17b-3a: save and autosave become mode participants, measured from a view boot.
@@ -22,14 +23,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const flush = async () => {
   for (let i = 0; i < 5; i++) await sleep(0);
-};
-
-const until = async (predicate, tries = 400) => {
-  for (let i = 0; i < tries; i++) {
-    if (predicate()) return true;
-    await sleep(10);
-  }
-  return false;
 };
 
 let mode, save, autosave, warning, gate, snapshot;
@@ -163,7 +156,7 @@ test("one real edit gives exactly one POST, and the accepted receipt carries it"
   document.getElementById("content").textContent = "one edit";
   await flush();
 
-  expect(await until(() => posts.length === postsBefore + 1)).toBe(true);
+  await until(() => posts.length === postsBefore + 1, { timeout: 4000, what: "one save POST for the edit" });
   expect(posts[posts.length - 1]).toContain("one edit");
   await sleep(2000);
   expect(posts.length).toBe(postsBefore + 1);
@@ -187,13 +180,13 @@ test("an edit while quiesced parks, and resume sends it", async () => {
   expect(save.savesAdmitted()).toBe(false);
 
   // The attempt the activity earned still happens; it is parked, not dropped.
-  expect(await until(() => save.sessionParked(), 300)).toBe(true);
+  await until(() => save.sessionParked(), { timeout: 3000, what: "the save attempt to be parked" });
   expect(posts.length).toBe(postsBefore);
   expect(warning.hasUnsavedChanges()).toBe(true);
 
   lease.saveLease.resume();
   expect(save.savesAdmitted()).toBe(true);
-  expect(await until(() => posts.length === postsBefore + 1 && !save.sessionParked())).toBe(true);
+  await until(() => posts.length === postsBefore + 1 && !save.sessionParked(), { timeout: 4000, what: "the parked save to be written after the resume" });
   expect(posts[posts.length - 1]).toContain("typed before the refusal");
   expect(save.sessionParked()).toBe(false);
   expect(warning.hasUnsavedChanges()).toBe(false);
@@ -214,7 +207,7 @@ test("a second entry installs no second listener and saves its own edit", async 
   const postsBefore = posts.length;
   document.getElementById("content").textContent = "second entry edit";
   await flush();
-  expect(await until(() => posts.length === postsBefore + 1)).toBe(true);
+  await until(() => posts.length === postsBefore + 1, { timeout: 4000, what: "one save POST for the edit" });
   await sleep(2000);
   expect(posts.length).toBe(postsBefore + 1);
   expect(posts[posts.length - 1]).toContain("second entry edit");

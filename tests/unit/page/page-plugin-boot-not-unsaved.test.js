@@ -6,6 +6,7 @@ import { jest } from "@jest/globals";
 import * as realEditor from "../../../src/page/editor.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
+import { untilBaselineSettled } from "../../helpers/until.js";
 
 /**
  * The autosave baseline settles once the boot's own churn stops, and the boot churn
@@ -37,10 +38,6 @@ const pageHtml = (value) => {
   return `<article data-blockeditor="1" data-rev="${rev}">${html}</article>`;
 };
 
-const settle = async (save, timeout = 6000) => {
-  const deadline = Date.now() + timeout;
-  while (!save.baselineSettled() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
-};
 
 const roomState = (room) => ({
   epoch: room.epoch, seq: room.seq, writer: room.writer, conn: 0,
@@ -129,7 +126,7 @@ test.each(DOCUMENTS)("a saved Block editor document with %s is not unsaved after
 
   // The boot settles with the editor's download still outstanding, exactly as it can
   // when that chunk is slow to arrive.
-  await settle(save);
+  await untilBaselineSettled(save);
   expect(save.baselineSettled()).toBe(true);
   expect(document.querySelectorAll(".blockeditor-shell")).toHaveLength(0);
 
@@ -148,7 +145,7 @@ test.each(DOCUMENTS)("a saved Block editor document with %s is not unsaved after
 
   await page.ready;
   await flushAsync();
-  await settle(save);
+  await untilBaselineSettled(save);
   await flushAsync();
 
   expect(save.baselineSettled()).toBe(true);

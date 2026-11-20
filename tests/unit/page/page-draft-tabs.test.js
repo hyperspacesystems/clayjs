@@ -3,6 +3,7 @@
  * @jest-environment-options {"url": "https://example.com/page.html"}
  */
 import { jest } from "@jest/globals";
+import { until } from "../../helpers/until.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
 
@@ -115,15 +116,6 @@ async function tapDraftTransport() {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function waitFor(predicate, timeout = 15000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    if (predicate()) return true;
-    await wait(50);
-  }
-  return predicate();
-}
-
 function firstParagraph(view) {
   let pos = null;
   view.state.doc.descendants((node, at) => {
@@ -148,7 +140,7 @@ test("two tabs typing different paragraphs both keep their words", async () => {
   await b.clay.blockeditor.ready;
   const bView = b.clay.blockeditor.view;
   bView.dispatch(bView.state.tr.insertText("bravo", firstParagraph(bView)));
-  await waitFor(() => recordOf()?.blockeditor?.html?.includes("bravo"));
+  await until(() => recordOf()?.blockeditor?.html?.includes("bravo"), { timeout: 15000, what: "bravo saved in draft record" });
   const rawB = localStorage.getItem(key);
   expect(rawB).toBeTruthy();
 
@@ -157,19 +149,19 @@ test("two tabs typing different paragraphs both keep their words", async () => {
   const bytes = await tapDraftTransport();
   const aView = a.clay.blockeditor.view;
   aView.dispatch(aView.state.tr.insertText("alpha", firstParagraph(aView)));
-  await waitFor(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.blockeditor?.html?.includes("alpha"));
+  await until(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.blockeditor?.html?.includes("alpha"), { timeout: 15000, what: "alpha saved to draft transport and record" });
   expect(aView.state.doc.textContent).not.toContain("bravo");
 
   localStorage.setItem(key, rawB);
   window.dispatchEvent(new StorageEvent("storage", { key }));
 
   const both = () => aView.state.doc.textContent.includes("alpha") && aView.state.doc.textContent.includes("bravo");
-  await waitFor(both);
+  await until(both, { timeout: 15000, what: "both alpha and bravo in editor" });
   expect(aView.state.doc.textContent).toContain("alpha");
   expect(aView.state.doc.textContent).toContain("bravo");
 
   aView.dispatch(aView.state.tr.insertText("!", firstParagraph(aView)));
-  await waitFor(() => recordOf()?.blockeditor?.html?.includes("!") && recordOf()?.blockeditor?.html?.includes("alpha") && recordOf()?.blockeditor?.html?.includes("bravo"));
+  await until(() => recordOf()?.blockeditor?.html?.includes("!") && recordOf()?.blockeditor?.html?.includes("alpha") && recordOf()?.blockeditor?.html?.includes("bravo"), { timeout: 15000, what: "merged alpha! and bravo in draft record" });
   const record = recordOf();
   expect(record.blockeditor.html).toContain("alpha");
   expect(record.blockeditor.html).toContain("bravo");
@@ -189,7 +181,7 @@ test("without the page editor's merge, the other tab's page is kept aside", asyn
   await b.clay.blockeditor.ready;
   const bView = b.clay.blockeditor.view;
   bView.dispatch(bView.state.tr.insertText("bravo", firstParagraph(bView)));
-  await waitFor(() => recordOf()?.blockeditor?.html?.includes("bravo"));
+  await until(() => recordOf()?.blockeditor?.html?.includes("bravo"), { timeout: 15000, what: "bravo saved in draft record" });
   const rawB = localStorage.getItem(key);
   expect(rawB).toBeTruthy();
 
@@ -198,11 +190,11 @@ test("without the page editor's merge, the other tab's page is kept aside", asyn
   const bytes = await tapDraftTransport();
   const aView = a.clay.blockeditor.view;
   aView.dispatch(aView.state.tr.insertText("alpha", firstParagraph(aView)));
-  await waitFor(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.blockeditor?.html?.includes("alpha"));
+  await until(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.blockeditor?.html?.includes("alpha"), { timeout: 15000, what: "alpha saved to draft transport and record" });
 
   localStorage.setItem(key, rawB);
   aView.dispatch(aView.state.tr.insertText("!", firstParagraph(aView)));
-  await waitFor(() => recordOf()?.id && localStorage.getItem(key) !== rawB && recordOf()?.blockeditor?.html?.includes("!"));
+  await until(() => recordOf()?.id && localStorage.getItem(key) !== rawB && recordOf()?.blockeditor?.html?.includes("!"), { timeout: 15000, what: "unmerged alpha! saved over rawB" });
 
   expect(localStorage.getItem(key + ":conflict")).toBe(rawB);
   const record = recordOf();
@@ -218,7 +210,7 @@ test("a hide right after a merge keeps this tab's saved words", async () => {
   await b.clay.blockeditor.ready;
   const bView = b.clay.blockeditor.view;
   bView.dispatch(bView.state.tr.insertText("bravo", firstParagraph(bView)));
-  await waitFor(() => recordOf()?.blockeditor?.html?.includes("bravo"));
+  await until(() => recordOf()?.blockeditor?.html?.includes("bravo"), { timeout: 15000, what: "bravo saved in draft record" });
   const rawB = localStorage.getItem(key);
   expect(rawB).toBeTruthy();
 
@@ -227,7 +219,7 @@ test("a hide right after a merge keeps this tab's saved words", async () => {
   const bytes = await tapDraftTransport();
   const aView = a.clay.blockeditor.view;
   aView.dispatch(aView.state.tr.insertText("alpha", firstParagraph(aView)));
-  await waitFor(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.blockeditor?.html?.includes("alpha"));
+  await until(() => bytes.some((html) => html.includes("alpha")) && recordOf()?.blockeditor?.html?.includes("alpha"), { timeout: 15000, what: "alpha saved to draft transport and record" });
 
   localStorage.setItem(key, rawB);
   window.dispatchEvent(new StorageEvent("storage", { key }));
@@ -247,7 +239,7 @@ test("a tab that took in the other tab's page follows Start over", async () => {
   await a.clay.blockeditor.ready;
   const aView = a.clay.blockeditor.view;
   aView.dispatch(aView.state.tr.insertText("alpha", firstParagraph(aView)));
-  await waitFor(() => recordOf()?.blockeditor?.html?.includes("alpha"));
+  await until(() => recordOf()?.blockeditor?.html?.includes("alpha"), { timeout: 15000, what: "alpha saved in draft record" });
   const rawA = localStorage.getItem(key);
   expect(rawA).toBeTruthy();
 
@@ -258,7 +250,7 @@ test("a tab that took in the other tab's page follows Start over", async () => {
 
   localStorage.setItem(key, rawA);
   window.dispatchEvent(new StorageEvent("storage", { key }));
-  await waitFor(() => bView.state.doc.textContent.includes("alpha"));
+  await until(() => bView.state.doc.textContent.includes("alpha"), { timeout: 15000, what: "alpha adopted into tab B" });
   expect(bView.state.doc.textContent).toContain("alpha");
 
   localStorage.removeItem(key);
@@ -276,7 +268,7 @@ test("a page recorded before the editor listened is taken in once it listens", a
   await a.clay.blockeditor.ready;
   const aView = a.clay.blockeditor.view;
   aView.dispatch(aView.state.tr.insertText("other", firstParagraph(aView)));
-  await waitFor(() => recordOf()?.blockeditor?.html?.includes("other"));
+  await until(() => recordOf()?.blockeditor?.html?.includes("other"), { timeout: 15000, what: "other saved in draft record" });
   const rawA = localStorage.getItem(key);
   expect(rawA).toBeTruthy();
 
@@ -292,7 +284,7 @@ test("a page recorded before the editor listened is taken in once it listens", a
 
   localStorage.setItem(key, rawA);
   document.dispatchEvent(new CustomEvent("clay:drafts-blockeditor-listening"));
-  await waitFor(() => bView.state.doc.textContent.includes("other"));
+  await until(() => bView.state.doc.textContent.includes("other"), { timeout: 15000, what: "other adopted into tab B" });
   expect(bView.state.doc.textContent).toContain("other");
 }, 60000);
 

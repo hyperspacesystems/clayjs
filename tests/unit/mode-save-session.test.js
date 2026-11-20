@@ -3,6 +3,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until, untilBaselineSettled } from "../helpers/until.js";
 
 /**
  * One save session per admitted edit, and the boundaries of its lifetime.
@@ -24,14 +25,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const flush = async () => {
   for (let i = 0; i < 5; i++) await sleep(0);
-};
-
-const until = async (predicate) => {
-  for (let i = 0; i < 300; i++) {
-    if (predicate()) return true;
-    await sleep(10);
-  }
-  return false;
 };
 
 let save, snapshot, warning, gate;
@@ -63,7 +56,7 @@ beforeAll(async () => {
   gate = await import("../../src/lib/dirty-gate.js");
   window.clay.hasUnsavedChanges = warning.hasUnsavedChanges;
   document.body.appendChild(document.createElement("span"));
-  for (let i = 0; i < 80 && !save.baselineSettled(); i++) await sleep(50);
+  await untilBaselineSettled(save);
   await sleep(50);
 }, 20000);
 
@@ -162,7 +155,7 @@ test("resume is the same session: the parked attempt is replayed and writes the 
   session.resume();
   expect(save.savesAdmitted()).toBe(true);
   const written = () => posts.some((body) => body.includes("typed before the refusal"));
-  expect(await until(() => written() && !save.sessionParked())).toBe(true);
+  await until(() => written() && !save.sessionParked(), { timeout: 3000, what: "the parked save to be written after the resume" });
   expect(save.sessionParked()).toBe(false);
   expect(save.getLastSavedDirty()).toBe(snapshot.captureForDirtyCheck());
 

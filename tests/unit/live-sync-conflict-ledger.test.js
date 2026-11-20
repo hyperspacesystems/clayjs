@@ -2,6 +2,7 @@ import { jest } from "@jest/globals";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { until } from "../helpers/until.js";
 
 /**
  * The conflict ledger, driven through live sync: what an incoming frame wins
@@ -172,14 +173,6 @@ function closeWarns() {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function waitFor(predicate, timeout = 4000) {
-  const started = Date.now();
-  while (Date.now() - started < timeout) {
-    if (predicate()) return;
-    await wait(25);
-  }
-}
-
 const saveCalls = () =>
   global.fetch.mock.calls.filter(([url]) => String(url).includes("/_/save"));
 const saveBodies = () => saveCalls().map(([, options]) => String(options?.body || ""));
@@ -243,7 +236,7 @@ test("autosave does not acknowledge a record", async () => {
 
   const before = saveCalls().length;
   document.querySelector('[data-id="b"]').textContent = "b local";
-  await waitFor(() => saveCalls().length > before);
+  await until(() => saveCalls().length > before, { timeout: 4000, what: "a save after the local edit" });
 
   expect(saveCalls().length).toBeGreaterThan(before);
   expect(conflicts.size).toBe(1);
@@ -304,7 +297,7 @@ test("a queued save drained after the loss does not acknowledge it", async () =>
 
   release();
   expect((await saving).ok).toBe(true);
-  await waitFor(() => saveCalls().length === 2);
+  await until(() => saveCalls().length === 2, { timeout: 4000, what: "the second save" });
   await wait(25);
 
   expect(saveCalls()).toHaveLength(2);
@@ -351,7 +344,7 @@ test("the convergence save runs over an open loss", async () => {
   await sync._doApplyExternal(diskDoc('<p id="p">budget is approved</p><p id="q">q0</p>'), 1);
   seen.stop();
   expect(seen[0].conflictIds).toHaveLength(1);
-  await waitFor(() => saveBodies().some((body) => body.includes("approved")));
+  await until(() => saveBodies().some((body) => body.includes("approved")), { timeout: 4000, what: "a save carrying the approved text" });
   await wait(25);
 
   const body = saveBodies().at(-1);

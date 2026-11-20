@@ -3,6 +3,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 import { deserialize, serialize } from "node:v8";
 import { IDBFactory } from "fake-indexeddb";
 
@@ -48,13 +49,6 @@ const rest = async () => {
   await tick(20);
 };
 
-async function until(check, tries = 400) {
-  for (let at = 0; at < tries; at++) {
-    if (await check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-}
 
 function clearRoot() {
   const root = document.documentElement;
@@ -499,7 +493,7 @@ test("a skipped step is kept as a recovery copy", async () => {
   expect(receipt.ok).toBe(false);
   expect(receipt.code).toBe("empty");
 
-  expect(await until(() => kept.length > 0)).toBe(true);
+  await until(() => kept.length > 0, { what: "skipped step kept in recovery" });
   expect(kept.at(-1)).toEqual({ ok: true, entryId: skippedEntry.id, direction: "undo" });
 
   const listed = await clay.undo.kept();

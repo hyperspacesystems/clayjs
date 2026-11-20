@@ -1,3 +1,4 @@
+import { until } from "../../helpers/until.js";
 import { createPageEditor, installPageFeature } from "../../../src/page/editor.js";
 import { createFeatureLoader } from "../../../src/page/feature-loader.js";
 import { FEATURES } from "../../../src/page/features/registry.js";
@@ -14,13 +15,6 @@ afterEach(() => {
 });
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const waitFor = async (check) => {
-  for (let i = 0; i < 100; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 
 const upload = () => Promise.resolve({ ok: true, uploads: [{ url: "/uploads/a.png" }] });
 
@@ -54,7 +48,7 @@ test("a document with no media and no checklist asks for neither part", async ()
 
 test("a checklist draws its decorations and toggles its box once the part arrives", async () => {
   const { view, calls } = open({ chk: { t: "list_item", pos: "B", c: "Do it", kind: "check" } });
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-check-controls"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-check-controls"), { what: "checklist controls to mount" });
   expect(calls).toEqual(["checklist"]);
   expect([...view.dom.querySelectorAll(".blockeditor-check-chip")].map((button) => button.textContent)).toEqual(["Unassigned", "No date"]);
 

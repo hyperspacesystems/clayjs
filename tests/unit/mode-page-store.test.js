@@ -3,6 +3,7 @@
  */
 import { jest } from "@jest/globals";
 import { bootFixture } from "./helpers/mode-harness.js";
+import { until } from "../helpers/until.js";
 
 // A boot parses and mounts the real fixtures: the jsdom default is a boot's own time.
 jest.setTimeout(120000);
@@ -25,11 +26,6 @@ const SRC = "../../src/";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const flush = async () => {
   for (let i = 0; i < 20; i++) await sleep(0);
-};
-const until = async (predicate, timeout = 8000) => {
-  const deadline = Date.now() + timeout;
-  while (!(await predicate()) && Date.now() < deadline) await sleep(5);
-  return Boolean(await predicate());
 };
 
 const PAGE_HOST = { spec: 1, extensions: ["blockeditor", "sync", "upload"], document: {} };
@@ -80,7 +76,7 @@ async function openDocument({ tagged = false } = {}) {
   }
   const bytes = `<!DOCTYPE html>\n${document.documentElement.outerHTML}`;
   frameFrom(openStream(boot), bytes, 1);
-  expect(await until(() => sync._represented?.bytes === bytes)).toBe(true);
+  await until(() => sync._represented?.bytes === bytes, { timeout: 8000, what: "the reader to hold the framed file" });
   return { boot, pageView, sync, pageMod };
 }
 
@@ -95,12 +91,12 @@ test("a tagged Document's exit leaves the tag at the file the session saved, and
   const page = await openDocument({ tagged: true });
   try {
     expect(await page.boot.clay.setMode("edit")).toMatchObject({ ok: true, mode: "edit" });
-    expect(await until(() => Boolean(page.pageMod.page.view?.editable))).toBe(true);
+    await until(() => Boolean(page.pageMod.page.view?.editable), { timeout: 8000, what: "an editable page view" });
     const view = page.pageMod.page.view;
     view.dispatch(view.state.tr.insertText("SESSION-ONE", 1));
     await flush();
     expect((await page.pageMod.page.flush())?.ok).toBe(true);
-    expect(await until(() => posts.length > 0)).toBe(true);
+    await until(() => posts.length > 0, { timeout: 8000, what: "the first save POST" });
     expect((await page.boot.clay.setMode("view")).ok).toBe(true);
     await flush();
 
@@ -116,13 +112,13 @@ test("a tagged Document's exit leaves the tag at the file the session saved, and
     // session's edit.
     const postsBefore = posts.length;
     expect(await page.boot.clay.setMode("edit")).toMatchObject({ ok: true, mode: "edit" });
-    expect(await until(() => Boolean(page.pageMod.page.view?.editable))).toBe(true);
+    await until(() => Boolean(page.pageMod.page.view?.editable), { timeout: 8000, what: "an editable page view" });
     const next = page.pageMod.page.view;
     expect(next.state.doc.textContent).toContain("SESSION-ONE");
     next.dispatch(next.state.tr.insertText("TWO", 1));
     await flush();
     expect((await page.pageMod.page.flush())?.ok).toBe(true);
-    expect(await until(() => posts.length > postsBefore)).toBe(true);
+    await until(() => posts.length > postsBefore, { timeout: 8000, what: "the second session's save POST" });
     expect(posts.at(-1)).toContain("SESSION-ONE");
     expect(posts.at(-1)).toContain("TWO");
   } finally {
@@ -137,12 +133,12 @@ test("an untagged Document's exit leaves the tag its save wrote, so the next ent
   try {
     expect(document.querySelector(TAG)).toBe(null);
     expect(await page.boot.clay.setMode("edit")).toMatchObject({ ok: true, mode: "edit" });
-    expect(await until(() => Boolean(page.pageMod.page.view?.editable))).toBe(true);
+    await until(() => Boolean(page.pageMod.page.view?.editable), { timeout: 8000, what: "an editable page view" });
     const view = page.pageMod.page.view;
     view.dispatch(view.state.tr.insertText("FIRST", 1));
     await flush();
     expect((await page.pageMod.page.flush())?.ok).toBe(true);
-    expect(await until(() => posts.length > 0)).toBe(true);
+    await until(() => posts.length > 0, { timeout: 8000, what: "the first save POST" });
     expect((await page.boot.clay.setMode("view")).ok).toBe(true);
     await flush();
 
@@ -152,7 +148,7 @@ test("an untagged Document's exit leaves the tag its save wrote, so the next ent
     expect(document.querySelector(TAG)).not.toBe(null);
 
     expect(await page.boot.clay.setMode("edit")).toMatchObject({ ok: true, mode: "edit" });
-    expect(await until(() => Boolean(page.pageMod.page.view?.editable))).toBe(true);
+    await until(() => Boolean(page.pageMod.page.view?.editable), { timeout: 8000, what: "an editable page view" });
     expect(page.pageMod.page.view.state.doc.textContent).toContain("FIRST");
   } finally {
     quiet.forEach((spy) => spy.mockRestore());

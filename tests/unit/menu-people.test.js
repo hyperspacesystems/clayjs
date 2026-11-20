@@ -1,5 +1,6 @@
 import { jest } from "@jest/globals";
 import { hostOf, $, $$, active, sheetText } from "./helpers/editor-ui.js";
+import { until } from "../helpers/until.js";
 
 // Scenario: the menu says who is here. The item, the roster beside the capsule and
 // the people panel all read one snapshot from the presence store, and the page that
@@ -18,7 +19,6 @@ const flush = async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function clearRoot() {
   const root = document.documentElement;
@@ -57,7 +57,7 @@ async function boot({ edit = false, roster = false } = {}) {
 // settles would be a state nobody is listening for yet.
 async function store() {
   const { presence } = await import("../../src/sync/presence-store.js");
-  for (let i = 0; i < 100 && presence.listeners.size === 0; i++) await wait(10);
+  await until(() => presence.listeners.size > 0, { what: "the menu to listen to the presence store" });
   return presence;
 }
 

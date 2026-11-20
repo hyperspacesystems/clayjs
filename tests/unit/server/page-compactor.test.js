@@ -2,6 +2,7 @@
  * @jest-environment node
  */
 import { EventEmitter } from "node:events";
+import { until } from "../../helpers/until.js";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { Worker } from "node:worker_threads";
@@ -84,13 +85,6 @@ afterEach(async () => {
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-const until = async (predicate, label) => {
-  for (let i = 0; i < 400; i++) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  throw new Error(`timed out waiting for ${label}`);
-};
 
 // A real worker whose messages the test delivers by hand, so a job can be held open.
 const heldWorker = () => {
@@ -407,7 +401,7 @@ test("close ends the worker, and the room's held job is released with it", async
   expect(compactor.running).toBe(true);
 
   await compactor.close();
-  await until(() => room.compaction.job === null, "the exited worker's job to be abandoned");
+  await until(() => room.compaction.job === null, { what: "the exited worker's job to be abandoned" });
   expect(rooms.used()).toBe(used);
   await flush();
   expect(room.compaction.job).toBeNull();

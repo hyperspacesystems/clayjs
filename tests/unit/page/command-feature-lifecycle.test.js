@@ -13,6 +13,7 @@ import { createPageEditor, runPageCommand, setEditorActive } from "../../../src/
 import { COMMAND_FEATURES, FEATURES } from "../../../src/page/features/registry.js";
 import { CORE_WAVES, PLUGIN_PATHS, resolveModules } from "../../../src/loader-logic.js";
 import { releaseFiles } from "../../../scripts/build-offline-manifest.mjs";
+import { until } from "../../helpers/until.js";
 
 /**
  * The one lifecycle for optional commands, and the download contract behind it. A command
@@ -37,13 +38,6 @@ afterEach(() => {
 });
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const waitFor = async (check) => {
-  for (let i = 0; i < 100; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 const deferred = () => {
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
@@ -143,7 +137,7 @@ test("a selection that moves before the module arrives cancels the command", asy
   expect(await asked).toEqual({ ok: false, code: "stale-target" });
 
   release();
-  expect(await waitFor(() => calls.installs.length === 1)).toBe(true);
+  await until(() => calls.installs.length === 1, { what: "the command module to install once" });
   expect(calls.loads).toBe(1);
   expect(calls.runs).toEqual([]);
 });
@@ -159,7 +153,7 @@ test("a document revision that moves before the module arrives cancels the comma
   expect(await asked).toEqual({ ok: false, code: "stale-target" });
 
   release();
-  expect(await waitFor(() => calls.installs.length === 1)).toBe(true);
+  await until(() => calls.installs.length === 1, { what: "the command module to install once" });
   expect(calls.runs).toEqual([]);
 
   const second = await runPageCommand(view, COMMAND, "second");

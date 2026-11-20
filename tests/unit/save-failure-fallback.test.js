@@ -4,6 +4,7 @@
 
 import { jest } from "@jest/globals";
 import { $$ } from "./helpers/editor-ui.js";
+import { untilBaselineSettled } from "../helpers/until.js";
 
 /**
  * A failed save is never silent. A page that loads neither the indicator plugin nor
@@ -61,7 +62,7 @@ beforeAll(async () => {
   // Stands in for the block editor, which claims the failures it puts its own notice up for.
   document.addEventListener("clay:save-error", (event) => { if (claiming) save.claimFailure(event); });
   save.setSaveGeneration(1);
-  for (let i = 0; i < 80 && !save.baselineSettled(); i++) await sleep(50);
+  await untilBaselineSettled(save);
   await sleep(50);
 }, 20000);
 

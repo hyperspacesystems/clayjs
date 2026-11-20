@@ -3,6 +3,7 @@
  * @jest-environment-options {"url": "https://example.com/notes.html"}
  */
 import { jest } from "@jest/globals";
+import { until, untilBaselineSettled } from "../../helpers/until.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
 import { blocksFromYValue } from "../../../src/page/ybind/decode.js";
@@ -28,17 +29,6 @@ const pageHtml = (value = seedValue(BLOCKS)) => {
 };
 
 const pageTag = () => document.querySelector(TAG_SEL);
-
-const settle = async (save, timeout = 4000) => {
-  const deadline = Date.now() + timeout;
-  while (!save.baselineSettled() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
-};
-
-const until = async (predicate, timeout = 4000) => {
-  const deadline = Date.now() + timeout;
-  while (!predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
-  return predicate();
-};
 
 const taggedBody = (body) => {
   const doc = new DOMParser().parseFromString(body, "text/html");
@@ -141,7 +131,7 @@ test("every typed edit after the first reaches the host, with the tag and the te
   const save = await import("../../../src/core/save.js");
 
   await page.ready;
-  await settle(save);
+  await untilBaselineSettled(save);
   expect(page.view).toBeTruthy();
   expect(pageTag()).toBe(null);
   expect(saves).toHaveLength(0);
@@ -151,8 +141,8 @@ test("every typed edit after the first reaches the host, with the tag and the te
     const at = view.state.doc.content.size - 1;
     view.dispatch(view.state.tr.insertText(text, at));
     checkpointWithin(0);
-    expect(await until(() => saves.length > 0)).toBe(true);
-    await until(() => storeOf("blockeditor").pending.length === 0);
+    await until(() => saves.length > 0, { timeout: 4000, what: "save request" });
+    await until(() => storeOf("blockeditor").pending.length === 0, { timeout: 4000, what: "pending edits cleared" });
   };
 
   await typed(" first.");
@@ -187,7 +177,7 @@ test("a document that already has its tag still ends with exactly one", async ()
   const save = await import("../../../src/core/save.js");
 
   await page.ready;
-  await settle(save);
+  await untilBaselineSettled(save);
   expect(pageTag()).toBeTruthy();
 
   const view = page.view;
@@ -196,8 +186,8 @@ test("a document that already has its tag still ends with exactly one", async ()
     view.dispatch(view.state.tr.insertText(text, at));
     const before = saves.length;
     checkpointWithin(0);
-    expect(await until(() => saves.length > before)).toBe(true);
-    await until(() => storeOf("blockeditor").pending.length === 0);
+    await until(() => saves.length > before, { timeout: 4000, what: "next save request" });
+    await until(() => storeOf("blockeditor").pending.length === 0, { timeout: 4000, what: "pending edits cleared" });
   }
 
   expect(saves).toHaveLength(2);

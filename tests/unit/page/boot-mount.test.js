@@ -11,6 +11,7 @@ import { renderFromTags } from "../../../src/page/save-projection.js";
 import { createPageDoc, docOf, walk, bareShape } from "../../../src/page/ybind/index.js";
 import { NET } from "../../../src/page/ybind/layout.js";
 import { state as pmState } from "../../../src/vendor/prosemirror.vendor.js";
+import { until } from "../../helpers/until.js";
 
 /**
  * The shell is built out of the page, moved into the article in one go, and only
@@ -35,13 +36,6 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 const flushAsync = async (turns = 40) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
-const until = async (check, tries = 300) => {
-  for (let i = 0; i < tries; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
@@ -279,7 +273,7 @@ test("a slow wait says so quietly after a moment, and a fast one never does", as
   try {
     // At first nothing is said: the saved article is on screen and that is enough.
     expect(document.querySelectorAll(".blockeditor-boot-status")).toHaveLength(0);
-    expect(await until(() => document.querySelectorAll(".blockeditor-boot-status").length === 1)).toBe(true);
+    await until(() => document.querySelectorAll(".blockeditor-boot-status").length === 1, { what: "the waiting line to appear" });
 
     const note = document.querySelector(".blockeditor-boot-status");
     expect(note.getAttribute("clay")).toBe("editor-ui");
@@ -312,7 +306,7 @@ test("an adoption another tab owns keeps this tab's staged view until the writer
   try {
     // Waiting for the elected writer, not blocked: the staged editor is in the
     // article over the room's state, and it takes no key.
-    expect(await until(() => page.status?.phase === "adopting")).toBe(true);
+    await until(() => page.status?.phase === "adopting", { what: "the boot to reach adopting" });
     await flushAsync();
 
     expect(page.status).toMatchObject({ phase: "adopting" });

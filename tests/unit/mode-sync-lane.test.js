@@ -3,6 +3,7 @@
  */
 import { jest } from "@jest/globals";
 import { bootFixture } from "./helpers/mode-harness.js";
+import { until } from "../helpers/until.js";
 
 /**
  * The one sync module a reader and an editor both load, as a lane that changes with
@@ -44,14 +45,6 @@ jest.unstable_mockModule("../../src/sync/editing-sender.js", () => {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const flush = async () => {
   for (let i = 0; i < 6; i++) await sleep(0);
-};
-const until = async (predicate, ms = 2000) => {
-  const stop = Date.now() + ms;
-  while (Date.now() < stop) {
-    if (predicate()) return true;
-    await sleep(2);
-  }
-  return false;
 };
 
 let sources = [];
@@ -196,7 +189,7 @@ test("the participant's lease never has two streams open, and ends with none", a
     const lease = await participant.prepare({ initial: false, isCurrent: () => true });
     lease.enable();
     expect(sync.lane).toBe("live");
-    await until(() => openStreams().length === 1);
+    await until(() => openStreams().length === 1, { what: "one open stream" });
     expect({ cycle, open: openStreams().length }).toEqual({ cycle, open: 1 });
     expect(openStreams()[0].url).toContain("lane=live");
     lease.dispose();
@@ -265,7 +258,7 @@ test("a live lane started after a view boot activates an incoming document", asy
   // The lane brings its edit chunk with it, before any frame: a view boot that starts
   // the live lane has the save code an edit boot would, and its first frame is not
   // what fetches it.
-  expect(await until(() => editChunkLoads === 1)).toBe(true);
+  await until(() => editChunkLoads === 1, { what: "the edit chunk to load" });
   expect(editChunkLoads).toBe(1);
 
   await sync._doApplyExternal(
@@ -377,7 +370,7 @@ const openNow = (booted) => [booted, ...opened].filter((source) => source && sou
 async function firstFile(sync, booted, { word = "disk1", seq = 5, etag = "E1" } = {}) {
   const bytes = doc(word);
   deliver(booted, bytes, seq, etag);
-  expect(await until(() => sync._represented.bytes !== null)).toBe(true);
+  await until(() => sync._represented.bytes !== null, { what: "the lane to hold the delivered file" });
   expect(shown()).toBe(word);
   return { bytes, etag, seq };
 }
@@ -391,14 +384,14 @@ test("a declared sync document switches 20 times with one stream open at any mom
       const entered = await window.clay.setMode("edit");
       expect({ cycle, entered }).toEqual({ cycle, entered: { ok: true, mode: "edit", changed: true } });
       expect({ cycle, lane: sync.lane }).toEqual({ cycle, lane: "live" });
-      expect(await until(() => openNow(booted).length === 1)).toBe(true);
+      await until(() => openNow(booted).length === 1, { what: "one open stream" });
       expect({ cycle, open: openNow(booted).length }).toEqual({ cycle, open: 1 });
       expect(openNow(booted)[0].url).toContain("lane=live");
 
       const left = await window.clay.setMode("view");
       expect({ cycle, left }).toEqual({ cycle, left: { ok: true, mode: "view", changed: true } });
       expect({ cycle, lane: sync.lane }).toEqual({ cycle, lane: "saved" });
-      expect(await until(() => openNow(booted).length === 1)).toBe(true);
+      await until(() => openNow(booted).length === 1, { what: "one open stream" });
       expect({ cycle, open: openNow(booted).length }).toEqual({ cycle, open: 1 });
       expect(openNow(booted)[0].url).toContain("lane=saved");
     }
@@ -446,7 +439,7 @@ test("a frame that arrives while the entry imports is reconciled before the base
     logic.MODULES["core/save.js"] = (...args) => gate.then(() => thunk(...args));
 
     const entry = window.clay.setMode("edit");
-    expect(await until(() => sync._handoffHeld)).toBe(true);
+    await until(() => sync._handoffHeld, { what: "the entry to hold the lane" });
     deliver(booted, doc("disk2"), 6, "E2");
     release();
 
@@ -486,7 +479,7 @@ test("a file newer than the represented one, applied after reconcile, refuses st
     expect(shown()).toBe("disk9");
     expect(openNow(booted)).toHaveLength(1);
     deliver(sync.sse._source, doc("later"), 10, "E10");
-    expect(await until(() => shown() === "later")).toBe(true);
+    await until(() => shown() === "later", { what: "the later file to show" });
     expect(shown()).toBe("later");
   } finally {
     boot.stop();

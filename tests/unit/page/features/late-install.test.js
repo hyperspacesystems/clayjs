@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { until } from "../../../helpers/until.js";
 import { history } from "../../../../src/vendor/prosemirror.vendor.js";
 import { state as pmState } from "../../../../src/vendor/prosemirror.vendor.js";
 import { schema } from "../../../../src/page/schema.js";
@@ -27,13 +28,6 @@ afterEach(() => {
 });
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const waitFor = async (check) => {
-  for (let i = 0; i < 100; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 const realLoad = (id) => FEATURES[id].load();
 const deferred = () => {
   let release;
@@ -97,7 +91,7 @@ test("a first table recreates the table's views only; the paragraph, the image, 
     host,
     load: (id) => (id === "table" ? gate.then(() => realLoad("table")) : realLoad(id)),
   });
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-image") && view.dom.querySelector(".blockeditor-tool-block"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-image") && view.dom.querySelector(".blockeditor-tool-block"), { what: "image and tool views to mount" });
   await settle(view);
 
   const paragraph = view.dom.querySelector("p");
@@ -118,7 +112,7 @@ test("a first table recreates the table's views only; the paragraph, the image, 
   expect(calls).toEqual(["media", "tool", "table"]);
 
   release();
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-table"), { what: "table view to mount" });
 
   expect(view.dom.querySelector("p")).toBe(paragraph);
   expect(view.dom.querySelector("figure.blockeditor-image")).toBe(figure);
@@ -139,7 +133,7 @@ test("a table present at boot draws its real table view, cells included, once th
   expect(view.dom.querySelector("table tbody td")).toBeTruthy();
 
   release();
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-table"), { what: "table view to mount" });
   expect(view.dom.querySelectorAll("thead th").length).toBe(2);
   expect(view.dom.querySelectorAll("td[data-col] .blockeditor-table-row-menu").length).toBeGreaterThan(0);
 });
@@ -156,7 +150,7 @@ test("the install transaction changes no document and leaves no undo step and no
   const steps = { done: historyOf(view.state).done.length, undone: historyOf(view.state).undone.length };
 
   release();
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-table"), { what: "table view to mount" });
 
   expect(view.state.doc).toBe(doc);
   expect(view.state.selection.from).toBe(selection);
@@ -186,5 +180,5 @@ test("an install requested while composing applies only after composing ends", a
   view.dom.dispatchEvent(new CompositionEvent("compositionend"));
   await flush();
   expect(view.dom.querySelector(".blockeditor-table")).toBe(null);
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-table"), { what: "table view to mount after composing" });
 });

@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../../helpers/until.js";
 
 /**
  * A reader never shows a file another version of the document wrote. The plugin
@@ -48,17 +49,6 @@ afterEach(() => {
   notice._test.render();
 });
 
-const tick = () => new Promise((r) => setTimeout(r, 0));
-
-async function until(predicate, ms = 2000) {
-  const started = Date.now();
-  while (Date.now() - started < ms) {
-    if (predicate()) return true;
-    await tick();
-  }
-  return false;
-}
-
 const FILE = (inner, { version = "1.0.0", rev = "r1", title = "Reader" } = {}) =>
   `<!doctype html><html><head>${
     version ? `<meta name="hyper-version" content="${version}">` : ""
@@ -103,7 +93,7 @@ test("a file another version wrote is refused before the reader claims the artic
   expect(pageVersion()).toBe("1.0.0");
   expect(document.title).toBe("Reader");
   expect(streams).toHaveLength(0);
-  expect(await until(() => noticeText().includes("This document was upgraded."))).toBe(true);
+  await until(() => noticeText().includes("This document was upgraded."), { what: "upgrade conflict notice" });
   expect(noticeButton("Reload")).toBeTruthy();
 });
 
@@ -120,7 +110,7 @@ test("a file another version wrote after an accepted file is refused, the stream
   expect(pageVersion()).toBe("1.0.0");
   expect(reader.represented).toEqual({ bytes: accepted, etag: "etag-a", seq: 1 });
   expect(streams[0].stopped).toBe(true);
-  expect(await until(() => noticeText().includes("This document was upgraded."))).toBe(true);
+  await until(() => noticeText().includes("This document was upgraded."), { what: "upgrade conflict notice" });
   expect(noticeButton("Reload")).toBeTruthy();
 });
 

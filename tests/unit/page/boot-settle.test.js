@@ -7,6 +7,7 @@ import * as realEditor from "../../../src/page/editor.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
 import { createInstall, disposeInstall, runBoot } from "../../../src/page/boot.js";
+import { until } from "../../helpers/until.js";
 
 /**
  * A boot settles on its first failure or on its dispose, not on the last branch to
@@ -25,13 +26,6 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 const flushAsync = async (turns = 60) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
-const until = async (check, tries = 300) => {
-  for (let i = 0; i < tries; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
@@ -231,7 +225,7 @@ test("a blocked boot releases the room the other branch had already taken", asyn
   try {
     // The room is joined and its participant registered while the editor is still
     // coming, so what the failure below has to release is already there.
-    expect(await until(() => registrations.some((entry) => entry.id === "page:live"))).toBe(true);
+    await until(() => registrations.some((entry) => entry.id === "page:live"), { what: "the page:live participant to register" });
     expect(page.status).toMatchObject({ phase: "joining" });
     expect(liveCalls).toEqual(["blockeditor"]);
 

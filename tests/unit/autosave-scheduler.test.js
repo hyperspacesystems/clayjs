@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { untilBaselineSettled } from "../helpers/until.js";
 import {
   ADAPTIVE_SPACING,
   CONTINUOUS_MS,
@@ -317,8 +318,7 @@ describe("an admitted automatic save", () => {
     expect(vetoed.msg).toBe("No changes to save");
     expect(posts.length).toBe(before + 1);
 
-    for (let i = 0; i < 80 && !save.baselineSettled(); i++) await sleep(50);
-    expect(save.baselineSettled()).toBe(true);
+    await untilBaselineSettled(save);
   }, 20000);
 
   async function establish(text) {

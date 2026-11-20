@@ -11,6 +11,7 @@ import {
   checkUpdate,
 } from "../../src/plugins/upgrade.js";
 import { $ } from "./helpers/editor-ui.js";
+import { until } from "../helpers/until.js";
 
 const BASE = "https://hyperclay.com/templates/kanban/owned";
 const SOURCE = `${BASE}/latest.html`;
@@ -47,16 +48,6 @@ const flush = async () => {
   for (let i = 0; i < 8; i++) await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
-
-async function waitFor(check, timeout = 2000) {
-  const deadline = Date.now() + timeout;
-  let value = check();
-  while (!value && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    value = check();
-  }
-  return value;
-}
 
 function clearRoot() {
   const root = document.documentElement;
@@ -187,7 +178,7 @@ describe("what the menu's footer says", () => {
   test("current: the latest-version line, and no dot", async () => {
     await boot({ fetchFn: netFetch({ latest: manifest({ version: "1.4.0" }) }) });
 
-    await waitFor(() => versionLine() && versionLine().textContent === "File at latest version");
+    await until(() => versionLine() && versionLine().textContent === "File at latest version", { what: "the version line to say the file is at the latest version" });
     expect(versionLine().textContent).toBe("File at latest version");
     expect(versionLine().dataset.menuId).toBe("upgrade");
     expect(badgeLine()).toBeNull();
@@ -195,7 +186,7 @@ describe("what the menu's footer says", () => {
 
   test("a divider stands between the Edit mode row and the version line", async () => {
     await boot({ fetchFn: netFetch({ latest: manifest({ version: "1.4.0" }) }), body: `<header><div clay-menu-slot no-edit-switch></div></header>${BODY}` });
-    await waitFor(() => versionLine() && versionLine().textContent === "File at latest version");
+    await until(() => versionLine() && versionLine().textContent === "File at latest version", { what: "the version line to say the file is at the latest version" });
     window.clay.menu.open();
 
     const before = versionLine().previousElementSibling;
@@ -206,11 +197,11 @@ describe("what the menu's footer says", () => {
   test("unknown: the bare version line survives the answer, and there is no dot", async () => {
     await boot({ fetchFn: netFetch({ latest: manifest({ version: undefined }), gate: gated() }) });
 
-    const checking = await waitFor(() => versionLine());
+    const checking = await until(() => versionLine(), { what: "the version line" });
     expect(checking.textContent).toBe("Version 1.4.0");
 
     release();
-    await waitFor(() => versionLine() && versionLine() !== checking);
+    await until(() => versionLine() && versionLine() !== checking, { what: "the version line to be redrawn after the answer" });
     expect(versionLine()).not.toBe(checking);
     expect(versionLine().textContent).toBe("Version 1.4.0");
     expect(versionLine().dataset.menuId).toBe("upgrade");
@@ -220,7 +211,7 @@ describe("what the menu's footer says", () => {
   test("update: the upgrade item with its dot, and no version line", async () => {
     await boot({ fetchFn: netFetch({ latest: manifest({ version: "2.0.0" }) }) });
 
-    await waitFor(() => $('[role="menuitem"][data-menu-id="upgrade"]', "menu"));
+    await until(() => $('[role="menuitem"][data-menu-id="upgrade"]', "menu"), { what: "the upgrade menu item" });
     const item = $('[role="menuitem"][data-menu-id="upgrade"]', "menu");
     expect(item.textContent).toBe("Upgrade to version 2.0.0");
     expect(badgeLine()).not.toBeNull();
@@ -230,7 +221,7 @@ describe("what the menu's footer says", () => {
   test("a page that is not a copy gets no footer at all", async () => {
     await boot({ copy: false });
 
-    await waitFor(() => $(".clay-menu-list", "menu"));
+    await until(() => $(".clay-menu-list", "menu"), { what: "the menu list" });
     await flush();
 
     expect($(".clay-menu-list", "menu")).not.toBeNull();
@@ -240,11 +231,11 @@ describe("what the menu's footer says", () => {
   test("while the check waits, the footer shows the version; a current answer upgrades the line", async () => {
     await boot({ fetchFn: netFetch({ latest: manifest({ version: "1.4.0" }), gate: gated() }) });
 
-    const waiting = await waitFor(() => versionLine());
+    const waiting = await until(() => versionLine(), { what: "the version line" });
     expect(waiting.textContent).toBe("Version 1.4.0");
 
     release();
-    await waitFor(() => versionLine() && versionLine().textContent === "File at latest version");
+    await until(() => versionLine() && versionLine().textContent === "File at latest version", { what: "the version line to say the file is at the latest version" });
     expect(versionLine().textContent).toBe("File at latest version");
   });
 });

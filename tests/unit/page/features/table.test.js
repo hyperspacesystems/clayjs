@@ -1,5 +1,6 @@
 globalThis.ClipboardEvent ??= class ClipboardEvent extends Event { constructor(t, i = {}) { super(t, i); this.clipboardData = i.clipboardData ?? null; } };
 import * as Y from "../../../../src/vendor/yjs.vendor.js";
+import { until } from "../../../helpers/until.js";
 import { state as pmState, history } from "../../../../src/vendor/prosemirror.vendor.js";
 import { createStore } from "../../../../src/live/store.js";
 import { blockMap } from "../../../../src/page/model.js";
@@ -33,13 +34,6 @@ const track = (view, mount, binding = null) => {
 };
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const waitFor = async (check) => {
-  for (let i = 0; i < 100; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 const realLoad = (id) => FEATURES[id].load();
 const recordingLoader = (holder, calls, load = realLoad) => createFeatureLoader({
   load: (id) => { calls.push(id); return load(id); },
@@ -110,7 +104,7 @@ test("a document with a table boots with the table view part loaded", async () =
   const { view, calls } = open({ tbl: TABLE });
   expect(calls).toEqual(["table"]);
   expect(view.dom.querySelector(".blockeditor-table")).toBe(null);
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-table"), { what: "table view to mount" });
   expect(view.dom.querySelectorAll("thead th").length).toBe(2);
 });
 
@@ -120,7 +114,7 @@ test("inserting a table into a text-only document inserts one table and loads th
   pick(menu, "Table").click();
   expect(tables(view)).toHaveLength(1);
   expect(calls).toEqual(["table"]);
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-table"), { what: "table view to mount" });
   expect(calls).toEqual(["table"]);
   expect(tables(view)).toHaveLength(1);
 });
@@ -137,7 +131,7 @@ test("a table that arrives from a peer loads the view part", async () => {
   const base = b.store.authoritative;
   b.store.rebase({ ...base, y: { ...base.y, "peer-1": value } }, { source: "remote", frame: { ops: [{ op: "set", path: ["y", "peer-1"], value }] } });
   expect(b.calls).toEqual(["table"]);
-  expect(await waitFor(() => b.view.dom.querySelector(".blockeditor-table"))).toBe(true);
+  await until(() => b.view.dom.querySelector(".blockeditor-table"), { what: "peer table view to mount" });
   expect(tables(b.view)).toHaveLength(1);
 });
 
@@ -164,7 +158,7 @@ test("an install while composing waits for compositionend", async () => {
   await flush();
   expect(view.dom.querySelector(".blockeditor-table")).toBe(null);
   view.dom.dispatchEvent(new CompositionEvent("compositionend"));
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-table"), { what: "table view to mount after composing" });
 });
 
 test("selection, the undo stack and the save output are the same before and after the view part installs", async () => {
@@ -181,7 +175,7 @@ test("selection, the undo stack and the save output are the same before and afte
   });
   const before = snap();
   release();
-  expect(await waitFor(() => view.dom.querySelector(".blockeditor-table"))).toBe(true);
+  await until(() => view.dom.querySelector(".blockeditor-table"), { what: "table view to mount" });
   expect(snap()).toEqual(before);
   expect(history.undo(view.state)).toBe(true);
 });
@@ -197,7 +191,7 @@ test("after relaying both ways, two peers have the same projection", async () =>
   };
   pick(slash(a.view), "Table").click();
   send(a, b, "peer-1");
-  await waitFor(() => b.view.dom.querySelector(".blockeditor-table"));
+  await until(() => b.view.dom.querySelector(".blockeditor-table"), { what: "peer B table view to mount" });
   b.view.dispatch(b.view.state.tr.insertText("!", 2));
   send(b, a, "peer-2");
   await flush();

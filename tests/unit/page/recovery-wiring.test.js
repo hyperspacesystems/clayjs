@@ -4,6 +4,7 @@
  */
 import { webcrypto } from "node:crypto";
 import { jest } from "@jest/globals";
+import { until } from "../../helpers/until.js";
 import * as Y from "../../../src/vendor/yjs.vendor.js";
 import * as realRecoveryUi from "../../../src/page/recovery-ui.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
@@ -32,11 +33,6 @@ const TAG_SEL = 'script[type="application/json"][merge="blockeditor"][clay~="liv
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const flushAsync = async () => { for (let i = 0; i < 60; i++) await Promise.resolve(); };
-const until = async (done, timeout = 4000) => {
-  const deadline = Date.now() + timeout;
-  while (!done() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 5));
-  return done();
-};
 
 const pageHtml = (value = seedValue(BLOCKS)) => {
   const { html, rev } = renderFromTags([JSON.stringify(value)]);
@@ -217,7 +213,7 @@ test("a capsule this page may not replay is shown as a review after boot", async
 
   await page.ready;
   await flushAsync();
-  await until(() => reviewButton()?.hidden === false);
+  await until(() => reviewButton()?.hidden === false, { timeout: 4000, what: "recovery review button visible" });
 
   expect(requested).toEqual(["recovery-ui"]);
   const button = reviewButton();
@@ -262,7 +258,7 @@ test("mode exit removes the review and its listeners", async () => {
   const { page, staged } = await load({ records: [foreignCapsule()] });
   await page.ready;
   await flushAsync();
-  await until(() => reviewButton()?.hidden === false);
+  await until(() => reviewButton()?.hidden === false, { timeout: 4000, what: "recovery review button visible" });
 
   const surface = page.view.dom;
   const block = surface.querySelector('[data-id="p"]');

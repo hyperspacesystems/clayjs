@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * The editing marker on the wire, from the roster frame to the request.
@@ -98,11 +99,6 @@ const turn = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // caret, then the send it schedules), and a resend waits out the rate limit the
 // first send started. Waiting on the condition rather than on the clock keeps a
 // busy machine out of the result.
-async function until(check, ms = 2000) {
-  const deadline = Date.now() + ms;
-  while (!check() && Date.now() < deadline) await turn(10);
-}
-
 test("a presence-editing host is told the block under the caret", async () => {
   const fetchImpl = host(["sync", "presence", "presence-editing"]);
   const block = page();
@@ -111,7 +107,7 @@ test("a presence-editing host is told the block under the caret", async () => {
   open(sources[0]);
   roster(sources[0], [ME, OTHER]);
   block.focus();
-  await until(() => sentTo(fetchImpl, "/_/presence").length === 1);
+  await until(() => sentTo(fetchImpl, "/_/presence").length === 1, { what: "the first presence POST" });
 
   expect(sync._editing).not.toBeNull();
   const calls = sentTo(fetchImpl, "/_/presence");
@@ -163,10 +159,10 @@ test("a stream opening again reports the block again", async () => {
   open(sources[0]);
   roster(sources[0], [ME, OTHER]);
   block.focus();
-  await until(() => sentTo(fetchImpl, "/_/presence").length === 1);
+  await until(() => sentTo(fetchImpl, "/_/presence").length === 1, { what: "the first presence POST" });
 
   open(sources[0]);
-  await until(() => sentTo(fetchImpl, "/_/presence").length === 2);
+  await until(() => sentTo(fetchImpl, "/_/presence").length === 2, { what: "the second presence POST" });
 
   const calls = sentTo(fetchImpl, "/_/presence");
   expect(calls).toHaveLength(2);
@@ -181,7 +177,7 @@ test("a stopped tab reports nothing more", async () => {
   open(sources[0]);
   roster(sources[0], [ME, OTHER]);
   block.focus();
-  await until(() => sentTo(fetchImpl, "/_/presence").length === 1);
+  await until(() => sentTo(fetchImpl, "/_/presence").length === 1, { what: "the first presence POST" });
 
   sync.stop();
   const second = document.createElement("div");
@@ -204,7 +200,7 @@ test("a presence frame naming another person's block draws the outline", async (
 
   open(sources[0]);
   roster(sources[0], [ME, { ...OTHER, editing: "0" }]);
-  await until(() => document.querySelector("[data-clay-editing-marker]"));
+  await until(() => document.querySelector("[data-clay-editing-marker]"), { what: "the editing marker" });
 
   expect(document.querySelectorAll("[data-clay-editing-marker]").length).toBe(1);
   expect(document.querySelector("[data-clay-editing-chip]").textContent).toBe("Ada Lovelace");
@@ -219,7 +215,7 @@ test("a stopped tab takes the outline down with the stream", async () => {
 
   open(sources[0]);
   roster(sources[0], [ME, { ...OTHER, editing: "0" }]);
-  await until(() => document.querySelector("[data-clay-editing-marker]"));
+  await until(() => document.querySelector("[data-clay-editing-marker]"), { what: "the editing marker" });
   expect(document.querySelector("[data-clay-editing]")).not.toBeNull();
 
   sync.stop();
@@ -252,7 +248,7 @@ test("a sender discovered during the exit barrier says nothing until resume", as
   expect(sentTo(fetchImpl, "/_/presence")).toHaveLength(0);
 
   participant.resume();
-  await until(() => sentTo(fetchImpl, "/_/presence").length === 1);
+  await until(() => sentTo(fetchImpl, "/_/presence").length === 1, { what: "the first presence POST" });
   expect(JSON.parse(sentTo(fetchImpl, "/_/presence")[0][1].body)).toEqual({ editing: "0" });
 });
 

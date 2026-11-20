@@ -5,6 +5,7 @@
 import { jest } from "@jest/globals";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
+import { until } from "../../helpers/until.js";
 
 /**
  * The edit boot is one coordinator with named steps and one owner per
@@ -16,13 +17,6 @@ import { renderFromTags } from "../../../src/page/save-projection.js";
 const BLOCKS = [{ id: "p", t: "paragraph", text: "Hello" }];
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const flushAsync = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
-const until = async (check, tries = 400) => {
-  for (let i = 0; i < tries; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 
 const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value = seedValue(BLOCKS)) => {
@@ -349,7 +343,7 @@ test("an adoption another tab owns leaves the nonwriter waiting, not blocked", a
   try {
     // The nonwriter is not refused: it stays in adopting, read-only, until the
     // elected writer's adoption reaches it through the room.
-    expect(await until(() => page.status?.phase === "adopting")).toBe(true);
+    await until(() => page.status?.phase === "adopting", { what: "the boot to reach adopting" });
     await flushAsync();
 
     expect(sent).toEqual([]);

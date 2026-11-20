@@ -5,6 +5,7 @@ import { createFeatureLoader } from "../../../src/page/feature-loader.js";
 import { FEATURES } from "../../../src/page/features/registry.js";
 import { highlightKey } from "../../../src/page/highlight.js";
 import { posOf, select, typeText } from "./view-helpers.js";
+import { until } from "../../helpers/until.js";
 
 /**
  * Code blocks are a feature: the highlighter and the language picker load the
@@ -18,13 +19,6 @@ afterEach(() => {
 });
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const waitFor = async (check) => {
-  for (let i = 0; i < 100; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 const fake = () => {
   const calls = [];
   const run = (code, lang) => {
@@ -67,11 +61,11 @@ test("a document with no code block never asks for the code feature", async () =
 test("a code block at boot loads the feature once, with its picker and its colours", async () => {
   const { calls: tokens, run } = fake();
   const { view, calls } = open({ c: CODE }, { highlight: { tokenize: run, delay: 0 } });
-  expect(await waitFor(() => picker(view) !== null)).toBe(true);
+  await until(() => picker(view) !== null, { what: "the language picker" });
   expect(calls).toEqual(["code"]);
   expect(tokens).toEqual([["const x = 1", "javascript"]]);
   expect(view.dom.querySelector("pre").dataset.lang).toBe("javascript");
-  expect(await waitFor(() => decos(view).length === 1)).toBe(true);
+  await until(() => decos(view).length === 1, { what: "one highlight decoration" });
   expect(decos(view).map((d) => [d.from, d.to])).toEqual([[1, 6]]);
   await flush();
   expect(calls).toEqual(["code"]);
@@ -85,9 +79,9 @@ test("a code block inserted later loads the feature then", async () => {
   expect(picker(view)).toBe(null);
 
   view.dispatch(view.state.tr.insert(view.state.doc.content.size, nodeFromBlock(schema, "c", CODE)));
-  expect(await waitFor(() => picker(view) !== null)).toBe(true);
+  await until(() => picker(view) !== null, { what: "the language picker" });
   expect(calls).toEqual(["code"]);
-  expect(await waitFor(() => decos(view).length === 1)).toBe(true);
+  await until(() => decos(view).length === 1, { what: "one highlight decoration" });
 });
 
 test("typing in a code block before the feature resolves keeps the text", async () => {
@@ -104,7 +98,7 @@ test("typing in a code block before the feature resolves keeps the text", async 
   expect(view.state.doc.child(0).textContent).toBe("const x = 12");
 
   release();
-  expect(await waitFor(() => picker(view) !== null)).toBe(true);
+  await until(() => picker(view) !== null, { what: "the language picker" });
   expect(view.state.doc.child(0).textContent).toBe("const x = 12");
   expect(picker(view).value).toBe("javascript");
 });
@@ -120,7 +114,7 @@ test("destroying the editor stops the highlighter's timer", async () => {
   try {
     const { run } = fake();
     const { view } = open({ c: CODE }, { highlight: { tokenize: run, delay: 400 } });
-    expect(await waitFor(() => picker(view) !== null)).toBe(true);
+    await until(() => picker(view) !== null, { what: "the language picker" });
     select(view, posOf(view, "c", true));
     typeText(view, "2");
     const pending = [...scheduled].filter(([, ms]) => ms === 400).map(([id]) => id);

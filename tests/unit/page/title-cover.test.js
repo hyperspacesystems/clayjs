@@ -2,6 +2,7 @@
  * @jest-environment jsdom
  * @jest-environment-options {"url": "https://example.com/notes.html"}
  */
+import { until } from "../../helpers/until.js";
 import { history } from "../../../src/vendor/prosemirror.vendor.js";
 import * as titleIcon from "../../../src/page/features/title-icon.js";
 import * as titleCover from "../../../src/page/features/title-cover.js";
@@ -27,13 +28,6 @@ const PAGE = (attrs = {}) => [["h", "heading", "Notes", { level: 1, ...attrs }],
 afterEach(() => { document.body.innerHTML = ""; });
 
 const settle = () => new Promise((done) => setTimeout(done, 0));
-const waitFor = async (check) => {
-  for (let i = 0; i < 100; i++) {
-    if (check()) return true;
-    await new Promise((done) => setTimeout(done, 5));
-  }
-  return false;
-};
 const deferred = () => {
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
@@ -93,7 +87,7 @@ test("a chosen photograph is uploaded through the media transport and written to
   const { view, asked } = open(PAGE(), { upload: up.upload });
   await addCover(view, file("cover.png", "image/png", "the bytes"));
 
-  expect(await waitFor(() => record(view, "h").pageCoverSrc === "/uploads/1-cover.png")).toBe(true);
+  await until(() => record(view, "h").pageCoverSrc === "/uploads/1-cover.png", { what: "uploaded cover written to heading" });
   expect(up.calls.map((f) => f.name)).toEqual(["cover.png"]);
   expect(asked).toHaveLength(1);
   expect(record(view, "p")).toBeUndefined();
@@ -119,7 +113,7 @@ test("Add cover makes the title when the page has no H1: one admitted transactio
   const before = view.state.doc;
   await addCover(view, file());
 
-  expect(await waitFor(() => view.state.doc.childCount === 2)).toBe(true);
+  await until(() => view.state.doc.childCount === 2, { what: "synthesized title heading" });
   expect(asked).toHaveLength(1);
   const title = view.state.doc.child(0);
   expect([title.type.name, title.attrs.level, title.attrs.parent, title.attrs.pageCoverSrc]).toEqual(["heading", 1, null, "/uploads/1-cover.png"]);
@@ -138,13 +132,13 @@ test("a host that stores no files offers the embed choice, and only that choice 
   const image = file();
   await addCover(view, image);
 
-  expect(await waitFor(() => panel()?.dataset.state === "embed-choice")).toBe(true);
+  await until(() => panel()?.dataset.state === "embed-choice", { what: "cover panel embed-choice state" });
   expect(acts()).toEqual(["embed", "cancel"]);
   expect(record(view, "h").pageCoverSrc ?? null).toBeNull();
   expect(asked).toHaveLength(0);
 
   press("embed");
-  expect(await waitFor(() => typeof record(view, "h").pageCoverSrc === "string")).toBe(true);
+  await until(() => typeof record(view, "h").pageCoverSrc === "string", { what: "embedded cover data URL written" });
   expect(record(view, "h").pageCoverSrc).toBe(await dataUrlOf(image));
   expect(asked).toHaveLength(1);
   expect(coverImg(view).getAttribute("src")).toBe(record(view, "h").pageCoverSrc);
@@ -156,7 +150,7 @@ test("a forbidden upload embeds nothing: it is a refusal, not an offer", async (
   const before = view.state.doc;
   await addCover(view, file());
 
-  expect(await waitFor(() => panel()?.dataset.state === "error")).toBe(true);
+  await until(() => panel()?.dataset.state === "error", { what: "cover panel error state" });
   expect(panel().textContent).toContain("add files to this document");
   expect(acts()).toEqual(["cancel"]);
   await settle();
@@ -178,7 +172,7 @@ test("cancel stops the upload, and an answer that arrives afterwards lands nowhe
   });
   const before = view.state.doc;
   await addCover(view, file());
-  expect(await waitFor(() => panel()?.dataset.state === "uploading")).toBe(true);
+  await until(() => panel()?.dataset.state === "uploading", { what: "cover panel uploading state" });
 
   press("cancel");
   expect(panelHost()).toBeNull();
@@ -196,14 +190,14 @@ test("a title deleted, or a format that refuses, while the upload is in the air 
   const held = deferred();
   const first = open(PAGE(), { upload: () => held.gate.then(() => ({ ok: true, uploads: [{ url: "/uploads/1-cover.png" }] })) });
   await addCover(first.view, file());
-  expect(await waitFor(() => panel()?.dataset.state === "uploading")).toBe(true);
+  await until(() => panel()?.dataset.state === "uploading", { what: "cover panel uploading state" });
 
   // The title is deleted while the host is still answering: the block the command was asked
   // for is gone, so the address is written nowhere.
   first.view.dispatch(first.view.state.tr.delete(0, first.view.state.doc.child(0).nodeSize));
   const gone = first.view.state.doc;
   held.release();
-  expect(await waitFor(() => first.asked.length === 1)).toBe(true);
+  await until(() => first.asked.length === 1, { what: "format gate asked once" });
   await settle();
   expect(first.view.state.doc).toBe(gone);
   expect(first.view.dom.querySelector("header[data-blockeditor-heading]")).toBeNull();
@@ -244,7 +238,7 @@ test("the reposition previews without writing, and Apply is one undo step", asyn
   await runPageCommand(view, "titleCover", { act: "position" });
   key("ArrowRight");
   press("apply");
-  expect(await waitFor(() => record(view, "h").pageCoverX === 55)).toBe(true);
+  await until(() => record(view, "h").pageCoverX === 55, { what: "cover reposition X applied" });
   expect(attrsOf(view, "h")).toEqual({ src: "/cover.jpg", alt: "A door", x: 55, y: 50 });
   expect(coverImg(view).getAttribute("style")).toBe("object-position:55% 50%");
   expect(asked).toHaveLength(1);
@@ -258,14 +252,14 @@ test("a remote icon and a local cover are different fields: neither overwrites t
   const held = deferred();
   const { view } = open(PAGE(), { upload: () => held.gate.then(() => ({ ok: true, uploads: [{ url: "/uploads/1-cover.png" }] })) });
   await addCover(view, file());
-  expect(await waitFor(() => panel()?.dataset.state === "uploading")).toBe(true);
+  await until(() => panel()?.dataset.state === "uploading", { what: "cover panel uploading state" });
 
   // A peer puts an icon on the same title while the upload is in the air.
   const at = 0;
   view.dispatch(view.state.tr.setNodeMarkup(at, null, { ...view.state.doc.child(at).attrs, pageIcon: "\u{1F308}" }));
   held.release();
 
-  expect(await waitFor(() => record(view, "h").pageCoverSrc === "/uploads/1-cover.png")).toBe(true);
+  await until(() => record(view, "h").pageCoverSrc === "/uploads/1-cover.png", { what: "uploaded cover written to heading" });
   expect(record(view, "h").pageIcon).toBe("\u{1F308}");
   expect(header(view).querySelector("span[data-blockeditor-icon]").textContent).toBe("\u{1F308}");
   expect(coverImg(view)).not.toBeNull();
@@ -315,7 +309,7 @@ test("a cover is an address a reader can load and a focal point inside the pictu
     const { view, asked } = open(PAGE(), { upload: () => Promise.resolve({ ok: true, uploads: [{ url }] }) });
     const before = view.state.doc;
     await addCover(view, file());
-    expect(await waitFor(() => panel()?.dataset.state === "error")).toBe(true);
+    await until(() => panel()?.dataset.state === "error", { what: "cover panel error state" });
     expect(view.state.doc).toBe(before);
     expect(asked).toHaveLength(0);
     expect(header(view)).toBeNull();

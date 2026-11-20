@@ -2,6 +2,7 @@
  * @jest-environment jsdom
  */
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * The saved reader's half of a live switch.
@@ -28,14 +29,6 @@ import { jest } from "@jest/globals";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const flush = async () => {
   for (let i = 0; i < 6; i++) await sleep(0);
-};
-const until = async (predicate, ms = 2000) => {
-  const stop = Date.now() + ms;
-  while (Date.now() < stop) {
-    if (predicate()) return true;
-    await sleep(2);
-  }
-  return false;
 };
 
 let sources = [];
@@ -135,7 +128,7 @@ async function openReader({ bytes, etag = "E1", seq = 1, documentURL = "/index.h
   const file = bytes ?? FILE('<p data-id="a">A</p>');
   load(served(null, ARTICLE("served")));
   const reader = startReader({ represented: { bytes: file, etag, seq }, documentURL });
-  await until(() => sources.length > 0);
+  await until(() => sources.length > 0, { what: "the reader to open its stream" });
   await flush();
   return { reader, source: sources.at(-1), bytes: file };
 }
@@ -236,7 +229,7 @@ test("a live-lane preview is not a saved file, and a fed reader keeps the saved 
   const saved = served("E7", ARTICLE("saved"));
   source.onmessage(frame({ seq: 3, html: saved, etag: "E7" }));
   while (queued.length) queued.shift()();
-  expect(await until(() => text() === "saved")).toBe(true);
+  await until(() => text() === "saved", { what: "the saved file to show" });
   expect(liveSync._represented).toEqual({ bytes: saved, etag: "E7", seq: 3 });
 
   // The same file with a new stamp: the receipt moves and nothing is morphed.
@@ -286,7 +279,7 @@ test("an apply in flight is the file the switch is handed", async () => {
   expect(prepared).toBe(null);
 
   document.querySelector('script[src="/held.js"]').dispatchEvent(new Event("load"));
-  await until(() => prepared !== null);
+  await until(() => prepared !== null, { what: "the handoff to finish preparing" });
   expect(prepared.represented).toEqual({ bytes: one, etag: "E1", seq: 2 });
   expect(text()).toBe("B");
 
@@ -353,9 +346,9 @@ test("a switch cancelled while an apply is on the wire loses neither the frame n
   // The lane was never held: the next file applies without another prepare.
   const two = served("E2", ARTICLE("C"));
   source.onmessage(frame({ seq: 3, html: two, etag: "E2" }));
-  await until(() => queued.length > 0 || text() === "C");
+  await until(() => queued.length > 0 || text() === "C", { what: "file C to be queued or shown" });
   while (queued.length) queued.shift()();
-  await until(() => text() === "C");
+  await until(() => text() === "C", { what: "file C to show" });
   expect(text()).toBe("C");
 });
 
@@ -371,7 +364,7 @@ test("a repair owed while the switch holds the queue still runs", async () => {
   expect(text()).toBe("A");
 
   handoff.resume();
-  await until(() => text() === "repaired");
+  await until(() => text() === "repaired", { what: "the repaired file to show" });
   expect(text()).toBe("repaired");
   expect(reader.represented).toEqual({ bytes: served("E9", ARTICLE("repaired")), etag: "E9", seq: 9 });
   reader.stop();
@@ -401,7 +394,7 @@ test("one owner, one stream and no extra listeners across 100 entries and exits"
   for (let cycle = 0; cycle < 100; cycle++) {
     const reader = startReader({ represented: { bytes, etag: `E${cycle}`, seq: cycle }, documentURL: "/index.html" });
     expect(ownerOf(article)).toBe("reader");
-    expect(await until(() => sources.length === cycle + 1)).toBe(true);
+    await until(() => sources.length === cycle + 1, { what: `stream ${cycle + 1} to open` });
     const handoff = await reader.prepareHandoff({});
     expect(await handoff.commit()).toBe(true);
     expect(sources.at(-1).closed).toBe(true);
@@ -466,8 +459,8 @@ test("reclaim repaints the receipt, re-claims, and resume applies the file held 
   load(served(null, ARTICLE("served")));
   const reader = startReader({ represented: { bytes, etag: "E1", seq: 1 }, documentURL: "/index.html" });
   const article = document.querySelector("article[data-blockeditor]");
-  expect(await until(() => sources.length > 0)).toBe(true);
-  expect(await until(() => article.querySelector('[data-live-tool="on"]'))).toBe(true);
+  await until(() => sources.length > 0, { what: "the reader to open its stream" });
+  await until(() => article.querySelector('[data-live-tool="on"]'), { what: "the article's live tool to be on" });
   const source = sources.at(-1);
 
   // The reader opens a toggle the file says is closed: that state is the reader's,
@@ -491,7 +484,7 @@ test("reclaim repaints the receipt, re-claims, and resume applies the file held 
   expect(handoff.reclaimArticle()).toBe(true);
   expect(text()).toBe("A");
   expect(article.querySelector('details[data-id="d1"]').open).toBe(true);
-  expect(await until(() => article.querySelector('[data-live-tool="on"]'))).toBe(true);
+  await until(() => article.querySelector('[data-live-tool="on"]'), { what: "the article's live tool to be on" });
   expect(ownerOf(article)).toBe("reader");
   expect(() => claim(article, "editor")).toThrow(/already has a reader runtime/);
   expect(reader.represented).toEqual({ bytes, etag: "E1", seq: 1 });

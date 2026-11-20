@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * A late plugin loads after the page is interactive, so "the plugin is in the plan"
@@ -19,14 +20,6 @@ jest.unstable_mockModule("../../src/plugins/source.js", () => ({
   ready: latePlugin.ready,
   source: latePlugin.source,
 }));
-
-async function waitFor(predicate) {
-  for (let i = 0; i < 50; i++) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  throw new Error("timed out waiting for the loader");
-}
 
 async function boot() {
   jest.resetModules();
@@ -63,14 +56,14 @@ test("clay:plugin-ready fires once, for source, after its ready resolves", async
   latePlugin = { ready, source: {} };
 
   const { events } = await boot();
-  await waitFor(() => window.clay.source !== undefined);
+  await until(() => window.clay.source !== undefined, { what: "the late plugin's member on window.clay" });
 
   // The loader had the module in hand and its member attached, and still announced
   // nothing: the plugin is not usable until its own ready settles.
   expect(events).toEqual(["clay:ready"]);
 
   resolveReady();
-  await waitFor(() => events.length > 1);
+  await until(() => events.length > 1, { what: "the clay:plugin-ready event" });
 
   expect(events).toEqual(["clay:ready", "source"]);
 });
@@ -80,7 +73,7 @@ test("a late plugin whose ready rejects is logged and not announced", async () =
   latePlugin = { ready: Promise.reject(new Error("vendor fetch failed")), source: {} };
 
   const { events } = await boot();
-  await waitFor(() => logged.mock.calls.length > 0);
+  await until(() => logged.mock.calls.length > 0, { what: "the rejected ready to be logged" });
 
   expect(events).toEqual(["clay:ready"]);
   expect(logged.mock.calls[0][0]).toContain('plugins/source.js');

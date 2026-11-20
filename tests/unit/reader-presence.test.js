@@ -2,6 +2,7 @@
  * @jest-environment jsdom
  */
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * The roster chrome a reader draws is a first-use download of its own, counted here
@@ -64,10 +65,6 @@ const avatars = () => [...document.querySelectorAll("[data-clay-presence-avatar]
 const chip = () => document.querySelector("[data-clay-presence-count]");
 const tip = () => document.querySelector("[data-clay-presence-tip]");
 
-async function until(check, ms = 2000) {
-  const deadline = Date.now() + ms;
-  while (!check() && Date.now() < deadline) await tick();
-}
 const frame = (data) => ({ data: JSON.stringify(data) });
 
 const posts = () => fetchCalls.filter((call) => call.init.method === "POST");
@@ -149,13 +146,13 @@ test("the roster chrome arrives once, with the first frame", async () => {
   expect(rosterLoads.count).toBe(0);
 
   source.dispatchEvent(presenceEvent({ people: [ADA, GRACE], anonymous: 0 }));
-  await until(() => avatars().length === 2);
+  await until(() => avatars().length === 2, { what: "two presence avatars" });
   expect(avatars()).toHaveLength(2);
   expect(rosterLoads.count).toBe(1);
 
   // A frame after the download draws into the chrome that is already there.
   source.dispatchEvent(presenceEvent({ people: [ADA], anonymous: 1 }));
-  await until(() => avatars().length === 1);
+  await until(() => avatars().length === 1, { what: "one presence avatar" });
   expect(rosterLoads.count).toBe(1);
 });
 
@@ -265,7 +262,7 @@ test("a reader draws the same roster an editor sees, from the frame it already f
   const { source } = await startReader();
 
   source.dispatchEvent(presenceEvent({ people: [ADA, GRACE], anonymous: 1 }));
-  await until(() => avatars().length === 2);
+  await until(() => avatars().length === 2, { what: "two presence avatars" });
 
   // The roster's own chrome, built where the store said who is there.
   expect(stack()).not.toBeNull();
@@ -286,10 +283,10 @@ test("a second roster frame updates what the reader is shown", async () => {
   const { source } = await startReader();
 
   source.dispatchEvent(presenceEvent({ people: [ADA, GRACE], anonymous: 0 }));
-  await until(() => avatars().length === 2);
+  await until(() => avatars().length === 2, { what: "two presence avatars" });
 
   source.dispatchEvent(presenceEvent({ people: [ADA], anonymous: 2 }));
-  await until(() => avatars().length === 1);
+  await until(() => avatars().length === 1, { what: "one presence avatar" });
 
   expect(avatars().map((el) => el.textContent)).toEqual(["AL"]);
   expect(chip().textContent).toBe("+2 viewing");
@@ -299,7 +296,7 @@ test("closing the stream clears the roster a reader draws", async () => {
   const { handle, source } = await startReader();
 
   source.dispatchEvent(presenceEvent({ people: [ADA, GRACE], anonymous: 0 }));
-  await until(() => avatars().length === 2);
+  await until(() => avatars().length === 2, { what: "two presence avatars" });
 
   handle.stop();
   await settle();

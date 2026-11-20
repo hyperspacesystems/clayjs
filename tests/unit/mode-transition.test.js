@@ -3,6 +3,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until, untilBaselineSettled } from "../helpers/until.js";
 
 /**
  * The public transaction: `clay.setMode` runs the whole live controller for a document
@@ -18,14 +19,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const flush = async () => {
   for (let i = 0; i < 5; i++) await sleep(0);
-};
-
-const until = async (predicate) => {
-  for (let i = 0; i < 400; i++) {
-    if (predicate()) return true;
-    await sleep(5);
-  }
-  return false;
 };
 
 const API_TAG = '<script data-rules-name="api" data-rules-version="1" type="application/json">{"title":"h1"}</script>';
@@ -107,10 +100,10 @@ async function bootPage({
   if (beforeBoot) await beforeBoot();
   const { boot } = await import("../../src/loader.js");
   await new Promise((resolve) => boot(null, new URLSearchParams(params), resolve));
-  // The page's accepted baseline settles a quiet moment after boot; comparing an edit
+  // An edit boot's accepted baseline settles a quiet moment after boot; comparing an edit
   // against a moving baseline would test the fixture, not the switch.
   const save = await import("../../src/core/save.js").catch(() => null);
-  if (save) await until(() => save.baselineSettled());
+  if (save && window.clay.mode === "edit") await untilBaselineSettled(save);
   return window.clay;
 }
 
@@ -548,7 +541,7 @@ test("an explicit initial edit exits by adoption and the page re-enters live", a
   try {
     const clay = await bootPage({ edit: true, owner: true, declared: true, params: SORTABLE_PARAMS, resources: BOARD });
     // The boot's own late tail starts the drag editor; nothing has adopted it yet.
-    expect(await until(() => counter.snapshot().instances === 1)).toBe(true);
+    await until(() => counter.snapshot().instances === 1, { what: "the boot's late tail to start one drag editor" });
     const editing = counter.snapshot();
     posts = [];
 
@@ -587,7 +580,7 @@ test("an initial edit exit adopts the boot's sessions past a preboot participant
   const queue = [participant("app:panel", log, { order: 2000 })];
   try {
     const clay = await bootPage({ edit: true, owner: true, declared: true, params: SORTABLE_PARAMS, resources: BOARD, queue });
-    expect(await until(() => counter.snapshot().instances === 1)).toBe(true);
+    await until(() => counter.snapshot().instances === 1, { what: "the boot's late tail to start one drag editor" });
     expect(log).toContain("app:panel:prepare");
     log.length = 0;
 
@@ -628,7 +621,7 @@ test("a late edit-only module already importing when the exit starts begins no e
   });
   try {
     const clay = await bootPage({ edit: true, owner: true, declared: true, params: SORTABLE_PARAMS, resources: BOARD, beforeBoot });
-    expect(await until(() => seen.requested)).toBe(true);
+    await until(() => seen.requested, { what: "the late tail to ask for the sortable chunk" });
     expect(counter.snapshot().instances).toBe(0);
 
     const { registerUnsavedState } = await import("../../src/lib/unsaved-state.js");
@@ -642,7 +635,7 @@ test("a late edit-only module already importing when the exit starts begins no e
     });
     try {
       const exit = clay.setMode("view");
-      expect(await until(() => flushing)).toBe(true);
+      await until(() => flushing, { what: "the exit to start flushing the pending source" });
       expect(clay.modeLifecycle.state.phase).toBe("leaving");
 
       // The chunk lands here: the exit is still running and edit is still the committed mode.
@@ -745,7 +738,7 @@ test("an initial edit exits without waiting for its boot late tail, and what lan
     expect(clay.modeLifecycle.state.phase).toBe("idle");
 
     release();
-    expect(await until(() => seen.evaluated)).toBe(true);
+    await until(() => seen.evaluated, { what: "the held late module to be evaluated" });
     await flush();
 
     // It lands in view, so it belongs to no session: no editor, no clay member, no event.

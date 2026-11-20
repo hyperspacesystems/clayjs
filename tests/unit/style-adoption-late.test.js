@@ -3,6 +3,7 @@
  * @jest-environment-options {"url": "https://fixture.invalid/document.html"}
  */
 import { bootStylePage, warn } from "./style-adoption-helpers.js";
+import { untilBaselineSettled } from "../helpers/until.js";
 
 /**
  * Argon G3, the false-dirty half. On a page whose baseline has settled, a script
@@ -15,7 +16,7 @@ const { save, snapshot, style } = await bootStylePage();
 
 test("a clay.style() adoption after the settle reads clean while pending and after it lands", async () => {
   save.releaseBootSettle();
-  while (!save.baselineSettled()) await new Promise((resolve) => setTimeout(resolve, 10));
+  await untilBaselineSettled(save);
   expect(window.clay.hasUnsavedChanges()).toBe(false);
 
   const tag = document.querySelector('style[data-name="saved"]');

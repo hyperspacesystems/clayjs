@@ -3,6 +3,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { untilBaselineSettled } from "../helpers/until.js";
 
 /**
  * Fix 6: every feature that hangs off a session follows the committed mode, never the mode
@@ -20,14 +21,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const flush = async () => {
   for (let i = 0; i < 5; i++) await sleep(0);
-};
-
-const until = async (predicate) => {
-  for (let i = 0; i < 400; i++) {
-    if (predicate()) return true;
-    await sleep(5);
-  }
-  return false;
 };
 
 // The plan the plain cases boot with: the two plugins whose boot decision a case measures
@@ -72,10 +65,10 @@ async function bootPage({ url = "/notes.html", params = PLAIN_PARAMS, body = '<d
   window.clay = {};
   const { boot } = await import("../../src/loader.js");
   await new Promise((resolve) => boot(null, new URLSearchParams(params), resolve));
-  // The page's accepted baseline settles a quiet moment after boot; comparing an edit
+  // An edit boot's accepted baseline settles a quiet moment after boot; comparing an edit
   // against a moving baseline would test the fixture, not the switch.
   const save = await import("../../src/core/save.js").catch(() => null);
-  if (save) await until(() => save.baselineSettled());
+  if (save && window.clay.mode === "edit") await untilBaselineSettled(save);
   return window.clay;
 }
 

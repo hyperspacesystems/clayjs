@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * A reader's `clay.conflicts` exists before the ledger does. No merge has happened,
@@ -97,13 +98,6 @@ afterEach(() => {
   conflicts.acknowledge(conflicts.list().map((record) => record.id), { reason: "accepted" });
 });
 
-const turn = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function until(check, ms = 2000) {
-  const deadline = Date.now() + ms;
-  while (!check() && Date.now() < deadline) await turn(5);
-}
-
 async function startedReader() {
   const sync = new LiveSync();
   sync.lane = "saved";
@@ -163,7 +157,7 @@ test("the first merged frame downloads the ledger, and a resolver registered bef
 
   // The frame merged waits for the download instead of reading a ledger that is
   // not there; the page's own object answers empty until it lands.
-  await until(() => loads.ledger === 1);
+  await until(() => loads.ledger === 1, { what: "the ledger download to start" });
   expect(clay.conflicts).toBe(facade);
   expect(clay.conflicts.list()).toEqual([]);
   expect(clay.conflicts.size).toBe(0);

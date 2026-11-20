@@ -2,6 +2,7 @@ import { createPageEditor, installPageFeature } from "../../../src/page/editor.j
 import { createFeatureLoader } from "../../../src/page/feature-loader.js";
 import { FEATURES } from "../../../src/page/features/registry.js";
 import { RECORD } from "./fixtures/all-kinds.js";
+import { until } from "../../helpers/until.js";
 
 /**
  * Charts are a feature: the chart view and the module its insert helpers live in
@@ -15,13 +16,6 @@ afterEach(() => {
 });
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const waitFor = async (check) => {
-  for (let i = 0; i < 100; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 
 let frames;
 let originalRaf;
@@ -82,7 +76,7 @@ test("a table without a chart asks for the table part only", async () => {
 
 test("a chart at boot draws once its part arrives and refreshes when its source table changes", async () => {
   const { view, calls } = open({ tbl: table, ch: chart });
-  expect(await waitFor(() => { paint(); return view.dom.querySelector(".blockeditor-chart-plot svg") !== null; })).toBe(true);
+  await until(() => { paint(); return view.dom.querySelector(".blockeditor-chart-plot svg") !== null; }, { what: "the chart to draw its plot" });
   expect(calls.sort()).toEqual(["chart", "table"]);
   paint();
   const before = view.dom.querySelector(".blockeditor-chart-plot svg").outerHTML;
@@ -108,7 +102,7 @@ test("inserting a chart from the menu loads the part before the block draws", as
 
 test("a board asks for the board part and never for the chart one", async () => {
   const { view, calls } = open({ p: PARAGRAPH, bd: { t: "board", pos: "C" } }, { board: null });
-  expect(await waitFor(() => calls.includes("board"))).toBe(true);
+  await until(() => calls.includes("board"), { what: "the board part to be asked for" });
   await flush();
   expect(calls).not.toContain("chart");
   expect(view.state.doc.child(1).type.name).toBe("board");

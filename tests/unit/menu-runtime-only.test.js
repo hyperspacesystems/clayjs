@@ -1,5 +1,6 @@
 import { jest } from "@jest/globals";
 import { $, $$, hostOf } from "./helpers/editor-ui.js";
+import { until } from "../helpers/until.js";
 
 // Scenario: everything the menu draws lives only at runtime. The dock, the list, the
 // first-use notice, the note, the roster, the people panel and its name field, the drag
@@ -62,7 +63,7 @@ async function boot({ edit = true, roster = true, body = BODY, head = HEAD } = {
 // would be a state nobody is listening for yet.
 async function store() {
   const { presence } = await import("../../src/sync/presence-store.js");
-  for (let i = 0; i < 100 && presence.listeners.size === 0; i++) await wait(10);
+  await until(() => presence.listeners.size > 0, { what: "the menu to listen to the presence store" });
   return presence;
 }
 

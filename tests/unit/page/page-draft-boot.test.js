@@ -3,6 +3,7 @@
  * @jest-environment-options {"url": "https://example.com/page.html"}
  */
 import { jest } from "@jest/globals";
+import { until } from "../../helpers/until.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
 
@@ -97,15 +98,6 @@ async function tapDraftTransport() {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function waitFor(predicate, timeout = 15000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    if (predicate()) return true;
-    await wait(50);
-  }
-  return predicate();
-}
-
 function firstParagraph(view) {
   let pos = null;
   view.state.doc.descendants((node, at) => {
@@ -145,7 +137,7 @@ test("a visitor's typing saves into this browser's draft transport", async () =>
   const view = clay.blockeditor.view;
   view.dispatch(view.state.tr.insertText("visitor words", firstParagraph(view)));
 
-  await waitFor(() => bytes.some((html) => html.includes("visitor words")));
+  await until(() => bytes.some((html) => html.includes("visitor words")), { timeout: 15000, what: "visitor words saved to draft transport" });
   expect(bytes.length).toBeGreaterThan(0);
   const saved = bytes.find((html) => html.includes("visitor words"));
   expect(saved).toBeTruthy();
@@ -167,7 +159,7 @@ test("a return visit boots from a stored page tag", async () => {
   const bytes = await tapDraftTransport();
   const view = first.clay.blockeditor.view;
   view.dispatch(view.state.tr.insertText("kept words", firstParagraph(view)));
-  await waitFor(() => bytes.some((html) => html.includes("kept words")));
+  await until(() => bytes.some((html) => html.includes("kept words")), { timeout: 15000, what: "kept words saved to draft transport" });
   const saved = bytes.find((html) => html.includes("kept words"));
   expect(saved).toBeTruthy();
   const tagText = docOf(saved).querySelector(TAG_SEL).textContent;
@@ -191,7 +183,7 @@ test("a reload finds the visitor's page from the record alone", async () => {
   const recordOf = () => {
     try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
   };
-  await waitFor(() => bytes.some((html) => html.includes("record words")) && recordOf()?.blockeditor?.html?.includes("record words"));
+  await until(() => bytes.some((html) => html.includes("record words")) && recordOf()?.blockeditor?.html?.includes("record words"), { timeout: 15000, what: "record words saved to draft transport and localStorage" });
   const raw = localStorage.getItem(key);
   expect(raw).toBeTruthy();
   const record = JSON.parse(raw);
@@ -237,7 +229,7 @@ test("a visitor's dropped image is refused with the note, not offered as an embe
   const { mediaKey, insertFiles } = await import("../../../src/page/media.js");
   const item = () => mediaKey.getState(view.state).items[0];
   insertFiles(view, [new File(["x"], "a.png", { type: "image/png" })]);
-  await waitFor(() => item()?.state !== "uploading");
+  await until(() => item()?.state !== "uploading", { timeout: 15000, what: "dropped image upload settled" });
   expect(item().state).toBe("error");
   expect(item().state).not.toBe("embed-choice");
   expect(item().message).toBe("Download your copy to add pictures and files.");

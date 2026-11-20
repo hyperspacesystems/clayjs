@@ -8,6 +8,7 @@ import * as realTablePart from "../../../src/page/features/table.js";
 import * as realMergeEngine from "../../../src/sync/merge-engine.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
+import { until } from "../../helpers/until.js";
 
 /**
  * One installation owns the page at a time. Every test here holds the boot at a
@@ -32,13 +33,6 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 const flushAsync = async (turns = 40) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
-const until = async (check, tries = 300) => {
-  for (let i = 0; i < tries; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
@@ -257,7 +251,7 @@ test("a boot cancelled while the room is joining mounts nothing from the old one
   const roomGate = deferred();
   const { page, ownerOf, registrations } = await open({ roomGate });
   const stable = page;
-  expect(await until(() => page.status.phase === "joining")).toBe(true);
+  await until(() => page.status.phase === "joining", { what: "the boot to reach joining" });
   const since = marks.length;
 
   const next = page.install();
@@ -296,7 +290,7 @@ test("a boot cancelled while a demanded view part is coming takes its editor wit
     tableGate,
   });
   const stable = page;
-  expect(await until(() => page.status.phase === "adopting")).toBe(true);
+  await until(() => page.status.phase === "adopting", { what: "the boot to reach adopting" });
   // The old installation has its shell on screen and input still off.
   expect(document.querySelectorAll(".blockeditor-editor")).toHaveLength(1);
   const since = marks.length;
@@ -316,7 +310,7 @@ test("a boot cancelled while adoption waits on the engine restores nothing from 
   const adoptGate = deferred();
   const { page, ownerOf, registrations } = await open({ edit: handEdit, adoptGate });
   const stable = page;
-  expect(await until(() => page.status.phase === "adopting")).toBe(true);
+  await until(() => page.status.phase === "adopting", { what: "the boot to reach adopting" });
   const since = marks.length;
 
   // The article is what the new installation reads; the old one already captured its

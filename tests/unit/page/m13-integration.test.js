@@ -4,6 +4,7 @@
  */
 import { webcrypto } from "node:crypto";
 import { jest } from "@jest/globals";
+import { until } from "../../helpers/until.js";
 import * as Y from "../../../src/vendor/yjs.vendor.js";
 import { state as pmState, view as pmView } from "../../../src/vendor/prosemirror.vendor.js";
 import { createPageEditor, installPageFeature, runPageCommand, setEditorActive } from "../../../src/page/editor.js";
@@ -71,13 +72,6 @@ afterEach(() => {
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const settle = async (turns = 8) => {
   for (let i = 0; i < turns; i++) await new Promise((done) => setTimeout(done, 0));
-};
-const waitFor = async (check, turns = 200) => {
-  for (let i = 0; i < turns; i++) {
-    if (check()) return true;
-    await new Promise((done) => setTimeout(done, 5));
-  }
-  return false;
 };
 
 // clay.people, as a page finds it: the roster a mention is picked from. Nothing here writes.
@@ -317,7 +311,7 @@ async function fixture() {
   // The icon's picker refuses the same way: the list opens, a choice writes nothing, and no
   // activation was attempted for it either.
   expect(await runPageCommand(view, "titleIcon", {})).toEqual({ ok: true, picker: true });
-  expect(await waitFor(() => options().length > 0)).toBe(true);
+  await until(() => options().length > 0, { what: "picker options" });
   choose(ICON);
   await settle(2);
   expect(record(view, "h").pageIcon).toBeUndefined();
@@ -329,9 +323,9 @@ async function fixture() {
 
   // The page icon: the picker offers glyphs and one choice decorates the title.
   expect(await runPageCommand(view, "titleIcon", {})).toEqual({ ok: true, picker: true });
-  await waitFor(() => options().length > 0);
+  await until(() => options().length > 0, { what: "picker options" });
   choose(ICON);
-  expect(await waitFor(() => record(view, "h").pageIcon === ICON)).toBe(true);
+  await until(() => record(view, "h").pageIcon === ICON, { what: "page icon written" });
   expect(record(view, "h").c).toBe("Notebook");
 
   // The page cover: one upload, one address on the title, one undo entry.
@@ -339,7 +333,7 @@ async function fixture() {
   const chooser = document.querySelector("input.blockeditor-cover-input");
   Object.defineProperty(chooser, "files", { configurable: true, get: () => [new File(["bytes"], "cover.png", { type: "image/png" })] });
   chooser.dispatchEvent(new Event("change"));
-  expect(await waitFor(() => record(view, "h").pageCoverSrc === COVER)).toBe(true);
+  await until(() => record(view, "h").pageCoverSrc === COVER, { what: "page cover written" });
   // The focal point is the default one, drawn on the picture beside the title, not in it.
   expect(view.dom.querySelector("img[data-blockeditor-cover]").getAttribute("style")).toBe("object-position:50% 50%");
   expect(view.dom.querySelector("header[data-blockeditor-heading] h1").textContent).toBe("Notebook");
@@ -347,27 +341,27 @@ async function fixture() {
   // The mention: the action types its @ and the pick writes the name under the mark.
   caret(view, blockPos(view, "m") + 1);
   expect(await runPageCommand(view, "mentions", {})).toEqual({ ok: true, picker: true });
-  expect(await waitFor(() => options().length === 1)).toBe(true);
+  await until(() => options().length === 1, { what: "mention picker option" });
   options()[0].click();
-  expect(await waitFor(() => record(view, "m").c === `${ADA.name} `)).toBe(true);
+  await until(() => record(view, "m").c === `${ADA.name} `, { what: "mention text written" });
   expect(runsOf(record(view, "m").m)).toEqual([[ADA.name.length, MENTION_KEY], [1, ""]]);
   view.dispatch(view.state.tr.insertText("wrote this"));
 
   // The date: Today is the local calendar day, written as its ISO text under the date mark.
   caret(view, blockPos(view, "d") + 1);
   expect(await runPageCommand(view, "dates", {})).toEqual({ ok: true, picker: true });
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "date picker options" });
   options()[0].click();
-  expect(await waitFor(() => /^\d{4}-\d{2}-\d{2} $/.test(record(view, "d").c))).toBe(true);
+  await until(() => /^\d{4}-\d{2}-\d{2} $/.test(record(view, "d").c), { what: "ISO date written" });
   const date = record(view, "d").c.slice(0, 10);
   expect(runsOf(record(view, "d").m)).toEqual([[10, DATE_KEY(date)], [1, ""]]);
 
   // The emoji: plain Unicode, no mark and nothing a reader needs this code to show.
   caret(view, blockPos(view, "e") + 1);
   expect(await runPageCommand(view, "emoji", {})).toEqual({ ok: true, picker: true });
-  await waitFor(() => options().length > 0);
+  await until(() => options().length > 0, { what: "picker options" });
   choose(EMOJI);
-  expect(await waitFor(() => record(view, "e").c === EMOJI)).toBe(true);
+  await until(() => record(view, "e").c === EMOJI, { what: "emoji written" });
   expect(record(view, "e").m).toBeUndefined();
   view.dispatch(view.state.tr.insertText(" Ship it"));
 
@@ -400,7 +394,7 @@ async function fixture() {
   expect(await runPageCommand(view, "importMarkdown", { file: { name: "notes.md", size: IMPORTED.length, text: async () => IMPORTED } })).toEqual({ ok: true, preview: true });
   expect(importPanel()).not.toBeNull();
   importPanel().querySelector('[data-import="insert"]').click();
-  expect(await waitFor(() => !importPanel())).toBe(true);
+  await until(() => !importPanel(), { what: "import preview closed" });
   const imported = orderedIds(blockMap(view.state.doc)).map((id) => blockMap(view.state.doc)[id]).filter((block) => block.c === "Imported" || block.c === "Imported body");
   expect(imported.map((block) => [block.t, block.level ?? null])).toEqual([["heading", 1], ["paragraph", null]]);
   // The TOC is derived: the imported heading is its one entry, and the title is not.
@@ -683,7 +677,7 @@ test("M11's journal and M12's provider stay inside the caps their own tests asse
   for (let i = 0; i < edits; i++) {
     view.dispatch(view.state.tr.insertText("x", endOf(view, NEIGHBOUR.id)));
   }
-  expect(await waitFor(() => channel.compactions.length > 0)).toBe(true);
+  await until(() => channel.compactions.length > 0, { what: "journal compaction" });
 
   // The journal compacts at sixty-four batches and retires the ones it named.
   expect(channel.compactions[0]).toHaveLength(64);

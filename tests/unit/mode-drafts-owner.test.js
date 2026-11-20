@@ -3,6 +3,7 @@
  */
 import { jest } from "@jest/globals";
 import { $, hostOf } from "./helpers/editor-ui.js";
+import { until } from "../helpers/until.js";
 
 /**
  * The owner chip as a mode lease.
@@ -48,14 +49,6 @@ async function load({ url = "/notes.html", owner = true, slot = "owner-lease-1",
 const chip = () => $("#clay-owner", "owner");
 const room = () => document.getElementById("clay-owner-vars");
 
-const until = async (predicate) => {
-  for (let i = 0; i < 400; i++) {
-    if (predicate()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
-
 afterEach(clearCookies);
 
 test("a managed session mounts the chip at the commit and takes it down at the exit", async () => {
@@ -70,7 +63,7 @@ test("a managed session mounts the chip at the commit and takes it down at the e
 
   mode.commitModeFacts({ mode: "edit", isEditMode: true, generation: 1 });
   lease.enable();
-  expect(await until(() => chip())).toBe(true);
+  await until(() => chip(), { what: "the owner chip" });
   expect(document.querySelectorAll('clay-editor-ui[data-clay-ui="owner"]')).toHaveLength(1);
   expect(room()).not.toBeNull();
 
@@ -82,7 +75,7 @@ test("a managed session mounts the chip at the commit and takes it down at the e
 test("adoption over the chip the import armed adds no second chip", async () => {
   const mod = await load({ url: "/notes.html?editmode=true" });
   // The explicit edit boot: the module's own import already armed the chip.
-  expect(await until(() => chip())).toBe(true);
+  await until(() => chip(), { what: "the owner chip" });
   const armed = chip();
 
   const lease = mod.draftsOwnerParticipant().prepare({ initial: true, generation: 1 });

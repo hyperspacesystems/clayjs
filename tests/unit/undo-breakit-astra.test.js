@@ -48,13 +48,6 @@ const rest = async () => {
   await tick(20);
 };
 
-async function until(check, tries = 400) {
-  for (let at = 0; at < tries; at++) {
-    if (await check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-}
 
 function clearRoot() {
   const root = document.documentElement;

@@ -3,6 +3,7 @@
  * @jest-environment-options {"url": "https://example.com/big.html"}
  */
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 import { model, pair, pairSteps } from "../../src/core/source-map.js";
 import { parseSteps } from "../../src/source/parse-steps.js";
 import { drain } from "../../src/lib/slice.js";
@@ -59,13 +60,6 @@ async function settlesInThisTask(promise) {
   return settled;
 }
 
-async function until(check, limit = 200) {
-  for (let i = 0; i < limit; i++) {
-    if (check()) return true;
-    await sleep(5);
-  }
-  return check();
-}
 
 function seed(filler) {
   const parsed = new DOMParser().parseFromString(source(filler), "text/html");
@@ -179,7 +173,7 @@ test("a repair over the threshold hands the page back, and a reader still answer
   await sleep(0);
   expect(session.repairGeneration()).toBe(before);
 
-  expect(await until(() => session.repairGeneration() === before + 1)).toBe(true);
+  await until(() => session.repairGeneration() === before + 1, { what: "sliced source repair generation" });
   expect(session.text()).toBe(EDITED);
   expect(session.stats().refreshes).toBeGreaterThan(0);
 

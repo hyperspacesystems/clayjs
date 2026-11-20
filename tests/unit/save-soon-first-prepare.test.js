@@ -13,6 +13,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 import { deserialize, serialize } from "node:v8";
 
 globalThis.structuredClone ??= (value) => deserialize(serialize(value));
@@ -30,13 +31,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const setText = (text) => { document.getElementById("c").textContent = text; };
 const lastPost = () => posts[posts.length - 1] ?? "";
 
-const waitFor = async (check, timeoutMs = 5000) => {
-  const deadline = Date.now() + timeoutMs;
-  while (!check()) {
-    if (Date.now() > deadline) throw new Error("timed out waiting for the condition");
-    await sleep(10);
-  }
-};
 
 function okJson(body) {
   return { ok: true, status: 200, statusText: "OK", headers: { get: () => null }, text: async () => JSON.stringify(body), json: async () => body };
@@ -87,7 +81,7 @@ test("a soon() caller queued behind the session's first save is answered by the 
   const sentBefore = posts.length;
   const held = holdWire();
   const first = save.savePage();
-  await waitFor(() => posts.length === sentBefore + 1);
+  await until(() => posts.length === sentBefore + 1, { timeout: 5000, what: "first save on wire" });
   expect(lastPost()).toContain("first-save-on-wire");
 
   // Typed while the first request is on the wire: the save that follows it is the one that

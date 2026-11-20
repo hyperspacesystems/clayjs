@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * Revert to mine, the whole command: several batches over one spot, the click race,
@@ -151,14 +152,6 @@ function body() {
   const clone = document.body.cloneNode(true);
   clone.querySelector("[data-clay-conflict]")?.remove();
   return clone.innerHTML;
-}
-
-async function waitFor(predicate, timeout = 4000) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeout) {
-    if (predicate()) return;
-    await wait(25);
-  }
 }
 
 async function settle(html) {
@@ -385,7 +378,7 @@ test("R14 a save already on the wire queues the revert, and the drain sends the 
 
   release();
   expect((await first).ok).toBe(true);
-  await waitFor(() => savePosts.length === 2);
+  await until(() => savePosts.length === 2, { timeout: 4000, what: "the second save POST" });
   await frame();
   expect(savePosts).toHaveLength(2);
   expect(savePosts[1]).toContain("One slow fox sleeps.");
@@ -499,7 +492,7 @@ test("the panel offers Revert to mine between Download and Accept; pressing it p
 
   buttonSaying(/Revert to mine/).click();
   expect(buttonSaying(/Putting back…/)).toBeDefined();
-  await waitFor(() => conflicts.size === 0);
+  await until(() => conflicts.size === 0, { timeout: 4000, what: "the conflict ledger to empty" });
   await frame();
 
   expect(body()).toBe(`<p id="p">One slow fox sleeps.</p><a id="a" href="/mine">Go</a>`);
@@ -524,7 +517,7 @@ test("a blocked id keeps its row, with the reason under it, and the toast counts
   document.getElementById("p").firstChild.data = "OnXst fox sleeps.";
 
   buttonSaying(/Revert to mine/).click();
-  await waitFor(() => !conflicts.get(C));
+  await until(() => !conflicts.get(C), { timeout: 4000, what: "conflict C to leave the ledger" });
   await frame();
 
   expect(body()).toBe(`<p id="p">OnXst fox sleeps.</p><p id="q">slow</p>`);
@@ -575,7 +568,7 @@ test("Revert acknowledges only what it put back; Accept and Download stay what t
   document.addEventListener("clay:sync-conflicts-changed", (e) => { if (e.detail.reason) acknowledged.push([e.detail.reason, ...e.detail.removedIds]); }, { once: true });
 
   buttonSaying(/Revert to mine/).click();
-  await waitFor(() => conflicts.size === 0);
+  await until(() => conflicts.size === 0, { timeout: 4000, what: "the conflict ledger to empty" });
 
   expect(acknowledged).toEqual([["reverted", id]]);
   await wait(4100);
@@ -590,7 +583,7 @@ test("O5 a refused save shows the refusal at once, no toast, and the restored id
   saveResponse = () => ({ status: 412, body: { code: "conflict", changedBy: "another-tab", etag: "E9" } });
 
   buttonSaying(/Revert to mine/).click();
-  await waitFor(() => conflicts.size === 0);
+  await until(() => conflicts.size === 0, { timeout: 4000, what: "the conflict ledger to empty" });
   await frame();
   expect(shown()).not.toContain("Put back");
   expect(save.isSaveConflicted()).toBe(true);
@@ -614,7 +607,7 @@ test("C12 a partial revert hands focus to Review once the toast has gone", async
   expect(document.activeElement).toBe(put);
 
   put.click();
-  await waitFor(() => !conflicts.get(C));
+  await until(() => !conflicts.get(C), { timeout: 4000, what: "conflict C to leave the ledger" });
   await frame();
   expect(shown()).toBe("Put back 1 change. Saving.");
   expect(conflicts.list().map((r) => r.id)).toEqual([A]);
@@ -636,7 +629,7 @@ test("N7 C11 the person clicks into the page during the toast: focus stays there
   const put = buttonSaying(/Revert to mine/);
   put.focus();
   put.click();
-  await waitFor(() => !conflicts.get(C));
+  await until(() => !conflicts.get(C), { timeout: 4000, what: "conflict C to leave the ledger" });
   await frame();
   expect(shown()).toBe("Put back 1 change. Saving.");
   expect(conflicts.list().map((r) => r.id)).toEqual([A]);
@@ -667,14 +660,14 @@ test("C12 a revert queued behind a save on the wire whose drained save is refuse
   saveResponse = () => ({ status: 412, body: { code: "conflict", changedBy: "another-tab", etag: "E9" } });
 
   buttonSaying(/Revert to mine/).click();
-  await waitFor(() => conflicts.size === 0);
+  await until(() => conflicts.size === 0, { timeout: 4000, what: "the conflict ledger to empty" });
   await frame();
   expect(shown()).toBe("Put back 1 change. Saving.");
   expect(conflicts.get(id)).toBeNull();
 
   release();
   await first;
-  await waitFor(() => save.isSaveConflicted());
+  await until(() => save.isSaveConflicted(), { timeout: 4000, what: "the save to be refused as conflicted" });
   await frame();
   expect(shown()).not.toContain("Put back");
   expect(notice._test.state().refused).toBeTruthy();
@@ -701,7 +694,7 @@ test("C9 the person moves focus into the page while the revert's save is on the 
   const put = buttonSaying(/Revert to mine/);
   put.focus();
   put.click();
-  await waitFor(() => !!release);
+  await until(() => !!release, { timeout: 4000, what: "the save POST to be held" });
 
   const input = document.createElement("input");
   input.id = "continued-editing";

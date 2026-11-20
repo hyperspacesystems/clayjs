@@ -2,6 +2,7 @@
  * @jest-environment jsdom
  * @jest-environment-options {"url": "https://example.com/notes.html"}
  */
+import { until } from "../../helpers/until.js";
 import { history, state as pmState, view as pmView } from "../../../src/vendor/prosemirror.vendor.js";
 import * as Y from "../../../src/vendor/yjs.vendor.js";
 import { createPageEditor, runPageCommand, setEditorActive } from "../../../src/page/editor.js";
@@ -63,13 +64,6 @@ function open(blocks = BLOCKS()) {
   return view;
 }
 
-const waitFor = async (check) => {
-  for (let i = 0; i < 200; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 const pickerEl = () => document.querySelector(".blockeditor-mention-picker");
 const options = () => [...document.querySelectorAll(".blockeditor-mention-picker .blockeditor-menu-item")];
 const record = (view, id) => blockMap(view.state.doc)[id];
@@ -108,7 +102,7 @@ test("@ offers the roster and choosing one writes the name, then an unmarked spa
   people();
   const view = open();
   expect(type(view, endOf(view, "a"))).toBe(true);
-  expect(await waitFor(() => options().length === 2)).toBe(true);
+  await until(() => options().length === 2, { what: "two mention options" });
   expect(pickerEl().getAttribute("role")).toBe("listbox");
   expect(options().map((row) => row.textContent)).toEqual(["Ada Lovelace", "Grace Hopper"]);
   expect(record(view, "a").c).toBe("Hello @");
@@ -127,9 +121,9 @@ test("typing filters the roster, and Enter picks the highlighted person", async 
   people();
   const view = open();
   type(view, endOf(view, "a"));
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "two mention options" });
   typeQuery(view, "gra");
-  await waitFor(() => options().length === 1);
+  await until(() => options().length === 1, { what: "filtered mention option" });
   expect(options()[0].textContent).toBe("Grace Hopper");
   expect(record(view, "a").c).toBe("Hello @gra");
   expect(record(view, "z").c).toBe("Neighbour line");
@@ -148,9 +142,9 @@ test("a query that no longer matches what was shown refuses, and so does a delet
   people();
   const view = open();
   type(view, endOf(view, "a"));
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "two mention options" });
   typeQuery(view, "ad");
-  await waitFor(() => options().length === 1);
+  await until(() => options().length === 1, { what: "filtered mention option" });
   // A peer (or a programmatic edit) changed the query range after the list was drawn.
   view.dispatch(view.state.tr.insertText("x"));
   expect(record(view, "a").c).toBe("Hello @adx");
@@ -160,7 +154,7 @@ test("a query that no longer matches what was shown refuses, and so does a delet
   expect(pickerEl()).toBeNull();
 
   type(view, blockPos(view, "a") + 1);
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "two mention options" });
   const pos = blockPos(view, "a");
   view.dispatch(view.state.tr.delete(pos, pos + view.state.doc.nodeAt(pos).nodeSize));
   expect(options()[0]).toBeTruthy();
@@ -172,8 +166,8 @@ test("a host with no roster keeps the typed query and offers nobody", async () =
   people({ saved: [], allowed: null });
   const view = open();
   type(view, endOf(view, "a"));
-  expect(await waitFor(() => pickerEl() !== null)).toBe(true);
-  await waitFor(() => pickerEl().textContent.length > 0);
+  await until(() => pickerEl() !== null, { what: "mention picker to open" });
+  await until(() => pickerEl().textContent.length > 0, { what: "empty roster message" });
   expect(options()).toEqual([]);
   expect(pickerEl().textContent).toBe("No people to mention");
   typeQuery(view, "ad");
@@ -188,7 +182,7 @@ test("a host that fails still offers the people the document saved", async () =>
   people({ saved: [GRACE], allowed: null, fail: true });
   const view = open();
   type(view, endOf(view, "a"));
-  expect(await waitFor(() => options().length === 1)).toBe(true);
+  await until(() => options().length === 1, { what: "saved mention option" });
   expect(options()[0].textContent).toBe("Grace Hopper");
 });
 
@@ -201,9 +195,9 @@ test("nothing about a mention writes to the network", async () => {
   people();
   const view = open();
   type(view, endOf(view, "a"));
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "two mention options" });
   typeQuery(view, "ada");
-  await waitFor(() => options().length === 1);
+  await until(() => options().length === 1, { what: "filtered mention option" });
   options()[0].click();
   expect(record(view, "a").c).toBe("Hello Ada Lovelace ");
   expect(calls).toEqual([]);
@@ -222,7 +216,7 @@ test("a composition never opens or replaces anything", async () => {
   view.dom.dispatchEvent(new CompositionEvent("compositionend"));
 
   type(view, endOf(view, "a"));
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "two mention options" });
   view.dom.dispatchEvent(new CompositionEvent("compositionstart"));
   keys(view, "Enter");
   expect(record(view, "a").c).toBe("@Hello @");
@@ -235,7 +229,7 @@ test("typing at the mark's edge stays unmarked, and an unknown person stays read
   people();
   const view = open();
   type(view, endOf(view, "a"));
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "two mention options" });
   options()[0].click();
   view.dispatch(view.state.tr.insertText("Wrote this"));
   expect(record(view, "a").c).toBe("Hello Ada Lovelace Wrote this");
@@ -297,7 +291,7 @@ test("undo takes the mention back out and redo puts it back", async () => {
   people();
   const view = open();
   type(view, endOf(view, "a"));
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "two mention options" });
   options()[0].click();
   expect(record(view, "a").c).toBe("Hello Ada Lovelace ");
   // The pick is one undo step of its own: the @ typed before it is a separate one.
@@ -335,7 +329,7 @@ test("a saved article reopens with the same label and id", async () => {
   people();
   const view = open();
   type(view, endOf(view, "a"));
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "two mention options" });
   options()[0].click();
   const saved = blockMap(view.state.doc);
   const model = project(saved);
@@ -368,7 +362,7 @@ test("view, edit, view leaves no picker and no listener behind", async () => {
   people();
   const view = open();
   type(view, blockPos(view, "a") + 1);
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "two mention options" });
   expect(pickerEl()).not.toBeNull();
   setEditorActive(view, false);
   expect(pickerEl()).toBeNull();
@@ -379,7 +373,7 @@ test("view, edit, view leaves no picker and no listener behind", async () => {
 
   setEditorActive(view, true);
   type(view, endOf(view, "a"));
-  expect(await waitFor(() => options().length === 2)).toBe(true);
+  await until(() => options().length === 2, { what: "two mention options" });
   expect(document.querySelectorAll(".blockeditor-mention-picker")).toHaveLength(1);
   keys(view, "Escape");
   expect(pickerEl()).toBeNull();
@@ -416,7 +410,7 @@ test("the Mention action types the @ it needs and opens the same picker", async 
   const answer = await runPageCommand(view, "mentions", {});
   expect(answer).toEqual({ ok: true, picker: true });
   expect(record(view, "a").c).toBe("Hello @");
-  expect(await waitFor(() => options().length === 2)).toBe(true);
+  await until(() => options().length === 2, { what: "two mention options" });
   options()[1].click();
   expect(record(view, "a").c).toBe("Hello Grace Hopper ");
   expect(await runPageCommand(view, "mentions", {})).toEqual({ ok: true, picker: true });
@@ -432,7 +426,7 @@ test("a gate that refuses writes nothing, marks nothing and leaves no undo entry
   const asked = [];
   view.runFormatCommand = async () => { asked.push(true); return { status: "upgrade-required", code: "blockeditor-format-upgrade-required" }; };
   type(view, endOf(view, "a"));
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "two mention options" });
   const before = view.state.doc;
   options()[0].click();
   await settle();
@@ -475,7 +469,7 @@ test("a caret that moves while the gate is pending refuses with stale-target", a
     return { status: "applied", floor: 1, result };
   };
   type(view, endOf(view, "a"));
-  await waitFor(() => options().length === 2);
+  await until(() => options().length === 2, { what: "two mention options" });
   options()[0].click();
   expect(release).not.toBeNull();
   caret(view, endOf(view, "z"));

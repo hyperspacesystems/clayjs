@@ -10,6 +10,7 @@ import * as realMediaPart from "../../../src/page/features/media.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
 import { readYValue, writeYValue } from "../../../src/page/ybind/external.js";
+import { until } from "../../helpers/until.js";
 
 /**
  * Input is the last thing a boot gives: the saved article's shell stays inert, so a
@@ -30,13 +31,6 @@ const deferred = () => {
 };
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const flushAsync = async (turns = 60) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
-const until = async (check, tries = 400) => {
-  for (let i = 0; i < tries; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 
 const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
 const articleHtml = (value) => {
@@ -184,7 +178,7 @@ const shellOf = (article) => article.querySelector(".blockeditor-shell");
 test("the waiting shell takes no input of any kind, and takes it at ready", async () => {
   const { page, article, adoptFromWriter } = await open({ edit: handEdit, writer: "other" });
   try {
-    expect(await until(() => page.status?.phase === "adopting")).toBe(true);
+    await until(() => page.status?.phase === "adopting", { what: "the boot to reach adopting" });
     await flushAsync();
 
     expect(page.status).toMatchObject({ phase: "adopting" });
@@ -212,11 +206,11 @@ test("the waiting shell takes no input of any kind, and takes it at ready", asyn
 test("the waiting line sits above the editor while the adoption is waited on", async () => {
   const { page, article, adoptFromWriter } = await open({ edit: handEdit, writer: "other" });
   try {
-    expect(await until(() => page.status?.phase === "adopting")).toBe(true);
+    await until(() => page.status?.phase === "adopting", { what: "the boot to reach adopting" });
     await flushAsync();
     expect(article.querySelectorAll(".blockeditor-boot-status")).toHaveLength(0);
 
-    expect(await until(() => article.querySelectorAll(".blockeditor-boot-status").length === 1)).toBe(true);
+    await until(() => article.querySelectorAll(".blockeditor-boot-status").length === 1, { what: "the waiting line to appear" });
     const note = article.querySelector(".blockeditor-boot-status");
     // Above the editor, where the person is looking, not below its bottom padding.
     expect(article.firstElementChild).toBe(note);
@@ -243,13 +237,13 @@ test("a part only the adopted document needs is loaded before input", async () =
     mediaGate,
   });
   try {
-    expect(await until(() => page.status?.phase === "adopting")).toBe(true);
+    await until(() => page.status?.phase === "adopting", { what: "the boot to reach adopting" });
     await flushAsync();
 
     // The adoption lands with an image the saved article never had, and that part is
     // still on the wire: the boot waits for it rather than handing over a document
     // whose image is only a stand-in.
-    expect(await until(() => page.view?.state.doc.childCount === 2)).toBe(true);
+    await until(() => page.view?.state.doc.childCount === 2, { what: "the adoption to land its second block" });
     await flushAsync();
     expect(requests).toContain("media");
     expect(page.view.state.doc.child(1).type.name).toBe("image");

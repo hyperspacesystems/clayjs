@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { untilBaselineSettled } from "../helpers/until.js";
 
 /**
  * An autosave that arrives while a save is on the wire queues one more save
@@ -40,7 +41,7 @@ beforeAll(async () => {
   save = await import("../../src/core/save.js");
   snapshot = await import("../../src/core/snapshot.js");
   document.body.appendChild(document.createElement("span"));
-  for (let i = 0; i < 80 && !save.baselineSettled(); i++) await sleep(50);
+  await untilBaselineSettled(save);
   await sleep(1300);
 }, 20000);
 

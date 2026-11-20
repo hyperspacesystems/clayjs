@@ -3,6 +3,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 
 /**
  * The loader's half of a live switch: what it starts, once, and what it refuses to start
@@ -49,14 +50,6 @@ jest.unstable_mockModule("../../src/plugins/source.js", () => {
 });
 
 jest.unstable_mockModule("../../src/plugins/menu.js", () => ({ menu: { drawn: true } }));
-
-async function waitFor(predicate) {
-  for (let i = 0; i < 50; i++) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  throw new Error("timed out waiting for the loader");
-}
 
 async function boot(params, onReady = () => {}) {
   jest.resetModules();
@@ -126,7 +119,7 @@ test("the late tail drops the edit-only plugins once the page has left edit", as
   // vendor fetch it asked for is still in flight.
   facts.commitModeFacts({ mode: "view", isEditMode: false });
   resolveReady();
-  await waitFor(() => events.includes("menu"));
+  await until(() => events.includes("menu"), { what: "the menu plugin to be announced" });
 
   expect(events).toEqual(["clay:ready", "menu"]);
   expect(imported).toEqual([]);

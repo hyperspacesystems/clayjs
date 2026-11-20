@@ -3,6 +3,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until, untilBaselineSettled } from "../helpers/until.js";
 
 /**
  * R4-1: a page the host has said is no longer writable sends no save request.
@@ -70,7 +71,7 @@ beforeAll(async () => {
   modeFacts = await import("../../src/core/is-edit-mode.js");
   permission = await import("../../src/core/host-permission.js");
   save.setSaveGeneration(1);
-  for (let i = 0; i < 80 && !save.baselineSettled(); i++) await sleep(50);
+  await untilBaselineSettled(save);
   await sleep(50);
   document.addEventListener("clay:save-error", (event) => errors.push(event.detail));
 }, 20000);
@@ -162,14 +163,6 @@ test("a writable answer again clears it, and the next save goes out once", async
 // The same refusal seen from the outside: the real loader, the real controller and the real
 // save code, only the host a fixture. `clay.setMode` is the leave a person makes, and it has
 // to come back refused with the page still theirs.
-const until = async (predicate) => {
-  for (let i = 0; i < 400; i++) {
-    if (predicate()) return true;
-    await sleep(5);
-  }
-  return false;
-};
-
 async function bootPage({ url = "/notes.html" } = {}) {
   jest.resetModules();
   posts.length = 0;
@@ -220,7 +213,7 @@ test("the leave itself is refused: the mode stays edit, nothing is sent, the tex
   expect(clay.modeLifecycle.canWrite()).toBe(true);
   expect(document.getElementById("content").textContent).toBe("typed before the host withdrew");
   expect(liveWarning.hasUnsavedChanges()).toBe(true);
-  expect(await until(() => document.documentElement.getAttribute("savestatus") === "error")).toBe(true);
+  await until(() => document.documentElement.getAttribute("savestatus") === "error", { what: "savestatus error attribute" });
 
   writable = true;
   await expect(livePermission.checkHostPermission({ fresh: true })).resolves.toBe(true);

@@ -15,6 +15,7 @@
  */
 
 import { jest } from "@jest/globals";
+import { until } from "../helpers/until.js";
 import { deserialize, serialize } from "node:v8";
 import { IDBFactory } from "fake-indexeddb";
 
@@ -99,13 +100,6 @@ function guardedFactory(base, failWith) {
   };
 }
 
-async function until(check, tries = 400) {
-  for (let at = 0; at < tries; at++) {
-    if (await check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-}
 
 let factory;
 let plugin;
@@ -165,12 +159,12 @@ async function skipStep() {
   expect(receipt).toMatchObject({ ok: false, code: "empty", direction: "undo" });
   expect(skipped).toEqual([{ entryId: id, label: "Edit", direction: "undo", code: "content-changed" }]);
   expect(refused).toEqual([]);
-  await until(() => kept.length > 0);
+  await until(() => kept.length > 0, { what: "skipped step kept in recovery" });
   return { entryId: id };
 }
 
 const nextKept = async () => {
-  await until(() => kept.length > 0);
+  await until(() => kept.length > 0, { what: "skipped step kept in recovery" });
   return kept.at(-1);
 };
 
@@ -266,7 +260,7 @@ test("two rapid presses skip one step once and keep one recovery copy", async ()
   expect(second).toMatchObject({ ok: false, code: "empty" });
   expect(skipped).toEqual([{ entryId: id, label: "Edit", direction: "undo", code: "content-changed" }]);
 
-  expect(await until(() => kept.length === 1)).toBe(true);
+  await until(() => kept.length === 1, { what: "one recovery copy kept" });
   expect(kept).toEqual([{ ok: true, entryId: id, direction: "undo" }]);
 
   const listed = await records();
@@ -295,7 +289,7 @@ test("a store that refuses the write keeps the in-memory copy and the earlier du
   failures = 1;
   const receipt = undo.undo();
   expect(receipt).toMatchObject({ ok: false, code: "empty" });
-  await until(() => kept.length > 1);
+  await until(() => kept.length > 1, { what: "quota refusal event emitted" });
   const detail = kept.at(-1);
 
   expect(detail).toEqual({ ok: false, code: "quota", entryId: id, direction: "undo" });
@@ -318,7 +312,7 @@ test("a store that cannot be opened reports ok:false", async () => {
   undo.flush();
   expect(undo.undo()).toMatchObject({ ok: false, code: "empty" });
   expect(refused).toEqual([]);
-  await until(() => kept.length > 0);
+  await until(() => kept.length > 0, { what: "skipped step kept in recovery" });
 
   expect(kept.at(-1)).toMatchObject({ ok: false, code: "unavailable", direction: "undo" });
   expect((await undo.kept()).ok).toBe(false);

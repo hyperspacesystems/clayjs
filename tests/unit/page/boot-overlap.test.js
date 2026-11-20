@@ -8,6 +8,7 @@ import * as realTablePart from "../../../src/page/features/table.js";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
 import { createInstall, disposeInstall, runBoot } from "../../../src/page/boot.js";
+import { until } from "../../helpers/until.js";
 
 /**
  * The edit boot fetches the editor's code while it prepares authority, so time to
@@ -34,13 +35,6 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 const flushAsync = async (turns = 40) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
-const until = async (check, tries = 300) => {
-  for (let i = 0; i < tries; i++) {
-    if (check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return false;
-};
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 const tagHtml = (value) => `<script type="application/json" merge="blockeditor" clay="live">${JSON.stringify(value)}</script>`;
@@ -338,7 +332,7 @@ test("while the room is still joining, the saved article stays and nothing is ed
   const { page, roomGate } = await load({ room: "defer" });
   try {
     // The editor's code arrived and was accepted while the room was still joining.
-    expect(await until(() => markNames().includes("document:assets-ready"))).toBe(true);
+    await until(() => markNames().includes("document:assets-ready"), { what: "the document:assets-ready mark" });
     expect(liveCalls).toEqual(["blockeditor"]);
     expect(markNames()).not.toContain("document:authority-ready");
     expect(page.status).toMatchObject({ phase: "joining" });
@@ -430,7 +424,7 @@ test("the view part the saved article asks for is fetched with the editor and dr
   try {
     // The part is still on the wire: the editor must not mount on a document whose
     // view parts are missing, and the saved article is what a person still sees.
-    expect(await until(() => liveCalls.includes("blockeditor"))).toBe(true);
+    await until(() => liveCalls.includes("blockeditor"), { what: "the room join to be asked for" });
     expect(page.status).toMatchObject({ phase: "joining" });
     expect(document.querySelector(".blockeditor-editor")).toBe(null);
     expect(document.querySelector('article[data-blockeditor] [data-id="p"]')).toBeTruthy();
@@ -475,7 +469,7 @@ test("the room join is asked for while the editor's code is still arriving", asy
   try {
     // The join is asked for while the editor's code is still on the wire: the tag was
     // read without it, so the room answers before the editor ever evaluates.
-    expect(await until(() => liveCalls.includes("blockeditor"))).toBe(true);
+    await until(() => liveCalls.includes("blockeditor"), { what: "the room join to be asked for" });
     expect(MODE.editorDone).toBe(false);
     expect(inst.phase).toBe("joining");
     expect(markNames()).not.toContain("document:assets-ready");

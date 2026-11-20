@@ -1,6 +1,7 @@
 import { jest } from "@jest/globals";
 import { deserialize, serialize } from "node:v8";
 import { IDBFactory } from "fake-indexeddb";
+import { until } from "../helpers/until.js";
 
 /**
  * `clay.conflicts.registerContext(resolver)`: the page can name a conflict — a record
@@ -74,14 +75,6 @@ const entryResolver = () => (record) => {
     open: () => el.scrollIntoView(),
   };
 };
-
-async function until(check, tries = 300) {
-  for (let at = 0; at < tries; at++) {
-    if (await check()) return true;
-    await new Promise((r) => setTimeout(r, 5));
-  }
-  return false;
-}
 
 test("two entries named the same still resolve by their own id", () => {
   ledger.conflicts.registerContext(entryResolver());
@@ -171,7 +164,7 @@ test("a stored context keeps the identity, the label and the field, never the fu
   ledger.conflicts.registerContext(entryResolver());
   applyWith([engineConflict("e-1"), engineConflict("e-2")]);
 
-  expect(await until(async () => (await store.listConflicts()).records.length === 1)).toBe(true);
+  await until(async () => (await store.listConflicts()).records.length === 1, { what: "one stored conflict record" });
   const [record] = (await store.listConflicts()).records;
   const contexts = record.conflicts.map((entry) => entry.context);
 

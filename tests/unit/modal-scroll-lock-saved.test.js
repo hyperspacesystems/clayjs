@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { untilBaselineSettled } from "../helpers/until.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const bodies = [];
@@ -23,7 +24,7 @@ beforeAll(async () => {
   gate = await import("../../src/lib/dirty-gate.js");
   themodal = (await import("../../src/ui/modal.js")).default;
   document.body.appendChild(document.createElement("span"));
-  for (let i = 0; i < 80 && !save.baselineSettled(); i++) await sleep(50);
+  await untilBaselineSettled(save);
   await save.savePage();
   await sleep(1300);
 }, 30000);

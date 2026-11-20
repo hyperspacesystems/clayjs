@@ -1,6 +1,7 @@
 import { jest } from "@jest/globals";
 import { docKey } from "../../src/lib/doc-storage.js";
 import { $ } from "./helpers/editor-ui.js";
+import { until } from "../helpers/until.js";
 
 // Scenario: the menu's editing items call the services that already do the job. Undo
 // and Redo follow the page's history and only exist when the page asked for the undo
@@ -71,7 +72,7 @@ async function boot({ cookie = true, edit = false, plugins = "menu", resume = nu
 // not attached it yet: the spy goes on as soon as it appears, before the reload
 // receipt runs.
 async function spyOnPick() {
-  for (let i = 0; i < 100 && !window.clay.aiEdit; i++) await wait(2);
+  await until(() => window.clay.aiEdit, { what: "ai-edit to load" });
   return jest.spyOn(window.clay.aiEdit, "pick").mockResolvedValue(true);
 }
 

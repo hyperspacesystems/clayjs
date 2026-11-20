@@ -4,6 +4,7 @@
 
 import { jest } from "@jest/globals";
 import { bootFixture } from "./helpers/mode-harness.js";
+import { until } from "../helpers/until.js";
 
 // A Document boot parses its page and mounts its reader, so a boot's own time is the
 // budget here, not a transition's.
@@ -28,11 +29,6 @@ jest.setTimeout(120000);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const flush = async () => {
   for (let i = 0; i < 20; i++) await sleep(0);
-};
-const until = async (predicate, timeout = 8000) => {
-  const deadline = Date.now() + timeout;
-  while (!predicate() && Date.now() < deadline) await sleep(5);
-  return predicate();
 };
 
 // The host's answer about what it can do. The boot asks before any entry runs and memoizes
@@ -148,7 +144,7 @@ test("a write a view script makes into saved markup does not refuse the next ent
     await flush();
     await clay.save();
     await flush();
-    expect(await until(() => fileSaves(boot) > before)).toBe(true);
+    await until(() => fileSaves(boot) > before, { timeout: 8000, what: "the file save" });
     expect(written[written.length - 1]).toContain('data-clock="12:00"');
 
     // And a page that takes its own write back takes it out of the file too.
@@ -161,7 +157,7 @@ test("a write a view script makes into saved markup does not refuse the next ent
     await flush();
     await clay.save();
     await flush();
-    expect(await until(() => fileSaves(boot) > before)).toBe(true);
+    await until(() => fileSaves(boot) > before, { timeout: 8000, what: "the file save" });
     expect(written[written.length - 1]).not.toContain("data-clock");
     await leave(clay);
   } finally {
@@ -303,7 +299,7 @@ test("an edit-only module that lands during an exit starts nothing, and the next
     const { facts } = await bootLivePage("exclude=richclay&plugins=menu,source");
 
     // The tail is at `menu`, which is holding the module after it back.
-    expect(await until(() => menuReadyReads > readsBefore)).toBe(true);
+    await until(() => menuReadyReads > readsBefore, { timeout: 8000, what: "the late tail to read the menu's ready" });
 
     // The window an exit opens, committed the way the controller commits it: the phase
     // says leaving while the facts still say edit, which is what used to make an edit-only

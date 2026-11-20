@@ -29,12 +29,6 @@ const flush = async () => {
   for (let i = 0; i < 20; i++) await sleep(0);
 };
 
-const until = async (predicate, timeout = 8000) => {
-  const deadline = Date.now() + timeout;
-  while (!predicate() && Date.now() < deadline) await sleep(5);
-  return predicate();
-};
-
 function okResponse() {
   return {
     ok: true,
@@ -85,8 +79,7 @@ async function bootPage(body, { autosave = false } = {}) {
   const { boot } = await import("../../src/loader.js");
   await new Promise((resolve) => boot(null, new URLSearchParams("exclude=richclay,source"), resolve));
 
-  const save = await import("../../src/core/save.js");
-  await until(() => save.baselineSettled());
+  await import("../../src/core/save.js");
   await flush();
   return window.clay;
 }

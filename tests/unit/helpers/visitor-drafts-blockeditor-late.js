@@ -3,6 +3,7 @@ import { deserialize, serialize } from "node:v8";
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { seedValue } from "../../../src/page/ybind/seed.js";
 import { renderFromTags } from "../../../src/page/save-projection.js";
+import { until } from "../../helpers/until.js";
 
 globalThis.structuredClone ??= (value) => deserialize(serialize(value));
 const BLOCKS = [
@@ -23,15 +24,6 @@ function firstParagraph(view) {
   let pos = null;
   view.state.doc.descendants((node, at) => { if (pos === null && node.type.name === "paragraph") pos = at + 1; });
   return pos;
-}
-
-async function waitFor(predicate, timeout = 15000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    if (await predicate()) return true;
-    await wait(25);
-  }
-  return predicate();
 }
 
 
@@ -76,8 +68,8 @@ export async function scenario({ late, gate = true }) {
   };
   const view = clay.blockeditor.view;
   view.dispatch(view.state.tr.insertText("alpha", firstParagraph(view)));
-  expect(await waitFor(() => sent.some(({ html }) => html.includes("alpha")))).toBe(true);
-  expect(await waitFor(async () => (await dump()).includes("alpha"))).toBe(true);
+  await until(() => sent.some(({ html }) => html.includes("alpha")), { timeout: 15000, what: "a draft save carrying alpha" });
+  await until(async () => (await dump()).includes("alpha"), { timeout: 15000, what: "alpha in the stored draft" });
   await wait(1500);
   expect(sent.length).toBeGreaterThan(0);
   for (const { at } of sent) {
