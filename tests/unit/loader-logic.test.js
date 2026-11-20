@@ -188,6 +188,24 @@ describe("resolveModules", () => {
     expect(late).not.toContain("plugins/ai-edit.js");
   });
 
+  // clay.ai sends through clay.wire, so the wire must be loaded by clay.ready, even on a
+  // Block page that otherwise loads the wire late. A visitor in draft mode keeps clay.ai
+  // for Copy prompt while the wire, which talks to the host, is dropped.
+  test("plugins=ai brings the wire before ai, also with blockeditor, and draft mode keeps ai without the wire", () => {
+    const edit = resolveModules(params({ plugins: "ai" }), true);
+    expect(edit.plugins.indexOf("plugins/wire.js")).toBeGreaterThan(-1);
+    expect(edit.plugins.indexOf("plugins/wire.js")).toBeLessThan(edit.plugins.indexOf("plugins/ai.js"));
+    const view = resolveModules(params({ plugins: "ai" }), false);
+    expect(view.plugins).toContain("plugins/ai.js");
+    expect(view.plugins).toContain("plugins/wire.js");
+    const withPage = resolveModules(params({ plugins: "blockeditor,ai" }), true);
+    expect(withPage.plugins).toContain("plugins/wire.js");
+    expect(withPage.late).not.toContain("plugins/wire.js");
+    const draft = resolveModules(params({ plugins: "ai" }), true, { isDraftMode: true });
+    expect(draft.plugins).toContain("plugins/ai.js");
+    expect(draft.plugins).not.toContain("plugins/wire.js");
+  });
+
   // Only a page with the editor half can wait for AI editing: every other page has
   // its wire at `clay.ready`, exactly as before the late tail.
   test("plugins=wire without page has the wire before clay.ready", () => {

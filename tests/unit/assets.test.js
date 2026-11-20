@@ -8,7 +8,7 @@ import { assets, createAssets } from "../../src/lib/assets.js";
  * export fails here rather than in a page.
  */
 
-const LANGUAGES = ["bash", "css", "javascript", "json", "python", "xml"];
+const LANGUAGES = ["bash", "c", "cpp", "css", "diff", "go", "java", "javascript", "json", "markdown", "python", "ruby", "rust", "sql", "swift", "typescript", "xml", "yaml"];
 
 test("overtype resolves to the editor and its toolbar buttons", async () => {
   const mod = await assets.load("overtype");
@@ -51,7 +51,7 @@ test.each(["nope", "constructor", "toString", "__proto__", "hasOwnProperty"])("a
 });
 
 test("names lists every asset a document can ask for", () => {
-  expect(assets.names()).toEqual(["overtype", "marked", "highlight", ...LANGUAGES.map((name) => `highlight/${name}`), "uimotion"]);
+  expect(assets.names()).toEqual(["overtype", "marked", "highlight", ...LANGUAGES.map((name) => `highlight/${name}`), "highlight-lines", "uimotion"]);
 });
 
 test("two calls before the first resolves share one load", async () => {

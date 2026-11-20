@@ -382,6 +382,9 @@ function attachPluginMember(path, mod, namespaces = loaded) {
     clay.wire = mod.wire || mod.default;
   } else if (path === "plugins/ai-edit.js") {
     clay.aiEdit = mod.aiEdit || mod.default;
+  } else if (path === "plugins/ai.js") {
+    clay.ai = mod.ai;
+    clay.instructions = mod.instructions;
   } else if (path === "plugins/demo.js") {
     clay.demo = mod.demo;
   } else if (path === "sheet/sheet.js") {

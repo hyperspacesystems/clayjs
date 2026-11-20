@@ -292,13 +292,12 @@ function handleFrame(frame) {
 function notifyStatus(rec, frame) {
   if (!rec.onStatus || typeof frame.text !== "string") return;
   const status = { text: frame.text };
-  if (
-    frame.payload &&
-    typeof frame.payload === "object" &&
-    Object.prototype.hasOwnProperty.call(frame.payload, "progress")
-  ) {
-    status.progress = frame.payload.progress;
+  const payload = frame.payload && typeof frame.payload === "object" ? frame.payload : null;
+  if (payload && Object.prototype.hasOwnProperty.call(payload, "progress")) {
+    status.progress = payload.progress;
   }
+  // The ai-tools helper names where a run is: asking, starting, working, collecting.
+  if (payload && typeof payload.phase === "string") status.phase = payload.phase;
   try {
     rec.onStatus(status);
   } catch (err) {

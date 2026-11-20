@@ -93,11 +93,23 @@ This software is provided by the copyright holders and contributors “as is” 
 
 - src/vendor/highlight.vendor.js
 - src/vendor/hljs-bash.vendor.js
+- src/vendor/hljs-c.vendor.js
+- src/vendor/hljs-cpp.vendor.js
 - src/vendor/hljs-css.vendor.js
+- src/vendor/hljs-diff.vendor.js
+- src/vendor/hljs-go.vendor.js
+- src/vendor/hljs-java.vendor.js
 - src/vendor/hljs-javascript.vendor.js
 - src/vendor/hljs-json.vendor.js
+- src/vendor/hljs-markdown.vendor.js
 - src/vendor/hljs-python.vendor.js
+- src/vendor/hljs-ruby.vendor.js
+- src/vendor/hljs-rust.vendor.js
+- src/vendor/hljs-sql.vendor.js
+- src/vendor/hljs-swift.vendor.js
+- src/vendor/hljs-typescript.vendor.js
 - src/vendor/hljs-xml.vendor.js
+- src/vendor/hljs-yaml.vendor.js
 - https://github.com/highlightjs/highlight.js
 
 BSD 3-Clause License

@@ -21,7 +21,7 @@ const OUT_DIR = join(ROOT, 'src', 'vendor');
 const LICENSES = 'LICENSES-optional.md';
 
 const HIGHLIGHT = 'https://github.com/highlightjs/highlight.js';
-const HIGHLIGHT_LANGUAGES = ['bash', 'css', 'javascript', 'json', 'python', 'xml'];
+const HIGHLIGHT_LANGUAGES = ['bash', 'c', 'cpp', 'css', 'diff', 'go', 'java', 'javascript', 'json', 'markdown', 'python', 'ruby', 'rust', 'sql', 'swift', 'typescript', 'xml', 'yaml'];
 
 export const ASSETS = [
   {

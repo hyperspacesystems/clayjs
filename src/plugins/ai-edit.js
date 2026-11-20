@@ -437,20 +437,39 @@ function isScriptURL(value) {
   return url.startsWith('javascript:') || url.startsWith('vbscript:');
 }
 
-// A script whose type the browser does not run (JSON, a template) is data.
+// A script whose type the browser does not run (JSON, a template) is data. Two inert
+// types count as code anyway: hidden agent instructions steer every agent request the
+// page sends, and an in-file program is code HTML Clay runs, so a reply must not add
+// or change either. Edit mode re-activates "inert/" scripts and inert-onclick
+// handlers (core/admin-attrs.js), so those are judged by what they become.
+const ACTIVE_INERT_TYPES = new Set(['text/x-clay-instructions', 'text/x-clay-program']);
+const ACTIVE_CLAY_ATTRS = new Set(['inert-onclick', 'editmode:onclick', 'editmode:resource']);
+
 function runsAsCode(script) {
-  const type = (script.getAttribute('type') || '').trim().toLowerCase();
-  return !type || /javascript|ecmascript/.test(type) || ['module', 'importmap', 'speculationrules'].includes(type);
+  const raw = (script.getAttribute('type') || '').trim().toLowerCase();
+  const essence = raw.replace(/^(?:inert\/)+/, '').split(';')[0].trim();
+  return !essence || /javascript|ecmascript|jscript|livescript/.test(essence) || ['module', 'importmap', 'speculationrules'].includes(essence) || ACTIVE_INERT_TYPES.has(essence);
 }
 
 function attrsOf(el) {
   return [...el.attributes].map(a => a.name.toLowerCase() + '=' + a.value).sort().join(' ');
 }
 
+// Every element under root, template content included: querySelectorAll stops at a
+// <template>, whose children live in a separate fragment the page clones later.
+function* allElements(root) {
+  for (const el of [root, ...root.querySelectorAll('*')]) {
+    yield el;
+    if (el.localName === 'template' && el.content) {
+      for (const child of el.content.children) yield* allElements(child);
+    }
+  }
+}
+
 function activeParts(root) {
   const parts = new Map();
   const add = (part) => parts.set(part, (parts.get(part) || 0) + 1);
-  for (const el of [root, ...root.querySelectorAll('*')]) {
+  for (const el of allElements(root)) {
     const tag = el.tagName.toLowerCase();
     if (tag === 'script') {
       if (runsAsCode(el)) add('script ' + attrsOf(el) + '|' + el.textContent.trim());
@@ -461,7 +480,7 @@ function activeParts(root) {
     }
     for (const attr of el.attributes) {
       const name = attr.name.toLowerCase();
-      if (ACTIVE_ATTR.test(name)) add(tag + ' ' + name + '=' + attr.value.trim());
+      if (ACTIVE_ATTR.test(name) || ACTIVE_CLAY_ATTRS.has(name)) add(tag + ' ' + name + '=' + attr.value.trim());
       else if (name === 'srcdoc') add(tag + ' srcdoc=' + attr.value);
       else if (isScriptURL(attr.value)) add(tag + ' ' + name + '=' + attr.value);
     }
