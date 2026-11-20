@@ -5,6 +5,21 @@ import { startShell } from "../../../src/sheet/shell.js";
 const fakeSheet = () => ({ text: "", replaceSync(text) { this.text = text; } });
 const windowOptions = () => ({ sheet: fakeSheet(), adopt: () => {}, drop: () => {}, schedule: (fn) => fn() });
 
+// A Grid stand-in: it records every listener a table gets, since a sheet table now has both
+// its row window and its rules following its changes.
+const fakeGrid = (listeners) => (table) => ({
+  on: (type, fn) => {
+    if (!listeners.has(table)) listeners.set(table, []);
+    const entry = { type, fn };
+    listeners.get(table).push(entry);
+    return () => {
+      const rest = (listeners.get(table) ?? []).filter((each) => each !== entry);
+      if (rest.length > 0) listeners.set(table, rest);
+      else listeners.delete(table);
+    };
+  },
+});
+
 const tab = (id) => `<section item data-id="${id}" data-pos="V"><h2 bind="name">${id}</h2><table grid><colgroup><col></colgroup><tbody><tr data-id="${id}r1"></tr></tbody></table></section>`;
 
 describe("the sheet shell", () => {
@@ -53,7 +68,7 @@ describe("the sheet shell", () => {
   test("once the engine has mounted, each window follows its table's Grid", async () => {
     document.body.innerHTML = `<main sap plugins="grid"><div items="sheets" sheet-workbook>${tab("s1")}</div></main>`;
     const listeners = new Map();
-    window.Sap = { grid: (table) => ({ on: (type, fn) => listeners.set(table, { type, fn }) }) };
+    window.Sap = { grid: fakeGrid(listeners) };
     window.clay = { ready: Promise.resolve() };
 
     const { windows, followed } = startShell({ windowOptions: windowOptions() });
@@ -63,10 +78,12 @@ describe("the sheet shell", () => {
 
     // The mount has painted, so the window reads its table again once.
     expect(win.geometry).not.toBe(booted);
-    expect(listeners.get(table).type).toBe("change");
+    const entries = listeners.get(table);
+    expect(entries.map((each) => each.type)).toEqual(["change", "change"]);
+    expect(entries.map((each) => each.fn)).toContain(win.follow);
     const before = win.geometry;
     table.insertAdjacentHTML("beforeend", '<tbody><tr data-id="new"></tr></tbody>');
-    listeners.get(table).fn({ structure: true, rows: { added: ["new"], removed: [], changed: [] }, cells: [] });
+    for (const { fn } of entries) fn({ structure: true, rows: { added: ["new"], removed: [], changed: [] }, cells: [] });
     expect(win.geometry).not.toBe(before);
     expect(win.geometry.rowCount).toBe(2);
   });
@@ -74,14 +91,7 @@ describe("the sheet shell", () => {
   test("restart puts a window on a table that replaced the old one and keeps the window of a table that stayed", async () => {
     document.body.innerHTML = `<main sap plugins="grid"><div items="sheets" sheet-workbook>${tab("s1")}${tab("s2")}</div></main>`;
     const listeners = new Map();
-    window.Sap = {
-      grid: (table) => ({
-        on: (type, fn) => {
-          listeners.set(table, fn);
-          return () => listeners.delete(table);
-        },
-      }),
-    };
+    window.Sap = { grid: fakeGrid(listeners) };
     window.clay = { ready: Promise.resolve() };
 
     let drops = 0;
@@ -103,16 +113,16 @@ describe("the sheet shell", () => {
     expect([...windows.keys()]).toEqual([stayed, fresh]);
     expect(windows.get(stayed)).toBe(kept);
     expect(windows.get(fresh).table).toBe(fresh);
-    expect(listeners.get(fresh)).toBe(windows.get(fresh).follow);
+    expect(listeners.get(fresh).map((each) => each.fn)).toContain(windows.get(fresh).follow);
     expect(listeners.has(gone)).toBe(false);
-    expect(listeners.get(stayed)).toBe(kept.follow);
+    expect(listeners.get(stayed).map((each) => each.fn)).toContain(kept.follow);
     expect(drops).toBe(1);
   });
 
   test("a grid that arrives after the mount is still followed", async () => {
     document.body.innerHTML = `<main sap plugins="grid"><div items="sheets" sheet-workbook>${tab("s1")}</div></main>`;
     const listeners = new Map();
-    const grid = (table) => ({ on: (type, fn) => listeners.set(table, fn) });
+    const grid = fakeGrid(listeners);
     window.Sap = { plugins: { load: async (name) => { if (name === "grid") window.Sap.grid = grid; } } };
     window.clay = { ready: Promise.resolve() };
 
@@ -120,7 +130,7 @@ describe("the sheet shell", () => {
     await followed;
 
     const [table, win] = [...windows][0];
-    expect(listeners.get(table)).toBe(win.follow);
+    expect(listeners.get(table).map((each) => each.fn)).toContain(win.follow);
   });
 
   // Bug: shell loaded grid-functions eagerly at open instead of waiting 3 s plus requestIdleCallback({ timeout: 5000 }), forgot to cancel on dispose, or failed to catch a rejected load.

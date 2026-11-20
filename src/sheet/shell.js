@@ -1,3 +1,4 @@
+import { boundRange, isEmpty, listItems, matchKey, parseRuleStyle, readBox, readTexts } from "./geometry.js";
 import { canAdopt, createRowWindow, EARLY, scopeOf } from "./row-window.js";
 
 // sapjs's two grid extensions, carried by this release but addressed only on sheet pages, so a
@@ -16,6 +17,50 @@ export function addressGridExtensions(plugins) {
   const before = plugins.loader;
   plugins.loader = (name, facts) => (Object.hasOwn(EXTENSIONS, name) ? EXTENSIONS[name]() : before?.(name, facts));
   plugins[ADDRESSED] = true;
+}
+
+// A tab's saved rules paint through the lazy rules.js, loaded only once some table has rules.
+let rulesModule = null;
+const rulesPending = new Set();
+const watchedGrids = new WeakSet();
+const watchedTables = new Map();
+function paintRulesSoon(table, grid) {
+  const rules = grid?.rules?.();
+  if (!rules) return;
+  if (!rulesModule && rules.length === 0) return;
+  if (rulesPending.has(table)) return;
+  rulesPending.add(table);
+  rulesModule ??= import("./rules.js").then((module) =>
+    module.createRules({ boundRange, isEmpty, listItems, matchKey, parseStyle: parseRuleStyle, readBox, readTexts, canAdopt, scopeOf }));
+  rulesModule.then((rules) => {
+    rulesPending.delete(table);
+    rules.paintRules(table, grid);
+  });
+}
+
+// A dropdown may read another tab's range, so a change on the tab that holds the items repaints
+// the dropdowns that point at it: their red underlines go as the items arrive.
+function repaintListTabs(source) {
+  for (const [table, grid] of watchedTables) {
+    if (table === source) continue;
+    if (!table.isConnected) {
+      watchedTables.delete(table);
+      continue;
+    }
+    const reads = grid.rules?.().some((rule) => rule.kind === "list" && String(rule.source ?? "").includes("!"));
+    if (reads) paintRulesSoon(table, grid);
+  }
+}
+
+function watchRules(table, grid) {
+  paintRulesSoon(table, grid);
+  if (watchedGrids.has(grid)) return;
+  watchedGrids.add(grid);
+  watchedTables.set(table, grid);
+  grid.on("change", () => {
+    paintRulesSoon(table, grid);
+    repaintListTabs(table);
+  });
 }
 
 const IDLE_DELAY_MS = 3000;
@@ -171,6 +216,7 @@ export function startShell({ root = document, windowOptions = {} } = {}) {
     }
     for (const [table, winRow] of windows) {
       unsubscribe.push(gridOf(table).on("change", winRow.follow));
+      watchRules(table, gridOf(table));
       winRow.follow({ rescanned: true });
     }
   }

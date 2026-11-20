@@ -240,6 +240,7 @@ export function createHistory(root, gridOf) {
       inverses: events.map((ev) => ev.inverse),
       cells,
       sorts,
+      sortActions: events.filter((e) => e.action?.t === "sort").map((e) => e.action),
       rows: collectAdded(events, "rows"),
       cols: collectAdded(events, "cols"),
       axisStates,
@@ -329,8 +330,25 @@ export function createHistory(root, gridOf) {
     } finally {
       replaying = false;
     }
-    if (events.length > 0) list[to].push(buildEntry(tab, events));
-    return { ok: true, cells: replayCoords(events, tableMaps(tabTable(root, tab))) };
+    // sapjs undoes a narrow sort by writing each cell back, so its events name every cell of
+    // the range; the step reports the sort's two corners instead, both ways, as a sort does.
+    const sortActions = entry.sortActions ?? [];
+    if (events.length > 0) {
+      const next = buildEntry(tab, events);
+      if (next.sortActions.length === 0 && sortActions.length > 0) {
+        // The range must still read as it does now when this step replays, tied cells included.
+        const now = tabTable(root, tab);
+        const nowMaps = tableMaps(now);
+        next.sortActions = sortActions;
+        next.sorts = sortActions.map((action) => buildSortSnap(gridOf(now), nowMaps, action));
+      }
+      list[to].push(next);
+    }
+    const maps = tableMaps(tabTable(root, tab));
+    const cells = sortActions.length > 0
+      ? [...new Map(sortActions.flatMap((action) => sortCorners(action, maps)).map((c) => [`${c.row}\u0000${c.col}`, c])).values()]
+      : replayCoords(events, maps);
+    return { ok: true, cells };
   }
 
   return {

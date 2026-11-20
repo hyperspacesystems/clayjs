@@ -2,7 +2,7 @@ import { a1, colIndex, rowIndex, tabTable } from "./commit.js";
 import { createChrome } from "./chrome.js";
 import { copyParts, fillBlock, fillFormula, pasteBlock, transposeMatrix } from "./clipboard.js";
 import { createEditor } from "./editor.js";
-import { filteredRows, ROW_ESTIMATE, rowOutOfSight, setFilteredRows } from "./geometry.js";
+import { allowedInList, boundRange, filteredRows, inputRuleAt, listItems, parseRuleStyle, ROW_ESTIMATE, rowOutOfSight, setFilteredRows } from "./geometry.js";
 import { createHistory } from "./history.js";
 import { keyIntent } from "./keys.js";
 import { createOverlays } from "./overlays.js";
@@ -296,6 +296,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   );
   const xlsxTool = lazyModule(loaders.xlsx ?? (() => import("./xlsx.js")), onLazyFail);
   const filterTool = lazyModule(loaders.filter ?? (() => import("./filter.js")), onLazyFail);
+  const rulesTool = lazyModule(loaders.rules ?? (() => import("./rule-panels.js")), onLazyFail);
   let pendingLazy = null;
 
   function runLazy(holder, fn, { guardSel = false } = {}) {
@@ -372,11 +373,20 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   function closeTransient() {
     if (liveMenu?.isOpen) liveMenu.close({ restoreFocus: false });
     closeFilterPanel();
+    closeRuleSurface();
     closeDialog();
   }
 
   let filterPanelClose = null;
   let filterPanelKey = "";
+  let ruleSurface = null;
+  let dismissedPickKey = "";
+
+  function closeRuleSurface() {
+    const cur = ruleSurface;
+    ruleSurface = null;
+    cur?.close?.();
+  }
 
   function closeFilterPanel() {
     const close = filterPanelClose;
@@ -391,6 +401,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     const colId = viewOf(tabId).cols[c];
     if (!colId) return;
     const key = `${tabId}:${colId}`;
+    closeRuleSurface();
     if (filterPanelOpen()) {
       const same = filterPanelKey === key;
       closeFilterPanel();
@@ -405,8 +416,45 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     });
   }
 
+  function openPickListForCell(tabId, r, c) {
+    const view = viewOf(tabId);
+    const own = ownerOf(view, r, c);
+    const key = `${tabId}:${view.rows[own.r]}:${view.cols[own.c]}`;
+    if (dismissedPickKey === key) {
+      dismissedPickKey = "";
+      return;
+    }
+    if (ruleSurface?.key === key) {
+      closeRuleSurface();
+      return;
+    }
+    closeTransient();
+    runLazy(rulesTool, (mod) => {
+      const handle = mod.openPickList(sharedCtx(), { tab: tabId, r: own.r, c: own.c });
+      if (handle) {
+        handle.setOnDismissOutside?.((target) => {
+          ruleSurface = null;
+          dismissedPickKey = `${target.tab}:${target.row}:${target.col}`;
+          win.setTimeout(() => {
+            dismissedPickKey = "";
+          }, 0);
+        });
+        ruleSurface = handle;
+      }
+    });
+  }
+
+  function openRulePanel(kind, anchor = null) {
+    if (!ensureReadyForAction()) return;
+    closeTransient();
+    runLazy(rulesTool, (mod) => {
+      ruleSurface = kind === "dropdown" ? mod.openDropdownPanel(sharedCtx(), anchor) : mod.openConditionalPanel(sharedCtx(), anchor);
+    });
+  }
+
   function onForeignChange(tabId) {
     if (liveMenu?.isOpen && tabId === sel?.tab) liveMenu.close({ restoreFocus: false });
+    if (ruleSurface && ruleSurface.tab === tabId) closeRuleSurface();
     if (activeDialog && dialogTab === tabId) closeDialog();
   }
 
@@ -583,6 +631,10 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     viewOf,
     gridOf,
     windowOf,
+    boundRange,
+    inputRuleAt,
+    listItems,
+    parseStyle: parseRuleStyle,
     activeCellInfo,
     ensureReadyForAction,
     runFormat,
@@ -622,6 +674,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       onPasteSpecial: (mode) => runLazy(pasteSpecialTool, (ps) => ps.runPasteSpecial(sharedCtx(), mode)),
       onClipboard: (kind) => runClipboard(kind),
       onShortcuts: () => runLazy(shortcutsTool, (s) => s.showShortcutsDialog(sharedCtx())),
+      onDropdown: () => openRulePanel("dropdown"),
+      onConditionalFormat: () => openRulePanel("conditional"),
     });
     return { menu: liveMenu, actions: cmdActions };
   }
@@ -771,6 +825,14 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     onStateChange: () => syncUI(),
     onCaretChange: () => fnHelp?.update(),
     onNotice: (msg) => chrome.showNotice(msg),
+    refuseValue: ({ tab, row, col }, text) => {
+      const table = tabTable(workbook, tab);
+      const r = table ? rowIndex(table, row) : -1;
+      const c = table ? colIndex(table, col) : -1;
+      if (r === -1 || c === -1) return null;
+      const rule = inputRuleAt(window.Sap.grid(table), r, c);
+      return rule?.kind === "list" && !allowedInList(table, rule, text) ? "Pick one of the dropdown's items." : null;
+    },
     onClearNotice: () => chrome.hideNotice(),
   });
 
@@ -837,7 +899,42 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     );
     chrome.setButtonPressed("filter", filters.has(sel.tab));
 
-    for (const extraId of ["sort", "checkbox", "chart"]) {
+    const hasSel = Boolean(sel && selectionBox(selView, sel));
+    const extCheckbox = externalCommands.checkbox;
+    chrome.registerCommand(
+      "checkbox",
+      !editor.editing
+        ? typeof extCheckbox === "function"
+          ? extCheckbox
+          : canEdit && hasSel
+            ? () => ensureReadyForAction() && runLazy(rulesTool, (r) => r.toggleCheckboxRule(sharedCtx()))
+            : null
+        : null,
+    );
+    const extDropdown = externalCommands.dropdown;
+    chrome.registerCommand(
+      "dropdown",
+      !editor.editing
+        ? typeof extDropdown === "function"
+          ? extDropdown
+          : canEdit && hasSel
+            ? () => openRulePanel("dropdown", chrome.getButton("dropdown"))
+            : null
+        : null,
+    );
+    const extCond = externalCommands["conditional-format"];
+    chrome.registerCommand(
+      "conditional-format",
+      !editor.editing
+        ? typeof extCond === "function"
+          ? extCond
+          : canEdit
+            ? () => openRulePanel("conditional", chrome.getButton("conditional-format"))
+            : null
+        : null,
+    );
+
+    for (const extraId of ["sort", "chart"]) {
       const ext = externalCommands[extraId];
       chrome.registerCommand(extraId, !editor.editing && typeof ext === "function" ? ext : null);
     }
@@ -984,6 +1081,74 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     const scroller = scrollerOf(workbook);
     const h = scroller ? scroller.clientHeight : win.innerHeight;
     return Math.max(1, Math.floor((h || 520) / ROW_ESTIMATE));
+  }
+
+  const isTicked = (value) => value === true || (typeof value === "string" && value.toUpperCase() === "TRUE");
+
+  // A cell a box may cover: TRUE, FALSE or blank, as the rule paints a box. A heading or any
+  // other text in the range keeps showing as itself and is never ticked.
+  const mayTick = (value) => {
+    if (value === null || value === undefined || value === "") return true;
+    const flag = typeof value === "string" ? value.toUpperCase() : value;
+    return flag === true || flag === false || flag === "TRUE" || flag === "FALSE";
+  };
+
+  // The checkbox cells a box covers, in reading order, each with whether it is ticked. Rows the
+  // viewer filtered out or hid, hidden columns and a merge's covered cells are out of sight, so
+  // Space leaves them alone, as a Delete does.
+  function checkboxCells(table, grid, view, box, tab) {
+    // The rules are read once: Space runs this over the whole selection on every press.
+    const inputs = grid.rules()
+      .filter((rule) => rule.kind === "check" || rule.kind === "list")
+      .map((rule) => ({ kind: rule.kind, at: boundRange(rule.range, grid.size) }))
+      .filter(({ at }) => at && at.r0 <= box.bottom && at.r1 >= box.top && at.c0 <= box.right && at.c1 >= box.left);
+    if (!inputs.some(({ kind }) => kind === "check")) return [];
+    const kindAt = (r, c) => inputs.find(({ at }) => r >= at.r0 && r <= at.r1 && c >= at.c0 && c <= at.c1)?.kind;
+    const filtered = filteredRows(table);
+    const cells = [];
+    for (let r = box.top; r <= box.bottom; r++) {
+      if (filtered.has(view.rows[r]) || view.rowHidden?.(r)) continue;
+      for (let c = box.left; c <= box.right; c++) {
+        if (view.colHidden?.(c) || kindAt(r, c) !== "check") continue;
+        if (grid.cell(a1(r, c))?.covered) continue;
+        const value = grid.get(a1(r, c));
+        if (!mayTick(value)) continue;
+        cells.push({ tab, row: view.rows[r], col: view.cols[c], on: isTicked(value) });
+      }
+    }
+    return cells;
+  }
+
+  // Every one of those cells turns on, or all turn off when every one is already on: one grid
+  // write of real booleans, so one undo step and a formula counts them.
+  function writeCheckboxes(grid, cells) {
+    const next = !cells.every((cell) => cell.on);
+    const writes = cells.map((cell) => [cell.row, cell.col, next]);
+    if (!writeGrid(() => grid.apply({ v: 1, t: "set", sheet: cells[0].tab, cells: writes }))) return false;
+    refreshStatus();
+    syncUI({ announce: true });
+    return true;
+  }
+
+  // A plain click on a checkbox cell ticks it.
+  function toggleCheckboxAt(hit) {
+    const table = tabTable(workbook, hit.tab);
+    const grid = gridOf(table);
+    if (!grid || inputRuleAt(grid, hit.r, hit.c)?.kind !== "check") return;
+    const cells = checkboxCells(table, grid, viewOf(hit.tab), { top: hit.r, left: hit.c, bottom: hit.r, right: hit.c }, hit.tab);
+    if (cells.length > 0) writeCheckboxes(grid, cells);
+  }
+
+  // Space over a selection that covers a checkbox cell ticks them all, or clears them all when
+  // they all are ticked. False when no selected cell is a checkbox, so Space types as it always has.
+  function spaceTogglesCheckboxes() {
+    const table = tabTable(workbook, sel.tab);
+    const grid = gridOf(table);
+    const view = viewOf(sel.tab);
+    const box = selectionBox(view, sel);
+    if (!grid || !box) return false;
+    const cells = checkboxCells(table, grid, view, box, sel.tab);
+    return cells.length > 0 && writeCheckboxes(grid, cells);
   }
 
   // Rows this viewer filtered out are out of sight, so a Delete or a cut leaves them alone.
@@ -1295,6 +1460,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (disposed || seenKeys.has(event)) return;
     seenKeys.add(event);
 
+    if (ruleSurface?.handleKeyDown?.(event)) return;
     if (editor.editing && fnHelp?.handleKeyDown(event)) return;
 
     const intent = keyIntent(event, {
@@ -1310,16 +1476,38 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (!["Shift", "Control", "Meta", "Alt"].includes(event.key) && intent?.type !== "pasteValues") valuesNext = false;
     if (!editor.editing && event.altKey && event.key === "ArrowDown" && sel) {
       const tabId = tabs.activeId;
+      const table = tabTable(workbook, tabId);
+      const grid = gridOf(table);
+      const r = table ? rowIndex(table, sel.anchor.row) : -1;
+      const c = table ? colIndex(table, sel.anchor.col) : -1;
       const spec = filters.get(tabId);
       const view = viewOf(tabId);
       const heading = spec ? view.rows.indexOf(spec.header) : -1;
-      const c = view.cols.indexOf(sel.anchor.col);
-      if (spec && sel.tab === tabId && heading !== -1 && view.rows[heading] === sel.anchor.row && c !== -1 && spec.cols.includes(view.cols[c])) {
+      const fc = view.cols.indexOf(sel.anchor.col);
+      if (spec && sel.tab === tabId && heading !== -1 && view.rows[heading] === sel.anchor.row && fc !== -1 && spec.cols.includes(view.cols[fc])) {
         event.preventDefault();
-        const el = overlays.shadow?.querySelector?.(`[data-filter-col="${c}"]`) ?? null;
-        openFilterAt(tabId, c, el ?? chrome.getButton("filter"));
+        const el = overlays.shadow?.querySelector?.(`[data-filter-col="${fc}"]`) ?? null;
+        openFilterAt(tabId, fc, el ?? chrome.getButton("filter"));
         return;
       }
+      if (grid && sel.tab === tabId && r !== -1 && c !== -1 && inputRuleAt(grid, r, c)?.kind === "list") {
+        event.preventDefault();
+        openPickListForCell(tabId, r, c);
+        return;
+      }
+    }
+    if (
+      sel &&
+      !editor.editing &&
+      event.key === " " &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      spaceTogglesCheckboxes()
+    ) {
+      event.preventDefault();
+      return;
     }
     if (!intent) return;
 
@@ -1509,6 +1697,10 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   let suppressTap = false;
   let handleDrag = null;
   let touchTapCell = null;
+  // A press on a checkbox cell ticks only when its lift lands on the same cell: not a right
+  // click, a long press, a drag or the second press of a double click.
+  let pendingTick = null;
+  const TICK_SLOP = 4;
   const isTouch = () => lastPointer === "touch" || lastPointer === "pen";
 
   function cancelLongPress() {
@@ -1544,6 +1736,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (disposed || editor.editing || !tabs.list().some((t) => t.id === hit.tab)) return;
     suppressTap = true;
     touchTapCell = null;
+    pendingTick = null;
     openCellMenuAt(hit, x, y, { touch: true });
   }
 
@@ -1632,7 +1825,36 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (!editor.editing) chrome.setEditing(false);
   }
 
+  function dropdownChevronCell(event, hit) {
+    if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return null;
+    const table = tabTable(workbook, hit.tab);
+    const grid = gridOf(table);
+    if (!table || !grid) return null;
+    const view = viewOf(hit.tab);
+    const own = ownerOf(view, hit.r, hit.c);
+    if (inputRuleAt(grid, own.r, own.c)?.kind !== "list") return null;
+    const x = event.clientX;
+    if (typeof x !== "number") return null;
+    const td = (event.target?.nodeType === 1 ? event.target : event.target?.parentElement)?.closest?.("td, th");
+    const tdRect = td && table.contains(td) ? td.getBoundingClientRect() : null;
+    let left = 0;
+    let right = 0;
+    if (tdRect && tdRect.width > 0) {
+      left = tdRect.left;
+      right = tdRect.right;
+    } else {
+      const tl = overlays.cellBox(table, windowOf(table), own.r, own.c);
+      const br = overlays.cellBox(table, windowOf(table), own.r + own.rows - 1, own.c + own.cols - 1);
+      if (!tl || !br) return null;
+      left = tl.left;
+      right = br.left + br.width;
+    }
+    if (right <= left || x < Math.max(left, right - 20) || x > right) return null;
+    return { tab: hit.tab, r: own.r, c: own.c };
+  }
+
   function onMouseDown(event) {
+    pendingTick = null;
     if (event.button !== undefined && event.button !== 0) return;
     if (suppressTap) {
       event.preventDefault();
@@ -1640,6 +1862,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     }
     const hit = locateCellEvent(event);
     if (!hit) return;
+    if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && event.detail === 1) {
+      pendingTick = { tab: hit.tab, r: hit.r, c: hit.c, x: event.clientX ?? 0, y: event.clientY ?? 0 };
+    }
     chrome.commitRename();
     event.preventDefault();
     handledPointerDown = true;
@@ -1652,12 +1877,25 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     actOnCellPointer(hit, { extend: event.shiftKey });
     if (!wasPicking && openCellLinkIfMod(event, hit)) {
       dragging = false;
+      pendingTick = null;
       return;
     }
+    const chevron = !wasPicking ? dropdownChevronCell(event, hit) : null;
+    if (chevron) {
+      dragging = false;
+      touchTapCell = null;
+      pendingTick = null;
+      openPickListForCell(chevron.tab, chevron.r, chevron.c);
+      return;
+    }
+    dismissedPickKey = "";
     if (touch) {
       dragging = false;
       touchTapCell = tapOnSelected ? null : cellKey(hit);
-      if (tapOnSelected) openEdit();
+      if (tapOnSelected) {
+        pendingTick = null;
+        openEdit();
+      }
       return;
     }
     dragging = true;
@@ -1697,7 +1935,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     }
   }
 
-  function onMouseUp() {
+  function onMouseUp(event) {
+    const tick = pendingTick;
+    pendingTick = null;
     if (fillDrag) {
       const done = fillDrag;
       fillDrag = null;
@@ -1719,6 +1959,11 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       }
     }
     dragging = false;
+    if (!tick || suppressTap || !event) return;
+    if (Math.hypot((event.clientX ?? 0) - tick.x, (event.clientY ?? 0) - tick.y) >= TICK_SLOP) return;
+    const hit = locateCellEvent(event);
+    if (!hit || hit.tab !== tick.tab || hit.r !== tick.r || hit.c !== tick.c) return;
+    toggleCheckboxAt(hit);
   }
 
   function onClick(event) {
@@ -1731,7 +1976,10 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (!hit) return;
     const wasPicking = editor.editing && editor.canPick();
     actOnCellPointer(hit, { extend: event.shiftKey });
-    if (!wasPicking) openCellLinkIfMod(event, hit);
+    if (!wasPicking && !openCellLinkIfMod(event, hit)) {
+      const chevron = dropdownChevronCell(event, hit);
+      if (chevron) openPickListForCell(chevron.tab, chevron.r, chevron.c);
+    }
   }
 
   function onDblClick(event) {
@@ -1745,6 +1993,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   function openCellMenuAt(hit, cx, cy, { touch = false } = {}) {
+    pendingTick = null;
     if (!ensureReadyForAction()) return;
     const view = viewOf(hit.tab);
     const box = hit.tab === sel.tab ? selectionBox(view, sel) : null;
@@ -1943,6 +2192,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     cancelLongPress();
     fillDrag = null;
     closeFilterPanel();
+    closeRuleSurface();
     closeDialog();
     liveMenu?.dispose();
     findCtrl?.dispose();

@@ -158,9 +158,9 @@ function pointerEvent(type, init = {}) {
 function clickCell(cell, pointerType) {
   cell.dispatchEvent(pointerEvent("pointerdown", { pointerType, clientX: 10, clientY: 10 }));
   cell.dispatchEvent(pointerEvent("pointerup", { pointerType, clientX: 10, clientY: 10 }));
-  cell.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 10, clientY: 10 }));
-  cell.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0, clientX: 10, clientY: 10 }));
-  cell.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+  cell.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, detail: 1, clientX: 10, clientY: 10 }));
+  cell.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0, detail: 1, clientX: 10, clientY: 10 }));
+  cell.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1, clientX: 10, clientY: 10 }));
 }
 
 function tapMenuItem(item) {
@@ -241,12 +241,12 @@ test("the tab strip lists the tabs in page order and switching tabs changes only
 test("buttons for commands that cannot act or land in later milestones are drawn and disabled with aria-disabled", async () => {
   const { ui, inst } = await start();
 
-  for (const id of ["undo", "redo", "merge", "sort", "checkbox", "chart"]) {
+  for (const id of ["undo", "redo", "merge", "sort", "chart"]) {
     const btn = inst.chrome.topShadow.querySelector(`[data-command="${id}"]`);
     expect(btn).not.toBeNull();
     expect(btn.getAttribute("aria-disabled")).toBe("true");
   }
-  for (const id of ["number-format", "currency", "bold", "borders", "find", "import", "filter"]) {
+  for (const id of ["number-format", "currency", "bold", "borders", "find", "import", "filter", "checkbox"]) {
     const btn = inst.chrome.topShadow.querySelector(`[data-command="${id}"]`);
     expect(btn).not.toBeNull();
     expect(btn.getAttribute("aria-disabled")).toBeNull();
@@ -2919,7 +2919,7 @@ test("a phone-width sheet shows Undo, Bold, $%, Filter, Row + and More in one ro
 
   inst.chrome.setLayout("wide");
   expect(toolbar().querySelector('[data-command="number-format"]').textContent).toBe("Automatic");
-  expect(toolbar().querySelector('[data-command="more"]').hidden).toBe(true);
+  expect(toolbar().querySelector('[data-command="more"]').hidden).toBe(false);
   expect(toolbar().querySelector('[data-command="insert-row"]').hidden).toBe(true);
 
   ui.dispose();
@@ -2937,7 +2937,7 @@ test("tools that do not fit are reachable from More", async () => {
   await turn();
 
   const ids = [...inst.chrome.topShadow.querySelectorAll("[data-menu-item]")].map((el) => el.getAttribute("data-menu-item"));
-  expect(ids).toEqual(["filter", "sort", "checkbox", "chart", "find"]);
+  expect(ids).toEqual(["filter", "sort", "checkbox", "dropdown", "conditional-format", "chart", "find"]);
   expect(inst.chrome.getButton("find")).toBe(moreBtn);
   expect(inst.chrome.getButton("bold")).toBe(inst.chrome.topShadow.querySelector('[data-command="bold"]'));
 
@@ -3682,5 +3682,719 @@ test("Sort A to Z from the panel sorts the rows under the heading, keeps the hea
   await turn();
   expect(grid.get("B2")).toBe(9);
   expect(grid.get("B3")).toBe(5);
+  ui.dispose();
+});
+
+// Bug: a click on a checkbox cell selected it but never ticked it, or the tick was not one undo step.
+test("a click on a checkbox cell turns TRUE to FALSE and one undo puts TRUE back", async () => {
+  const { Sap, book, ui, inst } = await start();
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  grid.setRules({ set: [{ id: "k1", pos: "V", kind: "check", range: "B1:B3" }] });
+  grid.set("B2", "TRUE");
+  const rev = book.revision;
+
+  clickCell(table.rows[1].cells[1], "mouse");
+  await frame();
+  expect(String(grid.get("B2")).toUpperCase()).toBe("FALSE");
+  expect(book.revision).toBe(rev + 1);
+
+  press(inst.editor.textarea, "z", { metaKey: true });
+  expect(String(grid.get("B2")).toUpperCase()).toBe("TRUE");
+
+  ui.dispose();
+});
+
+// Bug: Space over a checkbox selection typed a space instead of ticking every covered box in one
+// action, or it swallowed Space on a cell no check rule covers.
+test("Space over a mixed checkbox selection sets them all in one undo step and still types where no check rule covers", async () => {
+  const { Sap, book, ui, inst } = await start();
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  grid.setRules({ set: [{ id: "k1", pos: "V", kind: "check", range: "B2:B3" }] });
+  grid.set("B2", "TRUE");
+  const textarea = inst.editor.textarea;
+  const rev = book.revision;
+
+  // A1 has no check rule, so Space is not the sheet's to take.
+  const plain = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+  textarea.dispatchEvent(plain);
+  expect(plain.defaultPrevented).toBe(false);
+  expect(book.revision).toBe(rev);
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.textContent).toBe("B2:B3");
+
+  const space = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+  textarea.dispatchEvent(space);
+  expect(space.defaultPrevented).toBe(true);
+  expect(book.revision).toBe(rev + 1);
+  expect(String(grid.get("B2")).toUpperCase()).toBe("TRUE");
+  expect(String(grid.get("B3")).toUpperCase()).toBe("TRUE");
+
+  // Every one is ticked, so the next Space clears them all.
+  press(textarea, " ");
+  expect(String(grid.get("B2")).toUpperCase()).toBe("FALSE");
+  expect(String(grid.get("B3")).toUpperCase()).toBe("FALSE");
+
+  press(textarea, "z", { metaKey: true });
+  expect(String(grid.get("B3")).toUpperCase()).toBe("TRUE");
+
+  ui.dispose();
+});
+
+// Bug: a closed dropdown saved a typed value it does not hold, or it also refused one an open
+// dropdown must keep, or a formula.
+test("a closed dropdown refuses a typed value outside its items and an open one keeps it", async () => {
+  const { Sap, book, ui, inst } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+  const rule = { id: "k1", pos: "V", kind: "list", range: "C1:C3", items: ["Yes", "No"] };
+  grid.setRules({ set: [rule] });
+  const textarea = inst.editor.textarea;
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowRight");
+  expect(inst.chrome.nameBox.textContent).toBe("C1");
+  const rev = book.revision;
+
+  typeInto(textarea, "Maybe");
+  press(textarea, "Enter");
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(inst.chrome.noticeBar.textContent).toContain("Pick one of the dropdown's items.");
+  expect(grid.get("C1")).toBeNull();
+  expect(book.revision).toBe(rev);
+  // The editor stays open on the refused text, as it does for any other refusal.
+  expect(inst.editor.editing).toBe(true);
+  expect(textarea.value).toBe("Maybe");
+
+  press(textarea, "Escape");
+  typeInto(textarea, "=1+1");
+  press(textarea, "Enter");
+  expect(inst.chrome.noticeBar.hidden).toBe(true);
+  expect(inst.editor.editing).toBe(false);
+  expect(grid.get("C1")).toBe(2);
+
+  press(textarea, "ArrowUp");
+  expect(inst.chrome.nameBox.textContent).toBe("C1");
+  grid.setRules({ set: [{ ...rule, open: true }] });
+  typeInto(textarea, "Maybe");
+  press(textarea, "Enter");
+  expect(inst.chrome.noticeBar.hidden).toBe(true);
+  expect(grid.get("C1")).toBe("Maybe");
+
+  ui.dispose();
+});
+
+// Bug: duplicating a tab wrote a table without its <template rules>, so the copy lost its rules.
+test("a duplicated tab keeps its rules", async () => {
+  const { Sap, ui, inst } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+  const rule = { id: "k1", pos: "V", kind: "list", range: "B2:B3", items: ["Yes", "No"] };
+  grid.setRules({ set: [rule] });
+
+  const tabBtns = [...inst.chrome.bottomShadow.querySelectorAll('[role="tab"]')];
+  tabBtns[0].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 400 }));
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="duplicate-tab"]').click();
+
+  const copy = inst.tabs.list()[1];
+  expect(copy.name).toBe("Copy of Budget");
+  expect(Sap.grid(tableOf(copy.id)).rules()).toEqual([rule]);
+  expect(tableOf(copy.id).querySelector("template[rules]")).not.toBeNull();
+
+  ui.dispose();
+});
+
+// Bug: the shell never loaded rules.js, so a tab's saved rules painted nothing for editors or readers.
+test("the shell paints a tab's rules into an adopted sheet and empties it when the rules go", async () => {
+  const { Sap, shell, getAdopted, ui } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+
+  grid.setRules({ set: [{ id: "k1", pos: "V", kind: "check", range: "B2:B3" }] });
+  shell.restart();
+  await turn();
+
+  const adopted = getAdopted();
+  const painted = adopted.at(-1);
+  expect(painted.text).not.toContain('tr[data-id="r2"]>td:nth-child(2)');
+  expect(painted.text).toContain('tr[data-id="r3"]>td:nth-child(2)');
+
+  grid.setRules({ remove: ["k1"] });
+  await frame();
+  await turn();
+  expect(adopted.at(-1)).toBe(painted);
+  expect(painted.text).toBe("");
+
+  ui.dispose();
+});
+
+// Bug: Insert checkbox overwrote filled cells, left empty cells blank, or added a duplicate rule instead of removing an exact-range check rule.
+test("Insert checkbox adds a check rule and fills empty cells with FALSE, undoes in one step, and pressing it again over the same range removes the rule", async () => {
+  const { Sap, ui, inst } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowRight", { shiftKey: true });
+  press(textarea, "ArrowDown", { shiftKey: true });
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.textContent).toBe("B1:C3");
+
+  const checkBtn = inst.chrome.topShadow.querySelector('[data-command="checkbox"]');
+  checkBtn.click();
+  await turn();
+  await turn();
+
+  expect(grid.rules()).toEqual([
+    { id: expect.stringMatching(/^k/), pos: "V", kind: "check", range: "B1:C3" },
+  ]);
+  expect(grid.get("B1")).toBe(30);
+  expect(grid.get("B2")).toBe(8);
+  expect(grid.get("C2")).toBe(9);
+  expect(String(grid.get("C1")).toUpperCase()).toBe("FALSE");
+  expect(String(grid.get("B3")).toUpperCase()).toBe("FALSE");
+  expect(String(grid.get("C3")).toUpperCase()).toBe("FALSE");
+
+  press(textarea, "z", { metaKey: true });
+  expect(grid.rules()).toEqual([]);
+  expect(grid.get("C1")).toBeNull();
+  expect(grid.get("B3")).toBeNull();
+
+  press(textarea, "Z", { metaKey: true, shiftKey: true });
+  expect(grid.rules()).toHaveLength(1);
+  expect(String(grid.get("C1")).toUpperCase()).toBe("FALSE");
+
+  checkBtn.click();
+  await turn();
+  await turn();
+  expect(grid.rules()).toEqual([]);
+  expect(String(grid.get("C1")).toUpperCase()).toBe("FALSE");
+  expect(grid.get("B1")).toBe(30);
+
+  ui.dispose();
+});
+
+// Bug: Alt+ArrowDown on a dropdown cell failed to open the pick list or Enter failed to commit the chosen item into the cell.
+test("Alt+ArrowDown and chevron clicks on a dropdown cell open the pick list and Enter writes the item", async () => {
+  const { Sap, ui, inst } = await start();
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  grid.setRules({ set: [{ id: "k1", pos: "V", kind: "list", range: "C1:C3", items: ["Low", "Medium", "High"] }] });
+  grid.set("C1", "Low");
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowRight");
+  expect(inst.chrome.nameBox.textContent).toBe("C1");
+
+  press(textarea, "ArrowDown", { altKey: true });
+  await turn();
+  await turn();
+
+  const list = inst.chrome.topShadow.querySelector("[data-pick-list]");
+  expect(list).not.toBeNull();
+  expect(list.querySelector('[data-pick-item="Low"]').getAttribute("data-current")).toBe("true");
+  expect(list.querySelector('[data-pick-item="Low"]').getAttribute("aria-selected")).toBe("true");
+
+  press(textarea, "h");
+  expect(list.querySelector('[data-pick-item="High"]').getAttribute("aria-selected")).toBe("true");
+  press(textarea, "ArrowUp");
+  expect(list.querySelector('[data-pick-item="Medium"]').getAttribute("aria-selected")).toBe("true");
+  press(textarea, "Enter");
+
+  expect(inst.chrome.topShadow.querySelector("[data-pick-list]")).toBeNull();
+  expect(grid.get("C1")).toBe("Medium");
+
+  press(textarea, "z", { metaKey: true });
+  expect(grid.get("C1")).toBe("Low");
+
+  // Click in the right 20 px of C2 (col C spans 200..300) opens the pick list; Escape closes without writing.
+  table.rows[1].cells[2].dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 292, clientY: 36 }),
+  );
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  await turn();
+  expect(inst.chrome.topShadow.querySelector("[data-pick-list]")).not.toBeNull();
+  press(textarea, "Escape");
+  expect(inst.chrome.topShadow.querySelector("[data-pick-list]")).toBeNull();
+  expect(grid.get("C2")).toBe(9);
+
+  ui.dispose();
+});
+
+// Bug: the dropdown panel dropped items or wrote open: false instead of open: true when checked.
+test("the dropdown panel writes items and open over the selection and removes an existing dropdown", async () => {
+  const { Sap, ui, inst } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.textContent).toBe("B2:B3");
+
+  inst.chrome.topShadow.querySelector('[data-command="more"]').click();
+  await turn();
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="dropdown"]').click();
+  await turn();
+  await turn();
+
+  let panel = inst.chrome.topShadow.querySelector("[data-dropdown-panel]");
+  expect(panel).not.toBeNull();
+  expect(panel.querySelector("[data-dropdown-range]").textContent).toBe("B2:B3");
+  expect(panel.querySelector("[data-dropdown-remove]")).toBeNull();
+
+  const itemsField = panel.querySelector("[data-dropdown-items]");
+  itemsField.value = "Todo\nDoing\nDone\n";
+  panel.querySelector("[data-dropdown-open]").click();
+  panel.querySelector("[data-dropdown-done]").click();
+
+  expect(inst.chrome.topShadow.querySelector("[data-dropdown-panel]")).toBeNull();
+  expect(grid.rules()).toEqual([
+    {
+      id: expect.stringMatching(/^k/),
+      pos: "V",
+      kind: "list",
+      range: "B2:B3",
+      items: ["Todo", "Doing", "Done"],
+      open: true,
+    },
+  ]);
+
+  // Reopen from the cell context menu over B2:B3 and remove it.
+  tableOf("s1")
+    .rows[1].cells[1].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 40 }));
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="dropdown"]').click();
+  await turn();
+
+  panel = inst.chrome.topShadow.querySelector("[data-dropdown-panel]");
+  expect(panel.querySelector("[data-dropdown-items]").value).toBe("Todo\nDoing\nDone");
+  expect(panel.querySelector("[data-dropdown-open]").checked).toBe(true);
+  panel.querySelector("[data-dropdown-remove]").click();
+  expect(grid.rules()).toEqual([]);
+
+  // Selecting a whole column shows an open-ended column range in the panel.
+  inst.overlays.shadow
+    .querySelector('[data-col="2"]')
+    .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  inst.chrome.topShadow.querySelector('[data-command="more"]').click();
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="dropdown"]').click();
+  await turn();
+  expect(inst.chrome.topShadow.querySelector("[data-dropdown-range]").textContent).toBe("C:C");
+
+  ui.dispose();
+});
+
+// Bug: the conditional formatting panel wrote an invalid style string, dropped the compared value, or left deleted rules in the sheet.
+test("the conditional formatting panel adds a when rule with the chosen test, value and style, and deleting it removes it", async () => {
+  const { Sap, ui, inst } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight", { shiftKey: true });
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.textContent).toBe("A1:B2");
+
+  inst.chrome.topShadow.querySelector('[data-command="more"]').click();
+  await turn();
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="conditional-format"]').click();
+  await turn();
+  await turn();
+
+  const panel = inst.chrome.topShadow.querySelector("[data-conditional-panel]");
+  expect(panel).not.toBeNull();
+  panel.querySelector("[data-cond-add]").click();
+
+  expect(panel.querySelector("[data-cond-range]").value).toBe("A1:B2");
+  const testSelect = panel.querySelector("[data-cond-test]");
+  testSelect.value = "gt";
+  testSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  panel.querySelector("[data-cond-a]").value = "5";
+  panel.querySelector('[data-cond-fill="#f0e4cc"]').click();
+  panel.querySelector('[data-cond-color="#7a2a1f"]').click();
+  panel.querySelector("[data-cond-bold]").click();
+  panel.querySelector("[data-cond-done]").click();
+
+  expect(grid.rules()).toEqual([
+    {
+      id: expect.stringMatching(/^k/),
+      pos: "V",
+      kind: "when",
+      range: "A1:B2",
+      test: "gt",
+      a: "5",
+      style: "font-weight:bold;color:#7a2a1f;background-color:#f0e4cc",
+    },
+  ]);
+  expect(panel.querySelector("[data-cond-summary]")?.textContent).toBe("Greater than 5");
+
+  const ruleId = grid.rules()[0].id;
+  panel.querySelector(`[data-cond-delete="${ruleId}"]`).click();
+  expect(grid.rules()).toEqual([]);
+
+  ui.dispose();
+});
+
+// Bug: interface.js imported or loaded rule-panels.js at start-up before any rule command ran.
+test("rule-panels.js is loaded only when one of the rule commands runs", async () => {
+  let ruleLoads = 0;
+  const { Sap, ui, inst } = await start(BOOK(), {
+    loaders: {
+      rules: () => {
+        ruleLoads += 1;
+        return import("../../../src/sheet/rule-panels.js");
+      },
+    },
+  });
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  inst.chrome.bottomShadow.querySelector('[data-tab-id="s2"]').click();
+  inst.chrome.bottomShadow.querySelector('[data-tab-id="s1"]').click();
+  typeInto(textarea, "12");
+  press(textarea, "Escape");
+  clickCell(tableOf("s1").rows[0].cells[0], "mouse");
+  await turn();
+  expect(ruleLoads).toBe(0);
+
+  inst.chrome.topShadow.querySelector('[data-command="checkbox"]').click();
+  await turn();
+  await turn();
+  expect(ruleLoads).toBe(1);
+  expect(Sap.grid(tableOf("s1")).rules()).toHaveLength(1);
+
+  ui.dispose();
+});
+
+// Bug: a tick stored the plain text "TRUE", so =COUNTIF(...,TRUE) counted nothing and the formula
+// bar showed 'TRUE on a ticked cell.
+test("a ticked checkbox stores a boolean, saves a td without a text flag, and COUNTIF counts it", async () => {
+  const { Sap, ui, inst } = await start();
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  grid.setRules({ set: [{ id: "k1", pos: "V", kind: "check", range: "B2:B3" }] });
+  grid.set("B2", null);
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.textContent).toBe("B2");
+  press(textarea, " ");
+  expect(grid.get("B2")).toBe(true);
+  expect(table.querySelector('tr[data-id="r2"] td:nth-child(2)').hasAttribute("t")).toBe(false);
+
+  press(textarea, "ArrowDown", { shiftKey: true });
+  press(textarea, " ");
+  expect(grid.get("B3")).toBe(true);
+
+  grid.set("A1", "=COUNTIF(B2:B3,TRUE)");
+  expect(grid.get("A1")).toBe(2);
+  ui.dispose();
+});
+
+// Bug: a right click, a drag or the second press of a double click ticked a checkbox cell.
+test("only a plain click or a tap ticks a checkbox cell", async () => {
+  const { Sap, ui, inst } = await start();
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  grid.setRules({ set: [{ id: "k1", pos: "V", kind: "check", range: "B2:B3" }] });
+  grid.set("B2", true);
+  const cell = table.rows[1].cells[1];
+
+  cell.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+  await turn();
+  expect(grid.get("B2")).toBe(true);
+
+  cell.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, detail: 1, clientX: 10, clientY: 10 }));
+  const other = table.rows[2].cells[1];
+  other.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+  other.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0, detail: 1, clientX: 60, clientY: 60 }));
+  await turn();
+  expect(grid.get("B2")).toBe(true);
+
+  clickCell(cell, "mouse");
+  await frame();
+  expect(grid.get("B2")).toBe(false);
+
+  tapCell(cell);
+  await frame();
+  expect(grid.get("B2")).toBe(true);
+  ui.dispose();
+});
+
+// Bug: Space over a column that crosses a merged heading row failed on the merge's covered cell.
+test("Space over a column crossing a merged heading row ticks the others and shows no notice", async () => {
+  const { Sap, ui, inst } = await start();
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  grid.merge("B1:C1");
+  grid.set("C2", null);
+  grid.setRules({ set: [{ id: "k1", pos: "V", kind: "check", range: "C:C" }] });
+
+  inst.overlays.shadow
+    .querySelector('[data-col="2"]')
+    .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  await turn();
+
+  press(inst.editor.textarea, " ");
+  await turn();
+  expect(grid.get("C2")).toBe(true);
+  expect(grid.get("C3")).toBe(true);
+  expect(inst.chrome.noticeBar.hidden).toBe(true);
+  ui.dispose();
+});
+
+// Bug: opening Dropdown from one cell of C1:C3 added a second rule over that one cell.
+test("the Dropdown panel edits the rule the active cell sits in", async () => {
+  const { Sap, ui, inst } = await start();
+  const table = tableOf("s1");
+  const grid = Sap.grid(table);
+  const rule = { id: "k1", pos: "V", kind: "list", range: "C1:C3", items: ["Low", "High"] };
+  grid.setRules({ set: [rule] });
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.textContent).toBe("C2");
+
+  table.rows[1].cells[2].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 220, clientY: 60 }));
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="dropdown"]').click();
+  await turn();
+
+  const panel = inst.chrome.topShadow.querySelector("[data-dropdown-panel]");
+  expect(panel.querySelector("[data-dropdown-range]").textContent).toBe("C1:C3");
+  expect(panel.querySelector("[data-dropdown-items]").value).toBe("Low\nHigh");
+  panel.querySelector("[data-dropdown-items]").value = "Low\nMiddle\nHigh";
+  panel.querySelector("[data-dropdown-done]").click();
+  await turn();
+
+  expect(grid.rules()).toEqual([
+    { id: "k1", pos: "V", kind: "list", range: "C1:C3", items: ["Low", "Middle", "High"] },
+  ]);
+
+  typeInto(textarea, "Middle");
+  press(textarea, "Enter");
+  expect(inst.chrome.noticeBar.hidden).toBe(true);
+  expect(grid.get("C2")).toBe("Middle");
+  ui.dispose();
+});
+
+// Bug: Insert checkbox over one cell of an existing checkbox range added a second rule instead of
+// removing the one it covers.
+test("Insert checkbox over one cell of a checkbox range removes that rule and keeps the values", async () => {
+  const { Sap, ui, inst } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+  grid.setRules({ set: [{ id: "k1", pos: "V", kind: "check", range: "B2:B3" }] });
+  grid.set("B3", true);
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.textContent).toBe("B2");
+
+  inst.chrome.topShadow.querySelector('[data-command="checkbox"]').click();
+  await turn();
+  await turn();
+  expect(grid.rules()).toEqual([]);
+  expect(grid.get("B3")).toBe(true);
+  expect(grid.get("B2")).toBe(8);
+  ui.dispose();
+});
+
+// Bug: a file's formula rule opened as "Is not empty" and saving replaced the person's formula.
+test("the Conditional formatting panel lists a formula rule with no Edit and Delete removes it", async () => {
+  const { Sap, ui, inst } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+  const rule = { id: "k1", pos: "V", kind: "when", range: "A1", test: "formula", f: "=A1>0", style: "color:#7a2a1f" };
+  grid.setRules({ set: [rule] });
+
+  const openList = async () => {
+    inst.chrome.topShadow.querySelector('[data-command="more"]').click();
+    await turn();
+    inst.chrome.topShadow.querySelector('[data-menu-item="conditional-format"]').click();
+    await turn();
+    await turn();
+    return inst.chrome.topShadow.querySelector("[data-conditional-panel]");
+  };
+
+  let panel = await openList();
+  expect(panel.querySelector("[data-cond-summary]").textContent).toBe("Custom formula");
+  expect(panel.querySelector("[data-cond-formula]").textContent).toBe("=A1>0");
+  expect(panel.querySelector('[data-cond-edit="k1"]')).toBeNull();
+
+  panel.querySelector("[data-cond-close]").click();
+  expect(grid.rules()).toEqual([rule]);
+
+  panel = await openList();
+  panel.querySelector('[data-cond-delete="k1"]').click();
+  expect(grid.rules()).toEqual([]);
+  ui.dispose();
+});
+
+// Bug: Space in the pick list typed a space, and Tab walked into the options instead of closing.
+test("in the pick list Space writes the focused option and Tab closes it", async () => {
+  const { Sap, ui, inst } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+  grid.setRules({ set: [{ id: "k1", pos: "V", kind: "list", range: "C1:C3", items: ["Low", "Medium", "High"] }] });
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowRight");
+  expect(inst.chrome.nameBox.textContent).toBe("C1");
+  press(textarea, "ArrowDown", { altKey: true });
+  await turn();
+  let list = inst.chrome.topShadow.querySelector("[data-pick-list]");
+  expect(list).not.toBeNull();
+
+  press(list.querySelectorAll("[data-pick-item]")[0], "ArrowDown");
+  press(list.querySelectorAll("[data-pick-item]")[0], " ");
+  await turn();
+  expect(inst.chrome.topShadow.querySelector("[data-pick-list]")).toBeNull();
+  expect(grid.get("C1")).toBe("Medium");
+
+  press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.textContent).toBe("C2");
+  press(textarea, "ArrowDown", { altKey: true });
+  await turn();
+  list = inst.chrome.topShadow.querySelector("[data-pick-list]");
+  expect(list).not.toBeNull();
+  press(list, "Tab");
+  await turn();
+  expect(inst.chrome.topShadow.querySelector("[data-pick-list]")).toBeNull();
+  const root = textarea.getRootNode();
+  expect((root.activeElement ?? document.activeElement) === textarea).toBe(true);
+  ui.dispose();
+});
+
+// Bug: Done in the Dropdown panel wrote an empty rule and showed the engine's own error text.
+test("the Dropdown panel refuses an empty item list with a plain message", async () => {
+  const { Sap, ui, inst } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+
+  inst.chrome.topShadow.querySelector('[data-command="more"]').click();
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="dropdown"]').click();
+  await turn();
+  const panel = inst.chrome.topShadow.querySelector("[data-dropdown-panel]");
+  panel.querySelector("[data-dropdown-items]").value = "";
+  panel.querySelector("[data-dropdown-done]").click();
+  await turn();
+
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(inst.chrome.noticeBar.textContent).toContain("Add at least one item.");
+  expect(grid.rules()).toEqual([]);
+  expect(inst.chrome.topShadow.querySelector("[data-dropdown-panel]")).not.toBeNull();
+  ui.dispose();
+});
+
+// Bug: Done in the Conditional formatting panel wrote a rule with no style and showed the engine's
+// own error text.
+test("the Conditional formatting panel refuses a test with no value with a plain message", async () => {
+  const { Sap, book, ui, inst } = await start();
+  const grid = Sap.grid(tableOf("s1"));
+
+  inst.chrome.topShadow.querySelector('[data-command="more"]').click();
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="conditional-format"]').click();
+  await turn();
+  await turn();
+  const panel = inst.chrome.topShadow.querySelector("[data-conditional-panel]");
+  panel.querySelector("[data-cond-add]").click();
+
+  const testSelect = panel.querySelector("[data-cond-test]");
+  testSelect.value = "gt";
+  testSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  const rev = book.revision;
+  panel.querySelector("[data-cond-done]").click();
+  await turn();
+
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(inst.chrome.noticeBar.textContent).toContain("Enter a value.");
+  expect(grid.rules()).toEqual([]);
+  expect(book.revision).toBe(rev);
+  ui.dispose();
+});
+
+// Bug: an item added on the tab a dropdown reads left the red underline stuck on the dropdown tab.
+test("adding an item on the source tab clears the red underline on the dropdown tab", async () => {
+  const { Sap, book, getAdopted, ui } = await start();
+  const main = Sap.grid(tableOf("s1"));
+  const lists = Sap.grid(tableOf("s2"));
+  main.set("A1", "Blue");
+  lists.set("A1", "Red");
+  const before = new Set(getAdopted());
+  main.setRules({ set: [{ id: "k1", pos: "V", kind: "list", range: "A1", source: "Totals!A1:A1" }] });
+  await turn();
+  await turn();
+
+  const mainSheet = getAdopted().find((sheet) => !before.has(sheet));
+  expect(mainSheet).toBeDefined();
+  expect(mainSheet.text).toContain("box-shadow:inset 0 -2px 0");
+
+  lists.set("A1", "Blue");
+  await turn();
+  await turn();
+
+  expect(mainSheet.text).not.toContain("box-shadow:inset 0 -2px 0");
+  ui.dispose();
+});
+
+// A file's own `<template rules>` reaches the panel unchecked: sapjs reads a rule's style as text.
+const FILE_RULE_BOOK = () => `<main sap plugins="grid"><div items="sheets" sheet-workbook>
+<section item data-id="s1" data-pos="V"><h2 bind="name">Budget</h2><table grid><colgroup><col data-id="c1" data-pos="V"></colgroup>
+<tbody><tr data-id="r1" data-pos="V"><td>1</td></tr></tbody>
+<template rules><rule data-id="k1" data-pos="V" kind="when" range="A1" test="filled" style="background-color:url(x.png);color:#7a2a1f"></rule></template>
+</table></section>
+<script type="application/json" sheet-commit">{"rev":1}</script>
+</div></main>`;
+
+// Bug: a rule style holding url(...) reached the list's badge and the badge fetched it.
+test("the conditional formatting badge carries no url from a rule's style", async () => {
+  const { Sap, ui, inst } = await start(FILE_RULE_BOOK());
+  const grid = Sap.grid(tableOf("s1"));
+  expect(grid.rules()).toHaveLength(1);
+
+  inst.chrome.topShadow.querySelector('[data-command="more"]').click();
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="conditional-format"]').click();
+  await turn();
+  await turn();
+  const panel = inst.chrome.topShadow.querySelector("[data-conditional-panel]");
+  const badge = panel.querySelector('[data-cond-rule="k1"] > span');
+  expect(badge).not.toBeNull();
+  expect(badge.getAttribute("style")).not.toContain("url(");
+  expect(badge.style.backgroundColor).toBe("");
+  expect(badge.style.color).not.toBe("");
+  ui.dispose();
+});
+
+// Bug: Alt+ArrowDown on a filtered header cell under a whole-column dropdown opened the cell's
+// pick list instead of the column's Filter panel.
+test("Alt+ArrowDown on a filtered header cell of a whole-column dropdown opens the filter", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const grid = Sap.grid(tableOf("s1"));
+  grid.setRules({ set: [{ id: "k1", pos: "V", kind: "list", range: "B:B", items: ["2", "3"] }] });
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  expect(inst.chrome.nameBox.textContent).toBe("B1");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  press(textarea, "ArrowDown", { altKey: true });
+  await turn();
+  await turn();
+  expect(inst.chrome.topShadow.querySelector("[data-pick-list]")).toBeNull();
+  expect(inst.chrome.topShadow.querySelector("[data-filter-panel]")).not.toBeNull();
   ui.dispose();
 });

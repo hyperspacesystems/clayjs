@@ -719,6 +719,8 @@ export function duplicateTableHtml(tabId, table, sapGrid) {
     }
   }
   sheet.rows = [...frozen, ...data];
+  const source = sapGrid(table);
+  if (source) sheet.rules = source.rules();
   return sapGrid.createSheetWriter().table(tabId, sheet);
 }
 
@@ -776,6 +778,8 @@ export function createCommandActions({
   onPasteSpecial,
   onClipboard,
   onShortcuts,
+  onDropdown,
+  onConditionalFormat,
   isMac = () => false,
   measureText: customMeasure = null,
 }) {
@@ -1094,6 +1098,13 @@ export function createCommandActions({
         { type: "separator" },
         { id: "delete-row", label: "Delete row", onSelect: () => deleteRowsAt(r, r) },
         { id: "delete-col", label: "Delete column", onSelect: () => deleteColsAt(c, c) },
+        ...(gridOf(tabTable(workbook, tabId))
+          ? [
+              { type: "separator" },
+              { id: "dropdown", label: "Dropdown…", disabled: editor.editing || !box, onSelect: () => onDropdown?.() },
+              { id: "conditional-format", label: "Conditional formatting…", disabled: editor.editing, onSelect: () => onConditionalFormat?.() },
+            ]
+          : []),
         { type: "separator" },
         {
           id: "shortcuts",

@@ -60,6 +60,7 @@ export function createEditor({
   onStateChange,
   onCaretChange,
   onNotice,
+  refuseValue,
   onClearNotice,
 }) {
   const theme = resolveTheme();
@@ -316,7 +317,11 @@ export function createEditor({
 
   function commit() {
     if (!editing || !target) return { ok: true, changed: false };
-    const result = commitCell(workbook, target, buffer);
+    // The page may refuse a value before it reaches the Grid (a closed dropdown's list).
+    const refusal = refuseValue?.(target, buffer);
+    const result = refusal
+      ? { ok: false, why: "refused", error: Object.assign(new Error(refusal), { name: "GridRefused", code: "refused_by_page" }) }
+      : commitCell(workbook, target, buffer);
     if (!result.ok) {
       if (result.why === "gone") onNotice?.(GONE_MESSAGE);
       else onNotice?.(result.error?.message || "That value could not be saved in this cell.");
@@ -330,7 +335,10 @@ export function createEditor({
 
   function commitWith(runner) {
     if (!editing || !target) return { ok: true, changed: false };
-    const result = runner({ target, text: buffer, isText: isTextCell() });
+    const refusal = refuseValue?.(target, buffer);
+    const result = refusal
+      ? { ok: false, why: "refused", error: Object.assign(new Error(refusal), { name: "GridRefused", code: "refused_by_page" }) }
+      : runner({ target, text: buffer, isText: isTextCell() });
     if (!result.ok) {
       if (result.why === "gone") onNotice?.(GONE_MESSAGE);
       else onNotice?.(result.error?.message || "That value could not be saved in this cell.");

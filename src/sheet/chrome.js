@@ -67,6 +67,8 @@ const GROUPS = [
     ["filter", "Filter", "filter", "Filter"],
     ["sort", "Sort", "sort", "Sort", true],
     ["checkbox", "Insert checkbox", "checkCircle", "Check"],
+    ["dropdown", "Dropdown…"],
+    ["conditional-format", "Conditional formatting…"],
     ["chart", "Insert chart", "chart", "Chart"],
     ["find", "Find and replace", "search", "Find"],
     ["insert-row", "Insert row", null, "Row +"],
@@ -87,6 +89,7 @@ export function layoutFor(width) {
 
 const PHONE_ORDER = ["undo", "bold", "number-format", "filter", "insert-row"];
 const PHONE_ONLY = new Set(["insert-row"]);
+const MORE_ONLY = new Set(["dropdown", "conditional-format"]);
 const COMPACT_MORE_GROUPS = new Set(["data"]);
 const PHONE_LABELS = { "number-format": "$%" };
 const QUICK_KEYS = ["=", "(", ")", ":", "+", "$"];
@@ -245,6 +248,7 @@ export function createChrome({
 
   let layout = null;
   const shownIn = (id, at = layout) => {
+    if (MORE_ONLY.has(id)) return false;
     if (PHONE_ONLY.has(id)) return at === "phone";
     if (at === "phone") return PHONE_ORDER.includes(id);
     if (at === "compact") return !COMPACT_MORE_GROUPS.has(toolGroup.get(id));

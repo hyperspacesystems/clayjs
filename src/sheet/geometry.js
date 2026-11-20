@@ -147,3 +147,138 @@ export function rowOutOfSight(tr) {
   const table = tr.closest?.("table");
   return Boolean(table && filtered.get(table)?.has(tr.getAttribute("data-id")));
 }
+
+// Where a tab's saved rules apply (sapjs S8: `<template rules>`). sapjs stores rules and
+// moves their ranges; ClayJS decides what they mean for a cell. This part is what the
+// editor needs on every keystroke: which checkbox or dropdown covers a cell, and a
+// dropdown's items. It lives here, in a module every sheet page already loads, so it adds
+// no request at start-up; the styling of a whole tab is in the lazy rules.js.
+
+const PART = /^([A-Z]+)?(\d+)?$/;
+
+const colIndex = (letters) => {
+  let n = 0;
+  for (const ch of letters) n = n * 26 + ch.charCodeAt(0) - 64;
+  return n - 1;
+};
+
+export const colLetters = (index) => {
+  let s = "";
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+  return s;
+};
+
+// "C2:C40", the open-ended "C2:C", "B3", "A:A" or "2:5" on a sheet of `size` rows and
+// columns, as a 0-based inclusive box clipped to the sheet, or null when nothing is left.
+export function boundRange(range, size) {
+  const [from, to = from] = String(range ?? "").toUpperCase().replace(/\$/g, "").split(":");
+  const a = PART.exec(from);
+  const b = PART.exec(to);
+  if (!a || !b || (!a[1] && !a[2]) || (!b[1] && !b[2])) return null;
+  if (a[2] === "0" || b[2] === "0") return null;
+  const r0 = a[2] ? Number(a[2]) - 1 : 0;
+  const c0 = a[1] ? colIndex(a[1]) : 0;
+  const r1 = b[2] ? Number(b[2]) - 1 : size.rows - 1;
+  const c1 = b[1] ? colIndex(b[1]) : size.cols - 1;
+  const box = {
+    r0: Math.min(r0, r1),
+    c0: Math.min(c0, c1),
+    r1: Math.min(Math.max(r0, r1), size.rows - 1),
+    c1: Math.min(Math.max(c0, c1), size.cols - 1),
+  };
+  return box.r0 > box.r1 || box.c0 > box.c1 ? null : box;
+}
+
+export const boxA1 = ({ r0, c0, r1, c1 }) => `${colLetters(c0)}${r0 + 1}:${colLetters(c1)}${r1 + 1}`;
+
+export const isEmpty = (value) => value === null || value === undefined || value === "";
+
+// The text a value shows as in a list, and the key two values match by (case-blind).
+export const shown = (value) => (typeof value === "boolean" ? (value ? "TRUE" : "FALSE") : String(value));
+export const matchKey = (value) => shown(value).toLowerCase();
+
+const STYLE_PROPS = new Set(["background-color", "color", "font-weight", "font-style", "text-decoration"]);
+// A colour, a keyword list or a number: never a url(), a quote, a brace or an unclosed bracket.
+const SAFE_VALUE = /^(?:[#\w\s.,%-]+|rgba?\([\d\s.,%]+\))$/;
+
+// A saved rule's style as the declarations ClayJS draws: a property it knows, and a value that
+// cannot break out of its declaration.
+export function parseRuleStyle(style) {
+  const props = [];
+  for (const part of String(style ?? "").split(";")) {
+    const at = part.indexOf(":");
+    if (at === -1) continue;
+    const prop = part.slice(0, at).trim().toLowerCase();
+    const value = part.slice(at + 1).trim();
+    if (STYLE_PROPS.has(prop) && SAFE_VALUE.test(value)) props.push([prop, value]);
+  }
+  return props;
+}
+
+// A grid range read as rows of typed values, whatever shape grid.get gives one cell.
+export function readBox(grid, box) {
+  const value = grid.get(boxA1(box));
+  return Array.isArray(value) ? value.map((row) => (Array.isArray(row) ? row : [row])) : [[value]];
+}
+
+// The first checkbox or dropdown rule covering row `row`, column `col` (0-based), in the
+// rules' saved order: an earlier rule wins.
+export function inputRuleAt(grid, row, col) {
+  const size = grid.size;
+  for (const rule of grid.rules?.() ?? []) {
+    if (rule.kind !== "check" && rule.kind !== "list") continue;
+    const box = boundRange(rule.range, size);
+    if (box && row >= box.r0 && row <= box.r1 && col >= box.c0 && col <= box.c1) return rule;
+  }
+  return null;
+}
+
+function tableNamed(table, name) {
+  const book = table.closest("[sheet-workbook]");
+  for (const section of book?.querySelectorAll(":scope > section[item]") ?? []) {
+    const label = section.querySelector(':scope > [bind="name"]')?.textContent.trim();
+    if (label?.toLowerCase() === name.toLowerCase()) return section.querySelector(":scope > table[grid]");
+  }
+  return null;
+}
+
+// A dropdown's items: its own list, or the distinct values of its `source` range, which
+// may name another tab ("Lists!A2:A", "'Price list'!B2:B20").
+export function listItems(table, rule) {
+  if (Array.isArray(rule.items)) return rule.items;
+  const source = String(rule.source ?? "");
+  const bang = source.lastIndexOf("!");
+  const target = bang === -1 ? table : tableNamed(table, source.slice(0, bang).replace(/^'(.*)'$/, "$1").replace(/''/g, "'"));
+  const grid = target && window.Sap?.grid?.(target);
+  if (!grid) return [];
+  const box = boundRange(bang === -1 ? source : source.slice(bang + 1), grid.size);
+  if (!box) return [];
+  const seen = new Set();
+  const items = [];
+  for (const text of readTexts(grid, box).flat()) {
+    if (text === "") continue;
+    if (seen.has(text)) continue;
+    seen.add(text);
+    items.push(text);
+  }
+  return items;
+}
+
+// A range read as rows of the text each cell shows ("50%", "3/14/2026"), which is what a
+// dropdown lists and matches: a picked "50%" is stored as 0.5.
+export function readTexts(grid, box) {
+  const rows = [];
+  for (let r = box.r0; r <= box.r1; r++) {
+    const row = [];
+    for (let c = box.c0; c <= box.c1; c++) row.push(String(grid.cell(`${colLetters(c)}${r + 1}`)?.text ?? ""));
+    rows.push(row);
+  }
+  return rows;
+}
+
+// A typed value a closed dropdown keeps: blank, a formula, or one of its items.
+export function allowedInList(table, rule, text) {
+  if (rule.open || isEmpty(text) || String(text).startsWith("=")) return true;
+  const key = String(text).toLowerCase();
+  return listItems(table, rule).some((item) => item.toLowerCase() === key);
+}
