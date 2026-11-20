@@ -13,7 +13,7 @@ import { onSaveAccepted, onSaveAttempt, onSaveOutcome, isSaveInProgress, saveFat
 import { savePageForce, baselineSettled, isSaveConflicted, autosaveIsSuspended } from "../core/save.js";
 import { withKeepalive } from "../core/save-core.js";
 import { isEditMode, isDraftMode } from "../core/is-edit-mode.js";
-import { registerUnsavedState } from "../lib/unsaved-state.js";
+import { registerUnsavedState, setLiveState, notifySavesSoon } from "../lib/unsaved-state.js";
 import { createCheckpoints } from "../live/checkpoint.js";
 import { parseJsonRelaxed } from "../vendor/hyper-morph-json.vendor.js";
 import * as hostMeta from "../core/host-meta.js";
@@ -442,6 +442,7 @@ function unsavedLiveChanges() {
 const fileWaiters = new Set();
 function fileMoved() {
   for (const fn of [...fileWaiters]) fn();
+  notifySavesSoon();
 }
 
 const checkpoints = createCheckpoints({
@@ -504,6 +505,11 @@ export async function drainLiveWriter({ timeoutMs = 5000 } = {}) {
 }
 
 registerUnsavedState({ id: "live:writer", isPending: liveWriterPending, flush: drainLiveWriter });
+// Only a room on the host's server is saved by the host; a lane between this browser's
+// tabs saves through this page.
+setLiveState(() => serverLane === true
+  ? (storeOf("blockeditor")?.handle?.status?.mode === "fast" ? "room" : null)
+  : (unsavedLiveChanges() ? "soon" : null));
 
 // The lane a session starts from: the reader's own ops are not this session's edits,
 // and no position a previous session's lane reported is carried into this one.
@@ -924,7 +930,7 @@ function openEntry(name, store, { layout = "line", leftAt = null, staged = null 
     settle(entry);
     if (store.handle.status.mode === "file" && ["undone", "refused", "decided"].includes(event.cause)) entry.leftAt = null;
   });
-  if (!store.ephemeral) store.onLocal(() => checkpoints.changed());
+  if (!store.ephemeral) store.onLocal(() => { checkpoints.changed(); notifySavesSoon(); });
   store.onLocal((ops) => { if (!entry.staged && writerAdmitted()) fast?.local(name, ops, store.mark); });
   store.handle.on("change", () => {
     if (!store.ephemeral && store.handle.status.mode === "fast") checkpoints.changed();

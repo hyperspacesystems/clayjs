@@ -24,6 +24,7 @@ await jest.unstable_mockModule("../../src/live/checkpoint.js", () => ({
 await jest.unstable_mockModule("../../src/core/host-meta.js", () => ({
   hostSupports: async () => false,
   hostMeta: async () => ({ spec: 1, extensions: ["live-data", "live-provenance"], document: null }),
+  hostMetaOutcome: () => "ok",
 }));
 // No live-data host here, so the plugin takes its local tab lane: a stub that
 // records what the plugin reports to it and hands the transport itself to the
@@ -59,6 +60,7 @@ const { saveCapturedHtml } = await import("../../src/core/save-core.js");
 const { savePageForce } = await import("../../src/core/save.js");
 const { stampOf, textHash, parseStamp, serializeLive } = await import("../../src/live/ops.js");
 const { FRAME_BYTES } = await import("../../src/live/fast-lane.js");
+const { pageLiveState } = await import("../../src/lib/unsaved-state.js");
 
 const flushAsync = async () => {
   for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -118,6 +120,9 @@ test("joins the room, posts ops, and checkpoints only as the writer after a chan
   expect(fastLane().isWriter()).toBe(true);
   expect(deps.needsSave()).toBe(true);
   expect(changed).toHaveBeenCalled();
+  // No live-data host: nothing but this page's checkpoint will save the change, so a
+  // host about to quit hears it as unsaved.
+  expect(pageLiveState()).toBe("soon");
 
   const body = snapshot.captureForSaveAndComparison({ flushUndo: false }).forSave;
   expect(body).toContain('{"s":1}');
@@ -128,7 +133,9 @@ test("joins the room, posts ops, and checkpoints only as the writer after a chan
 
   bridge.streamEvent("data-writer", { epoch: "e1", writer: "tab-1", landed: { g: 1 } });
   expect(deps.needsSave()).toBe(false);
+  expect(pageLiveState()).toBe(null);
 });
+
 
 test("a single op too large for a frame is announced to the user", async () => {
   document.body.innerHTML = tag("g", '{"s":0}');

@@ -22,6 +22,7 @@ await jest.unstable_mockModule("../../src/live/checkpoint.js", () => ({
 await jest.unstable_mockModule("../../src/core/host-meta.js", () => ({
   hostSupports: async (ext) => ext === "live-data" || ext === "live-provenance",
   hostMeta: async () => ({ spec: 1, extensions: ["live-data", "live-provenance"], document: null }),
+  hostMetaOutcome: () => "ok",
 }));
 
 window.clayEditMode = true;

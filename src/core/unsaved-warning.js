@@ -20,7 +20,10 @@ import { draftStoreFailed, draftUnconfirmed, flushDraft } from "./draft-mode.js"
 import { captureForDirtyCheck } from "./snapshot.js";
 import { getLastSavedDirty, sessionParked, styleAdoptionPending } from "./save.js";
 import { logUnloadDiffSync, preloadIfEnabled } from "../lib/autosave-debug-gate.js";
-import { hasUnsavedState } from "../lib/unsaved-state.js";
+import { hasUnsavedState, pageLiveState, pendingIds } from "../lib/unsaved-state.js";
+import { hostMeta, hostMetaOutcome } from "./host-meta.js";
+import { pageMaybeDirty } from "../lib/dirty-gate.js";
+import { saveToken } from "./host-attrs.js";
 
 // One beforeunload let through, for the reload a person confirmed with two presses
 // in the conflict notice. Nothing else is switched off: the next close still warns.
@@ -86,6 +89,31 @@ export function bytesUnsaved() {
   } catch {
     return true;
   }
+}
+
+// What the host's Quit hears from this tab. Asked every few seconds while typing, so it
+// reads the dirty gate rather than capturing the page: the gate only errs toward
+// "unsaved" (text undone back to the saved words stays so until a save). On a page a
+// room keeps, the room's service saves the page, so only work it has not taken counts.
+export function unsavedForHost() {
+  if (sessionParked()) return true;
+  if (!isEditMode || window.clay?.demo) return false;
+  const live = pageLiveState();
+  if (live === 'soon') return true;
+  if (live === 'room') return pendingIds().some((id) => id !== 'page:journal');
+  return hasUnsavedState() || pageMaybeDirty();
+}
+
+// Loaded at the first sign of work, so an unedited page starts nothing; drafts never.
+const FIRST_WORK = ['clay:dirty', 'clay:unsaved-state-changed', 'clay:saves-soon'];
+function startReportsAtFirstWork() {
+  for (const type of FIRST_WORK) document.removeEventListener(type, startReportsAtFirstWork);
+  import('./unsaved-report.js')
+    .then(({ startUnsavedReports }) => startUnsavedReports(unsavedForHost, hostMeta, hostMetaOutcome, saveToken).soon())
+    .catch(() => {});
+}
+if (!isDraftMode) {
+  for (const type of FIRST_WORK) document.addEventListener(type, startReportsAtFirstWork);
 }
 
 window.addEventListener('beforeunload', (event) => {

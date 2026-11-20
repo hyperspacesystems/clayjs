@@ -9,6 +9,7 @@ import { jest } from "@jest/globals";
 await jest.unstable_mockModule("../../src/core/host-meta.js", () => ({
   hostSupports: async () => false,
   hostMeta: async () => ({ spec: 1, extensions: [], document: null }),
+  hostMetaOutcome: () => "ok",
 }));
 await jest.unstable_mockModule("../../src/live/local-lane.js", () => ({
   localLaneSupported: () => false,

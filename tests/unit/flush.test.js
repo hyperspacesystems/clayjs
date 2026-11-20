@@ -36,6 +36,11 @@ beforeAll(async () => {
   document.body.innerHTML = '<div id="c">start</div>';
   saveMod = await import("../../src/core/save.js");
   unsaved = await import("../../src/lib/unsaved-state.js");
+  // Entering edit reads the host's discovery once, and whatever asks later (the report
+  // of unsaved edits for the host's Quit, say) reuses that answer, so the requests these
+  // tests hold and count are saves only.
+  global.fetch = jest.fn(async () => okResponse());
+  await (await import("../../src/core/host-meta.js")).hostMeta({ fresh: true });
 });
 
 beforeEach(async () => {

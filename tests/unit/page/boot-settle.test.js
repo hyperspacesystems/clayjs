@@ -150,6 +150,9 @@ async function open({
     pendingIds: () => [],
     hasUnsavedState: () => false,
     flushUnsaved: async () => ({ ok: true, pending: [] }),
+    setLiveState: () => {},
+    pageLiveState: () => null,
+    notifySavesSoon: () => {},
   }));
 
   await jest.unstable_mockModule("../../../src/live/local-lane.js", () => ({

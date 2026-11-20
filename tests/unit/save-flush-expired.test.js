@@ -34,7 +34,7 @@ test("a flush that timed out sends nothing typed after its deadline", async () =
   const calls = [];
   const waiting = [];
   global.fetch = jest.fn((url, options) => {
-    calls.push({ url: String(url), options });
+    if (String(url).endsWith("/_/save")) calls.push({ url: String(url), options });
     return new Promise((resolve) => waiting.push(resolve));
   });
 

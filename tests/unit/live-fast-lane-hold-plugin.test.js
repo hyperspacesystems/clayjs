@@ -14,6 +14,7 @@ await jest.unstable_mockModule("../../src/live/checkpoint.js", () => ({
 await jest.unstable_mockModule("../../src/core/host-meta.js", () => ({
   hostSupports: async () => false,
   hostMeta: async () => ({ spec: 1, extensions: ["live-data", "live-provenance"], document: null }),
+  hostMetaOutcome: () => "ok",
 }));
 // No live-data host here, so the plugin takes its local tab lane: a stub that
 // records what the plugin reports to it and hands the transport itself to the

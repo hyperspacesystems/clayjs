@@ -58,6 +58,13 @@ export async function flushUnsaved(context = {}) {
   return { ok: results.every((r) => r?.ok !== false), pending: pendingIds() };
 }
 
+// For the host's Quit, from the live plugin: "room" when a room on the host keeps the
+// page, "soon" while a live change waits for its checkpoint save.
+let liveState = () => null;
+export const setLiveState = (check) => { liveState = check; };
+export const pageLiveState = () => liveState();
+export const notifySavesSoon = () => globalThis.document?.dispatchEvent(new CustomEvent('clay:saves-soon'));
+
 if (typeof window !== 'undefined') {
   window.clay = window.clay || {};
   window.clay.registerUnsavedState = registerUnsavedState;
