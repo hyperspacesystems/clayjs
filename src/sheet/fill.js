@@ -229,12 +229,13 @@ export function buildFillWrite(
       for (let r = sourceBox.top; r <= sourceBox.bottom; r++) src.push(grid.cell(a1(r, c)));
       const line = fillLine(src, rows, direction, { axis: "vertical", fmtKind, tokenize, series });
       for (let dr = 0; dr < rows; dr++) {
-        if (!view.cell(targetBox.top + dr, c)?.covered) block[dr][dc] = line[dr];
+        if (!view.cell(targetBox.top + dr, c)?.covered && !view.rowHidden?.(targetBox.top + dr)) block[dr][dc] = line[dr];
       }
     }
   } else {
     for (let dr = 0; dr < rows; dr++) {
       const r = sourceBox.top + dr;
+      if (view.rowHidden?.(r)) continue;
       const src = [];
       for (let c = sourceBox.left; c <= sourceBox.right; c++) src.push(grid.cell(a1(r, c)));
       const line = fillLine(src, cols, direction, { axis: "horizontal", fmtKind, tokenize, series });
@@ -362,7 +363,7 @@ export function buildSelectionFillBlock(view, box, rawText, { activeR = box.acti
     const line = [];
     for (let dc = 0; dc < cols; dc++) {
       const c = box.left + dc;
-      if (view.cell(r, c)?.covered) {
+      if (view.cell(r, c)?.covered || view.rowHidden?.(r)) {
         line.push(undefined);
         continue;
       }

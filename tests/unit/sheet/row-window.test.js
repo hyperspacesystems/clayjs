@@ -50,6 +50,16 @@ describe("the row window", () => {
     );
   });
 
+  test("filtered rows get a display:none rule outside the screen-only block, by id", () => {
+    const text = ruleText({ first: 2, last: 4, before: 1300, after: 2600 }, 'section[data-id="s1"]>table[grid]', 0, ["r2", 'a"b']);
+    expect(text).toContain('>tbody>tr[data-id="r2"]');
+    expect(text).toContain('>tbody>tr[data-id="a\\"b"]');
+    const screenEnd = text.indexOf("{display:none}}") + "{display:none}}".length;
+    const filteredAt = text.indexOf('>tbody>tr[data-id="r2"]');
+    expect(filteredAt).toBeGreaterThan(screenEnd - 1);
+    expect(text.endsWith("}")).toBe(true);
+  });
+
   test("a new window adopts its sheet, shows the first groups, and writes nothing into the page", () => {
     const table = workbook([50, 50, 50, 50, 50]);
     const before = document.body.innerHTML;

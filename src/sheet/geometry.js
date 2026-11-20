@@ -4,6 +4,7 @@
 // records each row's height by its id, so a rebuilt geometry keeps what was measured.
 // Rows are the data rows, the <tr> of every <tbody> in order; frozen <thead> rows are
 // never windowed and are not in the index.
+
 export const ROW_ESTIMATE = 26;
 export const COL_DEFAULT = 100;
 
@@ -66,7 +67,7 @@ export function createGeometry(table, { measured = new Map() } = {}) {
   const { groups, rows, groupStart, cols } = tableParts(table);
   const ids = rows.map((tr) => tr.getAttribute("data-id"));
   const indexOf = new Map(ids.map((id, i) => [id, i]));
-  const heights = rows.map((tr, i) => (tr.hidden ? 0 : measured.get(ids[i]) ?? ROW_ESTIMATE));
+  const heights = rows.map((tr, i) => (rowOutOfSight(tr) ? 0 : measured.get(ids[i]) ?? ROW_ESTIMATE));
   const index = fenwick(heights);
   const groupOf = new Int32Array(rows.length);
   const groupHeights = groupStart.map((start, g) => {
@@ -125,4 +126,24 @@ export function createGeometry(table, { measured = new Map() } = {}) {
       return delta;
     },
   };
+}
+
+// Rows this viewer filtered out, per table: a view of the sheet, never saved and never shared.
+const filtered = new WeakMap();
+const NONE = new Set();
+
+export const filteredRows = (table) => (table && filtered.get(table)) || NONE;
+
+export function setFilteredRows(table, ids) {
+  if (!table) return;
+  if (ids && ids.size > 0) filtered.set(table, new Set(ids));
+  else filtered.delete(table);
+}
+
+// A row is out of sight when the file hides it or this viewer filtered it out.
+export function rowOutOfSight(tr) {
+  if (!tr) return false;
+  if (tr.hidden) return true;
+  const table = tr.closest?.("table");
+  return Boolean(table && filtered.get(table)?.has(tr.getAttribute("data-id")));
 }

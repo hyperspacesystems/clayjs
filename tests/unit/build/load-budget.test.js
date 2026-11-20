@@ -446,6 +446,7 @@ test("sheet edit: the blank sheet's exact module list", async () => {
   expect(measured.lazy.filter((path) => path.startsWith("src/sheet/")).sort()).toEqual([
     "src/sheet/csv.js",
     "src/sheet/fill.js",
+    "src/sheet/filter.js",
     "src/sheet/find.js",
     "src/sheet/format-commands.js",
     "src/sheet/function-help.js",

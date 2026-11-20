@@ -45,9 +45,12 @@ export function clipboardStyleMap(css) {
 // The two clipboard parts for an area of a Grid: tab-separated shown values, and a table whose
 // cells carry their content, value, format and inline style, from which a paste rebuilds them
 // (formulas moved by the distance to where they land).
-export function copyParts(grid, { top, left, bottom, right }, a1, { cut = false } = {}) {
+export function copyParts(grid, { top, left, bottom, right }, a1, { cut = false, skipRows = null } = {}) {
   const rows = [];
+  const kept = [];
   for (let r = top; r <= bottom; r++) {
+    if (skipRows?.has(r)) continue;
+    kept.push(r);
     const cells = [];
     for (let c = left; c <= right; c++) {
       const cell = grid.cell(a1(r, c));
@@ -63,10 +66,14 @@ export function copyParts(grid, { top, left, bottom, right }, a1, { cut = false 
       }
       cells.push(`<td ${attrs.join(" ")}>${escapeHtml(cell.text)}</td>`);
     }
-    rows.push(`<tr>${cells.join("")}</tr>`);
+    rows.push(`<tr data-sheet-row="${r - (kept[0] ?? top)}">${cells.join("")}</tr>`);
   }
-  const html = `<table data-sheet-origin="${top},${left}"${cut ? " data-sheet-cut" : ""}><tbody>${rows.join("")}</tbody></table>`;
-  const text = grid.toDelimited(`${a1(top, left)}:${a1(bottom, right)}`, { delimiter: "\t", values: "shown" }).replace(/(^|\r\n)""$/, "$1");
+  const html = `<table data-sheet-origin="${kept[0] ?? top},${left}"${cut ? " data-sheet-cut" : ""}><tbody>${rows.join("")}</tbody></table>`;
+  const text = skipRows?.size > 0
+    ? kept
+        .map((r) => grid.toDelimited(`${a1(r, left)}:${a1(r, right)}`, { delimiter: "\t", values: "shown" }).replace(/^""$/, ""))
+        .join("\r\n")
+    : grid.toDelimited(`${a1(top, left)}:${a1(bottom, right)}`, { delimiter: "\t", values: "shown" }).replace(/(^|\r\n)""$/, "$1");
   return { html, text };
 }
 
@@ -101,6 +108,10 @@ export function pasteBlock(html, at, { valuesOnly = false, transpose = false, fo
   const rows = [...table.rows].map((tr) => [...tr.cells]);
   if (rows.length === 0) return null;
   if (rows.every((cells) => cells.length === 0)) return null;
+  const offsets = [...table.rows].map((tr, i) => {
+    const n = Number.parseInt(tr.getAttribute("data-sheet-row") ?? "", 10);
+    return Number.isInteger(n) && n >= 0 ? n : i;
+  });
   const rawOrigin = table.getAttribute("data-sheet-origin");
   if (!rawOrigin || !/^\d+,\d+$/.test(rawOrigin)) {
     const foreign = rows.map((cells) => cells.map((td) => td.textContent ?? ""));
@@ -133,12 +144,12 @@ export function pasteBlock(html, at, { valuesOnly = false, transpose = false, fo
 
   let block;
   if (!transpose) {
-    block = rows.map((cells, i) => cells.map((td, j) => buildItem(td, or + i, oc + j, at.r + i, at.c + j)));
+    block = rows.map((cells, i) => cells.map((td, j) => buildItem(td, or + offsets[i], oc + j, at.r + i, at.c + j)));
   } else {
     const rowCount = rows.length;
     const colCount = Math.max(0, ...rows.map((cells) => cells.length));
     block = Array.from({ length: colCount }, (_, j) =>
-      Array.from({ length: rowCount }, (_, i) => buildItem(rows[i]?.[j] ?? null, or + i, oc + j, at.r + j, at.c + i)),
+      Array.from({ length: rowCount }, (_, i) => buildItem(rows[i]?.[j] ?? null, or + offsets[i], oc + j, at.r + j, at.c + i)),
     );
   }
   return { kind: "ours", block, origin: cut ? { r: at.r, c: at.c } : { r: or, c: oc } };

@@ -190,6 +190,7 @@ export function findMatches(tabs, { query, searchFormulas = false } = {}) {
     const rows = size.rows ?? 0;
     const cols = size.cols ?? 0;
     for (let r = 0; r < rows; r++) {
+      if (tab.rowHidden?.(r)) continue;
       for (let c = 0; c < cols; c++) {
         const ref = a1(r, c);
         const cell = tab.grid ? tab.grid.cell(ref) : tab.cell?.(r, c);
@@ -683,7 +684,7 @@ export function createFindController(ctx) {
     bar ??= createFindBar({
       theme: ctx.chrome.theme,
       container: ctx.chrome.findSlot,
-      getTabs: () => ctx.tabs.list().map((t) => ({ id: t.id, name: t.name, grid: ctx.gridOf(t.table) })),
+      getTabs: () => ctx.tabs.list().map((t) => ({ id: t.id, name: t.name, grid: ctx.gridOf(t.table), rowHidden: ctx.viewOf(t.id).rowHidden })),
       getActiveTab: () => ctx.tabs.activeId || ctx.getSel()?.tab || "",
       getActivePos: () => {
         const info = ctx.activeCellInfo();

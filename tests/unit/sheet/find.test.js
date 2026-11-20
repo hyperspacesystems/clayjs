@@ -76,6 +76,11 @@ describe("sheet find and go-to", () => {
     // C2 evaluates to "80", so searching "80" in formula mode does not match C2's formula "=B1*2".
     expect(findMatches(tabs(), { query: "80", searchFormulas: false }).map((h) => h.ref)).toEqual(["C2"]);
     expect(findMatches(tabs(), { query: "80", searchFormulas: true })).toEqual([]);
+
+    // Bug: Find selected a different cell than the match, because rows out of sight stayed in the list.
+    const [budget] = tabs();
+    const hidden = findMatches([{ ...budget, rowHidden: (r) => r === 1 }], { query: "rent", searchFormulas: false });
+    expect(hidden.map((h) => h.ref)).toEqual(["A1", "C1"]);
   });
 
   // Bug: the find bar failed to step forward/backward with Enter and Shift+Enter, failed to rebuild its match list and count after a Grid change, or failed to return focus on Escape.

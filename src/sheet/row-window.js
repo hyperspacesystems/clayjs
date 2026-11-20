@@ -1,4 +1,4 @@
-import { createGeometry } from "./geometry.js";
+import { createGeometry, filteredRows, rowOutOfSight } from "./geometry.js";
 
 // The row window: every <tbody> group of a sheet table stays in the document, and one
 // constructable stylesheet per table hides the groups outside the viewport and gives
@@ -47,10 +47,13 @@ export function windowFor({ scrollTop, viewport, heights, overscan = 1 }) {
   return { first: first + 1, last: last + 1, before, after };
 }
 
-export function ruleText({ first, last, before, after }, scope, width = 0) {
+export function ruleText({ first, last, before, after }, scope, width = 0, hiddenIds = []) {
   const size = width > 0 ? `${scope}{width:${width}px}` : "";
+  const hidden = hiddenIds.length > 0
+    ? `${hiddenIds.map((id) => `${scope}>tbody>tr[data-id="${String(id).replace(/["\\]/g, "\\$&")}"]`).join(",")}{display:none}`
+    : "";
   return `${size}@media screen{${scope}{margin-top:${before}px;margin-bottom:${after}px;overflow-anchor:none}` +
-    `${scope}>tbody:nth-of-type(-n+${first - 1}),${scope}>tbody:nth-of-type(n+${last + 1}){display:none}}`;
+    `${scope}>tbody:nth-of-type(-n+${first - 1}),${scope}>tbody:nth-of-type(n+${last + 1}){display:none}}${hidden}`;
 }
 
 // A tab's table is named by its section's id (sapjs counts a table as a tab only when its
@@ -129,7 +132,7 @@ export function createRowWindow(table, {
       done.add(g);
       const [start, end] = geometry.groupRows(g);
       for (let i = start; i < end; i++) {
-        if (geometry.row(i).hidden) continue;
+        if (rowOutOfSight(geometry.row(i))) continue;
         // Rows measured before this one moved it by `shift`, and the viewport with it.
         const above = geometry.rowTop(i) + geometry.rowHeight(i) <= top + shift;
         const delta = geometry.setRowHeight(i, geometry.row(i).offsetHeight);
@@ -152,7 +155,7 @@ export function createRowWindow(table, {
       next.before !== current.before || next.after !== current.after;
     current = next;
     if (moved) {
-      sheet.replaceSync(ruleText(next, scope, geometry.width));
+      sheet.replaceSync(ruleText(next, scope, geometry.width, [...filteredRows(table)]));
       appliedBefore = next.before;
     }
     // Measuring can change the window once; the second pass does not measure again.

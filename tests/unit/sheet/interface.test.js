@@ -241,12 +241,12 @@ test("the tab strip lists the tabs in page order and switching tabs changes only
 test("buttons for commands that cannot act or land in later milestones are drawn and disabled with aria-disabled", async () => {
   const { ui, inst } = await start();
 
-  for (const id of ["undo", "redo", "merge", "filter", "sort", "checkbox", "chart"]) {
+  for (const id of ["undo", "redo", "merge", "sort", "checkbox", "chart"]) {
     const btn = inst.chrome.topShadow.querySelector(`[data-command="${id}"]`);
     expect(btn).not.toBeNull();
     expect(btn.getAttribute("aria-disabled")).toBe("true");
   }
-  for (const id of ["number-format", "currency", "bold", "borders", "find", "import"]) {
+  for (const id of ["number-format", "currency", "bold", "borders", "find", "import", "filter"]) {
     const btn = inst.chrome.topShadow.querySelector(`[data-command="${id}"]`);
     expect(btn).not.toBeNull();
     expect(btn.getAttribute("aria-disabled")).toBeNull();
@@ -3246,5 +3246,441 @@ test("dragging the end handle stretches the selection", async () => {
   window.dispatchEvent(pointerEvent("pointerup", { pointerId: 7 }));
   expect(inst.chrome.nameBox.value).toBe("B2:C3");
 
+  ui.dispose();
+});
+
+async function openFilterPanel(inst, col) {
+  inst.overlays.shadow.querySelector(`[data-filter-col="${col}"]`).click();
+  await turn();
+  await turn();
+  return inst.chrome.topShadow.querySelector("[data-filter-panel]");
+}
+
+const toolbarFilter = (inst) => inst.chrome.topShadow.querySelector('[data-command="filter"]');
+
+// Bug: rows filtered on screen still took part in moves, counts and copy, or the filter wrote into the document.
+test("a filtered row is skipped by moves, counts and copy, and the document is untouched", async () => {
+  const { Sap, shell, ui, inst } = await start(SLICE_BOOK());
+  const { setFilteredRows } = await import("../../../src/sheet/geometry.js");
+  const table = tableOf("s1");
+  const root = document.querySelector("[sheet-workbook]");
+  const before = root.innerHTML;
+
+  setFilteredRows(table, new Set(["r2"]));
+  shell.windowOf(table).refresh();
+  await turn();
+
+  const textarea = inst.editor.textarea;
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.textContent).toBe("B3");
+
+  press(textarea, "ArrowUp", { shiftKey: true });
+  press(textarea, "ArrowRight", { shiftKey: true });
+  expect(inst.chrome.nameBox.textContent).toBe("B1:C3");
+  expect(inst.chrome.statusText.textContent).toContain("Count 3");
+
+  const copy = clipEvent("copy");
+  textarea.dispatchEvent(copy);
+  const copied = copy.clipboardData.getData("text/plain");
+  expect(copied.split("\r\n")).toHaveLength(2);
+  expect(copied).not.toContain("3");
+  expect(copied).not.toContain("4");
+
+  expect(root.innerHTML).toBe(before);
+  expect(Sap.grid(table).get("B2")).toBe(3);
+
+  press(textarea, "Delete");
+  expect(Sap.grid(table).get("B2")).toBe(3);
+  expect(Sap.grid(table).get("B1") ?? "").toBe("");
+  ui.dispose();
+});
+
+// Bug: the filter could not be turned on or off.
+test("Filter turns on for the table around the active cell and shows a button on each heading cell", async () => {
+  const { ui, inst } = await start(SLICE_BOOK());
+  const { filteredRows } = await import("../../../src/sheet/geometry.js");
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.textContent).toBe("B2");
+
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  const buttons = () => [...inst.overlays.shadow.querySelectorAll("[data-filter-col]")];
+  expect(buttons().map((el) => el.getAttribute("data-filter-col"))).toEqual(["0", "1", "2"]);
+  expect(toolbarFilter(inst).getAttribute("aria-pressed")).toBe("true");
+
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+  expect(buttons()).toHaveLength(0);
+  expect(toolbarFilter(inst).getAttribute("aria-pressed")).toBe("false");
+  expect(filteredRows(tableOf("s1")).size).toBe(0);
+
+  ui.dispose();
+});
+
+// Bug: a formula copied from below a filtered row pasted pointing one row down.
+test("a formula copied across a filtered row keeps its own row when pasted", async () => {
+  const { Sap, shell, ui, inst } = await start(SLICE_BOOK());
+  const { setFilteredRows } = await import("../../../src/sheet/geometry.js");
+  const table = tableOf("s1");
+  setFilteredRows(table, new Set(["r2"]));
+  shell.windowOf(table).refresh();
+  await turn();
+
+  const textarea = inst.editor.textarea;
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown", { shiftKey: true });
+  press(textarea, "ArrowRight", { shiftKey: true });
+  expect(inst.chrome.nameBox.textContent).toBe("B1:C3");
+
+  const copy = clipEvent("copy");
+  textarea.dispatchEvent(copy);
+  const html = copy.clipboardData.getData("text/html");
+  const text = copy.clipboardData.getData("text/plain");
+
+  clickCell([...table.querySelectorAll("tbody tr")][0].children[4], "mouse");
+  await turn();
+  expect(inst.chrome.nameBox.textContent).toBe("E1");
+  textarea.dispatchEvent(clipEvent("paste", { "text/html": html, "text/plain": text }));
+  await turn();
+
+  const grid = Sap.grid(table);
+  expect(grid.input("E1")).toBe("2");
+  expect(grid.input("E2")).toBe("5");
+  expect(grid.input("F2")).toBe("=E2*2");
+  ui.dispose();
+});
+
+// Bug: a co-editor's change replaced the tab's table and every filtered row reappeared while the button stayed on.
+test("a peer's edit keeps this viewer's filter", async () => {
+  const { book, ui, inst, getAdopted } = await start(SLICE_BOOK());
+  const { filteredRows } = await import("../../../src/sheet/geometry.js");
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  const panel = await openFilterPanel(inst, 1);
+  panel.querySelector('[data-filter-value="3"] input').click();
+  panel.querySelector("[data-filter-apply]").click();
+  await turn();
+  await turn();
+  expect(filteredRows(tableOf("s1")).has("r2")).toBe(true);
+
+  const saved = book.serialize({ purpose: "save" });
+  const peer = docOf(saved);
+  const td = peer.querySelector('section[data-id="s1"] tr[data-id="r5"] td');
+  td.setAttribute("v", "77");
+  td.textContent = "77";
+  const before = tableOf("s1");
+  book.merge({ document: peer, base: docOf(saved) })();
+  await frame();
+  await turn();
+
+  const after = tableOf("s1");
+  expect(after).not.toBe(before);
+  expect(filteredRows(after).has("r2")).toBe(true);
+  expect(inst.overlays.shadow.querySelector('[data-filter-col="1"]').getAttribute("data-active")).toBe("true");
+  expect(getAdopted().map((sheet) => sheet.text).join("\n")).toContain('tr[data-id="r2"]');
+  ui.dispose();
+});
+
+// Bug: Ctrl+Enter overwrote rows this viewer cannot see.
+test("Ctrl+Enter leaves a filtered row alone", async () => {
+  const { Sap, shell, ui, inst } = await start(SLICE_BOOK());
+  const { setFilteredRows } = await import("../../../src/sheet/geometry.js");
+  const table = tableOf("s1");
+  setFilteredRows(table, new Set(["r2"]));
+  shell.windowOf(table).refresh();
+  await turn();
+
+  const textarea = inst.editor.textarea;
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.textContent).toBe("B1:B3");
+
+  typeInto(textarea, "x");
+  press(textarea, "Enter", { metaKey: true });
+  await turn();
+  await turn();
+
+  const grid = Sap.grid(table);
+  expect(grid.get("B1")).toBe("x");
+  expect(grid.get("B2")).toBe(3);
+  expect(grid.get("B3")).toBe("x");
+  ui.dispose();
+});
+
+// Bug: a keyboard user could not open a column's filter panel.
+test("Alt+ArrowDown on a heading cell opens that column's filter panel", async () => {
+  const { ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  press(textarea, "ArrowUp");
+  expect(inst.chrome.nameBox.textContent).toBe("B1");
+  press(textarea, "ArrowDown", { altKey: true });
+  await turn();
+  await turn();
+
+  const panel = inst.chrome.topShadow.querySelector("[data-filter-panel]");
+  expect(panel).not.toBeNull();
+  expect(panel.getAttribute("aria-label")).toMatch(/^Filter column B$/);
+  ui.dispose();
+});
+
+// Bug: Tab always jumped back to the panel's first control.
+test("Tab moves through the filter panel and wraps at its ends", async () => {
+  const { ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  const panel = await openFilterPanel(inst, 1);
+  const controls = () => [...panel.querySelectorAll("button, input, select")];
+  const root = panel.getRootNode();
+  expect(controls().length).toBeGreaterThan(2);
+
+  controls()[1].focus();
+  expect(root.activeElement).toBe(controls()[1]);
+  panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, composed: true, cancelable: true }));
+  expect(root.activeElement).not.toBe(controls()[0]);
+
+  controls()[0].focus();
+  panel.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, composed: true, cancelable: true }),
+  );
+  expect(root.activeElement).toBe(controls()[controls().length - 1]);
+  ui.dispose();
+});
+
+// Bug: the second press on a column's filter button reopened the panel instead of closing it.
+test("pressing a column's filter button twice closes its panel", async () => {
+  const { ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  expect(await openFilterPanel(inst, 1)).not.toBeNull();
+  inst.overlays.shadow.querySelector('[data-filter-col="1"]').click();
+  await turn();
+  await turn();
+  expect(inst.chrome.topShadow.querySelector("[data-filter-panel]")).toBeNull();
+  ui.dispose();
+});
+
+// Bug: rows stayed hidden with no button left to show them after their column was deleted.
+test("deleting the filtered column shows its rows again", async () => {
+  const { ui, inst, getAdopted } = await start(SLICE_BOOK());
+  const { filteredRows } = await import("../../../src/sheet/geometry.js");
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  const panel = await openFilterPanel(inst, 1);
+  panel.querySelector('[data-filter-value="3"] input').click();
+  panel.querySelector("[data-filter-apply]").click();
+  await turn();
+  await turn();
+  expect(filteredRows(tableOf("s1")).has("r2")).toBe(true);
+
+  inst.overlays.shadow
+    .querySelector('[data-col="1"]')
+    .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 10 }));
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="delete-cols"]').click();
+  await turn();
+  await turn();
+
+  expect(filteredRows(tableOf("s1")).size).toBe(0);
+  expect(getAdopted().map((sheet) => sheet.text).join("\n")).not.toContain('tr[data-id="r2"]');
+  ui.dispose();
+});
+
+// Bug: rows stayed hidden with no way to show them after the heading row was deleted.
+test("a structure change that deletes the heading row turns the filter off", async () => {
+  const { ui, inst } = await start(SLICE_BOOK());
+  const { filteredRows } = await import("../../../src/sheet/geometry.js");
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  const panel = await openFilterPanel(inst, 1);
+  panel.querySelector('[data-filter-value="3"] input').click();
+  panel.querySelector("[data-filter-apply]").click();
+  await turn();
+  expect(filteredRows(tableOf("s1")).has("r2")).toBe(true);
+
+  inst.overlays.shadow.querySelector('[data-row="0"]').dispatchEvent(
+    new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 20, clientY: 30 }),
+  );
+  await turn();
+  inst.chrome.topShadow.querySelector('[data-menu-item="delete-rows"]').click();
+  await turn();
+  await turn();
+
+  expect(inst.overlays.shadow.querySelectorAll("[data-filter-col]")).toHaveLength(0);
+  expect(filteredRows(tableOf("s1")).size).toBe(0);
+  ui.dispose();
+});
+
+// Bug: Apply did nothing, or wrote the filter into the document.
+test("Apply in the panel hides the unchecked value's rows on this screen only, and Select all shows them again", async () => {
+  const { ui, inst, root, getAdopted } = await start(SLICE_BOOK());
+  const { filteredRows } = await import("../../../src/sheet/geometry.js");
+  const before = root.innerHTML;
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  press(textarea, "ArrowUp");
+  press(textarea, "ArrowDown", { shiftKey: true });
+  press(textarea, "ArrowDown", { shiftKey: true });
+  expect(inst.chrome.nameBox.textContent).toBe("B1:B3");
+  expect(inst.chrome.statusText.textContent).toContain("Count 3");
+
+  let panel = await openFilterPanel(inst, 1);
+  panel.querySelector('[data-filter-value="3"] input').click();
+  panel.querySelector("[data-filter-apply]").click();
+  await turn();
+  await turn();
+
+  expect(inst.chrome.statusText.textContent).toContain("Count 2");
+  expect(filteredRows(tableOf("s1")).has("r2")).toBe(true);
+  const rules = getAdopted().map((sheet) => sheet.text).join("\n");
+  expect(rules).toContain('tr[data-id="r2"]');
+  expect(inst.overlays.shadow.querySelector('[data-filter-col="1"]').getAttribute("data-active")).toBe("true");
+  expect(root.innerHTML).toBe(before);
+
+  panel = await openFilterPanel(inst, 1);
+  panel.querySelector("[data-filter-all]").click();
+  panel.querySelector("[data-filter-apply]").click();
+  await turn();
+  await turn();
+
+  expect(filteredRows(tableOf("s1")).size).toBe(0);
+  expect(inst.overlays.shadow.querySelector('[data-filter-col="1"]').getAttribute("data-active")).toBe("false");
+  ui.dispose();
+});
+
+// Bug: Cancel applied the changes.
+test("Cancel and Escape change nothing", async () => {
+  const { ui, inst } = await start(SLICE_BOOK());
+  const { filteredRows } = await import("../../../src/sheet/geometry.js");
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  let panel = await openFilterPanel(inst, 1);
+  panel.querySelector('[data-filter-value="3"] input').click();
+  panel.querySelector("[data-filter-cancel]").click();
+  await turn();
+  expect(filteredRows(tableOf("s1")).size).toBe(0);
+
+  panel = await openFilterPanel(inst, 1);
+  panel.querySelector('[data-filter-value="3"] input').click();
+  panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true, cancelable: true }));
+  await turn();
+  panel = inst.chrome.topShadow.querySelector("[data-filter-panel]");
+  expect(panel).toBeNull();
+  expect(filteredRows(tableOf("s1")).size).toBe(0);
+
+  ui.dispose();
+});
+
+// Bug: number conditions compared text.
+test("the condition Greater than 3 keeps only rows above 3", async () => {
+  const { ui, inst } = await start(SLICE_BOOK());
+  const { filteredRows } = await import("../../../src/sheet/geometry.js");
+  const textarea = inst.editor.textarea;
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  const panel = await openFilterPanel(inst, 1);
+  const condition = panel.querySelector("[data-filter-condition]");
+  condition.value = "gt";
+  condition.dispatchEvent(new Event("change", { bubbles: true }));
+  panel.querySelector("[data-filter-arg]").value = "3";
+  panel.querySelector("[data-filter-apply]").click();
+  await turn();
+  await turn();
+
+  const filtered = filteredRows(tableOf("s1"));
+  expect(filtered.has("r2")).toBe(true);
+  expect(filtered.has("r3")).toBe(false);
+  ui.dispose();
+});
+
+// Bug: the heading row was sorted into the data, or the sort skipped history.
+test("Sort A to Z from the panel sorts the rows under the heading, keeps the heading, and undo puts them back", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const grid = Sap.grid(tableOf("s1"));
+  grid.set("B2", 9);
+  grid.set("B3", 5);
+  await turn();
+
+  const textarea = inst.editor.textarea;
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.textContent).toBe("B2");
+  toolbarFilter(inst).click();
+  await turn();
+  await turn();
+
+  const panel = await openFilterPanel(inst, 1);
+  panel.querySelector("[data-filter-sort-asc]").click();
+  await turn();
+  await turn();
+
+  expect(grid.get("A1")).toBe(1);
+  expect(grid.get("B2")).toBe(5);
+  expect(grid.get("B3")).toBe(9);
+
+  press(inst.editor.textarea, "z", { metaKey: true });
+  await turn();
+  expect(grid.get("B2")).toBe(9);
+  expect(grid.get("B3")).toBe(5);
   ui.dispose();
 });

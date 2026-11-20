@@ -34,6 +34,7 @@ test("a code block with a language gets colours without a document change or an 
   const depth = history.undoDepth(view.state);
   const doc = view.state.doc;
   await until(() => calls.length === 1, { timeout: 10000, what: "code block tokenization" });
+  await until(() => decos(view).length > 0, { timeout: 10000, what: "code block colours" });
   expect(calls).toEqual([["const x = 1", "javascript"]]);
   expect(decos(view).map((d) => [d.from, d.to])).toEqual([[1, 6]]);
   expect(decos(view)[0].type.attrs.style).toBe("color: var(--blockeditor-code-token-keyword)");

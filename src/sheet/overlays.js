@@ -57,6 +57,9 @@ const OVERLAY_CSS = `
   border-right: 1px solid var(--sheet-line-2);
   border-bottom: 1px solid var(--sheet-line-2);
 }
+.sheet-corner[hidden], .sheet-col-hdr[hidden], .sheet-row-hdr[hidden] {
+  display: none;
+}
 .sheet-col-hdr[data-active="true"], .sheet-row-hdr[data-active="true"] {
   background: var(--sheet-sel-head);
   color: var(--sheet-sel);
@@ -178,6 +181,27 @@ const OVERLAY_CSS = `
   z-index: 6;
   pointer-events: none;
 }
+.sheet-filter-btn {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--sheet-line, #C5CCD8);
+  background: var(--sheet-surface);
+  color: var(--sheet-sel);
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 7;
+}
+.sheet-filter-btn[data-active="true"] {
+  background: var(--sheet-sel);
+  color: var(--sheet-surface);
+}
+@media (pointer: coarse) {
+  .sheet-filter-btn { width: 28px; height: 28px; }
+}
 .sheet-sr-only {
   position: absolute;
   width: 1px;
@@ -286,6 +310,7 @@ export function createOverlays(
     onFillHandleDown,
     onFillHandleDblClick,
     onTouchHandleDown,
+    onFilterButton,
   } = {},
 ) {
   const doc = workbook.ownerDocument ?? document;
@@ -441,6 +466,8 @@ export function createOverlays(
   winObj.addEventListener("mouseup", onWinMouseUp);
 
   const refsLayer = doc.createElement("div");
+  const filterLayer = doc.createElement("div");
+  filterLayer.className = "sheet-filter-layer";
   const selFill = doc.createElement("div");
   selFill.className = "sheet-sel-fill";
   selFill.hidden = true;
@@ -511,7 +538,7 @@ export function createOverlays(
   live.setAttribute("aria-live", "polite");
   live.setAttribute("aria-atomic", "true");
 
-  root.append(corner, colsLayer, rowsLayer, refsLayer, selFill, activeRing, fillPreview, fillHandle, startHandle, endHandle, resizeGuide, linkChip, editorSlot, live);
+  root.append(corner, colsLayer, rowsLayer, refsLayer, filterLayer, selFill, activeRing, fillPreview, fillHandle, startHandle, endHandle, resizeGuide, linkChip, editorSlot, live);
 
   const ui = mountEditorUI({
     name: "sheet-overlays",
@@ -548,12 +575,14 @@ export function createOverlays(
     fillPreviewBox = null,
     linkUrl = null,
     touch = false,
+    filterButtons = [],
   }) {
     lastState = { table, win, view };
     if (!table || !view || view.rows.length === 0 || view.cols.length === 0) {
       colsLayer.textContent = "";
       rowsLayer.textContent = "";
       refsLayer.textContent = "";
+      filterLayer.textContent = "";
       selFill.hidden = true;
       activeRing.hidden = true;
       fillHandle.hidden = true;
@@ -629,6 +658,43 @@ export function createOverlays(
       el.style.setProperty("--ref-border", palette.border);
       el.style.setProperty("--ref-fill", palette.fill);
       placeBox(el, origin, metrics.spanBox(r0, c0, r1, c1));
+    });
+
+    const buttonSize = winObj.matchMedia?.("(pointer: coarse)")?.matches ? 28 : 18;
+    while (filterLayer.children.length > filterButtons.length) filterLayer.lastElementChild.remove();
+    filterButtons.forEach((item, idx) => {
+      let el = filterLayer.children[idx];
+      if (!el) {
+        el = doc.createElement("button");
+        el.type = "button";
+        el.className = "sheet-filter-btn";
+        el.innerHTML =
+          '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18l-7 8v6l-4 2v-8Z"/></svg>';
+        el.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        el.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onFilterButton?.(Number(el.getAttribute("data-filter-col")), el);
+        });
+        filterLayer.append(el);
+      }
+      el.setAttribute("data-filter-col", String(item.c));
+      el.setAttribute("aria-label", `Filter column ${colName(item.c)}`);
+      el.setAttribute("data-active", item.active ? "true" : "false");
+      const cell = metrics.spanBox(item.r, item.c, item.r, item.c);
+      const visible = cell.width > 0 && cell.height > 0;
+      el.style.display = visible ? "" : "none";
+      if (visible) {
+        placeBox(el, origin, {
+          left: cell.left + cell.width - buttonSize - 3,
+          top: cell.top + (cell.height - buttonSize) / 2,
+          width: buttonSize,
+          height: buttonSize,
+        });
+      }
     });
 
     if (!box) {

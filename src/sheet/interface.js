@@ -2,7 +2,7 @@ import { a1, colIndex, rowIndex, tabTable } from "./commit.js";
 import { createChrome } from "./chrome.js";
 import { copyParts, fillBlock, fillFormula, pasteBlock, transposeMatrix } from "./clipboard.js";
 import { createEditor } from "./editor.js";
-import { ROW_ESTIMATE } from "./geometry.js";
+import { filteredRows, ROW_ESTIMATE, rowOutOfSight, setFilteredRows } from "./geometry.js";
 import { createHistory } from "./history.js";
 import { keyIntent } from "./keys.js";
 import { createOverlays } from "./overlays.js";
@@ -257,6 +257,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   const tabs = createTabs(workbook, tabOptions);
   const lastViews = new Map();
+  // One filter per tab, this viewer's only, never saved:
+  // { header: rowId, cols: [colId], criteria: Map<colId, { values: Set<string> | null, condition: { op, arg } | null }> }
+  const filters = new Map();
   const unsubGrids = [];
   const seenKeys = new WeakSet();
   let sel = null;
@@ -292,6 +295,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     onLazyFail,
   );
   const xlsxTool = lazyModule(loaders.xlsx ?? (() => import("./xlsx.js")), onLazyFail);
+  const filterTool = lazyModule(loaders.filter ?? (() => import("./filter.js")), onLazyFail);
   let pendingLazy = null;
 
   function runLazy(holder, fn, { guardSel = false } = {}) {
@@ -367,7 +371,38 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   function closeTransient() {
     if (liveMenu?.isOpen) liveMenu.close({ restoreFocus: false });
+    closeFilterPanel();
     closeDialog();
+  }
+
+  let filterPanelClose = null;
+  let filterPanelKey = "";
+
+  function closeFilterPanel() {
+    const close = filterPanelClose;
+    filterPanelClose = null;
+    filterPanelKey = "";
+    close?.();
+  }
+
+  const filterPanelOpen = () => Boolean(chrome.topRoot?.querySelector?.("[data-filter-panel]"));
+
+  function openFilterAt(tabId, c, anchor) {
+    const colId = viewOf(tabId).cols[c];
+    if (!colId) return;
+    const key = `${tabId}:${colId}`;
+    if (filterPanelOpen()) {
+      const same = filterPanelKey === key;
+      closeFilterPanel();
+      if (same) return;
+    }
+    runLazy(filterTool, (f) => {
+      const close = f.openFilterPanel(sharedCtx(), tabId, colId, anchor);
+      if (typeof close === "function") {
+        filterPanelClose = close;
+        filterPanelKey = key;
+      }
+    });
   }
 
   function onForeignChange(tabId) {
@@ -379,7 +414,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   function viewOf(tabId) {
     const table = tabTable(workbook, tabId);
-    if (!table) return { rows: [], cols: [], rowHidden: () => false, colHidden: () => false, cell: () => null };
+    if (!table) return { rows: [], cols: [], frozenRows: 0, rowHidden: () => false, colHidden: () => false, cell: () => null };
     const grid = gridOf(table);
     const trs = tableRows(table);
     const colEls = tableCols(table);
@@ -388,13 +423,32 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     return {
       rows,
       cols,
-      rowHidden: (r) => Boolean(trs[r]?.hidden),
+      frozenRows: table.tHead?.rows.length ?? 0,
+      rowHidden: (r) => rowOutOfSight(trs[r]),
       colHidden: (c) => Boolean(colEls[c]?.hidden),
       cell(r, c) {
         if (!grid || r < 0 || c < 0 || r >= rows.length || c >= cols.length) return null;
         return grid.cell(a1(r, c));
       },
     };
+  }
+
+  function applyHiddenRows(tabId, ids) {
+    const table = tabTable(workbook, tabId);
+    if (!table) return;
+    setFilteredRows(table, ids);
+    windowOf(table)?.refresh?.();
+    refreshStatus();
+    syncUI();
+  }
+
+  function setFilter(tabId, spec) {
+    if (spec) filters.set(tabId, spec);
+    else {
+      filters.delete(tabId);
+      applyHiddenRows(tabId, null);
+    }
+    syncUI();
   }
 
   function snapshotViews() {
@@ -420,11 +474,14 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     ) {
       return "";
     }
+    const filtered = filteredRows(tabTable(workbook, sel.tab));
+    const view = viewOf(sel.tab);
     let uncovered = 0;
     let filled = 0;
     let nums = 0;
     let sum = 0;
     for (let r = box.top; r <= box.bottom; r++) {
+      if (filtered.has(view.rows[r])) continue;
       for (let c = box.left; c <= box.right; c++) {
         const cell = grid.cell(a1(r, c));
         if (!cell || cell.covered) continue;
@@ -520,6 +577,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     setSel: (next) => {
       sel = next;
     },
+    getFilter: (tabId) => filters.get(tabId) ?? null,
+    setFilter,
+    applyHiddenRows,
     viewOf,
     gridOf,
     windowOf,
@@ -650,6 +710,13 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       const fixed = corner === "start" ? { r: box.bottom, c: box.right } : { r: box.top, c: box.left };
       handleDrag = { tab: sel.tab, fixed, pointerId: event.pointerId, moved: false };
     },
+    onFilterButton: (c, el) => {
+      editor.settle?.();
+      if (editor.editing && editor.canPick()) return editor.focus();
+      if (!ensureReadyForAction()) return;
+      if (!filters.get(tabs.activeId)) return;
+      openFilterAt(tabs.activeId, c, el);
+    },
   });
 
   const chrome = createChrome({
@@ -757,7 +824,20 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
         : null,
     );
 
-    for (const extraId of ["filter", "sort", "checkbox", "chart"]) {
+    const extFilter = externalCommands.filter;
+    chrome.registerCommand(
+      "filter",
+      !editor.editing
+        ? typeof extFilter === "function"
+          ? extFilter
+          : canEdit
+            ? () => ensureReadyForAction() && runLazy(filterTool, (f) => f.toggleFilter(sharedCtx()))
+            : null
+        : null,
+    );
+    chrome.setButtonPressed("filter", filters.has(sel.tab));
+
+    for (const extraId of ["sort", "checkbox", "chart"]) {
       const ext = externalCommands[extraId];
       chrome.registerCommand(extraId, !editor.editing && typeof ext === "function" ? ext : null);
     }
@@ -785,6 +865,18 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     const activeInfo = shownId === sel.tab && !editor.editing ? activeCellInfo() : null;
     const linkUrl = activeInfo ? extractCellLink(activeInfo.cell, win.Sap?.grid?.tokenize) : null;
 
+    const filterButtons = [];
+    const filterSpec = filters.get(shownId);
+    if (filterSpec) {
+      const headerRow = view.rows.indexOf(filterSpec.header);
+      if (headerRow !== -1) {
+        for (const id of filterSpec.cols) {
+          const c = view.cols.indexOf(id);
+          if (c !== -1) filterButtons.push({ r: headerRow, c, active: filterSpec.criteria.has(id) });
+        }
+      }
+    }
+
     overlays.render({
       table,
       win: windowOf(table),
@@ -797,6 +889,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       fillPreviewBox: fillDrag?.tab === shownId ? fillDrag.targetBox : null,
       linkUrl,
       touch: isTouch(),
+      filterButtons,
     });
     findCtrl?.syncTab();
     syncFunctionHelp();
@@ -893,12 +986,31 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     return Math.max(1, Math.floor((h || 520) / ROW_ESTIMATE));
   }
 
+  // Rows this viewer filtered out are out of sight, so a Delete or a cut leaves them alone.
   function clearSelectedCells() {
-    const grid = gridOf(tabTable(workbook, sel.tab));
+    const table = tabTable(workbook, sel.tab);
+    const grid = gridOf(table);
     if (!grid) return;
     const view = viewOf(sel.tab);
     if (view.rows.length === 0 || view.cols.length === 0) return;
-    if (!writeGrid(() => grid.clear(commandArea(view, sel)))) return;
+    const box = selectionBox(view, sel);
+    if (!box) return;
+    const filtered = filteredRows(table);
+    const rows = [];
+    for (let r = box.top; r <= box.bottom; r++) if (!filtered.has(view.rows[r])) rows.push(r);
+    const wholeRows = sel.whole === "rows";
+    const cells = [];
+    for (const r of rows) {
+      const c0 = wholeRows ? 0 : box.left;
+      const c1 = wholeRows ? view.cols.length - 1 : box.right;
+      for (let c = c0; c <= c1; c++) {
+        const cell = grid.cell(a1(r, c));
+        if (cell && !cell.covered && cell.content !== null && cell.content !== undefined) cells.push([view.rows[r], view.cols[c], null]);
+      }
+    }
+    const area = commandArea(view, sel);
+    const unchanged = rows.length === box.bottom - box.top + 1;
+    if (!writeGrid(() => (unchanged ? grid.clear(area) : cells.length > 0 && grid.apply({ v: 1, t: "set", sheet: sel.tab, cells })))) return;
     refreshStatus();
     syncUI({ announce: true });
   }
@@ -957,7 +1069,11 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     const view = viewOf(sel.tab);
     if (view.rows.length === 0 || view.cols.length === 0) return null;
     const box = selectionBox(view, sel);
-    return box ? { grid, box, parts: copyParts(grid, box, a1, { cut }) } : null;
+    if (!box) return null;
+    const filtered = filteredRows(tabTable(workbook, sel.tab));
+    const skipRows = new Set();
+    for (let r = box.top; r <= box.bottom; r++) if (filtered.has(view.rows[r])) skipRows.add(r);
+    return { grid, box, skipRows, parts: copyParts(grid, box, a1, { cut, skipRows }) };
   }
 
   async function runClipboard(kind) {
@@ -1192,6 +1308,19 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       return;
     }
     if (!["Shift", "Control", "Meta", "Alt"].includes(event.key) && intent?.type !== "pasteValues") valuesNext = false;
+    if (!editor.editing && event.altKey && event.key === "ArrowDown" && sel) {
+      const tabId = tabs.activeId;
+      const spec = filters.get(tabId);
+      const view = viewOf(tabId);
+      const heading = spec ? view.rows.indexOf(spec.header) : -1;
+      const c = view.cols.indexOf(sel.anchor.col);
+      if (spec && sel.tab === tabId && heading !== -1 && view.rows[heading] === sel.anchor.row && c !== -1 && spec.cols.includes(view.cols[c])) {
+        event.preventDefault();
+        const el = overlays.shadow?.querySelector?.(`[data-filter-col="${c}"]`) ?? null;
+        openFilterAt(tabId, c, el ?? chrome.getButton("filter"));
+        return;
+      }
+    }
     if (!intent) return;
 
     event.preventDefault();
@@ -1666,7 +1795,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
               const idx = rw.geometry.indexOf(rowId);
               if (idx === -1) continue;
               const tr = rw.geometry.row(idx);
-              if (tr.offsetHeight === 0 && !tr.hidden) {
+              if (tr.offsetHeight === 0 && !rowOutOfSight(tr)) {
                 const h = Number.parseFloat(tr.style?.height);
                 rw.geometry.setRowHeight(idx, Number.isFinite(h) && h > 0 ? h : ROW_ESTIMATE);
               }
@@ -1676,6 +1805,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
             sel = clipSelection(viewOf(sel.tab), sel, lastViews.get(sel.tab) ?? null);
             writeSelection(storage, path, sel);
           }
+          if (event.structure) pruneFilters();
           if (tab.id === tabs.activeId) refreshStatus();
           findCtrl?.refresh();
           snapshotViews();
@@ -1705,7 +1835,41 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     subscribeGrids();
     refreshStatus();
     findCtrl?.refresh();
+    pruneFilters();
     syncUI({ announce: entered, enteredTab: entered });
+  }
+
+  function pruneFilters() {
+    const live = new Set(tabs.list().map((tab) => tab.id));
+    for (const tabId of [...filters.keys()]) {
+      if (!live.has(tabId)) {
+        filters.delete(tabId);
+        continue;
+      }
+      const table = tabTable(workbook, tabId);
+      const view = viewOf(tabId);
+      const spec = filters.get(tabId);
+      const header = view.rows.indexOf(spec.header);
+      const criteriaBefore = spec.criteria.size;
+      spec.cols = spec.cols.filter((id) => view.cols.includes(id));
+      for (const id of [...spec.criteria.keys()]) {
+        if (!spec.cols.includes(id)) spec.criteria.delete(id);
+      }
+      if (!table || header === -1 || spec.cols.length === 0) {
+        setFilter(tabId, null);
+        continue;
+      }
+      if (spec.criteria.size !== criteriaBefore) {
+        if (spec.criteria.size === 0) spec.hidden = new Set();
+        else {
+          const mod = filterTool.peek();
+          if (mod) spec.hidden = mod.hiddenRowsFor(view, spec);
+        }
+      }
+      const keep = new Set(view.rows);
+      spec.hidden = new Set([...(spec.hidden ?? [])].filter((id) => keep.has(id)));
+      applyHiddenRows(tabId, spec.hidden);
+    }
   }
 
   const raf = typeof win.requestAnimationFrame === "function" ? win.requestAnimationFrame.bind(win) : null;
@@ -1778,6 +1942,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     disposed = true;
     cancelLongPress();
     fillDrag = null;
+    closeFilterPanel();
     closeDialog();
     liveMenu?.dispose();
     findCtrl?.dispose();
@@ -1785,6 +1950,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     fnHelp = null;
     for (const off of unsubGrids.splice(0)) off();
     for (const off of cleanups.splice(0)) off();
+    for (const table of workbook.querySelectorAll("table[grid]")) setFilteredRows(table, null);
     resizeObserver?.disconnect();
     tabs.dispose();
     overlays.dispose();
