@@ -31,7 +31,10 @@ const EXTENSIONS = {
 
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
 const escapeHtml = (text) => text.replace(/[&<>"]/g, (c) => ESCAPES[c]);
-const TAG = /<span[^>]*>|<\/span>/g;
+const TAG = /<span(?:\s(?:[^>"']|"[^"]*"|'[^']*')*)?>|<\/span>/gi;
+// Grammars that hand embedded code to another: JSX and TSX tags, HTML in Markdown,
+// and <script> and <style> inside HTML stay plain until those are registered too.
+const EMBEDDED = { javascript: ["xml"], typescript: ["xml"], markdown: ["xml"], xml: ["css", "javascript"] };
 
 export function languageFor(path) {
   const name = String(path ?? "").split("/").pop().toLowerCase();
@@ -46,11 +49,17 @@ export function balanceLines(html) {
   const open = [];
   for (const line of String(html).split("\n")) {
     const reopened = open.join("");
-    for (const [tag] of line.matchAll(TAG)) {
-      if (tag === "</span>") open.pop();
-      else open.push(tag);
-    }
-    lines.push(reopened + line + "</span>".repeat(open.length));
+    // A closing tag with nothing open would close the row's own markup, so it is dropped.
+    const body = line.replace(TAG, (tag) => {
+      if (tag.toLowerCase() !== "</span>") {
+        open.push(tag);
+        return tag;
+      }
+      if (!open.length) return "";
+      open.pop();
+      return tag;
+    });
+    lines.push(reopened + body + "</span>".repeat(open.length));
   }
   return lines;
 }
@@ -61,8 +70,11 @@ export function withAssets(assets) {
   async function highlightLines(code, language) {
     const text = String(code ?? "");
     if (!language || !assets.names().includes(`highlight/${language}`)) return text.split("\n").map(escapeHtml);
-    const [{ default: hljs }, { default: grammar }] = await Promise.all([assets.load("highlight"), assets.load(`highlight/${language}`)]);
-    if (!hljs.getLanguage(language)) hljs.registerLanguage(language, grammar);
+    const names = [language, ...(EMBEDDED[language] || [])];
+    const [{ default: hljs }, ...grammars] = await Promise.all([assets.load("highlight"), ...names.map((name) => assets.load(`highlight/${name}`))]);
+    names.forEach((name, i) => {
+      if (!hljs.getLanguage(name)) hljs.registerLanguage(name, grammars[i].default);
+    });
     return balanceLines(hljs.highlight(text, { language, ignoreIllegals: true }).value);
   }
   return { languageFor, balanceLines, highlightLines };

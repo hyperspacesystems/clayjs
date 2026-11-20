@@ -45,3 +45,19 @@ test("a language with no grammar gives escaped plain lines", async () => {
   const { highlightLines } = await assets.load("highlight-lines");
   await expect(highlightLines("<b>&\nx", null)).resolves.toEqual(["&lt;b&gt;&amp;", "x"]);
 });
+
+// A .tsx diff's component markup is handed to the XML grammar, which must load with it.
+test("JSX in a TypeScript file is highlighted as markup", async () => {
+  const { highlightLines } = await assets.load("highlight-lines");
+  const [line] = await highlightLines("const a = <Button kind=\"x\">Go</Button>;", "typescript");
+  expect(line).toMatch(/<span class="hljs-name">Button<\/span>/);
+});
+
+test("balanceLines keeps a quoted > inside a span and drops a closing tag with nothing open", async () => {
+  const { balanceLines } = await assets.load("highlight-lines");
+  expect(balanceLines('<span data-tip="a > b">one\ntwo</span>')).toEqual([
+    '<span data-tip="a > b">one</span>',
+    '<span data-tip="a > b">two</span>',
+  ]);
+  expect(balanceLines("</span>x\ny")).toEqual(["x", "y"]);
+});

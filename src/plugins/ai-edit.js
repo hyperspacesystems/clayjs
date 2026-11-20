@@ -427,7 +427,10 @@ async function sendTargetRequest(target, comment, quote) {
 // reply is refused when it holds more of any part than the element the model was
 // given, so a page's own scripts and handlers are not a reason to refuse an edit
 // near them, while a copied handler or a changed script is.
-const ACTIVE_ATTR = /^(on|hx-on|x-|@|:|v-on:|v-bind:|data-on[-:])/;
+// SapJS (plugins/derive.js, loaded whenever a page has a [sap] root) compiles its
+// directive attributes with new Function, so they are code too.
+const ACTIVE_ATTR = /^(on|hx-on|x-|@|:|v-on:|v-bind:|data-on[-:]|(?:calc|text|attr|class|css|set|move|sort):|trigger-)/;
+const SAP_ATTRS = new Set(['sap', 'text', 'show', 'effect', 'invalid', 'confirm', 'detail', 'each', 'key', 'bind', 'scope', 'state', 'items']);
 const ACTIVE_TAGS = new Set(['iframe', 'frame', 'object', 'embed', 'base', 'link']);
 
 // URL parsing removes tab, CR and LF anywhere and controls and spaces at the start,
@@ -449,6 +452,17 @@ function runsAsCode(script) {
   const raw = (script.getAttribute('type') || '').trim().toLowerCase();
   const essence = raw.replace(/^(?:inert\/)+/, '').split(';')[0].trim();
   return !essence || /javascript|ecmascript|jscript|livescript/.test(essence) || ['module', 'importmap', 'speculationrules'].includes(essence) || ACTIVE_INERT_TYPES.has(essence);
+}
+
+// A stylesheet that selects on an attribute and fetches a URL can read the save token
+// on <html> one character at a time. Escapes are decoded first, since CSS lets
+// "u\\72l(" spell url(.
+function leaksAttributes(css) {
+  const plain = css
+    .replace(/\\([0-9a-f]{1,6})\s?/gi, (_, hex) => String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff)))
+    .replace(/\\(.)/g, '$1')
+    .toLowerCase();
+  return plain.includes('[') && /url\(|@import|image-set\(|image\(/.test(plain);
 }
 
 function attrsOf(el) {
@@ -473,6 +487,13 @@ function activeParts(root) {
     const tag = el.tagName.toLowerCase();
     if (tag === 'script') {
       if (runsAsCode(el)) add('script ' + attrsOf(el) + '|' + el.textContent.trim());
+    } else if (tag === 'noscript') {
+      // Parsed here with scripting off, so its content reads as elements or text; a
+      // browser running scripts reads it as raw text, where "</noscript>" inside an
+      // attribute ends it and a <script> after that runs. Its markup counts as a whole.
+      add('noscript ' + attrsOf(el) + '|' + el.innerHTML.trim());
+    } else if (tag === 'style') {
+      if (leaksAttributes(el.textContent)) add('style ' + attrsOf(el) + '|' + el.textContent.trim());
     } else if (ACTIVE_TAGS.has(tag) || (tag === 'meta' && el.hasAttribute('http-equiv'))) {
       add(tag + ' ' + attrsOf(el));
     } else if ((tag === 'animate' || tag === 'set') && /href/i.test(el.getAttribute('attributeName') || '')) {
@@ -480,7 +501,7 @@ function activeParts(root) {
     }
     for (const attr of el.attributes) {
       const name = attr.name.toLowerCase();
-      if (ACTIVE_ATTR.test(name) || ACTIVE_CLAY_ATTRS.has(name)) add(tag + ' ' + name + '=' + attr.value.trim());
+      if (ACTIVE_ATTR.test(name) || ACTIVE_CLAY_ATTRS.has(name) || SAP_ATTRS.has(name)) add(tag + ' ' + name + '=' + attr.value.trim());
       else if (name === 'srcdoc') add(tag + ' srcdoc=' + attr.value);
       else if (isScriptURL(attr.value)) add(tag + ' ' + name + '=' + attr.value);
     }
