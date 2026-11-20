@@ -72,6 +72,7 @@ export function createEditor({
   textarea.rows = 1;
   textarea.spellcheck = false;
   textarea.setAttribute("autocomplete", "off");
+  textarea.setAttribute("inputmode", "none");
   editorSlot.append(textarea);
 
   let editing = false;
@@ -122,6 +123,7 @@ export function createEditor({
     if (!active) return;
     onClearNotice?.();
     editing = true;
+    textarea.setAttribute("inputmode", "text");
     target = { tab: active.tab, row: active.row, col: active.col };
     pickState = null;
     activeField = focusField;
@@ -133,6 +135,7 @@ export function createEditor({
   function finishEdit() {
     const homeTab = target?.tab ?? null;
     editing = false;
+    textarea.setAttribute("inputmode", "none");
     target = null;
     pickState = null;
     buffer = "";
@@ -263,6 +266,17 @@ export function createEditor({
         c: visibleIndex(view.cols.length, pickState.focus.c + dc, dc, view.colHidden),
       },
     });
+  }
+
+  function insertText(text) {
+    if (!editing) return;
+    const field = activeField;
+    const start = caretOf(field);
+    const end = typeof field.selectionEnd === "number" ? field.selectionEnd : start;
+    field.value = field.value.slice(0, start) + text + field.value.slice(end);
+    field.focus();
+    setCaret(field, start + text.length);
+    field.dispatchEvent(new field.ownerDocument.defaultView.Event("input", { bubbles: true }));
   }
 
   function insertNewline() {
@@ -425,6 +439,7 @@ export function createEditor({
     openWithInput,
     pickCell,
     pickMove,
+    insertText,
     insertNewline,
     cycleRef,
     replaceRange,

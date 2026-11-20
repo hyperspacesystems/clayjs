@@ -145,6 +145,31 @@ function press(field, key, init = {}) {
   field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, composed: true, cancelable: true, ...init }));
 }
 
+function pointerEvent(type, init = {}) {
+  const Ctor = typeof window.PointerEvent === "function" ? window.PointerEvent : window.Event;
+  const event = new Ctor(type, { bubbles: true, cancelable: true, composed: true });
+  for (const [key, value] of Object.entries({ pointerType: "touch", isPrimary: true, ...init })) {
+    Object.defineProperty(event, key, { configurable: true, get: () => value });
+  }
+  return event;
+}
+
+// A browser sends a tap's compatibility mouse events after the pointer is up.
+function clickCell(cell, pointerType) {
+  cell.dispatchEvent(pointerEvent("pointerdown", { pointerType, clientX: 10, clientY: 10 }));
+  cell.dispatchEvent(pointerEvent("pointerup", { pointerType, clientX: 10, clientY: 10 }));
+  cell.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, clientX: 10, clientY: 10 }));
+  cell.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0, clientX: 10, clientY: 10 }));
+  cell.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+}
+
+function tapMenuItem(item) {
+  item.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+  item.click();
+}
+
+const tapCell = (cell) => clickCell(cell, "touch");
+
 function typeInto(field, text) {
   field.focus();
   field.value = text;
@@ -2874,6 +2899,352 @@ test("a failed shortcuts load shows the Bevel notice, a failed function help loa
   await turn();
   await turn();
   expect(inst.chrome.topShadow.querySelector("[data-function-completions]")?.hidden).toBe(false);
+
+  ui.dispose();
+});
+
+// Bug: the phone layout kept the desktop tool order, the 88px format label and a wrapping toolbar, or leaked the $% label back to a wide sheet.
+test("a phone-width sheet shows Undo, Bold, $%, Filter, Row + and More in one row", async () => {
+  const { ui, inst } = await start();
+  const toolbar = () => inst.chrome.topShadow.querySelector('[role="toolbar"]');
+  const shown = () =>
+    [...toolbar().querySelectorAll("[data-command]")]
+      .filter((btn) => !btn.hidden)
+      .sort((a, b) => Number(a.style.order || 0) - Number(b.style.order || 0))
+      .map((btn) => btn.getAttribute("data-command"));
+
+  inst.chrome.setLayout("phone");
+  expect(shown()).toEqual(["undo", "bold", "number-format", "filter", "insert-row", "more"]);
+  expect(toolbar().querySelector('[data-command="number-format"]').textContent).toBe("$%");
+
+  inst.chrome.setLayout("wide");
+  expect(toolbar().querySelector('[data-command="number-format"]').textContent).toBe("Automatic");
+  expect(toolbar().querySelector('[data-command="more"]').hidden).toBe(true);
+  expect(toolbar().querySelector('[data-command="insert-row"]').hidden).toBe(true);
+
+  ui.dispose();
+});
+
+// Bug: the phone and compact layouts hid tools with no way to reach them.
+test("tools that do not fit are reachable from More", async () => {
+  const { ui, inst } = await start();
+  inst.chrome.setLayout("compact");
+
+  const moreBtn = inst.chrome.topShadow.querySelector('[data-command="more"]');
+  expect(moreBtn.hidden).toBe(false);
+  moreBtn.click();
+  await turn();
+  await turn();
+
+  const ids = [...inst.chrome.topShadow.querySelectorAll("[data-menu-item]")].map((el) => el.getAttribute("data-menu-item"));
+  expect(ids).toEqual(["filter", "sort", "checkbox", "chart", "find"]);
+  expect(inst.chrome.getButton("find")).toBe(moreBtn);
+  expect(inst.chrome.getButton("bold")).toBe(inst.chrome.topShadow.querySelector('[data-command="bold"]'));
+
+  // The screen turning (a layout switch) closes the menu rather than leaving it at its old place.
+  inst.chrome.setLayout("phone");
+  await turn();
+  expect(inst.chrome.topShadow.querySelectorAll('[role="menu"]').length).toBe(0);
+  // Out of compact, the data group (Filter, Row +) is still in the toolbar.
+  expect(inst.chrome.topShadow.querySelector('[data-toolbar-group="data"]').hidden).toBe(false);
+
+  // While editing nothing in More can run, so More is disabled instead of stealing the focus.
+  press(inst.editor.textarea, "Enter");
+  expect(inst.editor.editing).toBe(true);
+  expect(moreBtn.getAttribute("aria-disabled")).toBe("true");
+  press(inst.editor.textarea, "Escape");
+  expect(moreBtn.getAttribute("aria-disabled")).not.toBe("true");
+
+  ui.dispose();
+});
+
+// Bug: a phone toolbar button with no command behind it.
+test("Row + inserts a row above the selection", async () => {
+  const { Sap, ui, inst } = await start();
+  const textarea = inst.editor.textarea;
+  inst.chrome.setLayout("phone");
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.value).toBe("B2");
+
+  inst.chrome.topShadow.querySelector('[data-command="insert-row"]').click();
+  await turn();
+  await turn();
+
+  expect(tableOf("s1").querySelectorAll("tbody tr").length).toBe(4);
+  expect(Sap.grid(tableOf("s1")).get("B3")).toBe(8);
+
+  // With a whole column selected, Row + still adds a row, never a column.
+  press(textarea, " ", { metaKey: true });
+  inst.chrome.topShadow.querySelector('[data-command="insert-row"]').click();
+  await turn();
+  await turn();
+  expect(tableOf("s1").querySelectorAll("tbody tr").length).toBe(5);
+  expect(tableOf("s1").querySelectorAll("colgroup col").length).toBe(3);
+
+  ui.dispose();
+});
+
+// Bug: the phone formula bar stayed in the top toolbar while editing (the keyboard covers it and the user cannot see what they type), or the dock outlived the edit.
+test("on a phone the formula bar hides while reading and docks with quick keys while editing", async () => {
+  const { ui, inst } = await start();
+  const textarea = inst.editor.textarea;
+  const bar = inst.chrome.formulaInput.parentElement;
+  const quickKeys = inst.chrome.topShadow.querySelector("[data-sheet-quick-keys]");
+
+  inst.chrome.setLayout("phone");
+  inst.chrome.setTouch(true);
+  expect(bar.hidden).toBe(true);
+  expect(quickKeys.hidden).toBe(true);
+
+  press(textarea, "Enter");
+  expect(inst.editor.editing).toBe(true);
+  expect(bar.hidden).toBe(false);
+  expect(bar.style.position).toBe("fixed");
+  expect(quickKeys.hidden).toBe(false);
+
+  press(inst.editor.formulaInput, "Escape");
+  expect(inst.editor.editing).toBe(false);
+  expect(bar.hidden).toBe(true);
+  // With the bar hidden, the status line names the cell and what it holds.
+  expect(inst.chrome.statusText.textContent).toBe("A1 · 3");
+
+  // A phone-width sheet used with a mouse keeps its formula bar and name box (Go to).
+  inst.chrome.setTouch(false);
+  expect(bar.hidden).toBe(false);
+  press(textarea, "Enter");
+  expect(inst.editor.editing).toBe(true);
+  expect(bar.style.position).not.toBe("fixed");
+  expect(quickKeys.hidden).toBe(true);
+  press(textarea, "Escape");
+  expect(quickKeys.hidden).toBe(true);
+
+  ui.dispose();
+});
+
+// Bug: a quick key changed the field but not the editor's text (so the commit lost it), or typed at the end instead of the caret.
+test("quick keys type into the edit at the caret", async () => {
+  const { Sap, ui, inst } = await start();
+  const textarea = inst.editor.textarea;
+  const input = inst.chrome.formulaInput;
+  const plus = [...inst.chrome.topShadow.querySelectorAll("[aria-label]")].find(
+    (btn) => btn.getAttribute("aria-label") === "Type +",
+  );
+  inst.chrome.setLayout("phone");
+  inst.chrome.setTouch(true);
+
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowRight");
+  press(textarea, "ArrowDown");
+  press(textarea, "ArrowDown");
+  expect(inst.chrome.nameBox.value).toBe("C3");
+
+  press(textarea, "Enter");
+  expect(inst.editor.editing).toBe(true);
+  expect(inst.chrome.topShadow.activeElement).toBe(input);
+
+  const type = (text, caret = text.length) => {
+    input.value = text;
+    input.setSelectionRange(caret, caret);
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  };
+
+  type("=2");
+  plus.click();
+  expect(input.value).toBe("=2+");
+  type(`${input.value}3`);
+  inst.chrome.topShadow.querySelector('[aria-label="Commit edit"]').click();
+  expect(Sap.grid(tableOf("s1")).get("C3")).toBe(5);
+
+  press(textarea, "ArrowUp");
+  press(textarea, "Enter");
+  type("=23", 2);
+  plus.click();
+  expect(input.value).toBe("=2+3");
+  press(input, "Escape");
+
+  ui.dispose();
+});
+
+// Bug: every tap raised the phone keyboard at once, or tapping the selected cell never edited.
+test("a tap selects without editing; a second tap on the same cell edits", async () => {
+  const { ui, inst } = await start();
+  const cells = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+  inst.chrome.setLayout("phone");
+
+  inst.chrome.setTouch(true);
+
+  // A1 is selected at load: a first tap on it only reads it.
+  tapCell(cells()[0].children[0]);
+  expect(inst.editor.editing).toBe(false);
+
+  tapCell(cells()[1].children[1]);
+  expect(inst.chrome.nameBox.value).toBe("B2");
+  expect(inst.editor.editing).toBe(false);
+
+  tapCell(cells()[1].children[1]);
+  expect(inst.editor.editing).toBe(true);
+  expect(inst.chrome.topShadow.activeElement).toBe(inst.chrome.formulaInput);
+  press(inst.chrome.formulaInput, "Escape");
+  expect(inst.editor.editing).toBe(false);
+
+  // A long press, then a tap that closes its menu: the closing tap does not edit.
+  const b2 = cells()[1].children[1];
+  b2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  await turn();
+  await turn();
+  tapCell(b2);
+  expect(inst.editor.editing).toBe(false);
+
+  ui.dispose();
+});
+
+// Bug: the touch tap path changed desktop behavior and started an edit on a mouse click.
+test("a mouse click on the selected cell does not start an edit", async () => {
+  const { ui, inst } = await start();
+  const cells = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+
+  clickCell(cells()[1].children[1], "mouse");
+  clickCell(cells()[1].children[1], "mouse");
+
+  expect(inst.chrome.nameBox.value).toBe("B2");
+  expect(inst.editor.editing).toBe(false);
+
+  ui.dispose();
+});
+
+// Bug: touch had no cell menu, or Android's own contextmenu during a long press opened a second one.
+test("a long press opens the cell menu once, with Cut, Copy and Paste first", async () => {
+  const { ui, inst } = await start();
+  const cells = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+  const c3 = cells()[2].children[2];
+
+  c3.dispatchEvent(pointerEvent("pointerdown", { clientX: 40, clientY: 60 }));
+  window.dispatchEvent(pointerEvent("pointermove", { clientX: 60, clientY: 60 }));
+  await new Promise((resolve) => setTimeout(resolve, 470));
+  await turn();
+  expect(inst.chrome.topShadow.querySelectorAll('[role="menu"]').length).toBe(0);
+
+  c3.dispatchEvent(pointerEvent("pointerdown", { clientX: 40, clientY: 60 }));
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  await turn();
+  c3.dispatchEvent(pointerEvent("contextmenu", { clientX: 40, clientY: 60 }));
+  await turn();
+  await turn();
+
+  expect(inst.chrome.topShadow.querySelectorAll('[role="menu"]').length).toBe(1);
+  const ids = [...inst.chrome.topShadow.querySelectorAll("[data-menu-item]")].map((el) => el.getAttribute("data-menu-item"));
+  expect(ids.slice(0, 3)).toEqual(["cut", "copy", "paste"]);
+  expect(inst.chrome.nameBox.value).toBe("C3");
+
+  // Lifting the finger sends the tap's mouse events to whatever is under it, the cell or a menu
+  // item that opened there: the menu must stay open (iOS) and the item must not run.
+  const rowsBefore = cells().length;
+  const under = inst.chrome.topShadow.querySelector('[data-menu-item="delete-row"]');
+  c3.dispatchEvent(pointerEvent("pointerup", { clientX: 40, clientY: 60 }));
+  c3.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, composed: true, button: 0, clientX: 40, clientY: 60 }));
+  under.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, composed: true, button: 0, clientX: 40, clientY: 60 }));
+  under.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, composed: true, clientX: 40, clientY: 60 }));
+  await turn();
+  await turn();
+  expect(inst.chrome.topShadow.querySelectorAll('[role="menu"]').length).toBe(1);
+  expect(cells().length).toBe(rowsBefore);
+
+  ui.dispose();
+});
+
+// Bug: the touch cell menu could not copy or paste through the async clipboard.
+test("the touch menu's Copy and Paste use the async clipboard", async () => {
+  const { Sap, ui, inst } = await start(SLICE_BOOK());
+  const textarea = inst.editor.textarea;
+  const cells = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+  const grid = () => Sap.grid(tableOf("s1"));
+  const longPress = async (td) => {
+    td.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await turn();
+    await turn();
+  };
+
+  selectB2ToC3(textarea);
+  const copyEvent = clipEvent("copy");
+  textarea.dispatchEvent(copyEvent);
+  const expected = copyEvent.clipboardData.getData("text/plain");
+  expect(expected).toContain("3\t4");
+
+  const written = [];
+  const clipboard = {
+    writeText: jest.fn(async (text) => {
+      written.push(text);
+    }),
+    readText: jest.fn(async () => "7\t8"),
+  };
+  Object.defineProperty(window.navigator, "clipboard", { configurable: true, value: clipboard });
+
+  await longPress(cells()[1].children[1]);
+  tapMenuItem(inst.chrome.topShadow.querySelector('[data-menu-item="copy"]'));
+  await turn();
+  expect(written).toEqual([expected]);
+
+  tapCell(cells()[4].children[4]);
+  await longPress(cells()[4].children[4]);
+  tapMenuItem(inst.chrome.topShadow.querySelector('[data-menu-item="paste"]'));
+  await turn();
+  expect(grid().get("E5")).toBe(7);
+  expect(grid().get("F5")).toBe(8);
+
+  clipboard.readText.mockImplementation(async () => {
+    throw new Error("denied");
+  });
+  tapCell(cells()[5].children[5]);
+  await longPress(cells()[5].children[5]);
+  tapMenuItem(inst.chrome.topShadow.querySelector('[data-menu-item="paste"]'));
+  await turn();
+  expect(inst.chrome.noticeBar.hidden).toBe(false);
+  expect(inst.chrome.noticeBar.textContent).toContain("didn't let the sheet read the clipboard");
+  expect(grid().get("F6")).toBeNull();
+
+  delete window.navigator.clipboard;
+  ui.dispose();
+});
+
+// Bug: the 7px fill handle was the only thing a finger could grab, and the mouse lost it to the round handles.
+test("after a touch the selection shows two round handles and no fill handle; a mouse press brings the fill handle back", async () => {
+  const { ui, inst } = await start();
+  const cells = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+  const handle = (corner) => inst.overlays.shadow.querySelector(`[data-touch-handle="${corner}"]`);
+  const fillHandle = () => inst.overlays.shadow.querySelector("[data-fill-handle]");
+
+  tapCell(cells()[1].children[1]);
+  expect(handle("start").hidden).toBe(false);
+  expect(handle("end").hidden).toBe(false);
+  expect(fillHandle().hidden).toBe(true);
+
+  clickCell(cells()[2].children[2], "mouse");
+  expect(fillHandle().hidden).toBe(false);
+  expect(handle("start").hidden).toBe(true);
+  expect(handle("end").hidden).toBe(true);
+
+  ui.dispose();
+});
+
+// Bug: the round handles were decoration that could not stretch a selection.
+test("dragging the end handle stretches the selection", async () => {
+  const { ui, inst } = await start();
+  const cells = () => [...tableOf("s1").querySelectorAll("tbody tr")];
+
+  tapCell(cells()[1].children[1]);
+  inst.overlays.cellAtPoint = () => ({ r: 2, c: 2 });
+
+  const endHandle = inst.overlays.shadow.querySelector('[data-touch-handle="end"]');
+  endHandle.dispatchEvent(pointerEvent("pointerdown", { pointerId: 7, clientX: 10, clientY: 10 }));
+  window.dispatchEvent(pointerEvent("pointermove", { pointerId: 7, clientX: 20, clientY: 20 }));
+  expect(inst.chrome.nameBox.value).toBe("B2:C3");
+
+  window.dispatchEvent(pointerEvent("pointerup", { pointerId: 7 }));
+  expect(inst.chrome.nameBox.value).toBe("B2:C3");
 
   ui.dispose();
 });

@@ -9,6 +9,7 @@ import { bevelDialog, dismissOf } from "../ui/bevel-dialog.js";
 import { FONT_MONO, FONT_SANS, TOKENS } from "../ui/bevel.js";
 import { mountEditorUI } from "../ui/editor-ui.js";
 import { resolveTheme } from "../ui/theme.js";
+import { set } from "../lib/hostile-css.js";
 
 const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
 const SUBMENU_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
@@ -81,6 +82,17 @@ export function createMenu({ container, theme = resolveTheme(), getReturnFocus =
     if (restoreFocus) getReturnFocus()?.focus?.();
   }
 
+  // A menu taller than the room below its top moves up, and one taller than the screen scrolls:
+  // on a phone the More menu and the touch cell menu are longer than the screen is tall.
+  function fitInView(surface, top) {
+    const maxH = win.innerHeight || 0;
+    const height = surface.getBoundingClientRect().height;
+    if (!(maxH > 160) || !(height > 0)) return;
+    const nextTop = Math.max(4, Math.min(top, maxH - 4 - height));
+    set(surface, "top", `${nextTop}px`);
+    set(surface, "max-height", `${maxH - 8 - nextTop}px`);
+  }
+
   function open({ items = [], anchor = null, x = 0, y = 0, label = "", onClose = null } = {}) {
     if (active && anchor && active.anchor === anchor) {
       close({ restoreFocus: true });
@@ -106,6 +118,8 @@ export function createMenu({ container, theme = resolveTheme(), getReturnFocus =
       "gap:2px",
       "min-width:176px",
       "padding:4px",
+      "overflow-y:auto",
+      "overscroll-behavior:contain",
       `color-scheme:${theme.scheme}`,
       `box-shadow:6px 6px 0 color-mix(in srgb, ${TOKENS.ink} 10%, transparent)`,
     ], { theme });
@@ -212,6 +226,8 @@ export function createMenu({ container, theme = resolveTheme(), getReturnFocus =
         "gap:2px",
         "min-width:176px",
         "padding:4px",
+        "overflow-y:auto",
+        "overscroll-behavior:contain",
         `color-scheme:${theme.scheme}`,
         `box-shadow:6px 6px 0 color-mix(in srgb, ${TOKENS.ink} 10%, transparent)`,
       ], { theme });
@@ -292,6 +308,7 @@ export function createMenu({ container, theme = resolveTheme(), getReturnFocus =
       subSurface.addEventListener("keydown", onSubKeyDown);
       entry.el.setAttribute("aria-expanded", "true");
       container.append(subSurface);
+    fitInView(subSurface, subTop);
       activeSub = {
         surface: subSurface,
         parentBtn: entry.el,
@@ -488,6 +505,7 @@ export function createMenu({ container, theme = resolveTheme(), getReturnFocus =
 
     if (anchor) anchor.setAttribute("aria-expanded", "true");
     container.append(surface);
+    fitInView(surface, top);
 
     active = {
       surface,

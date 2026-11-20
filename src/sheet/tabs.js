@@ -25,7 +25,7 @@ export function readTabs(workbook) {
 
 export function tabRuleText(id, scope = "[sheet-workbook]") {
   const hideOthers = id ? `${scope} > section[item]:not([data-id="${escapeAttr(id)}"]) { display: none }` : "";
-  return `@media screen { ${hideOthers} ${scope} > section[item] > h2[bind="name"] { display: none } }`;
+  return `@media screen { ${hideOthers} ${scope} > section[item] > h2[bind="name"] { display: none } ${scope} > section[item] > table[grid] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation } }`;
 }
 
 export function createTabs(workbook, { sheet: customSheet = null, adopt: customAdopt = null, drop: customDrop = null } = {}) {

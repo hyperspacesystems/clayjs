@@ -774,6 +774,7 @@ export function createCommandActions({
   clearDialog,
   onFillShortcut,
   onPasteSpecial,
+  onClipboard,
   onShortcuts,
   isMac = () => false,
   measureText: customMeasure = null,
@@ -1032,7 +1033,7 @@ export function createCommandActions({
     });
   }
 
-  function openCellContextMenu(r, c, x, y) {
+  function openCellContextMenu(r, c, x, y, { touch = false } = {}) {
     const sel = getSel();
     if (!sel) return;
     const tabId = sel.tab;
@@ -1059,6 +1060,14 @@ export function createCommandActions({
       y,
       label: "Cell options",
       items: [
+        ...(touch
+          ? [
+              { id: "cut", label: "Cut", onSelect: () => onClipboard?.("cut") },
+              { id: "copy", label: "Copy", onSelect: () => onClipboard?.("copy") },
+              { id: "paste", label: "Paste", onSelect: () => onClipboard?.("paste") },
+              { type: "separator" },
+            ]
+          : []),
         {
           id: "paste-special",
           label: "Paste special",
@@ -1535,6 +1544,16 @@ export function createCommandActions({
       case "add-tab":
         handleAddTab();
         break;
+      case "insert-row": {
+        const view = viewOf(sel.tab);
+        const span = axisSpan(view, sel);
+        if (span?.axis === "rows") insertRowsAt(span.first, span.last - span.first + 1, span.first + 1, true);
+        else {
+          const box = selectionBox(view, sel);
+          if (box) insertRowsAt(box.top, 1, box.top + 1, false);
+        }
+        break;
+      }
     }
   }
 

@@ -97,6 +97,7 @@ export function argumentHintAt(text, caret, { tokenize: customTokenize } = {}) {
 }
 
 export function createFunctionHelp({
+  isDocked = () => false,
   container,
   win = window,
   theme = resolveTheme(),
@@ -317,7 +318,7 @@ export function createFunctionHelp({
   }
 
   function update() {
-    if (!editor.editing || editor.isTextCell() || !editor.buffer.startsWith("=") || isTooNarrow()) {
+    if (!editor.editing || editor.isTextCell() || !editor.buffer.startsWith("=") || isTooNarrow() || isDocked()) {
       dismissedKey = "";
       hideAll();
       return;

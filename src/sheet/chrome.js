@@ -36,6 +36,7 @@ const ICONS = {
   close: svgFill("M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"),
   check: svgStroke("m5 12 4 4L19 6", 2.2),
   caret: svgStroke("m6 9 6 6 6-6", 2.2),
+  more: svgFill("M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM196,116a12,12,0,1,0,12,12A12,12,0,0,0,196,116ZM60,116a12,12,0,1,0,12,12A12,12,0,0,0,60,116Z"),
 };
 
 // [id, label, icon, text, caret, extraFlags]
@@ -68,11 +69,34 @@ const GROUPS = [
     ["checkbox", "Insert checkbox", "checkCircle", "Check"],
     ["chart", "Insert chart", "chart", "Chart"],
     ["find", "Find and replace", "search", "Find"],
+    ["insert-row", "Insert row", null, "Row +"],
   ]],
   ["trailing", true, [
     ["import", "Import or export", null, "Import / Export", true],
   ]],
 ];
+
+export const PHONE_MAX = 760;
+export const COMPACT_MAX = 960;
+
+// The sheet's own width picks the layout, so a sheet in a narrow column acts like one on a phone.
+export function layoutFor(width) {
+  if (!(width > 0)) return "wide";
+  return width < PHONE_MAX ? "phone" : width < COMPACT_MAX ? "compact" : "wide";
+}
+
+const PHONE_ORDER = ["undo", "bold", "number-format", "filter", "insert-row"];
+const PHONE_ONLY = new Set(["insert-row"]);
+const COMPACT_MORE_GROUPS = new Set(["data"]);
+const PHONE_LABELS = { "number-format": "$%" };
+const QUICK_KEYS = ["=", "(", ")", ":", "+", "$"];
+const PHONE_ICON_ONLY = new Set(["filter"]);
+
+// Bevel controls rebuild their inline style on each state change; pinned declarations survive it.
+function pinStyle(el, props) {
+  if (el.pin) el.pin(props);
+  else for (const [prop, value] of Object.entries(props)) set(el, prop, value);
+}
 
 function appendSvg(parent, markup, size) {
   const holder = parent.ownerDocument.createElement("span");
@@ -139,8 +163,12 @@ export function createChrome({
   onCancelGoTo,
   onCommit,
   onCancel,
+  onMoreMenu,
+  onQuickKey,
+  onLayoutChange,
 } = {}) {
   const doc = scrollBox.ownerDocument ?? document;
+  const win = doc.defaultView ?? window;
   const parent = scrollBox.parentElement ?? doc.body;
   const theme = resolveTheme();
   const registry = new Map(Object.entries(commands));
@@ -177,9 +205,13 @@ export function createChrome({
   toolbar.setAttribute("role", "toolbar");
   toolbar.setAttribute("aria-label", "Formatting and sheet tools");
 
+  const groupEls = new Map();
+  const toolGroup = new Map();
+  const lastText = new Map();
   GROUPS.forEach(([name, trailing, items], gIdx) => {
+    let sep = null;
     if (gIdx > 0 && !trailing) {
-      const sep = bevelBox("span", [
+      sep = bevelBox("span", [
         "display:inline-block",
         "width:1px",
         "height:18px",
@@ -203,10 +235,48 @@ export function createChrome({
       meta.btn.setDisabled(!registry.has(id));
       buttons.set(id, meta.btn);
       buttonMeta.set(id, meta);
+      toolGroup.set(id, name);
+      if (spec[3] != null) lastText.set(id, spec[3]);
       groupEl.append(meta.btn);
     }
+    groupEls.set(name, { groupEl, sep });
     toolbar.append(groupEl);
   });
+
+  let layout = null;
+  const shownIn = (id, at = layout) => {
+    if (PHONE_ONLY.has(id)) return at === "phone";
+    if (at === "phone") return PHONE_ORDER.includes(id);
+    if (at === "compact") return !COMPACT_MORE_GROUPS.has(toolGroup.get(id));
+    return true;
+  };
+  const inMore = (id) => !PHONE_ONLY.has(id) && !shownIn(id);
+
+  const moreBtn = makeToolButton(["more", "More tools", "more"], theme, () => onMoreMenu?.(moreItems(), moreBtn)).btn;
+  moreBtn.setAttribute("aria-haspopup", "menu");
+  toolbar.append(moreBtn);
+
+  function paintMore() {
+    moreBtn.setDisabled(![...buttonMeta.keys()].some((id) => inMore(id) && registry.has(id)));
+  }
+
+  function moreItems() {
+    const items = [];
+    for (const [, , specs] of GROUPS) {
+      const ids = specs.map((spec) => spec[0]).filter(inMore);
+      if (ids.length === 0) continue;
+      if (items.length) items.push({ type: "separator" });
+      for (const id of ids) {
+        items.push({
+          id,
+          label: buttonMeta.get(id).btn.getAttribute("aria-label"),
+          disabled: !registry.has(id),
+          onSelect: () => registry.get(id)?.(),
+        });
+      }
+    }
+    return items;
+  }
 
   const formulaBar = bevelBox("div", [
     "display:flex",
@@ -298,6 +368,73 @@ export function createChrome({
   formulaInput.setAttribute("aria-label", "Formula bar");
 
   formulaBar.append(nameBox, fxActions, fxBadge, formulaInput);
+
+  const quickKeys = bevelBox("div", ["display:none", "flex-basis:100%", "gap:6px", "padding:6px 0 0"], { theme });
+  quickKeys.setAttribute("data-sheet-quick-keys", "");
+  quickKeys.setAttribute("role", "group");
+  quickKeys.setAttribute("aria-label", "Formula symbols");
+  for (const key of QUICK_KEYS) {
+    const btn = bevelButton(key, {
+      small: true,
+      onClick: () => onQuickKey?.(key),
+      theme,
+      extra: ["flex:1 1 0", "min-width:44px", "padding:0", `font:600 15px/1 ${FONT_MONO}`],
+    });
+    btn.setAttribute("aria-label", `Type ${key}`);
+    btn.addEventListener("pointerdown", (e) => e.preventDefault());
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
+    quickKeys.append(btn);
+  }
+  formulaBar.append(quickKeys);
+
+  let editingNow = false;
+  let keyboardInset = 0;
+  const DOCK = {
+    position: "fixed",
+    left: "0",
+    right: "0",
+    "z-index": "2147482000",
+    height: "auto",
+    "min-height": "52px",
+    padding: "6px 8px calc(6px + env(safe-area-inset-bottom))",
+    "flex-wrap": "wrap",
+    "border-top": `1px solid ${TOKENS["line-2"]}`,
+  };
+  const BAR = {
+    position: "static",
+    left: "auto",
+    right: "auto",
+    "z-index": "auto",
+    height: "30px",
+    "min-height": "0",
+    padding: "0 8px",
+    "flex-wrap": "nowrap",
+    "border-top": "0",
+  };
+  // On a phone the formula bar is the edit bar: hidden while reading, docked above the
+  // keyboard while editing.
+  // A phone-width sheet docks its edit bar only for a finger: a mouse user in a narrow
+  // window keeps the formula bar and the name box (Go to) where they always are.
+  let touchMode = Boolean(win.matchMedia?.("(pointer: coarse)")?.matches);
+  const docked = () => layout === "phone" && touchMode;
+  function paintFormulaBar() {
+    const phone = docked();
+    for (const btn of [cancelBtn, commitBtn]) pinStyle(btn, { "min-width": phone ? "44px" : "0" });
+    const dock = phone && editingNow;
+    for (const [prop, value] of Object.entries(dock ? DOCK : BAR)) set(formulaBar, prop, value);
+    set(formulaBar, "bottom", dock ? `${keyboardInset}px` : "auto");
+    setShown(formulaBar, !phone || editingNow, "flex");
+    setShown(quickKeys, dock, "flex");
+  }
+  const viewport = win.visualViewport ?? null;
+  const onViewport = () => {
+    const next = Math.max(0, Math.round(win.innerHeight - viewport.height - viewport.offsetTop));
+    if (next === keyboardInset) return;
+    keyboardInset = next;
+    if (docked() && editingNow) paintFormulaBar();
+  };
+  viewport?.addEventListener("resize", onViewport);
+  viewport?.addEventListener("scroll", onViewport);
 
   const noticeText = bevelText("span", ["flex:1 1 auto", `font:500 12.5px/1.4 ${FONT_SANS}`, `color:${TOKENS.ox}`], "", { theme });
   const noticeDismiss = bevelButton("Dismiss", {
@@ -398,7 +535,44 @@ export function createChrome({
   function setEditing(editing) {
     cancelBtn.setDisabled(!editing);
     commitBtn.setDisabled(!editing);
+    editingNow = editing;
+    paintFormulaBar();
   }
+
+  function applyLayout(next, notify = true) {
+    if (next === layout) return;
+    layout = next;
+    const phone = layout === "phone";
+    set(toolbar, "flex-wrap", phone ? "nowrap" : "wrap");
+    set(toolbar, "overflow", phone ? "hidden" : "visible");
+    set(toolbar, "justify-content", phone ? "space-between" : "flex-start");
+    for (const [id, meta] of buttonMeta) {
+      setShown(meta.btn, shownIn(id), "inline-flex");
+      const order = phone && PHONE_ORDER.includes(id) ? String(PHONE_ORDER.indexOf(id)) : "0";
+      // A finger needs 44 px across as well as down; six tools fit 320 px with Filter as an icon.
+      const minWidth = phone ? "44px" : id === "number-format" ? "88px" : "0";
+      pinStyle(meta.btn, { order, "min-width": minWidth });
+      if (meta.textEl && PHONE_ICON_ONLY.has(id)) setShown(meta.textEl, !phone, "inline");
+    }
+    for (const [name, { groupEl, sep }] of groupEls) {
+      const any = [...toolGroup].some(([id, group]) => group === name && shownIn(id));
+      setShown(groupEl, phone || any, phone ? "contents" : "inline-flex");
+      if (sep) setShown(sep, !phone && any, "inline-block");
+    }
+    setShown(moreBtn, [...buttonMeta.keys()].some(inMore), "inline-flex");
+    pinStyle(moreBtn, { order: phone ? "99" : "0", "min-width": phone ? "44px" : "0" });
+    paintMore();
+    for (const id of Object.keys(PHONE_LABELS)) paintButtonText(id);
+    paintFormulaBar();
+    if (notify) onLayoutChange?.(layout);
+  }
+
+  const measure = () => applyLayout(layoutFor(parent.clientWidth || win.innerWidth || 0));
+  const Observer = win.ResizeObserver;
+  const resizeWatch = typeof Observer === "function" ? new Observer(measure) : null;
+  if (resizeWatch) resizeWatch.observe(parent);
+  else win.addEventListener("resize", measure);
+  applyLayout(layoutFor(parent.clientWidth || win.innerWidth || 0), false);
 
   let lastCoord = "";
   const isNameBoxActive = () => topUI.shadow?.activeElement === nameBox || doc.activeElement === nameBox;
@@ -431,7 +605,7 @@ export function createChrome({
 
   function setCoord(area) {
     lastCoord = area;
-    set(nameBox, "width", `${Math.max(88, (area.length + 3) * 8)}px`);
+    set(nameBox, "width", `${Math.max(docked() ? 56 : 88, (area.length + 3) * 8)}px`);
     if ((!isNameBoxActive() || !nameBoxDirty) && nameBox.value !== area) nameBox.value = area;
   }
 
@@ -456,10 +630,16 @@ export function createChrome({
     meta.btn.pin({});
   }
 
+  function paintButtonText(id) {
+    const meta = buttonMeta.get(id);
+    const text = layout === "phone" && PHONE_LABELS[id] ? PHONE_LABELS[id] : lastText.get(id);
+    if (meta?.textEl && text != null && meta.textEl.textContent !== text) meta.textEl.textContent = text;
+  }
   function setButtonText(id, text, ariaLabel) {
     const meta = buttonMeta.get(id);
     if (!meta) return;
-    if (meta.textEl && meta.textEl.textContent !== text) meta.textEl.textContent = text;
+    lastText.set(id, text);
+    paintButtonText(id);
     if (ariaLabel && meta.btn.getAttribute("aria-label") !== ariaLabel) {
       meta.btn.setAttribute("aria-label", ariaLabel);
       meta.btn.title = ariaLabel;
@@ -582,6 +762,7 @@ export function createChrome({
     if (typeof fn === "function") registry.set(id, fn);
     else registry.delete(id);
     buttons.get(id)?.setDisabled(!registry.has(id));
+    if (layout) paintMore();
   }
 
   return {
@@ -600,12 +781,20 @@ export function createChrome({
     showNotice,
     hideNotice,
     setEditing,
+    layout: () => layout,
+    setLayout: (next) => applyLayout(next),
+    docked,
+    setTouch(next) {
+      if (Boolean(next) === touchMode) return;
+      touchMode = Boolean(next);
+      paintFormulaBar();
+    },
     setCoord,
     setStatus,
     focusNameBox,
     setButtonPressed,
     setButtonText,
-    getButton: (id) => buttons.get(id) ?? null,
+    getButton: (id) => (buttons.has(id) && inMore(id) ? moreBtn : buttons.get(id)) ?? null,
     mountTabRename,
     startRenameTab: (tabId) => onRenameTabStart?.(tabId),
     commitRename: () => renaming?.commit?.() ?? false,
@@ -613,6 +802,10 @@ export function createChrome({
     registerCommand,
     dispose() {
       clearLongPress();
+      resizeWatch?.disconnect();
+      win.removeEventListener("resize", measure);
+      viewport?.removeEventListener("resize", onViewport);
+      viewport?.removeEventListener("scroll", onViewport);
       renaming = null;
       topUI.remove();
       bottomUI.remove();

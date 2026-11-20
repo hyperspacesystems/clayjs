@@ -121,6 +121,24 @@ const OVERLAY_CSS = `
   pointer-events: auto;
   z-index: 5;
 }
+.sheet-touch-handle {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  z-index: 6;
+}
+.sheet-touch-handle::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--sheet-sel);
+  border: 2px solid var(--sheet-surface);
+}
 .sheet-fill-preview {
   position: absolute;
   pointer-events: none;
@@ -267,6 +285,7 @@ export function createOverlays(
     onRowMenu,
     onFillHandleDown,
     onFillHandleDblClick,
+    onTouchHandleDown,
   } = {},
 ) {
   const doc = workbook.ownerDocument ?? document;
@@ -455,6 +474,22 @@ export function createOverlays(
     onFillHandleDblClick?.(e);
   });
 
+  function makeTouchHandle(corner) {
+    const el = doc.createElement("div");
+    el.className = "sheet-touch-handle";
+    el.setAttribute("data-touch-handle", corner);
+    el.hidden = true;
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.setPointerCapture?.(e.pointerId);
+      onTouchHandleDown?.(corner, e);
+    });
+    return el;
+  }
+  const startHandle = makeTouchHandle("start");
+  const endHandle = makeTouchHandle("end");
+
   const linkChip = doc.createElement("div");
   linkChip.className = "sheet-link-chip";
   linkChip.setAttribute("data-sheet-link-chip", "");
@@ -476,7 +511,7 @@ export function createOverlays(
   live.setAttribute("aria-live", "polite");
   live.setAttribute("aria-atomic", "true");
 
-  root.append(corner, colsLayer, rowsLayer, refsLayer, selFill, activeRing, fillPreview, fillHandle, resizeGuide, linkChip, editorSlot, live);
+  root.append(corner, colsLayer, rowsLayer, refsLayer, selFill, activeRing, fillPreview, fillHandle, startHandle, endHandle, resizeGuide, linkChip, editorSlot, live);
 
   const ui = mountEditorUI({
     name: "sheet-overlays",
@@ -512,6 +547,7 @@ export function createOverlays(
     shownTab = "",
     fillPreviewBox = null,
     linkUrl = null,
+    touch = false,
   }) {
     lastState = { table, win, view };
     if (!table || !view || view.rows.length === 0 || view.cols.length === 0) {
@@ -521,6 +557,8 @@ export function createOverlays(
       selFill.hidden = true;
       activeRing.hidden = true;
       fillHandle.hidden = true;
+      startHandle.hidden = true;
+      endHandle.hidden = true;
       fillPreview.hidden = true;
       linkChip.hidden = true;
       corner.hidden = true;
@@ -597,6 +635,8 @@ export function createOverlays(
       selFill.hidden = true;
       activeRing.hidden = true;
       fillHandle.hidden = true;
+      startHandle.hidden = true;
+      endHandle.hidden = true;
       fillPreview.hidden = true;
       linkChip.hidden = true;
       placeBox(editorSlot, origin, { left: origin.left, top: origin.top, width: 1, height: 1 });
@@ -629,14 +669,20 @@ export function createOverlays(
     placeBox(editorSlot, origin, activeBox);
 
     const showHandle = !editing && whole !== "rows" && whole !== "cols" && wholeBox.width > 0 && wholeBox.height > 0;
-    fillHandle.hidden = !showHandle;
-    if (showHandle) {
+    fillHandle.hidden = !showHandle || touch;
+    startHandle.hidden = !showHandle || !touch;
+    endHandle.hidden = !showHandle || !touch;
+    if (showHandle && !touch) {
       placeBox(fillHandle, origin, {
         left: wholeBox.left + wholeBox.width - 4,
         top: wholeBox.top + wholeBox.height - 4,
         width: 7,
         height: 7,
       });
+    }
+    if (showHandle && touch) {
+      placeBox(startHandle, origin, { left: wholeBox.left - 22, top: wholeBox.top - 22, width: 44, height: 44 });
+      placeBox(endHandle, origin, { left: wholeBox.left + wholeBox.width - 22, top: wholeBox.top + wholeBox.height - 22, width: 44, height: 44 });
     }
 
     if (fillPreviewBox) {

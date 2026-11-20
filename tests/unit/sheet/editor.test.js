@@ -426,3 +426,27 @@ test("picking steps past a merge instead of staying on its own cell", async () =
 
   ui.dispose();
 });
+
+// Bug: every tap raised the phone keyboard, even though a tap only selects.
+test("the cell textarea asks for no on-screen keyboard until an edit starts", async () => {
+  const { ui, inst, textarea } = await start();
+  expect(textarea.getAttribute("inputmode")).toBe("none");
+
+  typeInto(textarea, "12", inst);
+  expect(inst.editor.editing).toBe(true);
+  expect(textarea.getAttribute("inputmode")).toBe("text");
+
+  press(textarea, "Enter");
+  expect(inst.editor.editing).toBe(false);
+  expect(textarea.getAttribute("inputmode")).toBe("none");
+
+  typeInto(textarea, "13", inst);
+  expect(inst.editor.editing).toBe(true);
+  expect(textarea.getAttribute("inputmode")).toBe("text");
+
+  press(textarea, "Escape");
+  expect(inst.editor.editing).toBe(false);
+  expect(textarea.getAttribute("inputmode")).toBe("none");
+
+  ui.dispose();
+});

@@ -93,7 +93,9 @@ async function setupFormulaHarness() {
     onCaretChange: () => fnHelp?.update(),
   });
 
+  let docked = false;
   fnHelp = createFunctionHelp({
+    isDocked: () => docked,
     container: popupHost,
     win: window,
     editor,
@@ -127,7 +129,10 @@ async function setupFormulaHarness() {
     field.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
-  return { Sap, grid, editor, fnHelp, popupHost, dispatchEditorKey, typeText };
+  const setDocked = (next) => {
+    docked = next;
+  };
+  return { Sap, grid, editor, fnHelp, popupHost, dispatchEditorKey, typeText, setDocked };
 }
 
 beforeEach(() => {
@@ -291,7 +296,7 @@ describe("sheet function help and completion", () => {
 
   // Bug: the argument hint card failed to bold the current argument in PMT, or popups still rendered on narrow phone viewports (< POPUP_WIDTH).
   test("renders PMT signature with the active argument in bold, keeps the editor focused on a press, follows Up and Down, and hides both popups on narrow phone widths", async () => {
-    const { editor, fnHelp, typeText } = await setupFormulaHarness();
+    const { editor, fnHelp, typeText, setDocked } = await setupFormulaHarness();
 
     typeText(editor.textarea, "=PMT(5%,");
     expect(fnHelp.isHintOpen).toBe(true);
@@ -326,6 +331,12 @@ describe("sheet function help and completion", () => {
     window.innerWidth = 1024;
     fnHelp.update();
     expect(fnHelp.isCompletionOpen).toBe(true);
+
+    // The phone's docked edit bar has its quick keys where the popups would sit.
+    setDocked(true);
+    fnHelp.update();
+    expect(fnHelp.isCompletionOpen).toBe(false);
+    setDocked(false);
 
     fnHelp.dispose();
   });

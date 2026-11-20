@@ -63,6 +63,7 @@ const LAZY_TOOLBAR_IDS = [
   "merge",
   "align",
   "wrap",
+  "insert-row",
   "add-tab",
 ];
 
@@ -559,6 +560,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       menu: liveMenu,
       onFillShortcut: triggerFillShortcut,
       onPasteSpecial: (mode) => runLazy(pasteSpecialTool, (ps) => ps.runPasteSpecial(sharedCtx(), mode)),
+      onClipboard: (kind) => runClipboard(kind),
       onShortcuts: () => runLazy(shortcutsTool, (s) => s.showShortcutsDialog(sharedCtx())),
     });
     return { menu: liveMenu, actions: cmdActions };
@@ -568,6 +570,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   function ensureFunctionHelp(mod) {
     fnHelp ??= mod.createFunctionHelp({
+      // The docked edit bar has its quick keys where the hint would sit.
+      isDocked: () => chrome.docked(),
       container: chrome.topRoot,
       win,
       theme: chrome.theme,
@@ -638,6 +642,14 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       fillTool.load();
     },
     onFillHandleDblClick: () => runLazy(fillTool, (f) => f.runAutoFillDown(sharedCtx()), { guardSel: true }),
+    onTouchHandleDown(corner, event) {
+      if (editor.editing || !sel) return;
+      const box = selectionBox(viewOf(sel.tab), sel);
+      if (!box) return;
+      cancelLongPress();
+      const fixed = corner === "start" ? { r: box.bottom, c: box.right } : { r: box.top, c: box.left };
+      handleDrag = { tab: sel.tab, fixed, pointerId: event.pointerId, moved: false };
+    },
   });
 
   const chrome = createChrome({
@@ -671,6 +683,13 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       }
     },
     onCancel: () => editor.cancel(),
+    onMoreMenu: (items, btn) => runLazy(cmdTool, (b) => ensureCommands(b).menu.open({ anchor: btn, label: "More tools", items })),
+    onQuickKey: (text) => editor.insertText(text),
+    onLayoutChange: () => {
+      if (disposed || !sel) return;
+      if (liveMenu?.isOpen) liveMenu.close({ restoreFocus: false });
+      syncUI();
+    },
   });
 
   const editor = createEditor({
@@ -755,7 +774,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     chrome.setEditing(editor.editing);
     syncToolbar(selView);
     chrome.setCoord(selectionArea(selView, sel));
-    chrome.setStatus(statusCache);
+    chrome.setStatus(chrome.docked() && !editor.editing ? readingStatus(selView) : statusCache);
     chrome.renderTabs(tabs.list(), shownId);
     if (!editor.editing) editor.refreshReady();
 
@@ -777,6 +796,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       shownTab: shownId,
       fillPreviewBox: fillDrag?.tab === shownId ? fillDrag.targetBox : null,
       linkUrl,
+      touch: isTouch(),
     });
     findCtrl?.syncTab();
     syncFunctionHelp();
@@ -938,6 +958,54 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (view.rows.length === 0 || view.cols.length === 0) return null;
     const box = selectionBox(view, sel);
     return box ? { grid, box, parts: copyParts(grid, box, a1, { cut }) } : null;
+  }
+
+  async function runClipboard(kind) {
+    const clip = win.navigator?.clipboard;
+    const refuse = () =>
+      chrome.showNotice(
+        kind === "paste"
+          ? "This browser didn't let the sheet read the clipboard. Tap the cell twice and paste into the edit bar."
+          : "This browser didn't let the sheet use the clipboard.",
+      );
+    if (!clip) return refuse();
+    if (kind === "paste") {
+      let html = "";
+      let text = "";
+      try {
+        if (typeof clip.read === "function") {
+          for (const item of await clip.read()) {
+            if (!html && item.types.includes("text/html")) html = await (await item.getType("text/html")).text();
+            if (!text && item.types.includes("text/plain")) text = await (await item.getType("text/plain")).text();
+          }
+        } else {
+          text = await clip.readText();
+        }
+      } catch {
+        return refuse();
+      }
+      if (!disposed) applyPasteData({ html, text });
+      return;
+    }
+    const before = sel;
+    const copied = copySelection(kind === "cut");
+    if (!copied) return;
+    try {
+      const Item = win.ClipboardItem;
+      if (typeof clip.write === "function" && typeof Item === "function") {
+        await clip.write([
+          new Item({
+            "text/plain": new win.Blob([copied.parts.text], { type: "text/plain" }),
+            "text/html": new win.Blob([copied.parts.html], { type: "text/html" }),
+          }),
+        ]);
+      } else {
+        await clip.writeText(copied.parts.text);
+      }
+    } catch {
+      return refuse();
+    }
+    if (kind === "cut" && !disposed && sel === before) clearSelectedCells();
   }
 
   function onCopy(event) {
@@ -1213,7 +1281,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
         runLazy(cmdTool, (b) => ensureCommands(b).actions.handleContextMenuShortcut());
         break;
       case "edit":
-        editor.openWithInput(editor.textarea);
+        openEdit();
         break;
       case "cancel":
         editor.cancel();
@@ -1305,17 +1373,162 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   let handledPointerDown = false;
   let dragging = false;
 
+  const LONG_PRESS_MS = 420;
+  const LONG_PRESS_SLOP = 10;
+  let lastPointer = win.matchMedia?.("(pointer: coarse)")?.matches ? "touch" : "mouse";
+  let longPress = null;
+  let suppressTap = false;
+  let handleDrag = null;
+  let touchTapCell = null;
+  const isTouch = () => lastPointer === "touch" || lastPointer === "pen";
+
+  function cancelLongPress() {
+    if (!longPress) return;
+    win.clearTimeout(longPress.timer);
+    longPress = null;
+  }
+
+  function onPointerDown(event) {
+    const wasTouch = isTouch();
+    lastPointer = event.pointerType || "mouse";
+    suppressTap = false;
+    cancelLongPress();
+    chrome.setTouch(isTouch());
+    if (wasTouch !== isTouch()) syncUI();
+    if (!isTouch() || event.isPrimary === false) return;
+    const hit = locateCellEvent(event);
+    if (!hit) return;
+    const x = event.clientX ?? 0;
+    const y = event.clientY ?? 0;
+    longPress = {
+      x,
+      y,
+      hit,
+      timer: win.setTimeout(() => {
+        longPress = null;
+        fireLongPress(hit, x, y);
+      }, LONG_PRESS_MS),
+    };
+  }
+
+  function fireLongPress(hit, x, y) {
+    if (disposed || editor.editing || !tabs.list().some((t) => t.id === hit.tab)) return;
+    suppressTap = true;
+    touchTapCell = null;
+    openCellMenuAt(hit, x, y, { touch: true });
+  }
+
+  function onPointerMove(event) {
+    if (longPress && Math.hypot((event.clientX ?? 0) - longPress.x, (event.clientY ?? 0) - longPress.y) > LONG_PRESS_SLOP) {
+      cancelLongPress();
+    }
+    if (!handleDrag || event.pointerId !== handleDrag.pointerId) return;
+    event.preventDefault?.();
+    const table = tabTable(workbook, handleDrag.tab);
+    const hit = overlays.cellAtPoint(table, windowOf(table), event.clientX ?? 0, event.clientY ?? 0);
+    if (!hit) return;
+    const view = viewOf(handleDrag.tab);
+    const anchored = selectCell(view, { ...sel, tab: handleDrag.tab }, handleDrag.fixed.r, handleDrag.fixed.c, { extend: false });
+    const next = selectCell(view, anchored, hit.r, hit.c, { extend: true });
+    const same =
+      next.focus.row === sel.focus.row && next.focus.col === sel.focus.col && next.anchor.row === sel.anchor.row && next.anchor.col === sel.anchor.col;
+    if (!same) {
+      handleDrag.moved = true;
+      applySelection(next, { announce: false });
+    }
+  }
+
+  // After a long press the finger's lift still sends mousedown and click; on iOS that mousedown
+  // would close the menu the press just opened. The next finger down ends the swallowing.
+  function swallowAfterLongPress(event) {
+    if (!suppressTap) return;
+    event.stopPropagation();
+    event.preventDefault();
+    if (event.type === "click") suppressTap = false;
+  }
+
+  function cellKey(hit) {
+    const view = viewOf(hit.tab);
+    const own = ownerOf(view, hit.r, hit.c);
+    return `${hit.tab}\u0000${view.rows[own.r]}\u0000${view.cols[own.c]}`;
+  }
+
+  // On a phone the formula bar is hidden while reading, so the status line names the selection
+  // and, for one cell, what it holds.
+  function readingStatus(selView) {
+    const area = selectionArea(selView, sel);
+    if (statusCache) return `${area} · ${statusCache}`;
+    const input = activeCellInfo()?.input ?? "";
+    if (!input) return area;
+    return `${area} · ${input.length > 60 ? `${input.slice(0, 59)}…` : input}`;
+  }
+
+  function onPointerEnd(event) {
+    cancelLongPress();
+    // The lift's mouse events follow at once; after that nothing is left to swallow (Android sends
+    // none after its own contextmenu).
+    if (suppressTap) win.setTimeout(() => {
+      suppressTap = false;
+    }, 1000);
+    if (handleDrag && event.pointerId === handleDrag.pointerId) {
+      const done = handleDrag;
+      handleDrag = null;
+      // A handle covers the corners of the cells around it: a tap on it that never dragged is a
+      // tap on the cell under the finger.
+      const table = tabTable(workbook, done.tab);
+      const hit = done.moved ? null : overlays.cellAtPoint(table, windowOf(table), event.clientX ?? 0, event.clientY ?? 0);
+      if (hit && !isOnlySelectedCell({ ...hit, tab: done.tab })) {
+        actOnCellPointer({ ...hit, tab: done.tab });
+        touchTapCell = cellKey({ ...hit, tab: done.tab });
+        return;
+      }
+      syncUI({ announce: true });
+    }
+  }
+
+  function isOnlySelectedCell(hit) {
+    if (!sel || hit.tab !== sel.tab) return false;
+    const view = viewOf(sel.tab);
+    const box = selectionBox(view, sel);
+    if (!box) return false;
+    const own = ownerOf(view, hit.r, hit.c);
+    return box.top === own.r && box.left === own.c && box.bottom === own.r + own.rows - 1 && box.right === own.c + own.cols - 1;
+  }
+
+  // On a phone the edit happens in the docked formula bar, which sits above the keyboard.
+  function openEdit() {
+    const phone = chrome.docked();
+    if (phone) chrome.setEditing(true);
+    editor.openWithInput(phone ? chrome.formulaInput : editor.textarea);
+    if (!editor.editing) chrome.setEditing(false);
+  }
+
   function onMouseDown(event) {
     if (event.button !== undefined && event.button !== 0) return;
+    if (suppressTap) {
+      event.preventDefault();
+      return;
+    }
     const hit = locateCellEvent(event);
     if (!hit) return;
     chrome.commitRename();
     event.preventDefault();
     handledPointerDown = true;
+    const touch = isTouch();
+    // A tap edits only when the touch tap before it selected this same cell: not the cell
+    // selected at load, and not the tap that closed a long-press menu.
+    const tapOnSelected =
+      touch && !editor.editing && !event.shiftKey && isOnlySelectedCell(hit) && touchTapCell === cellKey(hit);
     const wasPicking = editor.editing && editor.canPick();
     actOnCellPointer(hit, { extend: event.shiftKey });
     if (!wasPicking && openCellLinkIfMod(event, hit)) {
       dragging = false;
+      return;
+    }
+    if (touch) {
+      dragging = false;
+      touchTapCell = tapOnSelected ? null : cellKey(hit);
+      if (tapOnSelected) openEdit();
       return;
     }
     dragging = true;
@@ -1380,6 +1593,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   function onClick(event) {
+    if (suppressTap) return;
     if (handledPointerDown) {
       handledPointerDown = false;
       return;
@@ -1398,13 +1612,10 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       if (editor.editing && !commitEdit().ok) return;
       applySelection(selectCell(viewOf(hit.tab), { ...sel, tab: hit.tab }, hit.r, hit.c, { extend: false }));
     }
-    if (!editor.editing) editor.openWithInput(editor.textarea);
+    if (!editor.editing) openEdit();
   }
 
-  function onContextMenu(event) {
-    const hit = locateCellEvent(event);
-    if (!hit) return;
-    event.preventDefault();
+  function openCellMenuAt(hit, cx, cy, { touch = false } = {}) {
     if (!ensureReadyForAction()) return;
     const view = viewOf(hit.tab);
     const box = hit.tab === sel.tab ? selectionBox(view, sel) : null;
@@ -1412,14 +1623,28 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       actOnCellPointer(hit, { extend: false });
     }
     const span = hit.tab === sel.tab ? axisSpan(viewOf(sel.tab), sel) : null;
-    const cx = event.clientX ?? 0;
-    const cy = event.clientY ?? 0;
     runLazy(cmdTool, (b) => {
       const { actions } = ensureCommands(b);
       if (span?.axis === "rows") actions.openRowHeaderMenu(hit.r, null, cx, cy);
       else if (span?.axis === "cols") actions.openColHeaderMenu(hit.c, null, cx, cy);
-      else actions.openCellContextMenu(hit.r, hit.c, cx, cy);
+      else actions.openCellContextMenu(hit.r, hit.c, cx, cy, { touch });
     });
+  }
+
+  function onContextMenu(event) {
+    const hit = locateCellEvent(event);
+    if (!hit) return;
+    event.preventDefault();
+    if (isTouch()) {
+      // Android fires its own contextmenu during a long press: the sheet's timer opens the menu, once.
+      if (longPress) {
+        const pending = longPress;
+        cancelLongPress();
+        fireLongPress(pending.hit, pending.x, pending.y);
+      }
+      return;
+    }
+    openCellMenuAt(hit, event.clientX ?? 0, event.clientY ?? 0);
   }
 
   function subscribeGrids() {
@@ -1462,6 +1687,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
 
   function restart() {
     if (disposed) return;
+    cancelLongPress();
+    handleDrag = null;
     closeTransient();
     const list = tabs.list();
     const firstId = list[0]?.id ?? "";
@@ -1495,7 +1722,10 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   const resizeObserver = typeof win.ResizeObserver === "function" ? new win.ResizeObserver(() => redraw()) : null;
-  const onViewportMove = () => redraw();
+  const onViewportMove = () => {
+    cancelLongPress();
+    redraw();
+  };
   const cleanups = [];
   const listen = (el, evt, fn, opts) => {
     el.addEventListener(evt, fn, opts);
@@ -1516,6 +1746,15 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   listen(workbook, "click", onClick);
   listen(workbook, "dblclick", onDblClick);
   listen(workbook, "contextmenu", onContextMenu);
+  listen(workbook, "pointerdown", onPointerDown);
+  listen(win, "pointerdown", () => {
+    suppressTap = false;
+  }, true);
+  listen(win, "mousedown", swallowAfterLongPress, true);
+  listen(win, "click", swallowAfterLongPress, true);
+  listen(win, "pointermove", onPointerMove);
+  listen(win, "pointerup", onPointerEnd);
+  listen(win, "pointercancel", onPointerEnd);
   listen(scrollTarget, "scroll", onViewportMove, { passive: true });
   listen(win, "resize", onViewportMove);
 
@@ -1537,6 +1776,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   function dispose() {
     if (disposed) return;
     disposed = true;
+    cancelLongPress();
     fillDrag = null;
     closeDialog();
     liveMenu?.dispose();
