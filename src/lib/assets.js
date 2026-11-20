@@ -22,7 +22,7 @@ const ASSETS = {
   "highlight/typescript": () => import("../vendor/hljs-typescript.vendor.js"),
   "highlight/xml": () => import("../vendor/hljs-xml.vendor.js"),
   "highlight/yaml": () => import("../vendor/hljs-yaml.vendor.js"),
-  "highlight-lines": () => import("./highlight-lines.js"),
+  "highlight-lines": () => import("./highlight-lines.js").then((m) => m.withAssets(assets)),
   uimotion: () => import("./uimotion.js"),
 };
 

@@ -3,7 +3,10 @@
 // or comment, so splitting its output on "\n" breaks the rows; every line here reopens
 // what an earlier line left open and closes what it opened. A file's grammar loads
 // the first time a file in that language is shown, and never otherwise.
-import { assets } from "./assets.js";
+//
+// The asset table hands itself in (`withAssets`) rather than this file importing it: a
+// static import back into assets.js would split the table into a chunk of its own, one
+// more request on every page.
 
 const EXTENSIONS = {
   sh: "bash", bash: "bash", zsh: "bash",
@@ -52,14 +55,15 @@ export function balanceLines(html) {
   return lines;
 }
 
-// One entry per line of `code`, each a balanced HTML string. A language with no
-// grammar in this release gives escaped plain lines.
-export async function highlightLines(code, language) {
-  const text = String(code ?? "");
-  if (!language || !assets.names().includes(`highlight/${language}`)) return text.split("\n").map(escapeHtml);
-  const [{ default: hljs }, { default: grammar }] = await Promise.all([assets.load("highlight"), assets.load(`highlight/${language}`)]);
-  if (!hljs.getLanguage(language)) hljs.registerLanguage(language, grammar);
-  return balanceLines(hljs.highlight(text, { language, ignoreIllegals: true }).value);
+// `highlightLines(code, language)` gives one entry per line of `code`, each a balanced
+// HTML string. A language with no grammar in this release gives escaped plain lines.
+export function withAssets(assets) {
+  async function highlightLines(code, language) {
+    const text = String(code ?? "");
+    if (!language || !assets.names().includes(`highlight/${language}`)) return text.split("\n").map(escapeHtml);
+    const [{ default: hljs }, { default: grammar }] = await Promise.all([assets.load("highlight"), assets.load(`highlight/${language}`)]);
+    if (!hljs.getLanguage(language)) hljs.registerLanguage(language, grammar);
+    return balanceLines(hljs.highlight(text, { language, ignoreIllegals: true }).value);
+  }
+  return { languageFor, balanceLines, highlightLines };
 }
-
-export default { languageFor, balanceLines, highlightLines };
