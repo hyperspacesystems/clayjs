@@ -77,7 +77,7 @@ test("create posts the new document to the host's action and returns its href", 
     posts.push({ href, options });
     return { ok: true, status: 200, json: async () => ({ ok: true, href: "/notes-2.html" }) };
   });
-  await expect(create()).resolves.toEqual({ ok: true, href: "/notes-2.html" });
+  await expect(create()).resolves.toEqual({ ok: true, href: new URL("/notes-2.html", location.href).href });
   expect(posts).toHaveLength(1);
   expect(posts[0].href).toBe(new URL("/_/new-document/notes.html", location.origin).href);
   expect(posts[0].options.method).toBe("POST");
@@ -163,4 +163,53 @@ test("view mode and draft mode strip host root attributes and editor UI and fetc
   expect(doc.documentElement.hasAttribute("route-tab")).toBe(false);
   expect(doc.getElementById("bar")).toBeNull();
   expect(doc.getElementById("draft-extra")).toBeNull();
+});
+
+// Values the template names in `keep` (a look, an appreciation link) carry over as they are.
+test("keys the starting values tag keeps are left as they are, and the shared site values too", async () => {
+  document.head.innerHTML =
+    `<script type="application/json" data-rules-name="api" data-rules-version="1">${JSON.stringify({ title: "h1", look: "#look", site: { brand: "#brand" }, rows: ["ul.rows > li", "."] })}</script>` +
+    '<script type="application/json" clay-new-document keep="look">{"look":"ignored"}</script>';
+  document.body.innerHTML = '<span id="brand">Acme</span><h1>My notes</h1><i id="look">dark</i><ul class="rows"><li>one</li></ul>';
+  const doc = parse(await build());
+  expect(doc.querySelector("h1").textContent).toBe("");
+  expect(doc.getElementById("look").textContent).toBe("dark");
+  expect(doc.getElementById("brand").textContent).toBe("Acme");
+});
+
+// The store holds the old writing, and the editor would restore it over a blanked article.
+test("a Block page's store is left out of the new document", async () => {
+  document.body.insertAdjacentHTML("beforeend",
+    '<article data-blockeditor="1"><h1>Old writing</h1></article><script type="application/octet-stream" merge="blockeditor" clay="live">AAAA</script>');
+  const html = await build();
+  expect(html).not.toContain('merge="blockeditor"');
+});
+
+// The host's answer is opened as a page, so only a web address is.
+test("create refuses an answer whose href is not a web address", async () => {
+  window.fetch = jest.fn(async (url) => {
+    if (String(url).includes("/_/meta")) return meta({ newDocument: { post: "/_/new-document/notes.html" } });
+    return { ok: true, status: 200, json: async () => ({ ok: true, href: "javascript:alert(1)" }) };
+  });
+  await expect(create()).resolves.toEqual({ ok: false, message: "Couldn't make a new document. Try again." });
+});
+
+test("a paid-only region stays for the host to judge, and copy content still goes", async () => {
+  document.body.insertAdjacentHTML("beforeend", '<form clay="no-copy-unless:paid-forms" id="contact"></form>');
+  const doc = parse(await build());
+  expect(doc.getElementById("contact")).not.toBeNull();
+  expect(doc.getElementById("secret")).toBeNull();
+});
+
+// The theme's variant styles follow <html look>, so a blank copy keeps the chosen theme whole.
+test("the chosen theme stays", async () => {
+  document.documentElement.setAttribute("look", "dusk");
+  document.head.innerHTML = `<script type="application/json" data-rules-name="api" data-rules-version="1">${JSON.stringify({ title: "h1", look: "html@look" })}</script>`;
+  try {
+    const doc = parse(await build());
+    expect(doc.documentElement.getAttribute("look")).toBe("dusk");
+    expect(doc.querySelector("h1").textContent).toBe("");
+  } finally {
+    document.documentElement.removeAttribute("look");
+  }
 });

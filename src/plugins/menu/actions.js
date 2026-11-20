@@ -195,7 +195,9 @@ export function attachActions({ addItem, note, currentMode }) {
         if (typeof clay().getHTML === "function") {
           html = clay().getHTML();
         } else {
-          const response = await fetch(location.href, { cache: "no-store", credentials: "same-origin" });
+          // Clay-Source asks a local host for the file's own bytes, not the copy it serves with
+          // its runtime addresses and page state written in.
+          const response = await fetch(location.href, { cache: "no-store", credentials: "same-origin", headers: { "Clay-Source": "1" } });
           if (response.ok) html = await response.text();
         }
       } catch {}

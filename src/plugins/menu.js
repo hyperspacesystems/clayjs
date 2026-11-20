@@ -193,7 +193,7 @@ function mount() {
   const openSeo = () => import("./menu/seo.js").then((m) => m.open({ returnFocus: goo }));
 
   actions = attachActions({ addItem, note: showNote, currentMode });
-  if (document.querySelector('script[data-rules-name~="api"]')) {
+  if (document.querySelector('script[type="application/json"][clay-new-document]')) {
     import("./menu/new-document-item.js").then(({ addNewDocumentItem }) => addNewDocumentItem({ addItem, note: showNote })).catch(() => {});
   }
   people = attachPeople({ root, capsule: root.querySelector(".clay-menu"), addItem, removeItem, closeMenu: close, note: showNote });

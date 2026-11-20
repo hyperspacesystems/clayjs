@@ -416,7 +416,7 @@ test("Download in view mode fetches the saved file, and says when it cannot", as
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(location.href);
-    expect(fetchMock.mock.calls[0][1]).toEqual({ cache: "no-store", credentials: "same-origin" });
+    expect(fetchMock.mock.calls[0][1]).toEqual({ cache: "no-store", credentials: "same-origin", headers: { "Clay-Source": "1" } });
     expect(names).toHaveLength(1);
     expect(names[0]).toBe("notes.html");
     const blob = createObjectURL.mock.calls[0][0];

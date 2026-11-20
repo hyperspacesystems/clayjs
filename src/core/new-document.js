@@ -3,7 +3,7 @@ import { finalizeControlForSave } from "../vendor/control-serialize.vendor.js";
 import { TAB_LOCAL_ROOT_ATTRS, stripRouteAttrs } from "../lib/root-attrs.js";
 import { cleanSaveCopy } from "../lib/region-policy.js";
 import { stripCopyContent } from "./copy-content.js";
-import { downloadHtml, documentName, portableHtml } from "./download.js";
+import { downloadHtml, documentName, portableHtml, withoutPageStore } from "./download.js";
 
 /**
  * New blank document: this document with its data emptied, as a new file.
@@ -19,8 +19,6 @@ import { downloadHtml, documentName, portableHtml } from "./download.js";
 const STARTING = 'script[type="application/json"][clay-new-document]';
 const CONTROLS = 'input:not([type="password"]):not([type="file"]), textarea, select';
 const FAILED = "Couldn't make a new document. Try again.";
-
-export const hasRules = (doc = document) => Boolean(doc.querySelector('script[data-rules-name~="api"]'));
 
 function startingValues(doc) {
   const tag = doc.querySelector(STARTING);
@@ -50,15 +48,23 @@ function cleanDocument(doc) {
   const root = doc.documentElement;
   if (!root) return;
   cleanSaveCopy(root);
+  // Who last wrote the live parts, and when, belongs to the source's history.
+  for (const tag of doc.querySelectorAll('script[clay~="live"]')) {
+    tag.removeAttribute("live-at");
+    tag.removeAttribute("live-by");
+  }
   for (const name of TAB_LOCAL_ROOT_ATTRS) root.removeAttribute(name);
   stripRouteAttrs(root);
 }
 
-function writableRules(rules) {
+// The keys a blank copy empties. `site` holds what the host keeps for every page of a site
+// (core/site-edits.js), `html@look` is the chosen theme its variant styles follow, a codec rule has no blank the engine knows, and the starting values
+// tag's `keep` attribute names keys whose values the new document carries over as they are.
+function writableRules(rules, doc) {
+  const keep = new Set((doc.querySelector(STARTING)?.getAttribute("keep") || "").split(/\s+/).filter(Boolean));
   const active = {};
   for (const [key, rule] of Object.entries(rules)) {
-    const codec = engine.codecOf ? engine.codecOf(rule) : null;
-    if (codec && !engine.codecs.get(codec.name)) continue;
+    if (key === "site" || rule === "html@look" || keep.has(key) || engine.codecOf(rule)) continue;
     active[key] = rule;
   }
   return active;
@@ -70,12 +76,15 @@ function serialize(doc) {
 }
 
 export async function build() {
-  const html = stripCopyContent(await currentHtml());
+  // A Block page's store holds its old writing, and the editor would restore it; the article
+  // seeds the new page, and the template's clay:newdocument listener blanks the article.
+  // Content only the paid plans keep stays for the host to judge; a download strips it all.
+  const html = withoutPageStore(stripCopyContent(await currentHtml(), []));
   const doc = new DOMParser().parseFromString(html, "text/html");
   cleanDocument(doc);
   const found = engine.findRulesIn(doc, "api");
   if (!found?.rules) throw Object.assign(new Error("This page has no api rules tag."), { code: "no_rules" });
-  const rules = writableRules(found.rules);
+  const rules = writableRules(found.rules, doc);
   if (Object.keys(rules).length > 0) {
     applyData(doc, blankData(rules), rules);
     const starting = startingValues(doc);
@@ -117,7 +126,8 @@ export async function create() {
         body: html,
       });
       body = await response.json().catch(() => null);
-      if (response.ok && body?.ok !== false && typeof body?.href === "string") return { ok: true, href: body.href };
+      const href = typeof body?.href === "string" ? new URL(body.href, location.href) : null;
+      if (response.ok && body?.ok !== false && /^https?:$/.test(href?.protocol)) return { ok: true, href: href.href };
     } catch {}
     const text = body?.msg ?? body?.message;
     return { ok: false, message: typeof text === "string" && text ? text : FAILED };

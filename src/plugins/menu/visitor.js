@@ -113,7 +113,7 @@ export function start() {
   });
   publishLooks();
   attachUndo({ addItem, beforeOpen });
-  if (document.querySelector('script[data-rules-name~="api"]')) {
+  if (document.querySelector('script[type="application/json"][clay-new-document]')) {
     import("./new-document-item.js").then(({ addNewDocumentItem }) => addNewDocumentItem({ addItem, note })).catch(() => {});
   }
   addItem({ id: "clay.download", label: "Download copy", run: () => window.clay.visitorDrafts.download() });

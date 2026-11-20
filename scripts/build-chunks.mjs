@@ -166,14 +166,14 @@ function readerCorePlugin(coreExports) {
   };
 }
 
-// Inline the stateless serializer in recovery so its lazy consumer cannot split
-// the existing persist chunk and add a request to every edit or draft boot.
+// Inline the stateless serializer in its lazy consumers (recovery, New blank document) so
+// they cannot split the existing persist chunk and add a request to every edit or draft boot.
 function recoveryControlsPlugin() {
   return {
     name: "recovery-controls",
     setup(build) {
       build.onResolve({ filter: /control-serialize\.vendor\.js$/ }, (args) => {
-        if (!/[\\/]plugins[\\/]visitor-drafts[\\/]recovery\.js$/.test(args.importer)) return;
+        if (!/[\\/](?:plugins[\\/]visitor-drafts[\\/]recovery|core[\\/]new-document)\.js$/.test(args.importer)) return;
         // esbuild hashes a plugin namespace's path as given, so an absolute path would make
         // every chunk name depend on the folder the build runs in. Keep it root-relative.
         const root = build.initialOptions.absWorkingDir;

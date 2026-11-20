@@ -27,12 +27,15 @@ const isPageStoreTag = (tag) => {
   return /\bmerge="blockeditor(?:\.\d+)?"/.test(open) && /\bclay="[^"]*\blive\b/.test(open);
 };
 
-export function portableHtml(html) {
-  if (typeof html !== "string" || !/^https?:$/.test(location.protocol)) return html;
-  const withoutStore = /<article\b[^>]*\bdata-blockeditor\b/.test(html)
+export function withoutPageStore(html) {
+  return /<article\b[^>]*\bdata-blockeditor\b/.test(html)
     ? html.replace(PAGE_STORE_TAG, (tag) => (isPageStoreTag(tag) ? "" : tag))
     : html;
-  return withoutStore.replace(/(^|[^\w./:-])\/_\/uploads\//g, `$1${location.origin}/_/uploads/`);
+}
+
+export function portableHtml(html) {
+  if (typeof html !== "string" || !/^https?:$/.test(location.protocol)) return html;
+  return withoutPageStore(html).replace(/(^|[^\w./:-])\/_\/uploads\//g, `$1${location.origin}/_/uploads/`);
 }
 
 export async function downloadHtml({ html, name, type = "text/html" }) {

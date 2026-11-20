@@ -250,7 +250,8 @@ test("a host action the host does itself is a button that posts, opens what it a
 });
 
 test("New blank document is the first item when the page has an api rules tag, opens the created page or shows the refusal, and is absent without an api tag", async () => {
-  const apiHead = '<script type="application/json" data-rules-name="api" data-rules-version="1">{"title":"h1"}</script>';
+  const rulesTag = '<script type="application/json" data-rules-name="api" data-rules-version="1">{"title":"h1"}</script>';
+  const apiHead = rulesTag + '<script type="application/json" clay-new-document>{}</script>';
   const meta = metaDocument({ actions: { newDocument: { post: "/_/new-document/tok" } } });
   await boot({ meta, head: apiHead });
 
@@ -274,8 +275,12 @@ test("New blank document is the first item when the page has an api rules tag, o
   expect(buttonOf("clay.new").textContent.trim()).toBe("New blank document");
 
   buttonOf("clay.new").click();
+  gooOf().click();
+  buttonOf("clay.new").click();
   await flush();
   expect(opened).toHaveBeenCalledWith("http://localhost/notes-2.html", "_blank");
+  // The second click came while the first was under way, so it made nothing.
+  expect(window.fetch.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
   expect(tab.opener).toBeNull();
 
   reply = { ok: false, status: 403, json: async () => ({ msg: "Free plan limit reached.", msgType: "error", code: "forbidden" }) };
@@ -285,7 +290,8 @@ test("New blank document is the first item when the page has an api rules tag, o
   expect($(".clay-menu-note", "menu").textContent).toBe("Free plan limit reached.");
   opened.mockRestore();
 
-  await boot({ meta: metaDocument({}) });
+  // Rules alone do not say what a blank copy keeps, so the page also needs the starting values tag.
+  await boot({ meta: metaDocument({}), head: rulesTag });
   gooOf().click();
   await flush();
   expect(ids()).not.toContain("clay.new");
