@@ -67,6 +67,7 @@ const broken = {
   C12: { ...tiny, review: (action, saw) => saw },
   C13: { ...tiny, preview: (doc) => structuredClone(doc) },
   C14: { ...tiny, holds: () => true },
+  C15: { ...tiny, removes: (action) => (action.t === "set" ? [action.row] : tiny.removes(action)) },
   C17: { ...tiny, removes: () => [] },
   ids: { ...tiny, targets: (action) => tiny.targets(action).map((target) => target.split("/")) },
   ops: { ...tiny, ops: () => 1 },
@@ -111,6 +112,13 @@ test("a codec whose writer drops a column is rejected with C2", () => {
 test.each(Object.keys(broken))("a codec that breaks %s is rejected", (law) => {
   calls = 0;
   expect(lawsOf(broken[law])).toContain(law);
+});
+
+// Bug it catches: C15 refuses an action that removes a record a coworker already deleted, so a
+// sheet's undo of a paste that added rows cannot put back the cells it overwrote.
+test("a codec whose action removes a record that is already gone keeps C15", () => {
+  calls = 0;
+  expect(lawsOf({ ...tiny, removes: (action) => [...tiny.removes(action), "gone"] })).not.toContain("C15");
 });
 
 // Bug it catches: a planted defect inside the codec itself (a set that wipes its whole row)

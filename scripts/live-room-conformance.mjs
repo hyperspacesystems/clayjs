@@ -30,7 +30,7 @@ const FILE_PROFILES = ["v1", "v2", "v3"];
 // that module. Everything else a harness file imports comes from ref-core/.
 export const PRODUCT_IMPORTS = {
   "world.mjs": { "ledger.mjs": "*", "room.mjs": "*", "record.mjs": "*", "tab.mjs": "*", "host.mjs": "*" },
-  "fileworld.mjs": { "fileonly.mjs": "*", "record.mjs": ["serialize", "DOC"], "ledger.mjs": ["trimLedger"], "recover.mjs": ["replay"] },
+  "fileworld.mjs": { "fileonly.mjs": "*", "record.mjs": ["serialize"], "recover.mjs": ["replay"] },
   "oracle.mjs": { "recover.mjs": ["replay"] },
   "scenarios.mjs": { "recover.mjs": ["replay"], "room.mjs": ["admit"], "host.mjs": ["fileAccepted"] },
 };

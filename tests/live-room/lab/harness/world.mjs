@@ -7,7 +7,7 @@ import { newRoom, newInstance, dropConnection, rejoin, admit } from "../core/roo
 import { labLimits } from "../core/limits.mjs";
 import { serialize, parse, DOC } from "../core/record.mjs";
 import { newTab, attached, view as codecView, edit, restoreCopy, decide, flush, toRoom, post, answered, waited, toTab, receive, sync, read, link, nudgeAll, capture, deliver, rotate, retry, nextCommit, nextGen, storeRemovals } from "../core/tab.mjs";
-import { establishing, openOn, fileAccepted, sameTables } from "../core/host.mjs";
+import { establishing, openOn, fileAccepted, sameTables, render, outsideStep } from "../core/host.mjs";
 import { newOracle, checkStep, checkEnd } from "./oracle.mjs";
 import { tinyWorkbook } from "./lib.mjs";
 
@@ -237,8 +237,7 @@ function finalSave(world) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const file = get(world.host);
     if (file.record.gen !== room.gen || file.record.through >= room.seq) return;
-    const record = { v: 2, doc: DOC, gen: room.gen, epoch: room.epoch, commit: nextCommit(world), parent: file.record.commit, through: room.seq, room: room.id };
-    const body = serialize(record, room.state);
+    const { body } = render(world, file);
     if (put(world.host, body, file.etag, "final").status !== 200) continue;
     const before = file;
     world.accepted++;
@@ -281,7 +280,6 @@ export function rawWrite(world, body, kind) {
 export function outsideWrite(world, kind, at, action) {
   const version = at === "live" ? world.host : world.host.versions[at];
   if (!version) return false;
-  const room = world.room?.gen ? world.room : null;
   const current = get(world.host);
   const source = parse(version.body);
   const patch = action && { id: `x${++world.patches}`, action };
@@ -291,49 +289,17 @@ export function outsideWrite(world, kind, at, action) {
     return true;
   }
   if (patch) act(source.state.wb, codecAction(action));
-  if (world.hostMade && !planted("host-equal-tables-new-gen") && sameTables(source, current)) return rawWrite(world, world.host.body, kind);
-  const cut = room ? [room.gen, room.seq] : [current.record.gen, current.record.through];
-  const dirty = Boolean(room) && (room.gen !== current.record.gen || room.seq > current.record.through);
-  let backup = null;
-  if (dirty && !planted("restore-no-backup")) {
-    const record = { v: 2, doc: DOC, gen: room.gen, epoch: room.epoch, commit: nextCommit(world), parent: room.base.commit, through: room.seq, room: room.id };
-    backup = serialize(record, room.state);
-    keepVersion(world.host, backup, "backup");
-    world.oracle.onBackup(world, record.commit, room);
-  }
-  const epoch = current.record.epoch + 1;
-  const before = planted("restore-replays-admitted") ? {} : (room ?? current).state.seen;
-  const merged = [];
-  const range = {};
-  for (const client of new Set([...Object.keys(source.state.seen), ...Object.keys(before)])) {
-    const [low, lowAt] = source.state.seen[client] ?? [0, -1];
-    const [high, highAt] = before[client] ?? [0, -1];
-    merged.push([client, [Math.max(low, high), Math.max(lowAt, highAt)]]);
-    range[client] = [low, high];
-  }
-  const folded = trimLedger(merged, Math.max(source.state.floor, (room ?? current).state.floor), world.limits.ledgerCap);
-  const seen = {};
-  const bounds = {};
-  for (const [client, [n]] of folded.kept) {
-    seen[client] = [n, epoch];
-    if (range[client][1] > range[client][0]) bounds[client] = range[client];
-  }
-  const kept = planted("restore-keeps-lineage");
-  const state = {
-    wb: source.state.wb,
-    seen,
-    lineage: kept ? [[current.record.gen, current.record.through], ...current.state.lineage].slice(0, W) : [],
-    cut: kept ? null : [...cut, bounds],
-    floor: folded.floor,
-  };
   const keep = world.outside === "open";
-  if (keep && !world.room) world.room = newInstance(world);
-  const record = { v: 2, doc: DOC, gen: nextGen(world, epoch), epoch, commit: nextCommit(world), parent: current.record.commit, through: 0, room: keep ? world.room.id : null, restored: source.record.commit };
-  const body = serialize(record, state);
-  world.oracle.onRestore(world, body, { source: source.record.commit, room, dirty, backup: Boolean(backup), patch });
-  const etag = write(world.host, body, kind);
+  const step = outsideStep(world, source, current, keep);
+  if (step.same) return rawWrite(world, world.host.body, kind);
+  if (step.backup) {
+    keepVersion(world.host, step.backup.body, "backup");
+    world.oracle.onBackup(world, step.backup.record.commit, step.room);
+  }
+  world.oracle.onRestore(world, step.body, { source: source.record.commit, room: step.room, dirty: step.dirty, backup: Boolean(step.backup), patch });
+  const etag = write(world.host, step.body, kind);
   world.restores++;
-  world.room = keep ? newRoom(record, etag, state, world.room.id) : null;
+  world.room = keep ? newRoom(step.record, etag, step.state, step.instance.id) : null;
   if (keep) world.oracle.onRoom(world, world.room);
   nudgeAll(world);
   return true;

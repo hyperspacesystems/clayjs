@@ -169,3 +169,23 @@ export function deliver(env, at = 0, lost = false) {
   }
   return true;
 }
+
+// The outside write step of a file-only host (rule 22): a version restore, an agent's write or an
+// upload becomes a new file generation whose ledger folds the incoming file's and the current
+// file's, so a save whose answer was lost before the write is never applied again on top of it.
+// `source` and `current` are parsed files; answers the file to write.
+export function outsideFold(env, source, current) {
+  const merged = [];
+  for (const client of new Set([...Object.keys(source.state.seen), ...Object.keys(current.state.seen)])) {
+    const [low, lowAt] = source.state.seen[client] ?? [0, -1];
+    const [high, highAt] = planted("file-outside-forgets-ledger") ? [0, -1] : current.state.seen[client] ?? [0, -1];
+    const dropped = !(client in current.state.seen) && lowAt <= current.state.floor && !planted("file-fold-revives-retired");
+    const stale = !(client in source.state.seen) && highAt <= source.state.floor && !planted("file-fold-keeps-stale");
+    if (Math.max(low, high) > 0 && !dropped && !stale) merged.push([client, [Math.max(low, high), Math.max(lowAt, highAt)]]);
+  }
+  const folded = trimLedger(merged, Math.max(source.state.floor, current.state.floor), env.limits.ledgerCap);
+  const epoch = Math.max(current.record.epoch, folded.floor) + 1;
+  const state = { wb: source.state.wb, seen: Object.fromEntries(folded.kept), lineage: [], cut: [current.record.gen, current.record.through, {}], floor: folded.floor };
+  const record = { v: 2, doc: current.record.doc ?? DOC, gen: nextGen(env, epoch), epoch, commit: nextCommit(env), parent: current.record.commit, through: 0, room: null, mode: "file", restored: source.record.commit };
+  return { record, body: serialize(record, state) };
+}

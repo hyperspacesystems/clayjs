@@ -3,7 +3,7 @@
 // writes every file, sends every frame, and tells the registry what happened.
 import { randomInt } from 'node:crypto';
 import { admit, dropConnection, newInstance, rejoin, retained, stateReserve } from '../../live-room/core/room.js';
-import { establishing, fileAccepted as accepted } from '../../live-room/core/host.js';
+import { establishing, fileAccepted as accepted, outsideStep, render, sameTables } from '../../live-room/core/host.js';
 import { parse } from '../../live-room/core/record.js';
 import { useCodec } from '../../live-room/core/codec.js';
 import { REAL_LIMITS, ROOM_HEAP } from '../../live-room/core/limits.js';
@@ -168,6 +168,19 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       return used() - held(slots.get(key)) + others.used() + heap.doc * size + stateReserve(limits) <= liveBytes;
     },
 
+    // The room instance a joining client is told about before any generation is open, so a tab
+    // never makes an instance of its own: the host makes it, as `establish` does.
+    instance(key, codec) {
+      let slot = slots.get(key);
+      if (!slot) {
+        if (!Object.hasOwn(codecs, codec) || !this.mayFit(key, 0)) return null;
+        slot = { codec, room: null, bytes: null, docBytes: 0, copyBytes: 0, parts: new Map(), notices: [], idle: now() };
+        slots.set(key, slot);
+      }
+      if (!slot.room) slot.room = newInstance(envOf(slot));
+      return slot.room;
+    },
+
     establish(key, { bytes, etag, codec }) {
       if (!Object.hasOwn(codecs, codec) || !this.mayFit(key, bytes)) return null;
       let slot = slots.get(key);
@@ -203,6 +216,7 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       if (open(slot)) return file.record.gen === slot.room.gen && file.record.room === slot.room.id ? slot.room : null;
       if (accepted(envOf(slot), file, read(slot, slot.bytes ?? bytes, null)) !== 'establishing') return null;
       slot.bytes = bytes;
+      slot.etag = etag;
       slot.docBytes = utf8(bytes);
       slot.parts.clear();
       slot.notices = [];
@@ -261,10 +275,94 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
         return { answer, send: [], dirty: wasDirty };
       }
       slot.bytes = bytes;
+      slot.etag = etag;
       slot.docBytes = utf8(bytes);
+      if (answer === 'establishing') {
+        slot.parts.clear();
+        slot.copyBytes = 0;
+      }
       const send = answer === 'establishing' ? sent(slot, slot.room.log.length) : sent(slot, from);
       wake();
       return { answer, send };
+    },
+
+    // Whether writing `bytes` would end the open room (fileAccepted answering 'outside'), judged
+    // before the write. A browser save that is not the room's next commit is refused with this
+    // (plan 09 section 2.2): a tab from before the room opened, or one that lost track of it, would
+    // otherwise end the room and drop what it admitted since the last commit. Outside writes never
+    // ask: they go through outsideWrite, which backs the room up.
+    ends(key, bytes) {
+      const slot = slots.get(key);
+      const room = open(slot);
+      if (!room) return false;
+      let file;
+      try {
+        file = read(slot, bytes, null);
+      } catch {
+        return true;
+      }
+      const { record } = file;
+      if (record.gen !== room.gen) return !(record.room === room.id && record.epoch > room.epoch);
+      if (record.commit === room.base.commit) return Boolean(slot.bytes) && !sameTables(file, read(slot, slot.bytes, null));
+      return !(record.room === room.id && record.parent === room.base.commit);
+    },
+
+    // The host's own commit of the room's state (its final save when the last tab leaves a dirty
+    // room). Null when the file on disk already holds everything the room admitted. The host
+    // writes `bytes` with If-Match on the ETag it holds and reports the write with fileAccepted.
+    render(room) {
+      const slot = slotOf(room);
+      if (!slot || !open(slot) || !slot.bytes) return null;
+      const file = read(slot, slot.bytes, slot.etag ?? null);
+      if (file.record.gen !== room.gen || file.record.through >= room.seq) return null;
+      const built = render(envOf(slot), file);
+      return { bytes: built.body, record: built.record, ifMatch: slot.etag ?? null };
+    },
+
+    // The one host step for every write that did not come from the room: a version restore, an
+    // agent's write, an upload of an older copy. `bytes` is the file the host wants to write and
+    // `current` the file on disk. Answers `{ same: true, bytes }` when the tables are equal:
+    // write those bytes and report them with fileAccepted (the incoming bytes when they carry the
+    // current record, the current file otherwise, so the room is kept). Otherwise answers the bytes to
+    // write (a new generation with a cut) and, when the room held unsaved work, a backup to keep
+    // as a version first. With `keep` the room reopens on the new generation when fileAccepted
+    // sees the write; without it the room is dropped now. The host holds the document's write
+    // lock from this call until fileAccepted, so no frame lands between them.
+    outsideWrite(key, { bytes, current, codec, keep = true }) {
+      let slot = slots.get(key);
+      const kind = slot?.codec ?? codec;
+      if (!Object.hasOwn(codecs, kind)) return null;
+      const probe = slot ?? { codec: kind };
+      let source;
+      let disk;
+      try {
+        source = read(probe, bytes, null);
+        disk = read(probe, current, null);
+      } catch {
+        return null;
+      }
+      const reopen = keep && this.mayFit(key, bytes);
+      const made = !slot && reopen;
+      if (made) {
+        slot = { codec: kind, room: null, bytes: current, docBytes: utf8(current), copyBytes: 0, parts: new Map(), notices: [], idle: now() };
+        slots.set(key, slot);
+      }
+      const env = slot ? envOf(slot) : { hostMade: true, limits, observer: silent, port: { room: () => null, setRoom: () => {}, next } };
+      const step = outsideStep(env, source, disk, reopen);
+      if (step.same) {
+        if (made) forget(key);
+        // Equal tables: nothing changes for the room. The other bytes (a title) are taken only when
+        // the incoming file carries the current record; an older record over equal tables (a
+        // version restored twice) would end the room without a backup, so the file stays as it is.
+        const kept = source.record.gen === disk.record.gen && source.record.commit === disk.record.commit;
+        return { same: true, bytes: kept ? bytes : current };
+      }
+      const wasDirty = step.dirty;
+      if (!reopen && slot) {
+        forget(key);
+        wake();
+      }
+      return { same: false, bytes: step.body, record: step.record, backup: step.backup?.body ?? null, dirty: wasDirty, kept: reopen };
     },
 
     leave(room, conn) {

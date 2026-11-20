@@ -405,3 +405,81 @@ test("a paste whose stage fit when it opened is admitted to its last part", () =
   for (const piece of pieces.slice(0, -1)) expect(rooms.frame(room, "ben", piece).answer).toBe("staged");
   expect(rooms.frame(room, "ben", pieces.at(-1)).answer).toBe("ok");
 });
+
+function agentWrote(bytes, row, col, value) {
+  useCodec(tiny);
+  const { record, state } = parse(bytes);
+  state.wb.rows[row].cells[col] = value;
+  return serialize(record, state);
+}
+
+test("an agent's write while the room holds unsaved edits: the host keeps them in a backup, writes a new generation with a cut, and the room reopens on it", () => {
+  const { rooms, room, bytes } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "ben")));
+  const step = rooms.outsideWrite("doc", { bytes: agentWrote(bytes, "r2", "c2", "agent"), current: bytes, codec: "tiny" });
+  expect(step).toEqual(expect.objectContaining({ same: false, dirty: true, kept: true }));
+  useCodec(tiny);
+  const backup = parse(step.backup);
+  expect(backup.record).toEqual(expect.objectContaining({ gen: room.gen, through: 1, parent: room.base.commit }));
+  expect(backup.state.wb.rows.r1.cells.c1).toBe("ben");
+  const written = parse(step.bytes);
+  expect(written.record).toEqual(expect.objectContaining({ epoch: room.epoch + 1, through: 0, room: room.id }));
+  expect(written.record.gen).not.toBe(room.gen);
+  expect(written.state.cut).toEqual([room.gen, 1, { ben: [0, 1] }]);
+  expect(written.state.wb.rows.r2.cells.c2).toBe("agent");
+  expect(written.state.wb.rows.r1.cells.c1).toBe("a");
+  expect(rooms.fileAccepted("doc", { bytes: step.bytes, etag: "e3" }).answer).toBe("establishing");
+  expect(rooms.get("doc").gen).toBe(written.record.gen);
+});
+
+test("an outside write on a host that does not reopen drops the room now, and the file names no instance", () => {
+  const { rooms, room, bytes } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "ben")));
+  const step = rooms.outsideWrite("doc", { bytes: agentWrote(bytes, "r2", "c2", "upload"), current: bytes, codec: "tiny", keep: false });
+  expect(step).toEqual(expect.objectContaining({ same: false, dirty: true, kept: false }));
+  expect(step.backup).not.toBeNull();
+  expect(step.record.room).toBeNull();
+  expect(rooms.get("doc")).toBeNull();
+  expect(rooms.fileAccepted("doc", { bytes: step.bytes, etag: "e3" }).answer).toBe("none");
+});
+
+test("an outside write that changes only bytes outside the tables keeps the room and its generation", () => {
+  const { rooms, room, bytes } = opened();
+  const titled = bytes.replace("<!doctype html>", "<!doctype html><title>t</title>");
+  expect(rooms.outsideWrite("doc", { bytes: titled, current: bytes, codec: "tiny" })).toEqual({ same: true, bytes: titled });
+  expect(rooms.fileAccepted("doc", { bytes: titled, etag: "e4" }).answer).toBe("same");
+  expect(rooms.get("doc")).toBe(room);
+});
+
+test("the host's own commit covers every admitted edit and is the room's next commit; a clean room has none to make", () => {
+  const { rooms, room, est } = opened();
+  expect(rooms.render(room)).toBeNull();
+  rooms.attach(room, "ben", "conn-ben");
+  rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "ben")));
+  rooms.frame(room, "ben", request(room, "ben", 2, set("r2", "c1", "two")));
+  const own = rooms.render(room);
+  expect(own.record).toEqual(expect.objectContaining({ gen: room.gen, through: 2, parent: est.record.commit, room: room.id }));
+  useCodec(tiny);
+  expect(parse(own.bytes).state.wb.rows.r2.cells.c1).toBe("two");
+  const told = rooms.fileAccepted("doc", { bytes: own.bytes, etag: "e7" });
+  expect(told.answer).toBe("commit");
+  expect(told.send).toEqual([expect.objectContaining({ k: "receipt", through: 2, etag: "e7" })]);
+  expect(rooms.render(room)).toBeNull();
+});
+
+// Bug it catches: a version restored over equal tables is written with its old record, so the
+// host's next fileAccepted ends the dirty room with no backup and a coworker's edit is lost.
+test("a version restored over equal tables keeps the current record, the room and its unsaved edits", () => {
+  const { rooms, room, bytes } = opened();
+  useCodec(tiny);
+  const older = serialize({ ...RECORD, commit: "c00000000007" }, START);
+  rooms.attach(room, "ben", "conn-ben");
+  rooms.frame(room, "ben", request(room, "ben", 1, set("r2", "c2", "ben")));
+  const step = rooms.outsideWrite("doc", { bytes: older, current: bytes, codec: "tiny" });
+  expect(step).toEqual({ same: true, bytes });
+  expect(rooms.fileAccepted("doc", { bytes: step.bytes, etag: "e8" }).answer).toBe("same");
+  expect(rooms.get("doc")).toBe(room);
+  expect(room.state.wb.rows.r2.cells.c2).toBe("ben");
+});

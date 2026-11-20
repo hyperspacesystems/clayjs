@@ -87,11 +87,21 @@ function deliver(env, at = 0, lost = !1) {
   const { tab, io, status, etag } = answered;
   return tab.io === io && (tab.io = null), tab.alive && (lost || !status ? tab.unknown = io : status === 200 ? (settle(env, tab, io.ids), tab.base.etag === io.etag && (tab.base = { etag, ...parse(io.body) })) : refused(env, tab, io)), !0;
 }
+function outsideFold(env, source, current) {
+  const merged = [];
+  for (const client of /* @__PURE__ */ new Set([...Object.keys(source.state.seen), ...Object.keys(current.state.seen)])) {
+    const [low, lowAt] = source.state.seen[client] ?? [0, -1], [high, highAt] = current.state.seen[client] ?? [0, -1], dropped = !(client in current.state.seen) && lowAt <= current.state.floor && !0, stale = !(client in source.state.seen) && highAt <= source.state.floor && !0;
+    Math.max(low, high) > 0 && !dropped && !stale && merged.push([client, [Math.max(low, high), Math.max(lowAt, highAt)]]);
+  }
+  const folded = trimLedger(merged, Math.max(source.state.floor, current.state.floor), env.limits.ledgerCap), epoch = Math.max(current.record.epoch, folded.floor) + 1, state = { wb: source.state.wb, seen: Object.fromEntries(folded.kept), lineage: [], cut: [current.record.gen, current.record.through, {}], floor: folded.floor }, record = { v: 2, doc: current.record.doc ?? DOC, gen: nextGen(env, epoch), epoch, commit: nextCommit(env), parent: current.record.commit, through: 0, room: null, mode: "file", restored: source.record.commit };
+  return { record, body: serialize(record, state) };
+}
 export {
   deliver,
   edit,
   nextCommit,
   nextGen,
+  outsideFold,
   push,
   refresh,
   save,

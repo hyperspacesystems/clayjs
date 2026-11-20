@@ -246,9 +246,6 @@ export function checkCodec(
               );
         const needed = codec.needs(action).every((id) => codec.has(now, id));
         const absent = codec.creates(action).every((id) => !codec.has(now, id));
-        const removable = codec
-          .removes(action)
-          .every((id) => codec.has(now, id));
         const held = codec.holds(now, action);
         const twin = structuredClone(now);
         const reloaded = codec.read(before).doc;
@@ -307,11 +304,8 @@ export function checkCodec(
             run,
             "holds said the document already shows the action, but apply changed it",
           );
-        if (
-          applied &&
-          (!removable || codec.removes(action).some((id) => codec.has(now, id)))
-        )
-          fail("C15", run, "removes does not match what apply took away");
+        if (applied && codec.removes(action).some((id) => codec.has(now, id)))
+          fail("C15", run, "an applied action left something it removes in place");
         if (
           applied &&
           after !== before &&

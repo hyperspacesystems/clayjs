@@ -1,16 +1,16 @@
 import { planted } from "../core/planted.mjs";
 import { newHost, get, put, write, keepRecovery, fetchRecovery } from "./host.mjs";
-import { serialize, parse, DOC, ledgerBytes } from "../core/record.mjs";
+import { serialize, parse, ledgerBytes } from "../core/record.mjs";
 import { act as refAct, cellsOf as workbookCells } from "../codec-tiny/reducer.mjs";
 import { act } from "../core/codec.mjs";
 import { refAction, refDoc, codecAction, codecDoc } from "./lens.mjs";
-import { resolved, trimLedger } from "../core/ledger.mjs";
+import { resolved } from "../core/ledger.mjs";
 import { preview, replay } from "../core/recover.mjs";
 import { readPage, parse as readFile } from "./reader.mjs";
 import { labLimits } from "../core/limits.mjs";
 import { newTally, refStep as refFold } from "./oracle.mjs";
 import { canon, tinyWorkbook } from "./lib.mjs";
-import { nextCommit, nextGen, view as codecView, edit as codecEdit, refresh, push, save, deliver } from "../core/fileonly.mjs";
+import { nextCommit, nextGen, view as codecView, edit as codecEdit, refresh, push, save, deliver, outsideFold } from "../core/fileonly.mjs";
 
 export { refresh, push, save, deliver } from "../core/fileonly.mjs";
 
@@ -115,19 +115,7 @@ export function outside(world, at, action, raw = false) {
     announce(world);
     return true;
   }
-  const merged = [];
-  for (const client of new Set([...Object.keys(source.state.seen), ...Object.keys(current.state.seen)])) {
-    const [low, lowAt] = source.state.seen[client] ?? [0, -1];
-    const [high, highAt] = planted("file-outside-forgets-ledger") ? [0, -1] : current.state.seen[client] ?? [0, -1];
-    const dropped = !(client in current.state.seen) && lowAt <= current.state.floor && !planted("file-fold-revives-retired");
-    const stale = !(client in source.state.seen) && highAt <= source.state.floor && !planted("file-fold-keeps-stale");
-    if (Math.max(low, high) > 0 && !dropped && !stale) merged.push([client, [Math.max(low, high), Math.max(lowAt, highAt)]]);
-  }
-  const folded = trimLedger(merged, Math.max(source.state.floor, current.state.floor), world.limits.ledgerCap);
-  const epoch = Math.max(current.record.epoch, folded.floor) + 1;
-  const state = { wb: source.state.wb, seen: Object.fromEntries(folded.kept), lineage: [], cut: [current.record.gen, current.record.through, {}], floor: folded.floor };
-  const record = { v: 2, doc: DOC, gen: nextGen(world, epoch), epoch, commit: nextCommit(world), parent: current.record.commit, through: 0, room: null, mode: "file", restored: source.record.commit };
-  const body = serialize(record, state);
+  const { body } = outsideFold(world, source, current);
   world.oracle.onOutside(world, body, at, patch, false);
   write(world.host, body, "outside");
   announce(world);

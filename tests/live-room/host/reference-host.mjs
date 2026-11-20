@@ -1,0 +1,242 @@
+// The reference host: the whole host port of plan 09 section 2.1 over the ordered room
+// registry, in memory. The htmlclay and hyperclay lanes copy it. Clients reach it through
+// `host.fetch` (a fetch with the same answers a real host gives) and `host.subscribe` (the
+// event stream), so tests drive it with no network. Faults are switched on per request.
+import { randomInt } from "node:crypto";
+import { createOrderedRooms } from "../../../src/server/rooms/index.js";
+import { outsideFold } from "../../../src/live-room/core/fileonly.js";
+import { parse } from "../../../src/live-room/core/record.js";
+import { useCodec } from "../../../src/live-room/core/codec.js";
+import { REAL_LIMITS } from "../../../src/live-room/core/limits.js";
+
+const json = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+
+export function createReferenceHost({ codecs, codec, room = true, keep = true, rooms: options = {} }) {
+  // A room that frees memory tells the tabs of every other room that they may send again.
+  const rooms = createOrderedRooms({ codecs, ...options, onSpace: (key) => broadcast(key, [{ to: "*", k: "space" }]) });
+  const counters = {};
+  const fileEnv = { limits: options.limits ?? REAL_LIMITS, port: { next: (counter) => (counters[counter] = (counters[counter] ?? (options.newId ?? (() => randomInt(2 ** 40)))()) + 1) } };
+  const docs = new Map();
+  const faults = [];
+  let etags = 0;
+
+  function doc(key) {
+    const found = docs.get(key);
+    if (!found) throw Object.assign(new Error(`no document ${key}`), { status: 404 });
+    return found;
+  }
+
+  // One lock per document: the establishing commit, every save, the host's own commit and
+  // every outside write run one at a time, each with the fileAccepted call that follows it.
+  function locked(key, work) {
+    const entry = doc(key);
+    const run = entry.lock.then(work);
+    entry.lock = run.catch(() => {});
+    return run;
+  }
+
+  function broadcast(key, send) {
+    const entry = docs.get(key);
+    if (!entry) return;
+    const live = rooms.get(key);
+    const log = live?.log ?? [];
+    for (const frame of send) {
+      const at = frame.to === undefined ? log.lastIndexOf(frame) : -1;
+      const wire = JSON.parse(JSON.stringify(frame));
+      for (const [clientId, listener] of entry.listeners) {
+        if (frame.to !== undefined && frame.to !== "*" && frame.to !== clientId) continue;
+        listener({ type: "room", gen: live?.gen ?? null, at, frame: wire });
+      }
+    }
+  }
+
+  function push(key) {
+    const entry = docs.get(key);
+    for (const listener of entry.listeners.values()) listener({ type: "file", etag: entry.etag });
+  }
+
+  // A write the host accepted: on disk first, then the registry hears of it, then the tabs.
+  function accept(key, bytes, kind) {
+    const entry = doc(key);
+    entry.bytes = bytes;
+    entry.etag = `"e${++etags}"`;
+    entry.versions.push({ kind, etag: entry.etag, bytes });
+    if (!room) {
+      push(key);
+      return { answer: "none", send: [] };
+    }
+    const told = rooms.fileAccepted(key, { bytes, etag: entry.etag });
+    broadcast(key, told.send);
+    return told;
+  }
+
+  async function finalSave(key) {
+    await locked(key, () => {
+      const live = rooms.get(key);
+      const own = live && rooms.render(live);
+      // If-Match: the commit builds on the bytes the registry last heard of. On a host where
+      // another program can write the file, a moved ETag means no final save (the room stays dirty
+      // and is kept), never an overwrite.
+      if (own && own.ifMatch === doc(key).etag) accept(key, own.bytes, "final");
+    });
+  }
+
+  async function save(key, request) {
+    return locked(key, () => {
+      const entry = doc(key);
+      const match = request.headers.get("if-match");
+      if (match !== entry.etag) return json(412, { etag: entry.etag });
+      return request.text().then((bytes) => {
+        if (room && rooms.ends(key, bytes)) return json(409, { etag: entry.etag, error: "this save is not the room's next commit" });
+        accept(key, bytes, "save");
+        return json(200, { etag: entry.etag });
+      });
+    });
+  }
+
+  async function establish(key, request) {
+    if (!room) return json(404, { error: "no room on this host" });
+    return locked(key, () => {
+      const entry = doc(key);
+      if (request.headers.get("if-match") !== entry.etag) return json(412, { etag: entry.etag });
+      const built = rooms.establish(key, { bytes: entry.bytes, etag: entry.etag, codec });
+      if (!built) return json(503, { error: "the host cannot hold this room now" });
+      accept(key, built.bytes, "establish");
+      rooms.open(key, { bytes: entry.bytes, etag: entry.etag });
+      push(key);
+      return json(200, { etag: entry.etag });
+    });
+  }
+
+  function join(key, clientId) {
+    if (!room) return json(404, { error: "no room on this host" });
+    const instance = rooms.instance(key, codec);
+    if (!instance) return json(503, { error: "the host cannot hold this room now" });
+    const attached = instance.gen ? rooms.attach(instance, clientId, clientId) : null;
+    if (instance.gen && !attached) return json(400, { error: "the room cannot attach this client id" });
+    return json(200, { id: instance.id, ...(attached ?? { gen: null, base: null, tail: [] }), floor: instance.floor ?? 0 });
+  }
+
+  async function frames(key, clientId, request) {
+    if (!room) return json(404, { error: "no room on this host" });
+    const { frames: batch } = await request.json();
+    const answer = await locked(key, () => admitAll(key, clientId, batch));
+    // Frames that arrive after the last stream closed (a tab closed with a request on the way)
+    // get the final save the leave would have made.
+    if (!doc(key).listeners.size) await finalSave(key);
+    return answer;
+  }
+
+  function admitAll(key, clientId, batch) {
+    const answers = [];
+    for (const frame of batch) {
+      const live = rooms.get(key);
+      if (!live) {
+        answers.push("closed");
+        continue;
+      }
+      const { answer, send } = rooms.frame(live, clientId, frame);
+      answers.push(answer);
+      broadcast(key, send);
+    }
+    return json(200, { answers });
+  }
+
+  // The outside write step: a version restore, an agent's write, an upload of an older copy.
+  async function outside(key, bytes, kind) {
+    return locked(key, () => {
+      const entry = doc(key);
+      if (!room) {
+        useCodec(codecs[codec]);
+        const { body } = outsideFold(fileEnv, parse(bytes), parse(entry.bytes));
+        accept(key, body, kind);
+        return { etag: entry.etag };
+      }
+      const step = rooms.outsideWrite(key, { bytes, current: entry.bytes, codec, keep });
+      if (!step) throw new Error("the outside write step could not read the file");
+      if (step.backup) entry.versions.push({ kind: "backup", etag: null, bytes: step.backup });
+      accept(key, step.bytes, kind);
+      push(key);
+      return { etag: entry.etag, backup: Boolean(step.backup) };
+    });
+  }
+
+  async function route(request) {
+    const url = new URL(request.url);
+    const key = url.searchParams.get("page");
+    const clientId = url.searchParams.get("client-id");
+    if (request.method === "GET" && url.pathname === "/_/file") {
+      const entry = doc(key);
+      return new Response(entry.bytes, { status: 200, headers: { etag: entry.etag, "content-type": "text/html" } });
+    }
+    if (request.method === "POST" && url.pathname === "/_/save") return save(key, request);
+    if (url.pathname === "/_/sync/room") {
+      if (request.method === "GET") return join(key, clientId);
+      if (url.searchParams.get("op") === "establish") return establish(key, request);
+      return frames(key, clientId, request);
+    }
+    if (request.method === "GET" && url.pathname === "/_/announce") return json(200, { extensions: room ? ["ordered-room"] : ["ordered-file"] });
+    return json(404, { error: "no route" });
+  }
+
+  // fetch(url, init): faults act here, around the host. "drop" loses the request before the host
+  // sees it, "lose" lets the host act and loses the answer, "twice" delivers the request twice
+  // and answers the second, "move" has another writer change the file just before the request
+  // (through the outside write step; by default bytes outside the tables, a title), so its ETag
+  // no longer matches.
+  async function fetch(url, init = {}) {
+    const request = new Request(new URL(url, "http://host.test"), init);
+    const fault = faults.findIndex((one) => one.matches(request));
+    const [{ kind, change } = {}] = fault >= 0 ? faults.splice(fault, 1) : [];
+    if (kind === "drop") throw new TypeError("fetch failed: the request was dropped");
+    if (kind === "move") {
+      const key = new URL(request.url).searchParams.get("page");
+      const { bytes } = doc(key);
+      await outside(key, change ? change(bytes) : bytes.replace("<!doctype html>", `<!doctype html><title>t${etags}</title>`), "move");
+    }
+    try {
+      if (kind === "twice") await route(request.clone());
+      const answer = await route(request);
+      if (kind === "lose") throw new TypeError("fetch failed: the answer was lost");
+      return answer;
+    } catch (error) {
+      if (error.status) return json(error.status, { error: error.message });
+      throw error;
+    }
+  }
+
+  return {
+    rooms,
+    fetch,
+    put(key, bytes) {
+      docs.set(key, { bytes, etag: `"e${++etags}"`, versions: [], listeners: new Map(), lock: Promise.resolve() });
+      docs.get(key).versions.push({ kind: "put", etag: docs.get(key).etag, bytes });
+    },
+    file: (key) => ({ bytes: doc(key).bytes, etag: doc(key).etag }),
+    versions: (key) => doc(key).versions,
+    outside,
+    fault(kind, matches = () => true, change = null) {
+      faults.push({ kind, matches, change });
+    },
+    // The event stream of one client. Closing it is the connection ending: the room forgets the
+    // client's stages, and when the last client leaves a dirty room the host makes its own commit.
+    subscribe(key, clientId, listener) {
+      doc(key).listeners.set(clientId, listener);
+      return async () => {
+        // A reconnect that opened a new stream before the old one closed keeps the new one.
+        const entry = docs.get(key);
+        if (entry?.listeners.get(clientId) !== listener) return;
+        entry.listeners.delete(clientId);
+        if (!room) return;
+        const live = rooms.get(key);
+        if (!live) return;
+        const left = rooms.leave(live, clientId);
+        broadcast(key, left.send);
+        if (left.empty && left.dirty) await finalSave(key);
+      };
+    },
+    loseRoom(key) {
+      return rooms.drop(key);
+    },
+  };
+}
