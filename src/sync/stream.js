@@ -145,7 +145,7 @@ export class SyncStream extends EventTarget {
         } else if (data.type === 'frame' && typeof data.data === 'string') {
           this._remember(data.data);
           this._emit('message', data.data);
-        } else if (this._sharedData && data.type === 'event' && ['data', 'data-state', 'data-writer', 'presence'].includes(data.event)
+        } else if (this._sharedData && data.type === 'event' && ['data', 'data-state', 'data-writer', 'room', 'presence'].includes(data.event)
           && data.data !== null && typeof data.data === 'object' && !Array.isArray(data.data)) {
           try { this._emit(data.event, JSON.stringify(data.data)); } catch {}
         } else if (data.type === 'gone') {
@@ -220,8 +220,9 @@ export class SyncStream extends EventTarget {
       this._remember(event.data);
       this._emit('message', event.data);
     };
-    // `data`, `data-state` and `data-writer` are clay.live's fast lane (stream-bridge.js).
-    for (const type of ['cursor', 'presence', 'data', 'data-state', 'data-writer']) {
+    // `data`, `data-state` and `data-writer` are clay.live's fast lane, `room` is clay.liveRoom's
+    // ordered room (stream-bridge.js).
+    for (const type of ['cursor', 'presence', 'data', 'data-state', 'data-writer', 'room']) {
       source.addEventListener(type, event => {
         if (this._source !== source) return;
         if (type === 'cursor') hostSentCursor = true;

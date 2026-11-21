@@ -91,6 +91,33 @@ describe("stream bridge", () => {
     sync.stop();
   });
 
+  // Bug it catches: a host's flush before a quit or an update restart (HTML Clay) stops live sync
+  // for good, so a tab still open after the restart never hears the file again; or the stream
+  // closes before a live room saved what it held, so the quit loses the room's last edits.
+  test("a host's flush waits for every live room's save, then closes the stream and opens it again", async () => {
+    const { sync, sse } = await started();
+    sse.onopen();
+    let release;
+    const off = bridge.onHostFlush(() => new Promise((resolve) => (release = resolve)));
+    jest.useFakeTimers();
+    try {
+      sse.onmessage({ data: JSON.stringify({ type: "flush", seq: 5 }) });
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      expect(bridge.currentStream()).not.toBeNull();
+      release();
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      expect(bridge.currentStream()).toBeNull();
+      const opened = eventSourceInstances.length;
+      jest.advanceTimersByTime(3000);
+      expect(eventSourceInstances.length).toBe(opened + 1);
+      expect(sync.isDestroyed).toBe(false);
+    } finally {
+      jest.useRealTimers();
+      off();
+      sync.stop();
+    }
+  });
+
   test("a throwing handler does not stop the others", () => {
     const err = jest.spyOn(console, "error").mockImplementation(() => {});
     const event = jest.fn();

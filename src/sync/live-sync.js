@@ -56,10 +56,10 @@ import { recordEtag, seedEtag, lastSeenEtag, conditionalSaves, representedEtag, 
 import { pageMaybeDirty, pauseGate, resumeGate, gateCaptureToken, gateClearIfUnchanged, gateMarkDirty } from '../lib/dirty-gate.js';
 import { gestureSeen } from '../lib/user-gesture.js';
 import { SyncStream, pageHidden } from './stream.js';
-import { streamOpened, streamClosed, streamEvent, LIVE_EVENTS } from '../live/stream-bridge.js';
+import { streamOpened, streamClosed, streamEvent, streamMessage, hostFlush, LIVE_EVENTS } from '../live/stream-bridge.js';
 import { conflicts, conflictLedger, loadConflicts } from './conflicts-facade.js';
 import { upgradeReplaces, stopForUpgrade } from './version-guard.js';
-import { repaintsAttr, repaintsText, stripRepainted, repaintDerived, paintSignatureOfHtml } from '../lib/derived.js';
+import { repaintsAttr, repaintsText, stripRepainted, repaintDerived, paintSignatureOfHtml, carriesStaleMark } from '../lib/derived.js';
 
 // The edit-only half of live sync (save, admin and editing-sender code) is a
 // separate chunk. Edit mode starts it as live-sync evaluates, so its modules
@@ -1110,6 +1110,17 @@ class LiveSync {
         this.lastSeenSeq = seq;
       }
 
+      // A host about to quit or restart for an update (HTML Clay) waits for every stream on the
+      // document to close. Each live room saves what it holds first; then the stream closes
+      // and opens again after a pause, so a restarted host is back in sync without a reload.
+      if (data.type === "flush") {
+        hostFlush(data).then(() => this.pauseStream());
+        return;
+      }
+
+      // clay.liveRoom hears file pushes (stream-bridge.js).
+      streamMessage(data);
+
       // External disk changes ride the notification channel as first-class
       // content (data.kind === 'external-change'). They apply silently —
       // Google-Docs-style — so a handled one never reaches the toast branch.
@@ -1492,7 +1503,7 @@ class LiveSync {
     const info = data.data;
     if (info && info.kind === 'external-change') {
       if (typeof info.html === 'string') {
-        this._enqueueExternal(info.html, data.seq, info.etag, info.by);
+        this._enqueueExternal(info.html, data.seq, info.etag, info.by, info.recalculate);
       } else {
         this._fetchExternalChange(data.seq);
       }
@@ -1505,7 +1516,7 @@ class LiveSync {
     return false;
   }
 
-  _enqueueExternal(html, seq, etag, by) {
+  _enqueueExternal(html, seq, etag, by, recalc = null) {
     if (typeof seq === 'number') {
       if (seq <= this._lastExternalSeq) {
         this._log(`Dropping replayed external change: seq=${seq}`);
@@ -1513,7 +1524,7 @@ class LiveSync {
       }
       this._lastExternalSeq = seq;
     }
-    this._pendingExternal = {
+    const pending = {
       html,
       seq,
       saveEpoch: this._saveEpoch,
@@ -1524,6 +1535,12 @@ class LiveSync {
       // name. The slot carries it so a host that does stamp one is believed.
       by: by ?? null,
     };
+    // A waiting data write's request that this tab save at once (M2). Only a well-formed
+    // one is kept.
+    if (recalc && typeof recalc.id === 'string' && typeof recalc.etag === 'string') {
+      pending.recalc = { id: recalc.id, etag: recalc.etag };
+    }
+    this._pendingExternal = pending;
     this._scheduleNextFrame();
   }
 
@@ -1902,7 +1919,7 @@ class LiveSync {
       } else {
         this._morphInFlight = true;
         try {
-          await this._doApplyExternal(ext.html, ext.seq, ext.etag, ext.by, opts);
+          await this._doApplyExternal(ext.html, ext.seq, ext.etag, ext.by, opts, ext.recalc ?? null);
         } catch (err) {
           console.error('[LiveSync] applyExternal failed:', err);
         } finally {
@@ -2488,7 +2505,7 @@ class LiveSync {
    * holds or a later dirty peer apply misclassifies this frame's content as
    * local edits.
    */
-  async _doApplyExternal(html, seq, etag = null, by = null, fetchOptions = null) {
+  async _doApplyExternal(html, seq, etag = null, by = null, fetchOptions = null, recalc = null) {
     // Another version of the document is not a change to this one: it does not
     // merge, and after it no later frame is applied either. The guard holds the
     // saves and asks the notice to offer a reload.
@@ -2661,10 +2678,23 @@ class LiveSync {
     // A disk frame from a writer that does not paint (an agent, the data API)
     // changes records and leaves the painted values as they were. If the page's
     // repainted values differ from them once the timer fires, one tab saves so
-    // the bytes on disk heal. A writer that paints is left alone.
-    if (priorDisk != null && paintSignatureOfHtml(priorDisk) === paintSignatureOfHtml(html)) {
-      if (edit) edit.schedulePaintHeal(() => (this._diskBase == null ? null : paintSignatureOfHtml(this._diskBase)));
+    // the bytes on disk heal. A writer that paints is left alone. A frame whose file
+    // carries the stale mark heals once even when the painted values match, so the mark goes.
+    const heal = () => {
+      const marked = carriesStaleMark(html);
+      if (priorDisk != null && paintSignatureOfHtml(priorDisk) === paintSignatureOfHtml(html)) {
+        if (edit) edit.schedulePaintHeal(() => (this._diskBase == null ? null : paintSignatureOfHtml(this._diskBase)), { marked });
+      } else if (edit && marked) {
+        edit.schedulePaintHeal(null, { marked: true });
+      }
+    };
+    // A waiting data write asks for a save now, which replaces the delayed heal. A tab
+    // that could not save (busy) still heals later, once it can.
+    if (recalc && edit) {
+      edit.recalculateNow(recalc).then((sent) => { if (!sent) heal(); }, heal);
+      return;
     }
+    heal();
   }
 
   /**
@@ -2705,7 +2735,25 @@ class LiveSync {
    * Stop LiveSync and clean up resources
    * Can call start() again to restart
    */
+  /**
+   * Close the stream without ending live sync, and open it again after `ms`: the host asked for
+   * it (a flush before a quit or an update restart). A host that quit leaves the new stream
+   * retrying quietly, as any dropped connection does.
+   */
+  pauseStream(ms = 3000) {
+    if (this.isDestroyed || !this.sse) return;
+    this.sse.close();
+    this.sse = null;
+    streamClosed();
+    clearTimeout(this._pauseTimer);
+    this._pauseTimer = setTimeout(() => {
+      this._pauseTimer = null;
+      if (!this.isDestroyed && !this.sse) this.connect();
+    }, ms);
+  }
+
   stop() {
+    clearTimeout(this._pauseTimer);
     this.cleanup();
     this.isDestroyed = true;
     console.log('[LiveSync] Stopped');

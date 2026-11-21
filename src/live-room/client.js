@@ -1,5 +1,3 @@
-// The ordered live room client, clay.liveRoom, lands with step C4. Until then the plugin
-// loads a placeholder that says so if anything calls it.
-export default function liveRoom() {
-  throw new Error("clay.liveRoom is not built yet");
-}
+// The ordered live room client, clay.liveRoom (plan 09 section 1.8), over the page's own host.
+export { liveRoom } from "./browser.js";
+export { liveRoom as default } from "./browser.js";
