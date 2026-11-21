@@ -6,7 +6,7 @@ import { storage } from "./lib/doc-storage.js";
 import { trash } from "./lib/trash.js";
 import { effect } from "./lib/effect.js";
 import { style } from "./lib/style.js";
-import { derived } from "./lib/derived.js";
+import { derived, STALE_MARK_SELECTOR } from "./lib/derived.js";
 import { assets } from "./lib/assets.js";
 import { bootPhase } from "./core/boot-phase.js";
 import { mergeEngine } from "./sync/merge-engine.js";
@@ -188,6 +188,7 @@ export async function boot(base, params, readyResolve, manifest = null, suppleme
   await Promise.allSettled(plan.plugins.map((path) => loaded[path]?.ready).filter(Boolean));
 
   if (hasSap) mountDerivedEngine(loaded);
+  else scheduleMarkHeal(loaded);
 
   installViewModeNotice(editMode);
   readyResolve(window.clay);
@@ -255,7 +256,15 @@ export function mountDerivedEngine(loaded) {
   } finally {
     save?.releaseBootSettle();
   }
-  if (save && fileSignature != null) save.schedulePaintHeal(fileSignature);
+  const marked = document.querySelector(STALE_MARK_SELECTOR) !== null;
+  if (save && (fileSignature != null || marked)) save.schedulePaintHeal(fileSignature, { marked });
+}
+
+// A page without sapjs computes with its own script (clay.effect, <output>), so no
+// paint heal runs for it. When its file carries the stale mark it still saves once.
+function scheduleMarkHeal(loaded) {
+  const save = loaded["core/save.js"];
+  if (save && document.querySelector(STALE_MARK_SELECTOR) !== null) save.schedulePaintHeal(null, { marked: true });
 }
 
 function assembleCore(loaded, { isDraftMode, isOwner, siteVisibility }, regionPolicy) {
@@ -384,6 +393,8 @@ function attachPluginMember(path, mod, namespaces = loaded) {
     clay.message = mod.message;
   } else if (path === "plugins/like.js") {
     clay.like = mod.like;
+  } else if (path === "live-room/client.js") {
+    clay.liveRoom = mod.liveRoom;
   } else if (path === "plugins/wire.js") {
     clay.wire = mod.wire || mod.default;
   } else if (path === "plugins/ai-edit.js") {
@@ -391,6 +402,8 @@ function attachPluginMember(path, mod, namespaces = loaded) {
   } else if (path === "plugins/ai.js") {
     clay.ai = mod.ai;
     clay.instructions = mod.instructions;
+  } else if (path === "plugins/programs.js") {
+    clay.programs = mod.programs;
   } else if (path === "plugins/demo.js") {
     clay.demo = mod.demo;
   } else if (path === "sheet/sheet.js") {

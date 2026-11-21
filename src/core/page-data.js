@@ -11,6 +11,23 @@ function refusal(code, message, details) {
   return error;
 }
 
+const META_FIELDS = ["changed", "recalculated", "stale", "why", "code"];
+
+// A host's answer carries plain data, plus a __meta__ key when computed values are
+// old or the request asked with ?meta. The key is the host's, never the page's data.
+// Data that is a list or a single value has no room for the key, so the Clay-Stale
+// header is its only signal.
+function splitMeta(body, response) {
+  const headerStale = response?.headers?.get?.("Clay-Stale") === "true";
+  const withHeader = (fields) => (headerStale && fields.stale === undefined ? { ...fields, stale: true } : fields);
+  if (body === null || typeof body !== "object" || Array.isArray(body) || !Object.hasOwn(body, "__meta__")) return { data: body, meta: withHeader({}) };
+  const { __meta__: meta, ...data } = body;
+  if (meta === null || typeof meta !== "object" || Array.isArray(meta)) return { data: body, meta: withHeader({}) };
+  const fields = {};
+  for (const key of META_FIELDS) if (Object.hasOwn(meta, key)) fields[key] = meta[key];
+  return { data, meta: withHeader(fields) };
+}
+
 async function responseBody(response) {
   if (typeof response.json === "function") return response.json();
   const text = await response.text();
@@ -86,7 +103,8 @@ export function createPageDataApi({
     }
 
     if (!response.ok) throw await responseError(response);
-    return { data: await responseBody(response), etag: responseEtag(response) };
+    const { data, meta } = splitMeta(await responseBody(response), response);
+    return { data, etag: responseEtag(response), ...meta };
   }
 
   function loadWriteEngine() {
@@ -102,6 +120,7 @@ export function createPageDataApi({
       loadWriteModules,
       syncTimeoutMs,
       httpTimeoutMs,
+      splitMeta,
     })).catch((error) => {
       writeEngine = null;
       throw error;

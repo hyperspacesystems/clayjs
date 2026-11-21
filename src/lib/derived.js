@@ -161,3 +161,13 @@ export const derived = {
     for (const fn of mountWaiters.splice(0)) fn();
   },
 };
+
+// The stale mark: a host's data write leaves <meta name="clay-stale" clay="no-save">
+// in the head of a document whose computed values it could not recalculate
+// (calculator documents plan, M1b; hyper-html-api src/stale-mark.js). Every save
+// strips no-save, so the first save after the page repaints removes it.
+export const STALE_MARK_SELECTOR = 'meta[name="clay-stale"]';
+
+export function carriesStaleMark(html) {
+  return typeof html === "string" && html.includes('<meta name="clay-stale"');
+}

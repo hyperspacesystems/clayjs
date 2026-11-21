@@ -35,10 +35,15 @@ function responseEtag(response) {
   return typeof value === "string" && value ? value : null;
 }
 
-function dataUrl(rules, location) {
+function dataUrl(rules, location, { recalculate, timeout } = {}) {
   const base = `${location.origin}${location.pathname}`;
-  if (rules !== undefined) return `${base}?data=${encodeURIComponent(JSON.stringify(rules))}`;
-  return `${location.origin}/_/api${location.pathname}`;
+  let wait = "";
+  if (recalculate !== undefined) {
+    wait = `recalculate=${encodeURIComponent(recalculate)}`;
+    if (timeout !== undefined) wait += `&timeout=${encodeURIComponent(timeout)}`;
+  }
+  if (rules !== undefined) return `${base}?data=${encodeURIComponent(JSON.stringify(rules))}${wait ? `&${wait}` : ""}`;
+  return `${location.origin}/_/api${location.pathname}?meta${wait ? `&${wait}` : ""}`;
 }
 
 function connected(sync) {
@@ -93,6 +98,23 @@ function syncWaiter(eventTarget, timeoutMs) {
   };
 }
 
+// Waits until this tab has taken etag (a peer's save reaches it as a relay), or the
+// time runs out. Checks on every applied change and once more at the end.
+function etagWaiter(eventTarget, timeoutMs, lastSeenEtag, etag) {
+  if (lastSeenEtag() === etag) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let timer = null;
+    const finish = (taken) => {
+      clearTimeout(timer);
+      eventTarget.removeEventListener("clay:sync-applied", check);
+      resolve(taken);
+    };
+    const check = () => { if (lastSeenEtag() === etag) finish(true); };
+    timer = setTimeout(() => finish(lastSeenEtag() === etag), timeoutMs);
+    eventTarget.addEventListener("clay:sync-applied", check);
+  });
+}
+
 function httpDeadline(timeoutMs) {
   const controller = new AbortController();
   let rejectDeadline;
@@ -144,6 +166,7 @@ export function createPageDataWrite({
   loadWriteModules = defaultWriteModules,
   syncTimeoutMs = SYNC_WAIT_MS,
   httpTimeoutMs = HTTP_WAIT_MS,
+  splitMeta,
 }) {
   let writeRunning = false;
   let writeOutcomeUnknown = false;
@@ -182,7 +205,7 @@ export function createPageDataWrite({
     await new Promise((resolve) => eventTarget.addEventListener("clay:baseline-settled", resolve, { once: true }));
   }
 
-  async function writeData(values, { rules, ifMatch } = {}) {
+  async function writeData(values, { rules, ifMatch, recalculate, timeout } = {}) {
     const draft = await draftRefusal();
     if (draft) throw draft;
 
@@ -244,7 +267,7 @@ export function createPageDataWrite({
 
       let response;
       try {
-        response = await deadline.waitFor(fetchImpl(dataUrl(rules, getLocation()), {
+        response = await deadline.waitFor(fetchImpl(dataUrl(rules, getLocation(), { recalculate, timeout }), {
           method: "POST",
           credentials: "same-origin",
           redirect: "error",
@@ -276,24 +299,26 @@ export function createPageDataWrite({
         deadline.cancel();
       }
 
+      const { data: plain, meta } = splitMeta(data, response);
       const etag = responseEtag(response);
       if (etag && etag === modules.lastSeenEtag()) {
         waiter.cancel();
         waiter = null;
-        return { data, etag };
+        return { data: plain, etag, ...meta };
       }
 
-      const applied = await waiter.waitFor(etag);
+      // A write a page recalculated answers the page's save (a newer ETag), which reaches this
+      // tab as a relay, not a disk frame. The disk frame of the written version is the page
+      // taking this write.
+      let applied = await waiter.waitFor(meta.recalculated ? null : etag);
+      // The page's recalculation save (a newer ETag) reaches this tab as a relay. Until the
+      // tab holds it, its next write or save would be refused against the written version.
+      if (applied && meta.recalculated && etag) applied = await etagWaiter(eventTarget, syncTimeoutMs, modules.lastSeenEtag, etag);
       waiter = null;
       if (!applied) {
-        return {
-          data,
-          etag,
-          pageUpdatePending: true,
-          message: "Written, page update pending.",
-        };
+        return { data: plain, etag, ...meta, pageUpdatePending: true, message: "Written, page update pending." };
       }
-      return { data, etag };
+      return { data: plain, etag, ...meta };
     } finally {
       waiter?.cancel();
       writeRunning = false;

@@ -227,7 +227,7 @@ test("one successful conditional write sends its ETag and releases the save hold
   });
 
   expect(calls).toHaveLength(1);
-  expect(calls[0].url).toBe("https://example.test/_/api/nested/my%20page.htmlclay");
+  expect(calls[0].url).toBe("https://example.test/_/api/nested/my%20page.htmlclay?meta");
   expect(calls[0].init.method).toBe("POST");
   expect(calls[0].init.headers).toEqual({ "Content-Type": "application/json", "If-Match": '"E7"' });
   expect(page.held).toBe(0);

@@ -30,10 +30,11 @@ import {
 import { captureForComparisonAndDirty, captureForSaveAndComparison, captureForDirtyCheck, captureSaveClone, releaseCaptureArtifact, flushBoundary } from "./snapshot.js";
 import { saveLimit, saveLimits, inspectSaveSize } from "./save-size.js";
 import { SLICED_SAVE_MIN_BYTES } from "./save-slices.js";
-import { paintSignature } from "../lib/derived.js";
+import { paintSignature, derivedActive } from "../lib/derived.js";
 import { onOwnedRegister, ownedConflictHandlers, withoutQuietRevisions } from "../lib/owned-regions.js";
 import { NO_TRIGGER_AUTOSAVE_SELECTOR } from "../lib/region-policy.js";
-import { seedEtag, learnConditionalSaves, lastSeenEtag, recordEtag } from "./etag.js";
+import { seedEtag, learnConditionalSaves, lastSeenEtag, recordEtag, conditionalSaves } from "./etag.js";
+import { saveToken } from "./host-attrs.js";
 import { startDirtyGate, gateCaptureToken, gateClearIfUnchanged, gateRevision, pageMaybeDirty } from "../lib/dirty-gate.js";
 import { hasUnsavedState } from "../lib/unsaved-state.js";
 import { autosaveActive } from "../lib/autosave-state.js";
@@ -821,6 +822,8 @@ function settleRecoveryCapture(captureId, result) {
  * where the write may or may not have landed, so it is not treated as success
  * either.
  */
+const QUIET_REFUSALS = new Set(['not-next-commit', 'if-match-required']);
+
 function applySaveResult(result, forComparison, forDirty, label, gateToken, forSave = null, captureId = null, quietConflict = false) {
   settleRecoveryCapture(captureId, result);
   if (result.ok) {
@@ -850,6 +853,16 @@ function applySaveResult(result, forComparison, forDirty, label, gateToken, forS
     });
     logBaseline(label, `${lastSavedContents.length} chars`);
     releaseConflictHold();
+  } else if (quietConflict && QUIET_REFUSALS.has(result.code)) {
+    // A heal or recalculation save that lost to another window's save and was refused as an
+    // ordered save (HTML Clay: 409 not-next-commit, 428 if-match-required). As with a 412, the
+    // save that beat it reaches this tab through sync, so nothing is shown.
+    if (savingTimeout) {
+      clearTimeout(savingTimeout);
+      savingTimeout = null;
+    }
+    document.documentElement.setAttribute('savestatus', 'saved');
+    return;
   } else if (result.msgType === 'conflict') {
     // A refused heal leaves the tab as it was: still clean, no save event, no
     // hold. The save that beat it reaches this tab through sync.
@@ -2051,25 +2064,98 @@ export function currentPaintSignature() {
   return paintSignature(captureSaveClone({ flushUndo: false, owned: 'revision' }));
 }
 
+// Whether the page recomputes its derived values itself: a derive engine (sapjs)
+// or a live clay.effect. Only then can a save vouch that computed values are fresh,
+// so only then may it clear the stale mark. A page that computes only on input
+// (<form oninput>) leaves the mark until a person edits it.
+// src/lib/effect.js counts live effects on this key, so reading it never loads effect.js.
+const EFFECTS_LIVE = Symbol.for("clay.effectsLive");
+function recalculatesOnItsOwn() {
+  return derivedActive() || globalThis[EFFECTS_LIVE] > 0;
+}
+
+// A file that carries the stale mark was written by a host that could not
+// recalculate it. The page saves once even when its painted values already match
+// the file's, and the save's no-save strip removes the mark. The flag is sticky
+// across reschedules until the timer fires, so a later unmarked frame cannot drop it.
+let healMarked = false;
+
 /**
- * Save the page if its painted values differ from the file's. `fileSignature` is
- * the file's paintSignature, or a function returning it (or null when unknown)
- * when the timer fires.
+ * Save the page if its painted values differ from the file's, or once when the
+ * file carries the stale mark (`marked`). `fileSignature` is the file's
+ * paintSignature, or a function returning it (or null when unknown) when the
+ * timer fires.
  */
-export function schedulePaintHeal(fileSignature) {
+export function schedulePaintHeal(fileSignature, { marked = false } = {}) {
   if (!isEditMode || isDraftMode) return;
+  healMarked = healMarked || marked;
   clearTimeout(paintHealTimer);
   paintHealTimer = setTimeout(async () => {
     paintHealTimer = null;
+    const forMark = healMarked;
+    healMarked = false;
+    // A page without sapjs settles its baseline up to 3 s after boot; the marked
+    // heal waits for it rather than giving up.
+    if (forMark && !baselineSettled()) await new Promise((resolve) => document.addEventListener('clay:baseline-settled', resolve, { once: true }));
     if (adoptionsQueued) await adoptionQueue;
     const onDisk = typeof fileSignature === 'function' ? fileSignature() : fileSignature;
-    if (onDisk == null || !autosaveActive() || !baselineSettled() || isSaveConflicted() || autosaveIsSuspended()) return;
+    if ((onDisk == null && !forMark) || !autosaveActive() || !baselineSettled() || isSaveConflicted() || autosaveIsSuspended()) return;
     if (captureForDirtyCheck({ flushUndo: false }) !== lastSavedDirty) return;
-    if (onDisk === currentPaintSignature()) return;
-    if (healedFrom(onDisk)) return;
-    noteHealedFrom(onDisk);
+    if (forMark) {
+      if (!recalculatesOnItsOwn()) return;
+    } else {
+      if (onDisk === currentPaintSignature()) return;
+      if (healedFrom(onDisk)) return;
+      noteHealedFrom(onDisk);
+    }
     savePageForce(() => {}, { quietConflict: true });
   }, PAINT_HEAL_MIN_MS + Math.random() * PAINT_HEAL_SPREAD_MS);
+}
+
+// A data write that waits (?recalculate=wait) names itself in its disk frame
+// (calculator documents plan, M2). Each open edit tab that can save does so at once,
+// built on the written version, and the host answers the waiting writer with that
+// save's fresh values; a second tab's save is refused quietly. A tab that cannot save
+// says so, so the host stops waiting for it.
+export async function recalculateNow({ id, etag }) {
+  const ready = isEditMode && !isDraftMode && autosaveActive() && baselineSettled() && !isSaveConflicted() &&
+    !autosaveIsSuspended() && !savesHeld() && conditionalSaves() && lastSeenEtag() === etag && recalculatesOnItsOwn();
+  if (!ready) {
+    noteRecalc(id, etag, 'busy');
+    return false;
+  }
+  try {
+    // A clay.effect reruns on the next turn, after the merge that brought the new inputs.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The merge's own save is on its way, built on the written version: it is this tab's answer.
+    if (isSaveInProgress()) return true;
+    // Unsaved work is the person's to save (a no-trigger-autosave draft), never this tab's to force out.
+    if (captureForDirtyCheck({ flushUndo: false }) !== lastSavedDirty) {
+      noteRecalc(id, etag, 'busy');
+      return false;
+    }
+    const result = await savePageForce(() => {}, { quietConflict: true });
+    if (result?.msgType === 'skipped') {
+      noteRecalc(id, etag, 'busy');
+      return false;
+    }
+    return true;
+  } catch {
+    noteRecalc(id, etag, 'error');
+    return false;
+  }
+}
+
+// Tells the host this tab will not answer a waiting write with a save.
+function noteRecalc(id, etag, status) {
+  const token = saveToken();
+  if (!token) return;
+  fetch(new URL(`/_/recalc/${token}`, window.location.origin).href, {
+    method: 'POST',
+    credentials: 'omit',
+    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+    body: JSON.stringify({ id, etag, status }),
+  }).catch(() => {});
 }
 
 // parse5 is 38.5 KB Brotli, and an owned style is the only reason this module names

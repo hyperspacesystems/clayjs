@@ -88,6 +88,39 @@ function applyDisk(etag) {
   }));
 }
 
+// A peer's save arrives on the live lane: the event carries no stamp, and the tab has
+// already taken it from the frame (live-sync.js records it before dispatching).
+function applyPeer() {
+  document.dispatchEvent(new CustomEvent("clay:sync-applied", {
+    detail: { source: "peer", lane: "live" },
+  }));
+}
+
+// A host reading a file that carries the stale mark adds __meta__ to the answer.
+// Bug guarded: the host's key leaking into the page's data on a read.
+test("readData takes __meta__ out of the data and returns its fields", async () => {
+  const why = "No page has recalculated since the last data write. Open the document to refresh its computed values.";
+  const fetchImpl = jest.fn(async () => response({ data: { total: "38.5", __meta__: { stale: true, why } } }));
+  const { api } = harness({ fetchImpl });
+
+  const result = await api.readData();
+
+  expect(result).toEqual({ data: { total: "38.5" }, etag: '"E1"', stale: true, why });
+});
+
+// Data that is a list has no room for __meta__, so the header is the only signal.
+// Bug guarded: a list calculator's old values read as fresh.
+test("readData reports stale from the Clay-Stale header when the data is a list", async () => {
+  const fetchImpl = jest.fn(async () => {
+    const answer = response({ data: ["12"] });
+    answer.headers = { get: (name) => ({ etag: '"E1"', "clay-stale": "true" })[name.toLowerCase()] ?? null };
+    return answer;
+  });
+  const { api } = harness({ fetchImpl });
+
+  expect(await api.readData()).toEqual({ data: ["12"], etag: '"E1"', stale: true });
+});
+
 test("builds default and explicit-rules URLs from the encoded document path only", async () => {
   const fetchImpl = jest.fn(async () => response());
   const { api } = harness({ fetchImpl });
@@ -309,6 +342,77 @@ test("a stalled response body is bounded and releases the save hold", async () =
   expect(state.held).toBe(0);
 });
 
+// Bug guarded: the option never reaches the host.
+test("a waited write asks the host to wait", async () => {
+  const { api, fetchImpl } = harness();
+
+  await api.writeData({ qty: "7" }, { recalculate: "wait", timeout: 3000 });
+
+  expect(String(fetchImpl.mock.calls[0][0])).toBe(
+    "https://example.test/_/api/nested/my%20page.htmlclay?meta&recalculate=wait&timeout=3000"
+  );
+});
+
+// Bug guarded: the next write after a recalculated write is refused with 412, because
+// the tab still claimed the written version instead of the page's save.
+test("a recalculated write leaves the tab holding the page's save", async () => {
+  let api;
+  let state;
+  const ifMatches = [];
+  const fetchImpl = jest.fn(async (_url, init) => {
+    ifMatches.push(init.headers["If-Match"]);
+    return {
+      ...response({
+        etag: '"E2"',
+        data: { qty: "7", total: "70", __meta__: { recalculated: true, stale: false, etag: '"E2"' } },
+      }),
+      json: async () => {
+        applyDisk('"E1"');
+        setTimeout(() => {
+          state.etag = '"E2"';
+          applyPeer();
+        }, 0);
+        return { qty: "7", total: "70", __meta__: { recalculated: true, stale: false, etag: '"E2"' } };
+      },
+    };
+  });
+  ({ api, state } = harness({ syncTimeoutMs: 100, fetchImpl }));
+
+  const result = await api.writeData({ qty: "7" }, { recalculate: "wait" });
+
+  expect(result.pageUpdatePending).toBeUndefined();
+  expect(result.data).toEqual({ qty: "7", total: "70" });
+  expect(result.recalculated).toBe(true);
+  expect(state.etag).toBe('"E2"');
+
+  await api.writeData({ qty: "8" }, { recalculate: "wait" });
+  expect(ifMatches).toEqual(['"E1"', '"E2"']);
+});
+
+// Bug guarded: a tab that never takes the page's save reports the page update pending
+// instead of hanging or claiming the tab holds a version it does not.
+test("a recalculated write whose page save never arrives reports the page update pending", async () => {
+  const { api } = harness({
+    syncTimeoutMs: 20,
+    fetchImpl: jest.fn(async () => {
+      applyDisk('"E1"');
+      return response({
+        etag: '"E2"',
+        data: { qty: "7", __meta__: { recalculated: true, stale: false, etag: '"E2"' } },
+      });
+    }),
+  });
+
+  await expect(api.writeData({ qty: "7" }, { recalculate: "wait" })).resolves.toEqual({
+    data: { qty: "7" },
+    etag: '"E2"',
+    recalculated: true,
+    stale: false,
+    pageUpdatePending: true,
+    message: "Written, page update pending.",
+  });
+});
+
 test("a successful write whose frame times out reports that the page update is pending", async () => {
   const { api, state } = harness({
     syncTimeoutMs: 5,
@@ -322,6 +426,36 @@ test("a successful write whose frame times out reports that the page update is p
     message: "Written, page update pending.",
   });
   expect(state.held).toBe(0);
+});
+
+test("writeData takes __meta__ out of the data and returns its fields", async () => {
+  const { api } = harness({
+    fetchImpl: jest.fn(async () => response({
+      data: {
+        total: "38.5",
+        __meta__: { stale: true, why: "No page has recalculated since this write.", etag: '"x"' },
+      },
+    })),
+  });
+
+  // The bug this guards: the host's key leaking into the page's data.
+  const result = await api.writeData({ total: "38.5" });
+
+  expect(result.data).toEqual({ total: "38.5" });
+  expect(result.stale).toBe(true);
+  expect(result.why).toBe("No page has recalculated since this write.");
+  expect(result.etag).toBe('"E1"');
+});
+
+test("writeData against a host with no __meta__ answers as before", async () => {
+  const { api } = harness({
+    fetchImpl: jest.fn(async () => response({ data: { total: "102" } })),
+  });
+
+  const result = await api.writeData({ total: "102" });
+
+  expect(result.data).toEqual({ total: "102" });
+  expect(Object.keys(result).sort()).toEqual(["data", "etag"]);
 });
 
 test("writeData refuses when neither the caller nor the page has a trustworthy ETag", async () => {

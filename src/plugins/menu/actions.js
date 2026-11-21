@@ -193,7 +193,7 @@ export function attachActions({ addItem, note, currentMode }) {
       let html = null;
       try {
         if (typeof clay().getHTML === "function") {
-          html = clay().getHTML();
+          html = clay().getHTML({ purpose: "export" });
         } else {
           // Clay-Source asks a local host for the file's own bytes, not the copy it serves with
           // its runtime addresses and page state written in.

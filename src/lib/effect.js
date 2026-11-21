@@ -18,6 +18,9 @@ const LOOP_WINDOW_MS = 1000;
 const NO_SNAPSHOT = '[clay~="no-snapshot"], [no-snapshot], [snapshot-remove]';
 
 let running = 0;
+// How many clay.effects are live, on a shared key so save.js can read it without
+// loading this module at boot (EFFECTS_LIVE in src/core/save.js).
+const LIVE = Symbol.for("clay.effectsLive");
 
 const describe = (node) => {
   const el = node.nodeType === 1 ? node : node.parentElement;
@@ -128,7 +131,9 @@ export function effect(fn) {
   bindUndo();
 
   const stop = () => {
+    if (stopped) return;
     stopped = true;
+    globalThis[LIVE]--;
     offMutation();
     document.removeEventListener("clay:sync-applied", schedule);
     document.removeEventListener("clay:site-data", onSiteData);
@@ -136,6 +141,7 @@ export function effect(fn) {
     for (const type of undoEvents) clay.undo?.off?.(type, schedule);
   };
 
+  globalThis[LIVE] = (globalThis[LIVE] || 0) + 1;
   schedule();
   return stop;
 }

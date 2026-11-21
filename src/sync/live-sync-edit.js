@@ -10,7 +10,7 @@
 import { loadEdit as loadConflictsEdit } from "./conflicts.js";
 import { presence } from "./presence-store.js";
 
-export { savePageThrottled, setLastSavedBaselines, setUnsavedChanges, getLastSavedBytes, conflictResolvedBySync, isSaveConflicted, baselineSettled, schedulePaintHeal, holdForOwnedMerge, ownedMergeRecovered } from "../core/save.js";
+export { savePageThrottled, setLastSavedBaselines, setUnsavedChanges, getLastSavedBytes, conflictResolvedBySync, isSaveConflicted, baselineSettled, schedulePaintHeal, recalculateNow, holdForOwnedMerge, ownedMergeRecovered } from "../core/save.js";
 export { enableContentEditable } from "../core/admin-contenteditable.js";
 export { enableOnClick } from "../core/admin-onclick.js";
 export { enableAdminInputs } from "../core/admin-inputs.js";

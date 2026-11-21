@@ -964,8 +964,8 @@ export function captureForMerge() {
  * @param {boolean} options.emitForSync - Whether to emit snapshot-ready event (default: true)
  * @returns {string} Full HTML string ready for server
  */
-export function captureForSave({ emitForSync = true } = {}) {
-  const clone = captureSnapshot();
+export function captureForSave({ emitForSync = true, purpose = 'save' } = {}) {
+  const clone = captureSnapshot({ purpose });
 
   // Emit for live-sync before stripping admin elements
   // Sends full cloned documentElement so live-sync can extract head and body
@@ -1066,9 +1066,9 @@ export function captureBodyForSync() {
  * There is no global registration, so no other save ever sees these edits, and the
  * renderer runs without a capture context, so nothing can adopt these bytes as a model.
  */
-export function getPageContents({ transform = null, flushUndo = true } = {}) {
-  if (!transform && flushUndo) return captureForSave({ emitForSync: false });
-  const clone = captureSnapshot({ flushUndo });
+export function getPageContents({ transform = null, flushUndo = true, purpose = 'save' } = {}) {
+  if (!transform && flushUndo) return captureForSave({ emitForSync: false, purpose });
+  const clone = captureSnapshot({ flushUndo, purpose });
   if (transform) {
     const pending = transform(clone);
     if (pending && typeof pending.then === 'function') {
