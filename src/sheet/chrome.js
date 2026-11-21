@@ -511,7 +511,7 @@ export function createChrome({
     `color:${TOKENS.ink}`,
   ], { theme, role: "well" });
 
-  const tabStrip = bevelBox("div", ["display:flex", "align-items:stretch", "gap:2px", "overflow-x:auto"], { theme });
+  const tabStrip = bevelBox("div", ["display:flex", "align-items:stretch", "gap:2px", "overflow-x:auto", "min-width:0", "flex:1 1 auto"], { theme });
   tabStrip.setAttribute("role", "tablist");
   tabStrip.setAttribute("aria-label", "Workbook sheets");
 
@@ -520,7 +520,7 @@ export function createChrome({
     variant: "quiet",
     onClick: () => registry.get("add-tab")?.(),
     theme,
-    extra: ["width:28px", "height:28px", "padding:0"],
+    extra: ["width:28px", "min-width:28px", "flex:0 0 auto", "height:28px", "padding:0"],
   });
   addTabBtn.setAttribute("aria-label", "Add sheet");
   addTabBtn.setAttribute("data-command", "add-tab");
@@ -528,7 +528,7 @@ export function createChrome({
   addTabBtn.addEventListener("mousedown", (e) => e.preventDefault());
   buttons.set("add-tab", addTabBtn);
 
-  const tabsHolder = bevelBox("div", ["display:inline-flex", "align-items:center", "gap:2px"], { theme });
+  const tabsHolder = bevelBox("div", ["display:inline-flex", "align-items:center", "gap:2px", "flex:0 0 auto"], { theme });
   tabStrip.append(addTabBtn, tabsHolder);
 
   const roomChipSlot = bevelBox("div", ["display:none", "align-items:center"], { theme });
@@ -627,6 +627,7 @@ export function createChrome({
     }
     setShown(moreBtn, [...buttonMeta.keys()].some(inMore), "inline-flex");
     pinStyle(moreBtn, { order: phone ? "99" : "0", "min-width": phone ? "44px" : "0" });
+    pinStyle(addTabBtn, { width: phone ? "44px" : "28px", "min-width": phone ? "44px" : "28px" });
     paintMore();
     for (const id of Object.keys(PHONE_LABELS)) paintButtonText(id);
     paintFormulaBar();

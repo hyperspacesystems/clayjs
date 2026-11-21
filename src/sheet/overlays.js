@@ -28,15 +28,16 @@ const OVERLAY_CSS = `
   z-index: 8;
   font-family: ${FONT_MONO};
   font-variant-numeric: tabular-nums;
-  --sheet-sunk: ${TOKENS.sunk};
-  --sheet-surface: ${TOKENS.surface};
-  --sheet-muted: ${TOKENS.muted};
-  --sheet-line-2: ${TOKENS["line-2"]};
-  --sheet-sel: light-dark(#1D5B79, #5CA8CC);
-  --sheet-sel-fill: light-dark(#E5F0F6, #182B3A);
-  --sheet-sel-head: light-dark(#D8E8F1, #1E3548);
-  --sheet-sel-line: light-dark(#ADCBE0, #2D4F6C);
-  --sheet-brass: ${TOKENS.brass};
+  color-scheme: inherit;
+  --sheet-sunk: var(--sunk, var(--clay-ui-background, var(--sheet-fb-sunk, ${TOKENS.sunk})));
+  --sheet-surface: var(--surface, var(--clay-ui-surface, var(--sheet-fb-surface, ${TOKENS.surface})));
+  --sheet-muted: var(--muted, var(--clay-ui-muted-text, var(--sheet-fb-muted, ${TOKENS.muted})));
+  --sheet-line-2: var(--line-2, var(--clay-ui-border, var(--sheet-fb-line-2, ${TOKENS["line-2"]})));
+  --sheet-sel: var(--sel, var(--clay-ui-accent, var(--sheet-fb-sel, light-dark(#1D5B79, #5CA8CC))));
+  --sheet-sel-fill: var(--sel-fill, light-dark(#E5F0F6, #182B3A));
+  --sheet-sel-head: var(--sel-head, var(--sel-fill, light-dark(#D8E8F1, #1E3548)));
+  --sheet-sel-line: var(--sel-line, light-dark(#ADCBE0, #2D4F6C));
+  --sheet-brass: var(--brass, ${TOKENS.brass});
 }
 .sheet-overlays, .sheet-overlays * {
   box-sizing: border-box;
@@ -267,12 +268,13 @@ export function createOverlays(
   const theme = resolveTheme();
   const root = doc.createElement("div");
   root.className = "sheet-overlays";
-  root.style.colorScheme = theme.scheme;
-  if (theme.tokens?.accent) root.style.setProperty("--sheet-sel", theme.tokens.accent);
-  if (theme.tokens?.surface) root.style.setProperty("--sheet-surface", theme.tokens.surface);
-  if (theme.tokens?.background) root.style.setProperty("--sheet-sunk", theme.tokens.background);
-  if (theme.tokens?.border) root.style.setProperty("--sheet-line-2", theme.tokens.border);
-  if (theme.tokens?.mutedText) root.style.setProperty("--sheet-muted", theme.tokens.mutedText);
+  const pageScheme = winObj.getComputedStyle?.(doc.documentElement)?.colorScheme;
+  if (!pageScheme || pageScheme === "normal") root.style.colorScheme = theme.scheme;
+  if (theme.tokens?.accent) root.style.setProperty("--sheet-fb-sel", theme.tokens.accent);
+  if (theme.tokens?.surface) root.style.setProperty("--sheet-fb-surface", theme.tokens.surface);
+  if (theme.tokens?.background) root.style.setProperty("--sheet-fb-sunk", theme.tokens.background);
+  if (theme.tokens?.border) root.style.setProperty("--sheet-fb-line-2", theme.tokens.border);
+  if (theme.tokens?.mutedText) root.style.setProperty("--sheet-fb-muted", theme.tokens.mutedText);
 
   let lastState = { table: null, win: null, view: null };
   let resizing = null;
