@@ -206,6 +206,22 @@ describe("resolveModules", () => {
     expect(draft.plugins).not.toContain("plugins/wire.js");
   });
 
+  // clay.programs sends through clay.wire too, on the same terms as clay.ai.
+  test("plugins=programs brings the wire before programs, also with blockeditor, and draft mode keeps programs without the wire", () => {
+    const edit = resolveModules(params({ plugins: "programs" }), true);
+    expect(edit.plugins.indexOf("plugins/wire.js")).toBeGreaterThan(-1);
+    expect(edit.plugins.indexOf("plugins/wire.js")).toBeLessThan(edit.plugins.indexOf("plugins/programs.js"));
+    const view = resolveModules(params({ plugins: "programs" }), false);
+    expect(view.plugins).toContain("plugins/programs.js");
+    expect(view.plugins).toContain("plugins/wire.js");
+    const withPage = resolveModules(params({ plugins: "blockeditor,programs" }), true);
+    expect(withPage.plugins).toContain("plugins/wire.js");
+    expect(withPage.late).not.toContain("plugins/wire.js");
+    const draft = resolveModules(params({ plugins: "programs" }), true, { isDraftMode: true });
+    expect(draft.plugins).toContain("plugins/programs.js");
+    expect(draft.plugins).not.toContain("plugins/wire.js");
+  });
+
   // Only a page with the editor half can wait for AI editing: every other page has
   // its wire at `clay.ready`, exactly as before the late tail.
   test("plugins=wire without page has the wire before clay.ready", () => {
@@ -686,6 +702,24 @@ describe("the sheet and its reader half", () => {
 
   test("a visitor's draft keeps the editor", () => {
     expect(plan("draft").plugins).toContain("sheet/sheet.js");
+  });
+
+  // A sheet in a room follows saved files through live sync, and ClayJS's page save goes through
+  // the room: the editor alone would leave both behind.
+  test("edit mode brings live sync and the live room before the editor", () => {
+    const { plugins } = plan("edit");
+    expect(plugins).toContain("sync/live-sync.js");
+    expect(plugins).toContain("live-room/client.js");
+    expect(plugins.indexOf("sync/live-sync.js")).toBeLessThan(plugins.indexOf("sheet/sheet.js"));
+    expect(plugins.indexOf("live-room/client.js")).toBeLessThan(plugins.indexOf("sheet/sheet.js"));
+  });
+
+  test("view mode and a visitor's draft load neither", () => {
+    for (const mode of ["view", "draft"]) {
+      const { plugins } = plan(mode);
+      expect(plugins).not.toContain("sync/live-sync.js");
+      expect(plugins).not.toContain("live-room/client.js");
+    }
   });
 
   test("the reader half cannot be named in a URL", () => {

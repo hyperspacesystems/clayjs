@@ -75,6 +75,9 @@ export const PLUGIN_PATHS = {
   // clay.instructions and clay.ai. Not editOnly: a reader sends requests too, and a
   // visitor in draft mode copies the prompt (the wire is dropped there, so ask refuses).
   ai:        { path: "plugins/ai.js",              editOnly: false, default: false },
+  // clay.programs: runs the programs a page carries, through the host. Not editOnly:
+  // a reader runs them too. In draft mode the wire is dropped, so run refuses.
+  programs:  { path: "plugins/programs.js",        editOnly: false, default: false },
   demo:      { path: "plugins/demo.js",            editOnly: false, default: false },
   // Saves the file's own bytes back instead of a fresh serialization of the DOM.
   // editOnly because a page that cannot save has nothing to preserve. On by default
@@ -160,6 +163,7 @@ export const MODULES = {
   "plugins/like.js":            () => import("./plugins/like.js"),
   "plugins/ai-edit.js":         () => import("./plugins/ai-edit.js"),
   "plugins/ai.js":              () => import("./plugins/ai.js"),
+  "plugins/programs.js":        () => import("./plugins/programs.js"),
   "plugins/demo.js":            () => import("./plugins/demo.js"),
   "plugins/visitor-drafts.js": () => import("./plugins/visitor-drafts.js"),
   "plugins/visitor-drafts-owner.js": () => import("./plugins/visitor-drafts-owner.js"),
@@ -176,7 +180,7 @@ export const MODULES = {
 // `source` is last on purpose: its install captures a save clone, so it wants every
 // plugin that registers a document transform to have registered it first.
 // The sheet after derive: its windows follow the Grid that derive's grid plugin makes.
-const PLUGIN_ORDER = ["visitor-drafts", "visitor-menu", "richclay", "indicator", "sortable", "undo", "unsent", "quickcrop", "upload", "people", "menu", "upgrade", "cms", "blockeditor-view", "sync", "live", "live-room", "blockeditor", "message", "like", "wire", "ai-edit", "ai", "demo", "derive", "sheet-view", "sheet", "bind-text", "source"];
+const PLUGIN_ORDER = ["visitor-drafts", "visitor-menu", "richclay", "indicator", "sortable", "undo", "unsent", "quickcrop", "upload", "people", "menu", "upgrade", "cms", "blockeditor-view", "sync", "live", "live-room", "blockeditor", "message", "like", "wire", "ai-edit", "ai", "programs", "demo", "derive", "sheet-view", "sheet", "bind-text", "source"];
 
 // A plugin that cannot do its whole job alone. hypercms reads the cropper through
 // a capability lookup (`clay.quickcrop`) and silently uploads the raw file when it
@@ -206,7 +210,7 @@ const PLUGIN_ORDER = ["visitor-drafts", "visitor-menu", "richclay", "indicator",
 // The menu is how a person opens the CMS: hypercms adds no button of its own. It loads
 // in view too, because that is where a person starts, and it shows itself only to
 // someone who can edit. A page with its own control uses exclude=menu.
-const IMPLIES = { cms: ["quickcrop", "upload", "menu"], "ai-edit": ["wire"], ai: ["wire"], blockeditor: ["live", "sync", "upload", "wire", "ai-edit"] };
+const IMPLIES = { cms: ["quickcrop", "upload", "menu"], "ai-edit": ["wire"], ai: ["wire"], programs: ["wire"], blockeditor: ["live", "sync", "upload", "wire", "ai-edit"], sheet: ["sync", "live-room"] };
 
 // A Document's editor owns its article's rich text, so richclay (for [editable]) has
 // nothing to do there; plugins=blockeditor,richclay still loads it.
@@ -321,7 +325,7 @@ export function resolveModules(params, isEditMode, { isDraftMode = false, hasSap
     if (!enabled.has(name)) continue;
     const spec = PLUGIN_PATHS[name];
     if ((spec.editOnly && !isEditMode) || (spec.draft && !isDraftMode)) continue;
-    const lateHere = LATE.has(name) || (LATE_WITH_PAGE.has(name) && enabled.has("blockeditor") && !(name === "wire" && enabled.has("ai")));
+    const lateHere = LATE.has(name) || (LATE_WITH_PAGE.has(name) && enabled.has("blockeditor") && !(name === "wire" && (enabled.has("ai") || enabled.has("programs"))));
     (lateHere ? late : plugins).push(spec.ownerPath && !isDraftMode ? spec.ownerPath : spec.path);
   }
   return { core, plugins, late };

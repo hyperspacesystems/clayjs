@@ -77,6 +77,7 @@ export const MODULE_SUPPORT = {
   // The AI composer: the lease builds the chrome on a live entry and takes it down again.
   "plugins/ai-edit.js": "export",
   "plugins/ai.js": "neutral",
+  "plugins/programs.js": "neutral",
   // The CMS: the source owns the session, so the lease that opens it is the one that
   // closes it.
   "plugins/cms.js": "export",

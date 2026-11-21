@@ -1,5 +1,5 @@
 import { engine, schemaFor } from "../vendor/hyper-html-api-data.vendor.js";
-import { saveToken } from "../core/host-attrs.js";
+import { fetchRunFile } from "../core/run-files.js";
 
 /**
  * clay.instructions and clay.ai.
@@ -27,7 +27,6 @@ const LIMITS = { request: 64 * KIB, instructions: 128 * KIB, schema: 64 * KIB };
 const TOOLS = new Set(["read", "change", "internet"]);
 const FOLDERS = new Set(["remembered", "choose"]);
 const WRITE_BACKS = new Set(["agent", "file", "auto"]);
-const RUN_FILE = /^\/_\/wire\/runs\/[A-Za-z0-9_-]+\/files\/[A-Za-z0-9_-]+$/;
 const LIST_KEY = /^[A-Za-z0-9_$-]+$/;
 
 const encoder = new TextEncoder();
@@ -141,30 +140,6 @@ function failed(code, message) {
   };
 }
 
-// Run files live 5 minutes after the run, so every fetch starts as soon as the run
-// ends and text() hands out that one promise. The host finds the document from its
-// address and checks the save token; without both it answers 404.
-async function fetchRunFile(url) {
-  if (typeof url !== "string" || !RUN_FILE.test(url)) {
-    throw coded("source_unavailable", "The host named no file for this source.");
-  }
-  const headers = { "Document-URL": window.location.href };
-  const token = saveToken();
-  if (typeof token === "string" && token) headers["Save-Token"] = token;
-  let response;
-  try {
-    response = await fetch(new URL(url, window.location.origin).href, { headers, cache: "no-store", redirect: "manual" });
-  } catch {
-    throw coded("source_unavailable", "This source could not be fetched from the host.");
-  }
-  if (!response.ok) throw coded("source_unavailable", `The host answered ${response.status} for this source. Run the request again.`);
-  try {
-    return await response.text();
-  } catch {
-    throw coded("source_unavailable", "This source could not be read from the host. Run the request again.");
-  }
-}
-
 function sourcesOf(list) {
   const out = {};
   if (!Array.isArray(list)) return out;
@@ -172,7 +147,7 @@ function sourcesOf(list) {
     if (!src || typeof src !== "object" || typeof src.id !== "string" || !src.id) continue;
     if (Object.prototype.hasOwnProperty.call(out, src.id)) continue;
     const { url, ...meta } = src;
-    const text = fetchRunFile(url);
+    const text = fetchRunFile(url, "source_unavailable", "source");
     text.catch(() => {});
     const entry = { ...meta, skipped: Array.isArray(meta.skipped) ? meta.skipped : [], text: () => text };
     Object.defineProperty(out, src.id, { value: entry, enumerable: true, writable: true, configurable: true });
