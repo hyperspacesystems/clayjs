@@ -1,10 +1,10 @@
 import { planted } from "./planted.mjs";
 import { applyFrame, resolved, covered, ledgerMarks } from "./ledger.mjs";
 import { act } from "./codec.mjs";
-import { newInstance, admit, retained, originOf } from "./room.mjs";
+import { newInstance, admit, retained, originOf, tailBudget } from "./room.mjs";
 import { serialize, DOC, page, parsePage, ledgerBytes } from "./record.mjs";
 import { clone } from "./lib.mjs";
-import { opsOf, actionBytes } from "./limits.mjs";
+import { opsOf, actionBytes, frameBytes } from "./limits.mjs";
 import { explode } from "./frames.mjs";
 import { COPY_VERSION, CLOSING, inFile, positions, preview, taken, weigh, markFor, madeFor } from "./recover.mjs";
 import { seenBy, reviewed, unseenBy, holds, rowsOf, marksOf, createsOf, removesOf, has } from "./conflict.mjs";
@@ -123,9 +123,15 @@ export function edit(env, tab, action, shown = view(tab)) {
     tab.notices.push({ kind: "too-large", bytes, edits: [] });
     return null;
   }
-  const n = ++tab.n;
+  const n = tab.n + 1;
   const id = editId(tab.client, n);
   const saw = seenBy(planted("saw-from-shared") && tab.state ? tab.state.wb : shown, action);
+  const framed = frameBytes(action, { c: tab.client, n, e: id, action, saw });
+  if (framed > tailBudget(env.limits) && !planted("no-action-cap")) {
+    tab.notices.push({ kind: "too-large", bytes: framed, edits: [] });
+    return null;
+  }
+  tab.n = n;
   tab.pending.push({ n, id, action, saw, queued: false, sent: false });
   tab.edits.set(id, { c: tab.client, n, action, saw, state: "pending" });
   flush(env, tab);
@@ -163,6 +169,7 @@ export function flush(env, tab) {
     held.offered = true;
   }
   if (tab.held.length && !planted("natives-before-adopt")) return;
+  if (env.hostMade && tab.io?.kind === "establish") return;
   let before = resolved(tab.state, tab.client);
   for (const request of tab.pending) {
     if (request.n <= before) continue;

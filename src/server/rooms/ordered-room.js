@@ -148,9 +148,12 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
     const before = slot.parts.get(key);
     if (!before && [...slot.parts.keys()].filter((staged) => staged.startsWith(`${clientId}/`)).length >= STAGES_PER_CLIENT) return 'full';
     if (before && before.m !== frame.m) return 'bad-frame';
-    const stage = { m: frame.m, got: new Map(before?.got) };
+    // A restore's copy frame carries the rows it made (`made`) in its first part's header, which
+    // the declared size of the action leaves out.
+    const extra = frame.i === 0 && frame.frame?.made ? sizeOf(frame.frame.made) : (before?.extra ?? 0);
+    const stage = { m: frame.m, got: new Map(before?.got), extra };
     stage.got.set(frame.i, sizeOf(frame));
-    if (stageBytes(stage) > 2 * frame.size + frame.m * PART_SLACK) return 'bad-size';
+    if (stageBytes(stage) > 2 * frame.size + frame.m * PART_SLACK + extra) return 'bad-size';
     slot.parts.set(key, stage);
     const answer = admit(envOf(slot), room, frame, clientId);
     for (const staged of slot.parts.keys()) if (!room.staging.has(staged)) slot.parts.delete(staged);
@@ -247,14 +250,18 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       }
       const from = room.log.length;
       if (!room.restores.size) slot.copyBytes = 0;
-      if (frame.k === 'copy') slot.copyBytes += sizeOf(frame);
-      if (frame.k === 'part' && frame.i === 0 && frame.frame.k === 'copy') slot.copyBytes += frame.size;
       let answer;
       try {
         answer = frame.k === 'part' ? admitPart(slot, room, clientId, frame) : admit(envOf(slot), room, frame, clientId);
       } catch {
         answer = 'bad-frame';
       }
+      // The room holds a copy frame's bytes only while it keeps the frame for a person's decision
+      // (an answer with no place in the log). A frame it settled, answered before (a second
+      // restore of a finished copy), or appended (charged with the log) holds nothing more.
+      const keptForDecision = typeof answer === 'object' && answer !== null && answer.seq === undefined;
+      if (keptForDecision && frame.k === 'copy') slot.copyBytes += sizeOf(frame);
+      if (keptForDecision && frame.k === 'part' && frame.of === 'copy') slot.copyBytes += frame.size;
       return { answer, send: sent(slot, from) };
     },
 
@@ -328,11 +335,11 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
     // as a version first. With `keep` the room reopens on the new generation when fileAccepted
     // sees the write; without it the room is dropped now. The host holds the document's write
     // lock from this call until fileAccepted, so no frame lands between them.
-    outsideWrite(key, { bytes, current, codec, keep = true }) {
+    outsideWrite(key, { bytes, current, codec, keep = true, kind = null }) {
       let slot = slots.get(key);
-      const kind = slot?.codec ?? codec;
-      if (!Object.hasOwn(codecs, kind)) return null;
-      const probe = slot ?? { codec: kind };
+      const kindName = slot?.codec ?? codec;
+      if (!Object.hasOwn(codecs, kindName)) return null;
+      const probe = slot ?? { codec: kindName };
       let source;
       let disk;
       try {
@@ -344,11 +351,12 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       const reopen = keep && this.mayFit(key, bytes);
       const made = !slot && reopen;
       if (made) {
-        slot = { codec: kind, room: null, bytes: current, docBytes: utf8(current), copyBytes: 0, parts: new Map(), notices: [], idle: now() };
+        slot = { codec: kindName, room: null, bytes: current, docBytes: utf8(current), copyBytes: 0, parts: new Map(), notices: [], idle: now() };
         slots.set(key, slot);
       }
       const env = slot ? envOf(slot) : { hostMade: true, limits, observer: silent, port: { room: () => null, setRoom: () => {}, next } };
-      const step = outsideStep(env, source, disk, reopen);
+      const replace = kind === 'restore' || kind === 'reset' || kind === 'upload';
+      const step = outsideStep(env, source, disk, reopen, replace);
       if (step.same) {
         if (made) forget(key);
         // Equal tables: nothing changes for the room. The other bytes (a title) are taken only when

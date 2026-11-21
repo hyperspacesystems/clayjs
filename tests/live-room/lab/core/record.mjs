@@ -5,8 +5,17 @@ export const DOC = "doc0123456789abc";
 
 export const serialize = (record, state) => codec().write(state.wb, { ...record, lineage: state.lineage, cut: state.cut, floor: state.floor, opened: state.opened, seen: state.seen });
 
+// The record of a document no room has written yet: generation zero, nothing admitted, an empty
+// ledger. Hosts that make a document (a template, a copy, a new blank one) write it with their own
+// document id; a file whose record has no ledger (a template's placeholder `{"rev":1}`) reads as it.
+export const freshRecord = (doc = DOC) => ({ v: 2, doc, gen: "0.00000000", epoch: 0, commit: "c00000000000", parent: null, through: 0, lineage: [], cut: null, floor: -1, seen: {} });
+
+const hasLedger = (record) => record?.v === 2 && record.seen !== null && typeof record.seen === "object";
+
 export function parse(body) {
-  const { record, doc } = codec().read(body);
+  const read = codec().read(body);
+  const record = hasLedger(read.record) ? read.record : freshRecord(typeof read.record?.doc === "string" ? read.record.doc : DOC);
+  const doc = read.doc;
   const { lineage, cut, floor, opened, seen, ...header } = record;
   return { record: header, state: { wb: doc, seen, lineage, cut, floor, ...(opened === undefined ? {} : { opened }) } };
 }

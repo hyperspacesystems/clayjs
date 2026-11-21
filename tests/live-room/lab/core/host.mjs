@@ -59,12 +59,12 @@ export function render(env, file) {
 // The one host step for a write that did not come from the room (rule 19). `source` is the file to
 // write, already holding the outside change; `current` is the file on disk. `keep` reopens the
 // room on the new generation; otherwise the room is dropped and the file names no instance.
-export function outsideStep(env, source, current, keep) {
+export function outsideStep(env, source, current, keep, replace = false) {
   const live = env.port.room();
   const room = live?.gen ? live : null;
-  if (env.hostMade && !planted("host-equal-tables-new-gen") && sameTables(source, current)) return { same: true };
-  const cut = room ? [room.gen, room.seq] : [current.record.gen, current.record.through];
   const dirty = Boolean(room) && (room.gen !== current.record.gen || room.seq > current.record.through);
+  if (env.hostMade && !planted("host-equal-tables-new-gen") && sameTables(source, replace && dirty ? { state: room.state } : current)) return { same: true };
+  const cut = room ? [room.gen, room.seq] : [current.record.gen, current.record.through];
   let backup = null;
   if (dirty && !planted("restore-no-backup")) {
     const record = { v: 2, doc: current.record.doc ?? DOC, gen: room.gen, epoch: room.epoch, commit: nextCommit(env), parent: room.base.commit, through: room.seq, room: room.id };

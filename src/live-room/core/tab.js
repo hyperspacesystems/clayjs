@@ -2,10 +2,10 @@
 // Edit the lab copy, then run npm run build:live-room-core.
 import { applyFrame, resolved, covered, ledgerMarks } from "./ledger.js";
 import { act } from "./codec.js";
-import { newInstance, admit, retained, originOf } from "./room.js";
+import { newInstance, admit, retained, originOf, tailBudget } from "./room.js";
 import { serialize, DOC, page, parsePage, ledgerBytes } from "./record.js";
 import { clone } from "./lib.js";
-import { opsOf, actionBytes } from "./limits.js";
+import { opsOf, actionBytes, frameBytes } from "./limits.js";
 import { explode } from "./frames.js";
 import { COPY_VERSION, CLOSING, inFile, positions, preview, taken, markFor, madeFor } from "./recover.js";
 import { seenBy, reviewed, unseenBy, holds, rowsOf, marksOf, createsOf, removesOf, has } from "./conflict.js";
@@ -90,8 +90,8 @@ function edit(env, tab, action, shown = view(tab)) {
   const bytes = actionBytes(action);
   if (bytes > env.limits.actionBytes)
     return tab.notices.push({ kind: "too-large", bytes, edits: [] }), null;
-  const n = ++tab.n, id = editId(tab.client, n), saw = seenBy(shown, action);
-  return tab.pending.push({ n, id, action, saw, queued: !1, sent: !1 }), tab.edits.set(id, { c: tab.client, n, action, saw, state: "pending" }), flush(env, tab), id;
+  const n = tab.n + 1, id = editId(tab.client, n), saw = seenBy(shown, action), framed = frameBytes(action, { c: tab.client, n, e: id, action, saw });
+  return framed > tailBudget(env.limits) ? (tab.notices.push({ kind: "too-large", bytes: framed, edits: [] }), null) : (tab.n = n, tab.pending.push({ n, id, action, saw, queued: !1, sent: !1 }), tab.edits.set(id, { c: tab.client, n, action, saw, state: "pending" }), flush(env, tab), id);
 }
 function flush(env, tab) {
   if (!tab.alive || !tab.connected || !attached(env, tab) || tab.held.some((held) => !held.offered) && !writeMarks(env, tab)) return;
@@ -112,7 +112,7 @@ function flush(env, tab) {
     }
     pack.length && offer(pack), held.offered = !0;
   }
-  if (tab.held.length) return;
+  if (tab.held.length || env.hostMade && tab.io?.kind === "establish") return;
   let before = resolved(tab.state, tab.client);
   for (const request2 of tab.pending)
     if (!(request2.n <= before)) {

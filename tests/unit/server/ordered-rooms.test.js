@@ -483,3 +483,20 @@ test("a version restored over equal tables keeps the current record, the room an
   expect(rooms.get("doc")).toBe(room);
   expect(room.state.wb.rows.r2.cells.c2).toBe("ben");
 });
+
+// Bug it catches: a sheet made from a template whose record is a placeholder (`{"rev":1}`, no
+// ledger) cannot open a room: establishing reads the missing ledger and throws, so nobody can
+// co-edit a new sheet.
+test("a template's placeholder record opens a room as a fresh document", () => {
+  const { rooms } = setup();
+  useCodec(tiny);
+  const placeholder = tiny.write(START.wb, { rev: 1 });
+  const est = rooms.establish("doc", { bytes: placeholder, etag: "e0", codec: "tiny" });
+  const room = rooms.open("doc", { bytes: est.bytes, etag: "e1" });
+  expect(room.gen).toBeTruthy();
+  const { record, state } = parse(est.bytes);
+  expect(record).toEqual(expect.objectContaining({ v: 2, epoch: 1 }));
+  expect(state.wb).toEqual(START.wb);
+  rooms.attach(room, "ben", "conn-ben");
+  expect(rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "ben"))).answer).toBe("ok");
+});

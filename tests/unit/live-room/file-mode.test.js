@@ -30,8 +30,8 @@ function world(room = false) {
   useCodec(tiny);
   host.put("doc", serialize(RECORD, START));
   let n = 0;
-  const join = async (clientId) => {
-    const client = await connect({ page: "doc", codec: tiny, clientId, fetch: host.fetch, subscribe: host.subscribe, limits: labLimits(), firstId: 10_000 * ++n, idleMs: 5, maxMs: 20, waitMs: 20 });
+  const join = async (clientId, options = {}) => {
+    const client = await connect({ page: "doc", codec: tiny, clientId, fetch: host.fetch, subscribe: host.subscribe, limits: labLimits(), firstId: 10_000 * ++n, idleMs: 5, maxMs: 20, waitMs: 20, ...options });
     open.push(client);
     await client.ready;
     return client;
@@ -102,4 +102,35 @@ test("a save whose answer was lost is settled from the committed file, not writt
   expect(await ana.flush()).toEqual({ [a.id]: "saved", [b.id]: "saved" });
   expect([w.cell("r1", "c1"), w.cell("r2", "c1")]).toEqual(["once", "next"]);
   expect(w.saves()).toBe(1);
+});
+
+// Bug it catches: a 503 that came after the host wrote the file (hyperclay's save-unknown, a proxy
+// timeout) is taken as a refusal: the tab tells the person nothing is unknown, and after a version restore
+// that trims the ledger it would write the edit again over the restored file.
+test("a save answered 5xx after the host wrote it is an unknown save settled from the file", async () => {
+  const w = world();
+  w.host.fault("unknown", (request) => isSave(request));
+  const ana = await w.join("ana");
+  const typed = ana.submit(set("r1", "c1", "once"));
+  let unknown = false;
+  ana.subscribe(() => (unknown ||= ana.status.unknownSave));
+  expect(await ana.flush()).toEqual({ [typed.id]: "saved" });
+  expect(w.cell("r1", "c1")).toBe("once");
+  expect(w.saves()).toBe(1);
+  // Until the file shows the commit, the tab says its last save is unknown (the close warning).
+  expect(unknown).toBe(true);
+});
+
+// Bug it catches: a flush (a host about to quit gives it two seconds) whose save is refused
+// because another window saved first waits the whole idle pause before trying again, so the
+// quit loses the second window's edit.
+test("two windows flushing at once both get their edit into the file without waiting the idle pause", async () => {
+  const w = world();
+  const slow = { idleMs: 60_000, maxMs: 120_000 };
+  const ana = await w.join("ana", slow);
+  const ben = await w.join("ben", slow);
+  ana.submit(set("r1", "c1", "ana"));
+  ben.submit(set("r2", "c1", "ben"));
+  await Promise.all([ana.flush(), ben.flush()]);
+  expect([w.cell("r1", "c1"), w.cell("r2", "c1")]).toEqual(["ana", "ben"]);
 });

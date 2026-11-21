@@ -118,7 +118,7 @@ test("a frame delivered twice is admitted once, and a frame whose answer was los
 
 test("a host with no room announces the file contract and answers no room routes", async () => {
   const host = hosted({ room: false });
-  expect((await call(host, "/_/announce")).body).toEqual({ extensions: ["ordered-file"] });
+  expect((await call(host, "/_/meta")).body).toEqual({ spec: 1, extensions: ["ordered-file", "recovery-copies"] });
   expect((await call(host, "/_/sync/room?page=doc&client-id=ana")).status).toBe(404);
 });
 
@@ -163,4 +163,20 @@ test("closing an old stream after a reconnect keeps the new stream", async () =>
   await call(host, "/_/sync/room?page=doc&client-id=ana");
   await call(host, "/_/sync/room?page=doc&client-id=ana", { method: "POST", body: JSON.stringify({ frames: [request(room, "ana", 1, set("r2", "c1", "heard"))] }) });
   expect(heard.at(-1)).toEqual(expect.objectContaining({ type: "room", frame: expect.objectContaining({ k: "act" }) }));
+});
+
+// Bug it catches: a second tab storing a different copy under the same id replaces the first, so
+// the edits only that copy held are gone.
+test("a recovery copy is created once: the same bytes again answer the stored copy, different bytes are refused", async () => {
+  const host = hosted();
+  const put = (id, body) => call(host, `/_/copies/${id}?page=doc`, { method: "PUT", body });
+  expect((await put("j1", "<p>one</p>")).status).toBe(201);
+  expect((await put("j1", "<p>one</p>")).status).toBe(200);
+  expect((await put("j1", "<p>two</p>")).status).toBe(409);
+  expect((await call(host, "/_/copies/j1?page=doc")).body).toBe("<p>one</p>");
+  const mark = { e: "a:1", kind: "kept" };
+  expect((await call(host, "/_/copies/j1/done?page=doc", { method: "POST", body: JSON.stringify(mark) })).status).toBe(200);
+  expect((await call(host, "/_/copies/j1/done?page=doc", { method: "POST", body: JSON.stringify(mark) })).body.done).toEqual([expect.objectContaining(mark)]);
+  expect((await call(host, "/_/copies?page=doc")).body.copies).toEqual([expect.objectContaining({ id: "j1", size: 10, done: [expect.objectContaining(mark)] })]);
+  expect((await call(host, "/_/copies/j2?page=doc")).status).toBe(404);
 });

@@ -24,10 +24,10 @@ function render(env, file) {
   const room = env.port.room(), record = { v: 2, doc: file.record.doc ?? DOC, gen: room.gen, epoch: room.epoch, commit: nextCommit(env), parent: file.record.commit, through: room.seq, room: room.id };
   return { record, body: serialize(record, room.state) };
 }
-function outsideStep(env, source, current, keep) {
-  const live = env.port.room(), room = live?.gen ? live : null;
-  if (env.hostMade && sameTables(source, current)) return { same: !0 };
-  const cut = room ? [room.gen, room.seq] : [current.record.gen, current.record.through], dirty = !!room && (room.gen !== current.record.gen || room.seq > current.record.through);
+function outsideStep(env, source, current, keep, replace = !1) {
+  const live = env.port.room(), room = live?.gen ? live : null, dirty = !!room && (room.gen !== current.record.gen || room.seq > current.record.through);
+  if (env.hostMade && sameTables(source, replace && dirty ? { state: room.state } : current)) return { same: !0 };
+  const cut = room ? [room.gen, room.seq] : [current.record.gen, current.record.through];
   let backup = null;
   if (dirty) {
     const record2 = { v: 2, doc: current.record.doc ?? DOC, gen: room.gen, epoch: room.epoch, commit: nextCommit(env), parent: room.base.commit, through: room.seq, room: room.id };

@@ -2,9 +2,9 @@
 // Edit the lab copy, then run npm run build:live-room-core.
 import { codec } from "./codec.js";
 import { utf8Bytes } from "./lib.js";
-const DOC = "doc0123456789abc", serialize = (record, state) => codec().write(state.wb, { ...record, lineage: state.lineage, cut: state.cut, floor: state.floor, opened: state.opened, seen: state.seen });
+const DOC = "doc0123456789abc", serialize = (record, state) => codec().write(state.wb, { ...record, lineage: state.lineage, cut: state.cut, floor: state.floor, opened: state.opened, seen: state.seen }), freshRecord = (doc = DOC) => ({ v: 2, doc, gen: "0.00000000", epoch: 0, commit: "c00000000000", parent: null, through: 0, lineage: [], cut: null, floor: -1, seen: {} }), hasLedger = (record) => record?.v === 2 && record.seen !== null && typeof record.seen == "object";
 function parse(body) {
-  const { record, doc } = codec().read(body), { lineage, cut, floor, opened, seen, ...header } = record;
+  const read = codec().read(body), record = hasLedger(read.record) ? read.record : freshRecord(typeof read.record?.doc == "string" ? read.record.doc : DOC), doc = read.doc, { lineage, cut, floor, opened, seen, ...header } = record;
   return { record: header, state: { wb: doc, seen, lineage, cut, floor, ...opened === void 0 ? {} : { opened } } };
 }
 const page = (about, wb) => codec().write(wb, { v: 2, doc: DOC, ...about });
@@ -21,6 +21,7 @@ const recordBytes = (record, state) => utf8Bytes(recordTag(record, state));
 export {
   DOC,
   entryBytes,
+  freshRecord,
   ledgerBytes,
   page,
   parse,
