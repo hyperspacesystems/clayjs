@@ -453,6 +453,7 @@ test("sheet edit: the blank sheet's exact module list", async () => {
     "src/sheet/format-commands.js",
     "src/sheet/function-help.js",
     "src/sheet/paste-special.js",
+    "src/sheet/room.js",
     "src/sheet/rule-panels.js",
     "src/sheet/rules.js",
     "src/sheet/sheet-view.js",
