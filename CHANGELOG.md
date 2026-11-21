@@ -136,6 +136,42 @@
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-11-20
+
+### Added
+- A page can hold a spreadsheet with tabs, a formula bar, cell selection and typing, formulas, undo and redo for each tab, and copy, cut and paste that keep formulas, values and formats.
+- Sheet formatting and structure: bold, italic, underline, strikethrough, wrap, alignment, text and fill colours, number formats, decimals, borders, merge and unmerge, insert and delete rows and columns, resize and fit, freeze, and tab actions.
+- Sheet data tools: fill series, sort, find and replace, paste special, a custom format dialog, function help with name completion, a keyboard shortcut list, a status bar, and Open link chips for http, https and mailto cells.
+- Sheet import and export: CSV and TSV with a preview, and `.xlsx` with a preview of what will be added and what will not come across.
+- Sheet rules: checkboxes, dropdowns, conditional formatting and colour scales, saved with the sheet and painted without writing into the file. A closed dropdown refuses a typed value outside its list.
+- Sheet charts: column, bar, line, area, pie and scatter charts drawn from cell ranges, saved with the sheet and editable from a chart panel, including for readers without scripts.
+- Sheet filters: a filter for each viewer on a range by values and conditions, never saved, with copy, delete, cut, Ctrl+Enter and fill skipping filtered rows.
+- A phone layout for sheets: under 960 px the data tools move into More, under 760 px the toolbar is one row of 44 px tools, and touch selects without raising the keyboard until a second tap. A long press opens the cell menu with Cut, Copy and Paste, and round handles stretch the selection.
+- `clay.newDocument` builds a copy of the page with its data emptied and starting values applied, and the host keeps it or the browser downloads it.
+- New blank document is the first item in the owner and visitor menus on pages with API rules. It is offered only on pages with a starting values tag whose `keep` attribute names values to carry over, never blanks the site rule or theme, and keeps paid regions for the host.
+- `clay.ai` and `clay.instructions` let a page ask a person's agent, copy the prompt and carry hidden instructions.
+- `clay.region.own` lets an element own the bytes it saves, so a save costs the same at 0 and 20,000 cells.
+- `clay.derived.register(repaint, { flush })` registers a derived repaint whose result is flushed before a save clones the page.
+- Code highlighting loads JSX, Markdown and HTML grammars only when needed, and keeps highlighted lines balanced around quoted `>` and stray closers.
+- A tab in edit mode reports unsaved edits to a host that announces `unsaved-report-v1`, so the host's Quit can ask.
+
+### Changed
+- A save includes the values a SapJS engine painted from an edit made in the same task.
+- SapJS plugins load through ClayJS's plugin loader, and the first paint waits for `Sap.plugins.ready`.
+- Saves refused while HTML Clay restarts for an update are sent again after `Retry-After` (2 seconds by default), up to 15 times, and show as retrying.
+- AI edit refuses a reply that adds or changes instructions, programs, edit mode scripts or template code.
+- AI edit also refuses `noscript` blocks, SapJS directives and stylesheets that read attributes into URLs, and run files never follow a redirect.
+- Opening a sheet saves nothing, and saving writes every tab through SapJS's cached writer.
+- When two tabs change the same sheet, the merge fails and ClayJS keeps the page, holds autosave and says it could not merge.
+- Download a copy asks a local host for the file's own bytes.
+
+### Fixed
+- Edits made while a save is in flight are no longer marked saved.
+- An edit made while the change hub is paused reaches autosave and the unsaved mark.
+- A save made with undo or trash in the same task clears the unsaved mark.
+- Owned regions keep edits made during pauses, merges and conflict holds, and a page stays unsaved when a region moved while a merge waited.
+- CSV import handles files over about 125,000 rows without overflowing the stack.
+
 ## [1.26.2] - 2026-11-14
 
 ### Changed
