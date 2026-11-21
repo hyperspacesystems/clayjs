@@ -2,6 +2,8 @@ import { isEditMode } from "./is-edit-mode.js";
 import { downloadStored } from "./conflict-download.js";
 import { bevelSurface, bevelText, bevelButton, pageScheme, paintLook, setShown } from "../ui/bevel-controls.js";
 import { TOKENS } from "../ui/bevel.js";
+import { resolveTheme } from "../ui/theme.js";
+import { themed } from "../ui/theme-parts.js";
 import { set } from "../lib/hostile-css.js";
 
 // The one quiet word about how large this document is.
@@ -26,6 +28,7 @@ const OVER_MESSAGE = "Download a copy to keep your work.";
 let root = null;
 let sentence = null;
 let copy = null;
+let theme = null;
 let listeners = null;
 
 // A size a person can read at a glance. Kilobyte precision under a megabyte, one
@@ -62,24 +65,30 @@ async function download() {
 }
 
 function build() {
+  theme = resolveTheme();
   root = bevelSurface("div", [
     "position:fixed", "left:50%", "transform:translateX(-50%)",
     "z-index:2147483000", "display:flex", "align-items:center", "gap:10px 12px",
     "width:max-content", "max-width:calc(100vw - 24px)", "flex-wrap:wrap",
     "padding:8px 8px 8px 14px", "text-align:left", `color-scheme:${pageScheme()}`,
-  ]);
+  ], { theme, parts: ["notice.root", "notice.panel"] });
   // An injected element is in no document on disk, and `editor-ui` is the bundle that
   // says so: not saved, not watched, not in any snapshot, not undoable, not data. The
   // controls inside carry the same markers, as every other notice this library draws.
   root.setAttribute("clay", "editor-ui");
   root.setAttribute("data-clay-save-size", "");
   root.setAttribute("role", "status");
-  sentence = bevelText("span", [], "");
-  copy = bevelButton("Download my copy", { small: true, onClick: download });
+  sentence = bevelText("span", [], "", { theme, parts: ["notice.text"] });
+  copy = bevelButton("Download my copy", {
+    small: true, onClick: download, theme,
+    parts: ["notice.button"],
+    labelParts: ["notice.buttonLabel"],
+  });
   setShown(copy, false, "inline-flex");
   root.append(sentence, copy);
   document.body.appendChild(root);
   place();
+  if (themed(theme)) set(root, "color-scheme", theme.scheme === "light dark" ? "light" : theme.scheme);
   window.visualViewport?.addEventListener("resize", place);
   window.visualViewport?.addEventListener("scroll", place);
 }
@@ -91,7 +100,7 @@ function render(size) {
   // already recommends downloading one.
   setShown(copy, size.state === "over", "inline-flex");
   place();
-  paintLook(root, { background: TOKENS.surface });
+  if (!themed(theme)) paintLook(root, { background: TOKENS.surface });
 }
 
 function clear() {
@@ -102,6 +111,7 @@ function clear() {
   root = null;
   sentence = null;
   copy = null;
+  theme = null;
 }
 
 function onSaveSize(event) {

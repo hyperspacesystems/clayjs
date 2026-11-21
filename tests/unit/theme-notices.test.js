@@ -5,6 +5,9 @@ import { TOKENS } from "../../src/ui/bevel.js";
 import { capture, captureAsync, last } from "./helpers/injected-ui.js";
 import { toastStack, $$ } from "./helpers/editor-ui.js";
 import * as conflictNotice from "../../src/core/conflict-notice-ui.js";
+import * as saveSizeNotice from "../../src/core/save-size-notice.js";
+import { commitModeFacts } from "../../src/core/is-edit-mode.js";
+import { captureForSave } from "../../src/core/snapshot.js";
 
 /**
  * Toasts, the stale-host notice and the conflict notice take the page's theme the way the
@@ -23,6 +26,9 @@ const CONFLICT = {
 const toasts = () => $$("[data-clay-toast]", "toasts");
 const panel = () => toasts().at(-1);
 const bar = () => document.querySelector("[data-clay-stale-host]");
+const saveSizeBar = () => document.querySelector("[data-clay-save-size]");
+const sizeEvent = (state, bytes = 1_200_000, maxBytes = 1_048_576) =>
+  new CustomEvent("clay:save-size", { detail: { bytes, maxBytes, state } });
 const shown = (el, prop) => parseColor(el.style.getPropertyValue(prop));
 const pointer = (el, type) => capture(() => el.dispatchEvent(new MouseEvent(type)));
 
@@ -75,6 +81,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  saveSizeNotice.stop();
   jest.runOnlyPendingTimers();
   jest.useRealTimers();
 });
@@ -298,4 +305,96 @@ test("exact Bevel: the conflict notice marks no part and keeps every Bevel decla
   expect(last(calls, dialog, "background")).toBe(TOKENS.surface);
   expect(calls.filter((call) => call.style === dialog.style && call.name === "font-family")).toEqual([]);
   expect([...rootEl.querySelectorAll("button")].length).toBeGreaterThan(0);
+});
+
+test("the save-size notice takes the page's theme, repaints its button on hover, skips paintLook, updates on rebuild, and stays out of snapshots", () => {
+  commitModeFacts({ mode: "edit", isEditMode: true });
+  // Give the root an explicit light scheme so an unguarded paintLook() would actively
+  // repaint root's background and flip color-scheme back to light in jsdom.
+  document.documentElement.style.colorScheme = "light";
+  theme({
+    colorScheme: "dark",
+    tokens: { surface: "#202530", text: "#eef0f4", font: "Georgia, serif", radius: "12px" },
+    parts: {
+      "notice.panel": { base: { "border-radius": "2px" } },
+      "notice.button": { hover: { background: "red" } },
+    },
+  });
+
+  saveSizeNotice.start(sizeEvent("over"));
+
+  const el = saveSizeBar();
+  expect(el).not.toBeNull();
+  expect(el.getAttribute("data-clay-part")).toContain("notice.root");
+  expect(el.getAttribute("data-clay-part")).toContain("notice.panel");
+  expect(shown(el, "background")).toEqual(parseColor("#202530"));
+  expect(el.style.getPropertyPriority("background")).toBe("important");
+  expect(el.style.getPropertyValue("font-family")).toContain("Georgia");
+  expect(el.style.getPropertyValue("border-radius")).toBe("2px");
+  expect(el.style.getPropertyValue("color-scheme")).toBe("dark");
+
+  const text = partOf(el, "notice.text");
+  expect(text).not.toBeNull();
+  expect(shown(text, "color")).toEqual(parseColor("#eef0f4"));
+
+  const copy = partOf(el, "notice.button");
+  expect(copy).not.toBeNull();
+  expect(copy.hidden).toBe(false);
+  expect(partOf(copy, "notice.buttonLabel")).not.toBeNull();
+  expect(shown(copy, "background")).toEqual(parseColor("#202530"));
+  expect(shown(copy, "color")).toEqual(parseColor("#eef0f4"));
+
+  const over = pointer(copy, "pointerenter");
+  expect(last(over, copy, "background")).toBe("red");
+  const away = pointer(copy, "pointerleave");
+  expect(last(away, copy, "background")).toBe("#202530");
+  expect(copy.style.getPropertyValue("display")).toBe("inline-flex");
+
+  // Snapshot exclusion: a themed save-size notice never lands in saved HTML.
+  const saved = captureForSave({ emitForSync: false });
+  expect(saved).not.toContain("data-clay-save-size");
+  expect(saved).not.toContain("data-clay-part");
+
+  // Captured theme sticks across in-place updates (and paintLook must not overwrite root);
+  // a new theme applies only after clear + rebuild.
+  theme({ tokens: { surface: "#111111", text: "#ffffff" } });
+  const updateCalls = capture(() => document.dispatchEvent(sizeEvent("over", 1_300_000)));
+  expect(last(updateCalls, el, "background")).toBeNull();
+  expect(el.style.getPropertyValue("color-scheme")).toBe("dark");
+  expect(shown(saveSizeBar(), "background")).toEqual(parseColor("#202530"));
+  expect(shown(copy, "background")).toEqual(parseColor("#202530"));
+
+  document.dispatchEvent(sizeEvent("ok", 100_000));
+  expect(saveSizeBar()).toBeNull();
+  document.dispatchEvent(sizeEvent("near", 900_000));
+  expect(shown(saveSizeBar(), "background")).toEqual(parseColor("#111111"));
+});
+
+test("exact Bevel: the save-size notice ignores page styles, marks no part, and still runs paintLook", () => {
+  commitModeFacts({ mode: "edit", isEditMode: true });
+  document.documentElement.style.colorScheme = "dark";
+  document.body.style.fontFamily = "Georgia, serif";
+  document.body.style.backgroundColor = "#202530";
+  document.body.style.color = "#eef0f4";
+  document.body.style.setProperty("--clay-ui-radius", "12px");
+  window.clayTheme = false;
+
+  const calls = capture(() => saveSizeNotice.start(sizeEvent("over")));
+
+  const el = saveSizeBar();
+  expect(el).not.toBeNull();
+  expect(el.getAttribute("data-clay-part")).toBeNull();
+  expect(el.querySelectorAll("[data-clay-part]").length).toBe(0);
+  expect(last(calls, el, "background")).toBe(TOKENS.surface);
+  expect(calls.filter((call) => call.style === el.style && call.name === "border-radius")).toEqual([]);
+  expect(calls.filter((call) => call.style === el.style && call.name === "font-family")).toEqual([]);
+
+  const copy = el.querySelector("button");
+  expect(copy).not.toBeNull();
+  expect(copy.hidden).toBe(false);
+
+  // An in-place update does not re-run build(), so only render()'s paintLook() writes to root.
+  const inPlaceCalls = capture(() => document.dispatchEvent(sizeEvent("near", 900_000)));
+  expect(last(inPlaceCalls, el, "background")).toBe(TOKENS.surface);
+  expect(last(inPlaceCalls, el, "color-scheme")).toBe("dark");
 });
