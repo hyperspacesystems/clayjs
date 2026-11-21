@@ -534,6 +534,8 @@ test("a later Restore keeps the restored value instead of adopting the earlier b
   await flushAsync();
   expect(pendingIds(name)).toEqual([2]);
 
+  let openPost;
+  postGate = new Promise((resolve) => { openPost = resolve; });
   release();
   expect(await untilTaken()).toBeNull();
 
@@ -547,6 +549,8 @@ test("a later Restore keeps the restored value instead of adopting the earlier b
   expect(calls.queries).toHaveLength(1);
   // The newer edit goes to the room once, as its own operation, after the fresh
   // read: the earlier body is never sent again and never becomes the value.
+  postGate = null;
+  openPost();
   expect(await untilPosted(name)).toBe(1);
   expect(posted(name)[0].frame.ops).toEqual([{ op: "set", path: ["n"], value: 0 }]);
   expect(posted(name)[0].at).toBeGreaterThanOrEqual(calls.reads.at(-1).at);
@@ -600,6 +604,8 @@ test("an inverse operation made during uncertainty survives proof with peer edit
   await lostAnswer(save);
   expect(await untilQuery(1)).toBe(1);
 
+  let openPost;
+  postGate = new Promise((resolve) => { openPost = resolve; });
   s.add("n", -1);
   expect(pendingIds(name)).toEqual([1, 2]);
   releaseHistory();
@@ -608,6 +614,8 @@ test("an inverse operation made during uncertainty survives proof with peer edit
 
   expect(pendingIds(name)).toEqual([2]);
   expect(s.toJSON()).toEqual({ n: 0, peer: 7 });
+  postGate = null;
+  openPost();
   expect(await untilPosted(name)).toBe(1);
   expect(posted(name)[0].frame.ops).toEqual([{ op: "add", path: ["n"], n: -1 }]);
   expect(calls.saves).toHaveLength(1);
@@ -1020,6 +1028,8 @@ test("a later save while the fresh read is refused requests one more read and re
   s.add("m", 1);
   expect(pendingIds(name)).toEqual([2]);
 
+  let openPost;
+  postGate = new Promise((resolve) => { openPost = resolve; });
   readAnswer = null;
   newRoom({ g: roomStore({ s: 0 }), [name]: roomStore({ n: 1, m: 0 }) });
   const readsBefore = calls.reads.length;
@@ -1031,6 +1041,8 @@ test("a later save while the fresh read is refused requests one more read and re
   expect(await untilTaken()).toBeNull();
   expect(pendingIds(name)).toEqual([2]);
   expect(s.toJSON()).toEqual({ n: 1, m: 1 });
+  postGate = null;
+  openPost();
   expect(await untilPosted(name)).toBe(1);
   expect(posted(name)[0].frame.ops).toEqual([{ op: "add", path: ["m"], n: 1 }]);
 });
@@ -1044,6 +1056,8 @@ test("a fast-mode capture has no file-mode ID to settle", async () => {
   await flushAsync();
   await joinRoom({ g: roomStore({ s: 0 }), [name]: roomStore({ n: 0 }) });
   expect(s.status.mode).toBe("fast");
+  let openPost;
+  postGate = new Promise((resolve) => { openPost = resolve; });
   s.add("n", 1);
   await flushAsync();
 
@@ -1057,6 +1071,8 @@ test("a fast-mode capture has no file-mode ID to settle", async () => {
   expect(notices).toEqual([]);
   expect(refusal()).toBeNull();
   expect(calls.saves).toHaveLength(1);
+  postGate = null;
+  openPost();
 });
 
 test("a lane that stops mid-lookup gives nothing up early and does not restart the deadline", async () => {

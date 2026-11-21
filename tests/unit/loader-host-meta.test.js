@@ -54,7 +54,8 @@ async function boot(mode, query) {
   return { requests };
 }
 
-afterEach(() => {
+afterEach(async () => {
+  await new Promise((r) => setTimeout(r, 50));
   delete window.clay;
   delete window.clayEditMode;
   document.documentElement.removeAttribute("visitor-drafts");
