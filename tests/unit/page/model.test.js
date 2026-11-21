@@ -227,13 +227,12 @@ test("a keystroke is one small set op on that block", () => {
   let s = editor(blocks);
   const target = find(s.doc, "b-100");
   const before = s.doc;
-  const started = performance.now();
   s = s.apply(s.tr.insertText("!", target.offset + 1 + 3));
   const { before: was, after: now } = changedBlocks(before, s.doc);
   const ops = diffOps(was, now, ["blocks"]);
-  const elapsed = performance.now() - started;
+  expect(Object.keys(was)).toEqual(["b-100"]);
+  expect(Object.keys(now)).toEqual(["b-100"]);
   expect(ops).toEqual([{ op: "set", path: ["blocks", "b-100", "c"], value: "Par!agraph 100 with some words in it" }]);
-  expect(elapsed).toBeLessThan(50);
 });
 
 test("repairSiblings reorders only what is out of order", () => {

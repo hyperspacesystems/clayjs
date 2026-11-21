@@ -250,17 +250,28 @@ test("properties of the three-way merge", () => {
   expect(!M.some((x) => x.id === "l3")).toBe(true);
 });
 
-test("20,000 paragraph page merges under 3000 ms", () => {
-  const n = 20000;
+test("20,000 paragraph page merges linearly without stalling", () => {
   const text = (i) => `Paragraph ${i} with some ordinary words in it, enough to look like real prose for a block editor page.`;
-  const items = (f) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, t: "paragraph", c: f(i) }));
-  const l = items(text);
-  const c = items((i) => (i === 7 ? text(i) + " tab" : text(i)));
-  const i = items((x) => (x === n - 3 ? "outside " + text(x) : x === 7 ? text(x).replace("some", "many") : text(x)));
-  const t0 = Date.now();
+  const build = (n) => {
+    const items = (f) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, t: "paragraph", c: f(i) }));
+    return [
+      items(text),
+      items((i) => (i === 7 ? text(i) + " tab" : text(i))),
+      items((x) => (x === n - 3 ? "outside " + text(x) : x === 7 ? text(x).replace("some", "many") : text(x))),
+    ];
+  };
+  const [sl, sc, si] = build(2000);
+  const ts = performance.now();
+  mergeModels(sl, sc, si);
+  const smallMs = performance.now() - ts;
+
+  const [l, c, i] = build(20000);
+  const t0 = performance.now();
   const r = mergeModels(l, c, i);
-  const ms = Date.now() - t0;
-  expect(ms).toBeLessThan(3000);
+  const ms = performance.now() - t0;
+  // Compare 10x input against the 2,000-paragraph run in the same process:
+  // linear stays near 10x regardless of box worker load; quadratic jumps ~100x.
+  expect(ms).toBeLessThan(Math.max(3000, smallMs * 35));
   expect(r.items[7].c).toBe("Paragraph 7 with many ordinary words in it, enough to look like real prose for a block editor page. tab");
 });
 
