@@ -743,7 +743,7 @@ export function appendBlankTab({ tabs, sapGrid, gridOf, runTabStep, customName =
   const id = mintTabId(list, sapGrid.newId);
   const name = customName ?? nextSheetName(list);
   const html = emptyTableHtml(id, sapGrid, { colsCount, rowsCount });
-  if (!runTabStep(() => grid.apply({ v: 1, t: "insertSheet", sheet: { id, name, pos, html } }))) return null;
+  if (!runTabStep(() => grid.dispatch({ v: 1, t: "insertSheet", sheet: { id, name, pos, html } }))) return null;
   return { id, name };
 }
 
@@ -894,7 +894,7 @@ export function createCommandActions({
       direction,
     });
     if (!action) return;
-    if (!writeGrid(() => grid.apply(action))) return;
+    if (!writeGrid(() => grid.dispatch(action))) return;
     refreshStatus();
     syncUI({ announce: true });
     editor.focus();
@@ -937,7 +937,7 @@ export function createCommandActions({
           code: "merge_cut",
         });
       }
-      grid.apply(action);
+      grid.dispatch(action);
     });
     if (!ok) return;
     if (!prevWhole && ar >= 0 && ac >= 0 && fr >= 0 && fc >= 0) {
@@ -1163,9 +1163,9 @@ export function createCommandActions({
     const html = duplicateTableHtml(newId, srcTab.table, sapGrid);
     const ok = runTabStep(() => {
       for (let k = idx + 1; k < end; k++) {
-        grid.apply({ v: 1, t: "moveSheet", sheet: list[k].id, pos: keys[1 + (k - (idx + 1))] });
+        grid.dispatch({ v: 1, t: "moveSheet", sheet: list[k].id, pos: keys[1 + (k - (idx + 1))] });
       }
-      grid.apply({ v: 1, t: "insertSheet", sheet: { id: newId, name, pos: keys[0], html } });
+      grid.dispatch({ v: 1, t: "insertSheet", sheet: { id: newId, name, pos: keys[0], html } });
     });
     if (!ok) return;
     subscribeGrids();
@@ -1192,9 +1192,9 @@ export function createCommandActions({
     const keys = keysBetween(low, high, 1 + (end - targetIdx));
     const ok = runTabStep(() => {
       for (let k = targetIdx; k < end; k++) {
-        grid.apply({ v: 1, t: "moveSheet", sheet: others[k].id, pos: keys[1 + (k - targetIdx)] });
+        grid.dispatch({ v: 1, t: "moveSheet", sheet: others[k].id, pos: keys[1 + (k - targetIdx)] });
       }
-      grid.apply({ v: 1, t: "moveSheet", sheet: tabId, pos: keys[0] });
+      grid.dispatch({ v: 1, t: "moveSheet", sheet: tabId, pos: keys[0] });
     });
     if (!ok) return;
     syncUI();
@@ -1216,7 +1216,7 @@ export function createCommandActions({
         const freshTab = tabs.list().find((t) => t.id === tabId);
         const grid = gridOf(freshTab?.table ?? tabs.list()[0]?.table);
         if (!grid) return;
-        if (!runTabStep(() => grid.apply({ v: 1, t: "deleteSheet", sheet: tabId }))) return;
+        if (!runTabStep(() => grid.dispatch({ v: 1, t: "deleteSheet", sheet: tabId }))) return;
         restart();
       },
       onCancel: () => {
@@ -1523,7 +1523,7 @@ export function createCommandActions({
     }
     const grid = gridOf(tab.table);
     if (!grid) return true;
-    const ok = runTabStep(() => grid.apply({ v: 1, t: "renameSheet", sheet: tabId, name: nextName }));
+    const ok = runTabStep(() => grid.dispatch({ v: 1, t: "renameSheet", sheet: tabId, name: nextName }));
     if (!ok) return false;
     syncUI();
     editor.focus();

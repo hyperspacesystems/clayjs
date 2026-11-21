@@ -574,7 +574,7 @@ function removeTabs(ctx, added) {
   for (const { id, inverse } of added.reverse()) {
     const keep = ctx.tabs.list().find((t) => t.id !== id);
     try {
-      ctx.gridOf(keep?.table)?.apply(inverse ?? { v: 1, t: "deleteSheet", sheet: id });
+      ctx.gridOf(keep?.table)?.dispatch(inverse ?? { v: 1, t: "deleteSheet", sheet: id });
     } catch {
       // A tab that cannot be removed stays; the notice still says the import stopped.
     }

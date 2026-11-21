@@ -88,6 +88,7 @@ async function importThroughMenu(rows, fileName = "Bank.csv") {
       root.append(section);
       return true;
     },
+    dispatch: (action) => grid.apply(action),
     importDelimited: (text, at, options) => {
       writes.push({ text, at, options });
     },

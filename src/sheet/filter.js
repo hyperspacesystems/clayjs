@@ -359,7 +359,7 @@ export function openFilterPanel(ctx, tabId, colId, anchor) {
     const box = { top: heading + 1, left: 0, bottom: rows[rows.length - 1], right: current.cols.length - 1 };
     const action = buildRangeSortAction(grid, current, { sheet: tabId, box, col: colIndex, direction });
     if (action) {
-      ctx.writeGrid(() => grid.apply(action));
+      ctx.writeGrid(() => grid.dispatch(action));
       ctx.refreshStatus();
       ctx.syncUI({ announce: true });
     }

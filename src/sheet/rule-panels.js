@@ -295,7 +295,7 @@ export function toggleCheckboxRule(ctx) {
   const ok = ctx.writeGrid(() =>
     ctx.history.group(sel.tab, () => {
       if (emptyWrites.length > 0) {
-        grid.apply({ v: 1, t: "set", sheet: sel.tab, cells: emptyWrites });
+        grid.dispatch({ v: 1, t: "set", sheet: sel.tab, cells: emptyWrites });
       }
       grid.setRules({ set: [rule] });
     }),
