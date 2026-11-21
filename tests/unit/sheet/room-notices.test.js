@@ -410,3 +410,93 @@ test("conflicting freeze undo rejects no-op revert cleanly without duplicate lab
   expect(inst.chrome.noticeBar.textContent).not.toMatch(/s1#|Sheet1, Sheet1/);
   expect(binding.canRedo("s1")).toBe(false);
 });
+
+// Bug: sheet.js did not mount C9b's save chip in the bottom bar or "Recovered edits" in More,
+// downloadSheetCopy exported the live sheet instead of the stored recovery copy, double clicking
+// opened duplicate drawers, and leaveRoom did not tear down the chip cleanly.
+test("joining a room mounts the save chip, downloads stored recovery copies cleanly, deduplicates recovery drawers, and tears down on leaveRoom", async () => {
+  resetPage(BOOK());
+  const Sap = (await import("../../../src/vendor/sap-core.vendor.js")).default;
+  window.clay.region = (await import("../../../src/lib/region-policy.js")).regionShape;
+  const origGetHTML = window.clay.getHTML;
+  window.clay.getHTML = () => `<!doctype html><html><body><main sap plugins="grid"><div items="sheets" sheet-workbook>${document.querySelector("[sheet-workbook]").innerHTML}</div></main></body></html>`;
+  const origCreateObjectURL = URL.createObjectURL;
+  const origRevokeObjectURL = URL.revokeObjectURL;
+  const capturedBlobs = [];
+  URL.createObjectURL = (blob) => {
+    capturedBlobs.push(blob);
+    return "blob:test-copy";
+  };
+  URL.revokeObjectURL = () => {};
+
+  let sheet;
+  let ready;
+  let joinedRoom = null;
+  window.clay.liveRoom = jest.fn((_name, { codec }) => {
+    const root = document.querySelector("[sheet-workbook]");
+    const book = sheet.books.get(root);
+    const liveInner = book.serialize({ purpose: "recovery" });
+    const copyBody = liveInner.replace(">1<", ">RECOVERED_SECRET<");
+    joinedRoom = {
+      ...fakeRoom(codec, liveInner),
+      status: { mode: "ordered", connected: true, pending: 0, unsaved: 0, unstored: 0, unknownSave: false, copies: 1, restoring: false, pendingMarks: 0, conflicts: 0, error: null },
+      copies: () => [{ id: "r99", v: 4, at: 1000, body: copyBody, edits: [{ e: "a:1", c: "a", n: 1, out: "applied", action: { v: 1, t: "set", sheet: "s1", row: "r1", col: "c1", value: "RECOVERED_SECRET" }, saw: [] }], refused: [], marks: [] }],
+      unstoredCopies: () => [],
+      notices: () => [],
+      refreshCopies: async () => {},
+      capture: () => ({ bytes: "", record: {} }),
+      close: async () => {},
+    };
+    return joinedRoom;
+  });
+
+  try {
+    ({ sheet, ready } = await import("../../../src/sheet/sheet.js"));
+    await ready;
+    Sap.mount();
+    await turn();
+    await turn();
+    await turn();
+    await new Promise((r) => setTimeout(r, 20));
+
+    const inst = sheet.ui.of(document.querySelector("[sheet-workbook]"));
+    expect(inst.chrome.roomChipSlot.children.length).toBe(1);
+    expect(inst.chrome.roomChipSlot.textContent).toContain("Saved");
+    inst.chrome.topShadow.querySelector('[data-command="more"]').click();
+    await new Promise((r) => setTimeout(r, 25));
+    const menuButtons = [...document.querySelectorAll('[clay~="editor-ui"], [editor-ui]')].flatMap((host) => [...(host.shadowRoot?.querySelectorAll("button") ?? [])]);
+    const recoveredBtn = menuButtons.find((btn) => btn.textContent?.includes("Recovered edits"));
+    expect(recoveredBtn).toBeTruthy();
+
+    // Double-clicking "Recovered edits" mounts exactly one recovery drawer.
+    recoveredBtn.click();
+    recoveredBtn.click();
+    await new Promise((r) => setTimeout(r, 30));
+    const drawers = [...document.querySelectorAll('[clay~="editor-ui"], [editor-ui]')].filter((host) => host.shadowRoot?.querySelector("[data-live-room-recovery]"));
+    expect(drawers).toHaveLength(1);
+
+    // Clicking "Download copy" on stored copy r99 writes a full HTML page with the copy's value.
+    const dlBtn = [...drawers[0].shadowRoot.querySelectorAll("button")].find((btn) => btn.textContent?.includes("Download copy"));
+    expect(dlBtn).toBeTruthy();
+    dlBtn.click();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(capturedBlobs).toHaveLength(1);
+    const downloadedText = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsText(capturedBlobs[0]);
+    });
+    expect(downloadedText).toContain("<!doctype html>");
+    expect(downloadedText).toContain("RECOVERED_SECRET");
+    expect(downloadedText).not.toContain(">1<");
+
+    sheet.leaveRoom();
+    expect(inst.chrome.roomChipSlot.children).toHaveLength(0);
+    await joinedRoom.close();
+  } finally {
+    window.clay.getHTML = origGetHTML;
+    URL.createObjectURL = origCreateObjectURL;
+    URL.revokeObjectURL = origRevokeObjectURL;
+  }
+});

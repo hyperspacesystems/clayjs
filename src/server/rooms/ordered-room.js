@@ -3,10 +3,10 @@
 // writes every file, sends every frame, and tells the registry what happened.
 import { randomInt } from 'node:crypto';
 import { admit, dropConnection, newInstance, rejoin, retained, stateReserve } from '../../live-room/core/room.js';
-import { establishing, fileAccepted as accepted, outsideStep, render, sameTables } from '../../live-room/core/host.js';
+import { establishing, fileAccepted as accepted, outsideStep, render, sameTables, hostSubmit } from '../../live-room/core/host.js';
 import { parse } from '../../live-room/core/record.js';
 import { useCodec } from '../../live-room/core/codec.js';
-import { REAL_LIMITS, ROOM_HEAP } from '../../live-room/core/limits.js';
+import { REAL_LIMITS, ROOM_HEAP, frameBytes } from '../../live-room/core/limits.js';
 import { LIVE_LIMITS } from './live-data-rooms.js';
 
 const silent = new Proxy({}, { get: () => () => {} });
@@ -27,14 +27,21 @@ const NOBODY = Object.freeze({ used: () => 0, size: () => 0 });
 /**
  * @param {{ codecs: Record<string, object>, limits?: object, now?: () => number, newId?: () => number,
  *   liveBytes?: number, maxRooms?: number, retainMs?: number, heap?: { doc: number, tail: number }, onSpace?: (key: string) => void,
- *   others?: { used: () => number, size: () => number } }} options
+ *   others?: { used: () => number, size: () => number }, recalculate?: boolean }} options
  */
-export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.now, newId = () => randomInt(2 ** 40), liveBytes = LIVE_LIMITS.liveBytes, maxRooms = LIVE_LIMITS.rooms, retainMs = LIVE_LIMITS.retainMs, heap = ROOM_HEAP, onSpace = () => {}, others = NOBODY } = {}) {
+export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.now, newId = () => randomInt(2 ** 40), liveBytes = LIVE_LIMITS.liveBytes, maxRooms = LIVE_LIMITS.rooms, retainMs = LIVE_LIMITS.retainMs, heap = ROOM_HEAP, onSpace = () => {}, others = NOBODY, recalculate = false } = {}) {
   if (!codecs || !Object.keys(codecs).length) throw new Error('createOrderedRooms needs at least one codec');
   const slots = new Map();
   const byConn = new Map();
   const counters = {};
   const maxParts = Math.max(1, Math.ceil(limits.roomBytes / (limits.opsPerFrame * 8)));
+
+  function extrasFor(codec, doc, previousBytes, calc) {
+    const drawing = previousBytes && typeof codec.drawingsIn === 'function' ? codec.drawingsIn(previousBytes) : undefined;
+    const result = calc && typeof codec.results === 'function' ? codec.results(doc) : undefined;
+    if (!drawing && !result) return undefined;
+    return { ...(result ? { result } : {}), ...(drawing ? { drawing } : {}) };
+  }
 
   const next = (counter) => (counters[counter] = (counters[counter] ?? newId()) + 1);
 
@@ -60,12 +67,14 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
   }
 
   const open = (slot) => (slot?.room?.gen ? slot.room : null);
+  const active = (slot) => Boolean(slot?.room && (open(slot) || slot.docBytes > 0));
+  const activeCount = () => [...slots.values()].filter(active).length;
   const stageBytes = (stage) => [...stage.got.values()].reduce((sum, bytes) => sum + bytes, 0);
   const stageCost = (stage) => heap.tail * stageBytes(stage) + SLOT_COST * stage.m + STAGE_COST;
   const partBytes = (slot) => [...slot.parts.values()].reduce((sum, stage) => sum + stageCost(stage), 0);
   const roomBytes = (room) => (room?.gen ? room.bytes.tail + room.bytes.staged + room.bytes.waiting : 0);
   const copyBytes = (slot) => (slot.room?.restores?.size ? slot.copyBytes : 0);
-  const held = (slot) => (slot?.room ? Math.ceil(heap.doc * slot.docBytes + stateReserve(limits) + heap.tail * (roomBytes(slot.room) + copyBytes(slot)) + partBytes(slot)) : 0);
+  const held = (slot) => (active(slot) ? Math.ceil(heap.doc * slot.docBytes + stateReserve(limits) + heap.tail * (roomBytes(slot.room) + copyBytes(slot)) + partBytes(slot)) : 0);
   const used = () => [...slots.values()].reduce((sum, slot) => sum + held(slot), 0);
   const dirty = (room) => Boolean(room?.gen) && room.seq > room.base.through;
   const slotOf = (room) => [...slots.values()].find((slot) => slot.room === room) ?? null;
@@ -148,12 +157,14 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
     const before = slot.parts.get(key);
     if (!before && [...slot.parts.keys()].filter((staged) => staged.startsWith(`${clientId}/`)).length >= STAGES_PER_CLIENT) return 'full';
     if (before && before.m !== frame.m) return 'bad-frame';
+    if (before && before.size !== frame.size) return 'bad-size';
     // A restore's copy frame carries the rows it made (`made`) in its first part's header, which
-    // the declared size of the action leaves out.
+    // the declared size of the action leaves out; bound it to actionBytes so it cannot evade caps.
     const extra = frame.i === 0 && frame.frame?.made ? sizeOf(frame.frame.made) : (before?.extra ?? 0);
-    const stage = { m: frame.m, got: new Map(before?.got), extra };
+    if (extra > limits.actionBytes) return 'bad-size';
+    const stage = { m: frame.m, size: before?.size ?? frame.size, got: new Map(before?.got), extra };
     stage.got.set(frame.i, sizeOf(frame));
-    if (stageBytes(stage) > 2 * frame.size + frame.m * PART_SLACK + extra) return 'bad-size';
+    if (stageBytes(stage) > 2 * stage.size + stage.m * PART_SLACK + extra) return 'bad-size';
     slot.parts.set(key, stage);
     const answer = admit(envOf(slot), room, frame, clientId);
     for (const staged of slot.parts.keys()) if (!room.staging.has(staged)) slot.parts.delete(staged);
@@ -166,17 +177,18 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
     capability: (codec) => Object.hasOwn(codecs, codec),
 
     mayFit(key, bytes) {
-      if (!slots.has(key) && slots.size + others.size() >= maxRooms) return false;
+      if (!active(slots.get(key)) && activeCount() + others.size() >= maxRooms) return false;
       const size = typeof bytes === 'string' ? utf8(bytes) : bytes;
       return used() - held(slots.get(key)) + others.used() + heap.doc * size + stateReserve(limits) <= liveBytes;
     },
 
     // The room instance a joining client is told about before any generation is open, so a tab
-    // never makes an instance of its own: the host makes it, as `establish` does.
+    // never makes an instance of its own: the host makes it, as `establish` does. Passive viewers
+    // who never edit do not consume an active maxRooms slot.
     instance(key, codec) {
       let slot = slots.get(key);
       if (!slot) {
-        if (!Object.hasOwn(codecs, codec) || !this.mayFit(key, 0)) return null;
+        if (!Object.hasOwn(codecs, codec)) return null;
         slot = { codec, room: null, bytes: null, docBytes: 0, copyBytes: 0, parts: new Map(), notices: [], idle: now() };
         slots.set(key, slot);
       }
@@ -202,8 +214,7 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       }
       const env = envOf(slot);
       if (!slot.room) slot.room = newInstance(env);
-      slot.docBytes = Math.max(slot.docBytes, utf8(bytes));
-      const built = establishing(env, file);
+      const built = establishing(env, file, extrasFor(codecs[slot.codec], file.state.wb, bytes, false));
       return { bytes: built.body, record: built.record };
     },
 
@@ -232,6 +243,10 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       if (!slot || !open(slot) || !id(clientId) || conn === undefined || conn === null) return null;
       const before = byConn.get(conn);
       if (before && before !== slot) this.leave(before.room, conn);
+      else if (before === slot) {
+        const prevClient = slot.conns?.get(conn);
+        if (prevClient && prevClient !== clientId) this.leave(room, conn);
+      }
       byConn.set(conn, slot);
       (slot.conns ??= new Map()).set(conn, clientId);
       rejoin(room, clientId);
@@ -243,7 +258,8 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       if (!slot || !open(slot)) return { answer: 'closed', send: [] };
       const bad = validFrame(codecs[slot.codec], frame);
       if (bad) return { answer: bad, send: [] };
-      const adds = frame.k === 'receipt' ? 0 : frame.k !== 'part' ? heap.tail * sizeOf(frame) : slot.parts.has(`${clientId}/${frame.key}`) ? 0 : 2 * heap.tail * frame.size + SLOT_COST * frame.m + STAGE_COST;
+      const madeExtra = frame.k === 'part' && frame.i === 0 && frame.frame?.made ? heap.tail * sizeOf(frame.frame.made) : 0;
+      const adds = frame.k === 'receipt' ? 0 : frame.k !== 'part' ? heap.tail * sizeOf(frame) : slot.parts.has(`${clientId}/${frame.key}`) ? madeExtra : 2 * heap.tail * frame.size + SLOT_COST * frame.m + STAGE_COST + madeExtra;
       if (adds && used() + others.used() + adds > liveBytes) {
         slot.starved = true;
         return { answer: 'full', send: [] };
@@ -309,9 +325,9 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
         return true;
       }
       const { record } = file;
-      if (record.gen !== room.gen) return !(record.room === room.id && record.epoch > room.epoch);
+      if (record.gen !== room.gen) return true;
       if (record.commit === room.base.commit) return Boolean(slot.bytes) && !sameTables(file, read(slot, slot.bytes, null));
-      return !(record.room === room.id && record.parent === room.base.commit);
+      return !(record.room === room.id && record.parent === room.base.commit && Number.isInteger(record.through) && record.through > room.base.through && record.through <= room.seq);
     },
 
     // The host's own commit of the room's state (its final save when the last tab leaves a dirty
@@ -322,8 +338,27 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       if (!slot || !open(slot) || !slot.bytes) return null;
       const file = read(slot, slot.bytes, slot.etag ?? null);
       if (file.record.gen !== room.gen || file.record.through >= room.seq) return null;
-      const built = render(envOf(slot), file);
+      const built = render(envOf(slot), file, extrasFor(codecs[slot.codec], room.state.wb, slot.bytes, recalculate));
       return { bytes: built.body, record: built.record, ifMatch: slot.etag ?? null };
+    },
+
+    // A host client's action (an agent cell patch while people edit, plan 09 section 2.9):
+    // admits the action in the room's one order and returns `{ answer, applied, seq, id, send }`.
+    submit(room, action) {
+      const slot = slotOf(room);
+      if (!slot || !open(slot)) return { answer: 'closed', applied: false, seq: null, id: null, send: [] };
+      const codec = codecs[slot.codec];
+      if (!codec.validate(action)) return { answer: 'bad-action', applied: false, seq: null, id: null, send: [] };
+      useCodec(codec);
+      const saw = codec.fits(room.state.wb, action) ? codec.seen(room.state.wb, action) : null;
+      const adds = heap.tail * frameBytes(action, { saw, b: room.epoch });
+      if (adds && used() + others.used() + adds > liveBytes) {
+        slot.starved = true;
+        return { answer: 'full', applied: false, seq: null, id: null, send: [] };
+      }
+      const from = room.log.length;
+      const result = hostSubmit(envOf(slot), room, action);
+      return { ...result, send: sent(slot, from) };
     },
 
     // The one host step for every write that did not come from the room: a version restore, an
@@ -356,7 +391,8 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       }
       const env = slot ? envOf(slot) : { hostMade: true, limits, observer: silent, port: { room: () => null, setRoom: () => {}, next } };
       const replace = kind === 'restore' || kind === 'reset' || kind === 'upload';
-      const step = outsideStep(env, source, disk, reopen, replace);
+      const backupExtras = slot?.room?.gen ? extrasFor(codecs[kindName], slot.room.state.wb, slot.bytes ?? current, recalculate) : undefined;
+      const step = outsideStep(env, source, disk, reopen, replace, extrasFor(codecs[kindName], source.state.wb, bytes, false), backupExtras);
       if (step.same) {
         if (made) forget(key);
         // Equal tables: nothing changes for the room. The other bytes (a title) are taken only when
@@ -394,7 +430,7 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
     sweep(connectedOf = () => 0) {
       const dropped = [];
       for (const [key, slot] of [...slots]) {
-        if (slot.conns?.size || connectedOf(key) > 0) continue;
+        if (active(slot) && (slot.conns?.size || connectedOf(key) > 0)) continue;
         if (dirty(slot.room)) continue;
         if (now() - slot.idle < retainMs) continue;
         forget(key);
@@ -413,6 +449,6 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
     wake,
 
     used,
-    size: () => slots.size,
+    size: () => activeCount(),
   };
 }

@@ -54,7 +54,16 @@ function newTab(id) {
     jobs: 0
   };
 }
-const editId = (client, n) => `${client}:${n}`, frameId = (frame) => frame.e, attached = (env, tab) => !!tab.room && tab.room === env.port.room(), nextCommit = (env) => `c${String(env.port.next("commits")).padStart(11, "0")}`, nextGen = (env, epoch) => `${epoch}.${String(env.port.next("nonce")).padStart(8, "0")}`, fits = (wb, action) => rowsOf(action).every((row) => removesOf(action).includes(row) || has(wb, row)), met = (wb, action) => removesOf(action).length > 0 ? removesOf(action).every((row) => !has(wb, row)) || !1 : holds(wb, action), unsavedFor = (tab, action) => tab.tail.some((frame) => !frame.noop && (removesOf(action).length > 0 ? removesOf(frame.action).some((row) => removesOf(action).includes(row)) : marksOf(frame.action).some((key) => marksOf(action).includes(key)))), takeMet = (tab, basis, action) => met(basis.file.state.wb, action) && (basis.saved || !1 || !unsavedFor(tab, action)), inLineage = (state, frame) => frame.k === "adopt" && (covered(state, frame.from[0])?.[1] ?? -1) >= frame.from[1];
+const editId = (client, n) => `${client}:${n}`, frameId = (frame) => frame.e, attached = (env, tab) => !!tab.room && tab.room === env.port.room(), nextCommit = (env) => `c${String(env.port.next("commits")).padStart(11, "0")}`, nextGen = (env, epoch) => `${epoch}.${String(env.port.next("nonce")).padStart(8, "0")}`, fits = (wb, action) => rowsOf(action).every((row) => removesOf(action).includes(row) || has(wb, row));
+function met(wb, action) {
+  if (removesOf(action).length > 0)
+    return removesOf(action).every((row) => !has(wb, row)) || !1;
+  if (holds(wb, action)) return !0;
+  if (!codec().fits(wb, action)) return !1;
+  const before = codec().write(wb, {}), copy = clone(wb);
+  return codec().apply(copy, action).out === "applied" && codec().write(copy, {}) === before;
+}
+const unsavedFor = (tab, action) => tab.tail.some((frame) => !frame.noop && (removesOf(action).length > 0 ? removesOf(frame.action).some((row) => removesOf(action).includes(row)) : marksOf(frame.action).some((key) => marksOf(action).includes(key)))), takeMet = (tab, basis, action) => met(basis.file.state.wb, action) && (basis.saved || !1 || !unsavedFor(tab, action)), inLineage = (state, frame) => frame.k === "adopt" && (covered(state, frame.from[0])?.[1] ?? -1) >= frame.from[1];
 function settledElsewhere(tab) {
   const settled = /* @__PURE__ */ new Set();
   for (const held of tab.held) {
@@ -593,12 +602,12 @@ function capture(env, tab) {
   if (!tab || !tab.alive || !tab.connected || tab.io || tab.wake || tab.fetched || ((tab.unknown || !attached(env, tab) || tab.base.etag === tab.refused) && sync(env, tab), tab.io || tab.fetched || !attached(env, tab) || tab.base.etag === tab.refused)) return !1;
   if (tab.a <= tab.base.through)
     return ledgerBytes(tab.state.seen) > ledgerMarks(env.limits.ledgerCap).rotate ? startEstablish(env, tab, env.port.read()) : !1;
-  const commit = nextCommit(env), record = { v: 2, doc: tab.doc ?? DOC, gen: tab.gen, epoch: tab.epoch, commit, parent: tab.base.commit, through: tab.a, room: tab.room.id }, state = tab.state;
-  let body = () => serialize(record, state);
-  return body = serialize(record, state), request(env, tab, { kind: "save", gen: tab.gen, commit, through: tab.a, etag: tab.base.etag, body, removals: env.removals ? heldRemovals(tab) : [] }), !0;
+  const commit = nextCommit(env), record = { v: 2, doc: tab.doc ?? DOC, gen: tab.gen, epoch: tab.epoch, commit, parent: tab.base.commit, through: tab.a, room: tab.room.id }, state = tab.state, extras = () => env.port.extras?.(state.wb);
+  let body = () => serialize(record, state, extras());
+  return body = serialize(record, state, extras()), request(env, tab, { kind: "save", gen: tab.gen, commit, through: tab.a, etag: tab.base.etag, body, removals: env.removals ? heldRemovals(tab) : [] }), !0;
 }
-function refused(env, tab, io) {
-  tab.refused = io.etag, sync(env, tab);
+function refused(env, tab, io, status = 412) {
+  status === 412 && (tab.refused = io.etag), sync(env, tab);
 }
 function unanswered(env, tab, io) {
   tab.unknown = { kind: io.kind, gen: io.gen, commit: io.commit, through: io.through };
@@ -611,7 +620,7 @@ function deliver(env, at = 0, lost = !1) {
   const answered2 = env.port.takeAnswer(at);
   if (!answered2) return !1;
   const { tab, io, status } = answered2;
-  return tab.io === io && (tab.io = null), tab.alive ? lost || !status || !tab.connected ? (unanswered(env, tab, io), !0) : (env.observer.onAnswer(env, tab, io, status), status !== 200 ? refused(env, tab, io) : sync(env, tab), !0) : !0;
+  return tab.io === io && (tab.io = null), tab.alive ? lost || !status || !tab.connected ? (unanswered(env, tab, io), !0) : (env.observer.onAnswer(env, tab, io, status), status !== 200 ? refused(env, tab, io, status) : sync(env, tab), !0) : !0;
 }
 export {
   answered,

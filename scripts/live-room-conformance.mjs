@@ -32,7 +32,7 @@ export const PRODUCT_IMPORTS = {
   "world.mjs": { "ledger.mjs": "*", "room.mjs": "*", "record.mjs": "*", "tab.mjs": "*", "host.mjs": "*" },
   "fileworld.mjs": { "fileonly.mjs": "*", "record.mjs": ["serialize"], "recover.mjs": ["replay"] },
   "oracle.mjs": { "recover.mjs": ["replay"] },
-  "scenarios.mjs": { "recover.mjs": ["replay"], "room.mjs": ["admit"], "host.mjs": ["fileAccepted"] },
+  "scenarios.mjs": { "recover.mjs": ["replay"], "room.mjs": ["admit"], "host.mjs": ["fileAccepted", "hostSubmit"] },
 };
 
 const VIEW_LINE = "  const raw = codecView(tab);\n";

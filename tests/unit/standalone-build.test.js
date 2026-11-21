@@ -89,8 +89,9 @@ test("carries the core, every plugin and every satellite", () => {
   // bundle prints at about 1.4 MB here, since the single-file build does not minify).
   // New blank document (2026-11-20, 8.53 MB measured on the box after the sheet's filters also landed).
   // Then to 8.9 MB for the live room's browser client, clay.liveRoom (2026-11-20, 8.81 MB
-  // measured; 8.72 MB without it, the sheet lane's later changes).
-  expect(bundle.length).toBeLessThan(8_900_000);
+  // measured; 8.72 MB without it, the sheet lane's later changes), then to 9.05 MB for C9b's
+  // save chip and recovery panel plus C10 and sapjs Lane R (2026-11-20, 8.96 MB measured).
+  expect(bundle.length).toBeLessThan(9_050_000);
 });
 
 // The chunk build adds a generated bootstrap per entry that has a target, plus the

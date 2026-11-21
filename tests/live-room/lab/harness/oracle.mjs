@@ -238,7 +238,7 @@ function sawAsSeen({ action, seen }, saw) {
 }
 
 function newGenInfo(kind, parent, base, text, outcomes, room = null, turn = false) {
-  return { kind, parent, base, room, turn, pre: [], ids: [null], who: [null], applied: [null], dup: [null], declined: [null], origin: [null], open: [false], bytes: [0], at: [text], work: fromCanon(text), kept: new Set(), removed: new Map(), done: new Set(outcomes.keys()), outcomes, result: new Map(outcomes), turned: new Map(), reopened: new Map() };
+  return { kind, parent, base, room, turn, pre: [], ids: [null], who: [null], applied: [null], dup: [null], declined: [null], origin: [null], open: [false], bytes: [0], at: [text], work: fromCanon(text), kept: new Set(), taken: new Set(), removed: new Map(), done: new Set(outcomes.keys()), outcomes, result: new Map(outcomes), turned: new Map(), reopened: new Map() };
 }
 
 export function newOracle(world) {
@@ -430,7 +430,7 @@ export function newOracle(world) {
       const fits = fitsRef(info.work, edit.action);
       const coming = fits ? null : rowToComeRef(oracle, { record: { gen: room.gen, epoch: room.epoch }, state: room.state }, info.work, edit.action, oracle.jobMade.get(frame.job));
       if (how === "refused") checkRefusal(`${about} as refused`, entry, judged, fits);
-      const settled = info.ids.some((one, seq) => one === id && !info.open[seq] && !info.dup[seq]) || info.kept.has(id);
+      const settled = info.ids.some((one, seq) => one === id && !info.open[seq] && !info.dup[seq]) || info.kept.has(id) || info.taken.has(id);
       const placed = placedRef({ record: { gen: room.gen, through: room.seq }, state: room.state }, entry);
       const byPlace = placed && !info.kept.has(id);
       if (late && !(frame.open && (byPlace || (counted && !settled)))) throw new Error(`R11 ${about} without the ledger, and ${!counted && !placed ? "the ledger does not count it and no place in the room's history covers it" : settled ? "the history of that room holds it, or a person's decision to keep the current value in its place" : "its offer does not name it as an edit that waits for a decision"}`);
@@ -658,6 +658,7 @@ export function newOracle(world) {
         if (frame.keep && !clash.length) throw new Error(`R8 ${room.gen}#${frame.seq} counted ${id}, a person's take of ${took.e}, without writing it, and every cell it writes still holds the value that person reviewed`);
         if (!frame.keep && clash.length) throw new Error(`R8 ${room.gen}#${frame.seq} wrote ${id}, a person's take of ${took.e}, into ${clash[0][0]}/${clash[0][1]} over ${JSON.stringify(clash[0][2])}, a value that person did not review`);
         if (!frame.keep && fitsRef(info.work, edit.action)) note(oracle.facts, took.e, "taken");
+        if (!frame.keep && !result.dup && !frame.open) info.taken.add(took.e);
         origin = { copy: frame.take[0], e: took.e, looked: null };
         removedBy = !frame.keep && fitsRef(info.work, edit.action) ? removedRef(info.work, edit) : [];
         info.removed.set(frame.seq, removedBy);
@@ -776,7 +777,8 @@ export function newOracle(world) {
       if (frame.k === "adopt") oracle.adopted++;
       if (!step.applied && (frame.copy || frame.k === "adopt") && !frame.open) info.turned.set(id, frame.seq);
       if (frame.k === "adopt" && frame.open) info.reopened.set(id, frame.seq);
-      const shown = theWorld.tabs.find((tab) => tab.clients.has(frame.c)).edits.get(id).state;
+      const ownerTab = theWorld.tabs.find((tab) => tab.clients.has(frame.c));
+      const shown = ownerTab ? ownerTab.edits.get(id).state : "pending";
       if (frame.k === "act" && !frame.copy && shown !== "pending") throw new Error(`R5 ${id} entered ${room.gen} as a new request while its tab shows it as ${shown}`);
       if (oracle.backedUp.has(id) || oracle.cutOut.has(id)) throw new Error(`R6 ${id} was in the room or the file that a restore replaced, and it entered ${room.gen} again`);
       if (step.applied) oracle.refused.delete(id);

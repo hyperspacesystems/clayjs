@@ -133,7 +133,7 @@ export function save(env, tab) {
     next.lineage = [[record.gen, record.through], ...state.lineage].slice(0, W);
   }
   const commit = nextCommit(env);
-  const body = serialize({ v: 2, doc: record.doc ?? DOC, gen, epoch, commit, parent: record.commit, through: 0, room: null, mode: "file" }, next);
+  const body = serialize({ v: 2, doc: record.doc ?? DOC, gen, epoch, commit, parent: record.commit, through: 0, room: null, mode: "file" }, next, env.port.extras?.(next.wb));
   const io = { client: tab.client, etag: planted("file-save-unconditional") ? "*" : etag, body, commit, upto, ids: tab.pending.map((request) => request.id), outcomes };
   for (const request of tab.pending) request.sent = [commit, outcomes.get(request.id)];
   env.observer.onSend(env, tab, io, tab.pending.map((request) => [request.id, request.n]));

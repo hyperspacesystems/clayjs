@@ -74,7 +74,7 @@ function save(env, tab) {
     const folded = trimLedger(Object.entries(next.seen).filter(([client]) => client !== tab.client), next.floor, Math.max(0, cap - 60));
     epoch = tab.high + 1, gen = nextGen(env, epoch), tab.high = epoch, next.seen = { ...Object.fromEntries(folded.kept), [tab.client]: [upto, epoch] }, next.floor = folded.floor, next.lineage = [[record.gen, record.through], ...state.lineage].slice(0, W);
   }
-  const commit = nextCommit(env), body = serialize({ v: 2, doc: record.doc ?? DOC, gen, epoch, commit, parent: record.commit, through: 0, room: null, mode: "file" }, next), io = { client: tab.client, etag, body, commit, upto, ids: tab.pending.map((request) => request.id), outcomes };
+  const commit = nextCommit(env), body = serialize({ v: 2, doc: record.doc ?? DOC, gen, epoch, commit, parent: record.commit, through: 0, room: null, mode: "file" }, next, env.port.extras?.(next.wb)), io = { client: tab.client, etag, body, commit, upto, ids: tab.pending.map((request) => request.id), outcomes };
   for (const request of tab.pending) request.sent = [commit, outcomes.get(request.id)];
   return env.observer.onSend(env, tab, io, tab.pending.map((request) => [request.id, request.n])), tab.io = io, env.port.send(tab, io), !0;
 }

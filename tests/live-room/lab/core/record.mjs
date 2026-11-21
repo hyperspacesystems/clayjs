@@ -3,7 +3,7 @@ import { utf8Bytes } from "./lib.mjs";
 
 export const DOC = "doc0123456789abc";
 
-export const serialize = (record, state) => codec().write(state.wb, { ...record, lineage: state.lineage, cut: state.cut, floor: state.floor, opened: state.opened, seen: state.seen });
+export const serialize = (record, state, extras) => codec().write(state.wb, { ...record, lineage: state.lineage, cut: state.cut, floor: state.floor, opened: state.opened, seen: state.seen }, extras);
 
 // The record of a document no room has written yet: generation zero, nothing admitted, an empty
 // ledger. Hosts that make a document (a template, a copy, a new blank one) write it with their own

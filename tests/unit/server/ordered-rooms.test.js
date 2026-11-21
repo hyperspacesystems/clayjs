@@ -500,3 +500,120 @@ test("a template's placeholder record opens a room as a fresh document", () => {
   rooms.attach(room, "ben", "conn-ben");
   expect(rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "ben"))).answer).toBe("ok");
 });
+
+// Bug it catches: rooms.submit (P5b) admitted invalid/unfitted actions or failed to broadcast and
+// advance room.seq for host-side agent cell patches, or bypassed process liveBytes caps.
+test("rooms.submit admits valid host actions in order, broadcasts to tabs, and refuses invalid, unfitted, closed, or over-budget actions", () => {
+  const { rooms, room } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  expect(rooms.submit(room, { t: "bogus" })).toEqual({ answer: "bad-action", applied: false, seq: null, id: null, send: [] });
+  expect(rooms.submit(room, set("no-such-row", "c1", "x"))).toEqual({ answer: "refused", applied: false, seq: null, id: null, send: [] });
+  expect(room.seq).toBe(0);
+
+  const ok = rooms.submit(room, set("r1", "c1", "agent-patch"));
+  expect(ok.answer).toBe("ok");
+  expect(ok.applied).toBe(true);
+  expect(ok.seq).toBe(1);
+  expect(ok.id).toMatch(/^h:/);
+  expect(ok.send.length).toBeGreaterThanOrEqual(1);
+  expect(room.state.wb.rows.r1.cells.c1).toBe("agent-patch");
+
+  const rendered = rooms.render(room);
+  expect(rendered.record.through).toBe(1);
+  useCodec(tiny);
+  expect(parse(rendered.bytes).state.wb.rows.r1.cells.c1).toBe("agent-patch");
+
+  // Closed room refuses.
+  rooms.drop("doc");
+  expect(rooms.submit(room, set("r1", "c1", "late"))).toEqual({ answer: "closed", applied: false, seq: null, id: null, send: [] });
+
+  // Over process liveBytes cap refuses with "full".
+  let other = 0;
+  const tight = opened({ liveBytes: 40_000, others: { used: () => other, size: () => 0 } });
+  other = 40_000 - tight.rooms.used();
+  expect(tight.rooms.submit(tight.room, set("r1", "c1", "x")).answer).toBe("full");
+});
+
+// Bug it catches: ends() allowed a POST /_/save carrying epoch > room.epoch to bypass 409 and wipe a
+// dirty room without backup, and allowed an out-of-range through to desynchronize room.base.commit.
+test("ends() rejects forged establishing commits and out-of-range through values on an open room", () => {
+  const { rooms, room, bytes } = opened();
+  rooms.attach(room, "ben", "conn-ben");
+  rooms.frame(room, "ben", request(room, "ben", 1, set("r1", "c1", "ben")));
+  useCodec(tiny);
+  const parsed = parse(bytes);
+  const forgedEstablish = serialize(
+    { ...parsed.record, gen: `${room.epoch + 1}.00000099`, epoch: room.epoch + 1, commit: "c99999999901", parent: room.base.commit, through: 0, room: room.id },
+    parsed.state,
+  );
+  expect(rooms.ends("doc", forgedEstablish)).toBe(true);
+
+  const staleThrough = serialize(
+    { ...parsed.record, commit: "c99999999902", parent: room.base.commit, through: 0, room: room.id },
+    parsed.state,
+  );
+  const beyondThrough = serialize(
+    { ...parsed.record, commit: "c99999999903", parent: room.base.commit, through: 99, room: room.id },
+    parsed.state,
+  );
+  expect(rooms.ends("doc", staleThrough)).toBe(true);
+  expect(rooms.ends("doc", beyondThrough)).toBe(true);
+  expect(rooms.fileAccepted("doc", { bytes: staleThrough, etag: "e-bad" }).answer).toBe("outside");
+});
+
+// Bug it catches: admitPart did not verify frame.size stayed consistent across parts of one stage or
+// cap frame.made, letting one client inflate rooms.used() far past liveBytes.
+test("admitPart rejects mismatched part sizes and oversized made payloads", () => {
+  const limits = labLimits();
+  const { rooms, room } = opened({ limits, liveBytes: 28_000 });
+  rooms.attach(room, "eve", "conn-eve");
+  const p0 = {
+    k: "part",
+    gen: room.gen,
+    of: "req",
+    key: "stage-0",
+    order: { c: "eve", p: 0 },
+    i: 0,
+    m: 3,
+    size: 48,
+    frame: { k: "req", c: "eve", n: 1, p: 0, b: room.epoch, e: "eve:1", action: { t: "paste", cells: [] }, saw: [] },
+    cells: [["r1", "c1", "x"]],
+    saw: ["a"],
+  };
+  const p1 = { ...p0, i: 1, size: limits.roomBytes, frame: null, cells: [["r1", "c2", "Y".repeat(5000)]], saw: [""] };
+  expect(rooms.frame(room, "eve", p0).answer).toBe("staged");
+  expect(rooms.frame(room, "eve", p1).answer).toBe("bad-size");
+  expect(rooms.used()).toBeLessThanOrEqual(28_000);
+});
+
+// Bug it catches: un-established viewer slots counted against maxRooms and sweep() skipped them while
+// SSE stayed open, letting passive viewers lock out real editors with 503.
+test("passive viewer slots do not exhaust maxRooms and sweep evicts idle un-established slots", () => {
+  let clock = 1000;
+  const { rooms } = setup({ maxRooms: 2, now: () => clock, retainMs: 60_000 });
+  const v1 = rooms.instance("doc1", "tiny");
+  const v2 = rooms.instance("doc2", "tiny");
+  const v3 = rooms.instance("doc3", "tiny");
+  expect(v1 && v2 && v3).toBeTruthy();
+  expect(rooms.size()).toBe(0);
+  expect(rooms.used()).toBe(0);
+  clock += 120_000;
+  rooms.sweep(() => 1);
+  expect(rooms.instance("doc1", "tiny")).not.toBe(v1);
+});
+
+// Bug it catches: re-attaching the same conn to the same room under a new clientId overwrote the old
+// clientId without dropping its staged parts or parked requests, leaking bytes after leave().
+test("re-attaching the same connection under a new clientId frees the previous clientId's staged bytes", () => {
+  const { rooms, room } = opened();
+  const baseline = rooms.used();
+  rooms.attach(room, "ana", "conn-1");
+  const [first] = parts(room, "ana", 1, paste(6));
+  expect(rooms.frame(room, "ana", first).answer).toBe("staged");
+  expect(room.bytes.staged).toBeGreaterThan(0);
+
+  rooms.attach(room, "ben", "conn-1");
+  expect(room.bytes.staged).toBe(0);
+  rooms.leave(room, "conn-1");
+  expect(rooms.used()).toBe(baseline);
+});

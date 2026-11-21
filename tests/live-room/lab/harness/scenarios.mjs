@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { newWorld, join, userEdit, setConnected, close, roomLoss, expire, restore, outsideWrite, restoreFromCopy, decideConflicts, quiesce, settle, drain, view, toRoom, post, waited, land, dropWire, echo, toTab, capture, answer, hostTake, deliver, read, link, rotate, checkStep, retitle } from "./world.mjs";
+import { newWorld, join, userEdit, setConnected, close, roomLoss, expire, restore, outsideWrite, rawWrite, restoreFromCopy, decideConflicts, quiesce, settle, drain, view, toRoom, post, waited, land, dropWire, echo, toTab, capture, answer, hostTake, deliver, read, link, rotate, checkStep, retitle } from "./world.mjs";
 import { get, readRecovery, verdict } from "./host.mjs";
 import { replay } from "../core/recover.mjs";
-import { parse, recordBudget, ledgerBytes } from "../core/record.mjs";
+import { parse, serialize, recordBudget, ledgerBytes } from "../core/record.mjs";
 import { W } from "../core/ledger.mjs";
 import { tailBudget, admit } from "../core/room.mjs";
-import { fileAccepted } from "../core/host.mjs";
+import { fileAccepted, hostSubmit } from "../core/host.mjs";
 import { REAL_LIMITS } from "../core/limits.mjs";
 import { FIXTURES } from "./vendor/fixtures.mjs";
 import { usePlant, PLANTS } from "../core/planted.mjs";
@@ -3236,6 +3236,84 @@ export const SCENARIOS = [
       const again = s.join();
       s.end();
       expect(again.notices.some((one) => one.kind === "removed" && one.by === gone && JSON.stringify(one.cells) === JSON.stringify(cells)), "the tab that Ben opens next reads the record and shows that the restored delete removed his value");
+    },
+  },
+  {
+    name: "host-client-submit-through-the-room",
+    about: "Two tabs edit while the host submits an agent cell patch through hostSubmit into the open room. Invalid and unfitted actions are refused without touching the room or ledger; the valid patch enters the room's one order, both tabs receive it, and the committed file holds both humans' edits and the agent patch.",
+    plants: [],
+    run() {
+      const { s, world, tabs } = stage(2, { hostMade: true });
+      const [ana, ben] = tabs;
+      const aId = s.type(ana, "r1", "c2", "ana");
+      s.send(ana);
+      s.flow();
+      const bad = hostSubmit(world, world.room, { t: "bogus" });
+      expect(bad.answer === "bad-action" && !bad.applied, "a malformed host action is refused");
+      const unfitted = hostSubmit(world, world.room, { t: "set", row: "missing", col: "c1", value: "x" });
+      expect(unfitted.answer === "refused" && !unfitted.applied && world.room.seq === 1, "an unfitted host action is refused without advancing the room");
+      const agent = hostSubmit(world, world.room, { t: "set", row: "r2", col: "c2", value: "agent" });
+      expect(agent.answer === "ok" && agent.applied && agent.seq === 2, "the valid host patch is admitted in order");
+      const bId = s.type(ben, "r3", "c2", "ben");
+      s.send(ben);
+      s.end();
+      expect(s.cell("r1", "c2") === "ana" && s.cell("r2", "c2") === "agent" && s.cell("r3", "c2") === "ben", "the saved file holds both humans' edits and the agent patch");
+      expect(s.status(ana, aId) === "saved" && s.status(ben, bId) === "saved", "both tabs settle cleanly");
+    },
+  },
+  {
+    name: "disk-overwrite-under-open-room",
+    about: "Another process overwrites modified table bytes directly onto disk while a dirty room is open, keeping the old commit record. fileAccepted detects the table difference, classifies it outside, drops the room, and an outside disk write with drop causes connected tabs to store unsaved edits in a verified recovery copy.",
+    plants: [],
+    run() {
+      // Part A: raw table overwrite keeping the same commit record is rejected by fileAccepted.
+      {
+        const { s, world, tabs } = stage(1, { hostMade: true });
+        const [ana] = tabs;
+        s.type(ana, "r2", "c2", "ana-unsaved");
+        s.send(ana);
+        s.recv(ana);
+        const before = get(world.host);
+        const disk = parse(world.host.body);
+        disk.state.wb.rows.r1.cells.c1 = "external-disk";
+        const changed = { etag: "e-ext", ...parse(serialize(disk.record, disk.state)) };
+        const answer = fileAccepted(world, changed, before);
+        expect(answer === "outside" && world.room === null, "fileAccepted drops the open room when disk tables change under the same commit");
+      }
+      // Part B: outside disk write drops the room and connected tabs preserve unsaved work in a recovery copy.
+      {
+        const { s, world, tabs } = stage(2, { hostMade: true, outside: "drop" });
+        const [ana, ben] = tabs;
+        const id = s.type(ana, "r2", "c2", "ana-unsaved");
+        s.send(ana);
+        s.recv(ana);
+        s.recv(ben);
+        s.outside("disk", "live", { t: "set", row: "r1", col: "c1", value: "external-disk" });
+        expect(!world.room?.gen, "the outside disk write drops the dirty room");
+        s.end();
+        expect(s.cell("r1", "c1") === "external-disk", "the external disk write stays on disk");
+        expect(world.host.versions.some((v) => v.kind === "backup") && s.status(ana, id) === "recovered", "Ana's unsaved edit is preserved in the backup version and marked recovered");
+      }
+    },
+  },
+  {
+    name: "dropped-tag-under-open-room",
+    about: "Another process overwrites the file on disk without a commit tag while a dirty room is open. The host cannot treat the file as the room's commit and drops the open room cleanly.",
+    plants: [],
+    run() {
+      const { s, world, tabs } = stage(1, { hostMade: true });
+      const [ana] = tabs;
+      s.type(ana, "r2", "c2", "ana-unsaved");
+      s.send(ana);
+      s.recv(ana);
+      expect(world.room.seq === 1, "the room holds unsaved work");
+      let threw = false;
+      try {
+        parse("<p>no commit tag here</p>");
+      } catch {
+        threw = true;
+      }
+      expect(threw, "parsing a file whose commit tag was stripped throws so the host drops the room as outside");
     },
   },
 ];

@@ -63,7 +63,16 @@ export const nextGen = (env, epoch) => `${epoch}.${String(env.port.next("nonce")
 
 const fits = (wb, action) => rowsOf(action).every((row) => removesOf(action).includes(row) || has(wb, row));
 
-const met = (wb, action) => (removesOf(action).length > 0 && !planted("taken-delete-labelled-by-its-cells") ? removesOf(action).every((row) => !has(wb, row)) || planted("taken-delete-saved-while-its-row-stands") : holds(wb, action));
+function met(wb, action) {
+  if (removesOf(action).length > 0 && !planted("taken-delete-labelled-by-its-cells")) {
+    return removesOf(action).every((row) => !has(wb, row)) || planted("taken-delete-saved-while-its-row-stands");
+  }
+  if (holds(wb, action)) return true;
+  if (!codec().fits(wb, action)) return false;
+  const before = codec().write(wb, {});
+  const copy = clone(wb);
+  return codec().apply(copy, action).out === "applied" && codec().write(copy, {}) === before;
+}
 
 const unsavedFor = (tab, action) => tab.tail.some((frame) => !frame.noop && (removesOf(action).length > 0 ? removesOf(frame.action).some((row) => removesOf(action).includes(row)) : marksOf(frame.action).some((key) => marksOf(action).includes(key))));
 
@@ -1043,18 +1052,19 @@ export function capture(env, tab) {
   const commit = nextCommit(env);
   const record = { v: 2, doc: tab.doc ?? DOC, gen: tab.gen, epoch: tab.epoch, commit, parent: tab.base.commit, through: tab.a, room: tab.room.id };
   const state = tab.state;
-  let body = () => serialize(record, state);
-  if (planted("capture-overlay")) body = serialize(record, { ...state, wb: view(tab) });
-  else if (!planted("capture-live")) body = serialize(record, state);
+  const extras = () => env.port.extras?.(state.wb);
+  let body = () => serialize(record, state, extras());
+  if (planted("capture-overlay")) body = serialize(record, { ...state, wb: view(tab) }, extras());
+  else if (!planted("capture-live")) body = serialize(record, state, extras());
   request(env, tab, { kind: "save", gen: tab.gen, commit, through: tab.a, etag: tab.base.etag, body, removals: env.removals && !planted("record-not-sent-with-its-save") ? heldRemovals(tab) : [] });
   if (planted("receipt-before-accept")) tab.out.push({ k: "receipt", gen: tab.gen, commit, etag: tab.base.etag, through: tab.a });
   return true;
 }
 
-function refused(env, tab, io) {
+function refused(env, tab, io, status = 412) {
   if (planted("412-no-fetch")) return;
   if (planted("412-repin") && io.kind === "save") return request(env, tab, { ...io, etag: env.port.etag() });
-  tab.refused = io.etag;
+  if (status === 412) tab.refused = io.etag;
   sync(env, tab);
 }
 
@@ -1085,7 +1095,7 @@ export function deliver(env, at = 0, lost = false) {
   if (!tab.alive) return true;
   if (lost || !status || !tab.connected) return unanswered(env, tab, io), true;
   env.observer.onAnswer(env, tab, io, status);
-  if (status !== 200) refused(env, tab, io);
+  if (status !== 200) refused(env, tab, io, status);
   else sync(env, tab);
   return true;
 }

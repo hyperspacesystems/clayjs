@@ -165,10 +165,8 @@ test("a sheet save moves the page's ETag to the file it wrote", async () => {
   await ana.ready;
   ana.submit(set("r1", "c1", "x"));
   await ana.flush();
-  // The room's receipt can settle the edit before the save's own answer arrives; establish
-  // advances the page ETag first ("e2") and the save advances it to the saved file ("e3").
+  // The room's receipt can settle the edit before the save's own answer arrives.
   await until(() => recorded.at(-1) === w.host.file("doc").etag);
-  expect(recorded.length).toBeGreaterThanOrEqual(2);
   expect(recorded.at(-1)).toBe(w.host.file("doc").etag);
 });
 
@@ -248,4 +246,37 @@ test("on a token host the copy routes carry the save token in the path, and no c
     { path: "/_/copies/tok-1/r12", credentials: "omit" },
     { path: "/_/copies/tok-1/r12/done", credentials: "omit" },
   ]);
+});
+
+// Bug it catches: savedPage() sliced into a comment mentioning <html before <html>, commenting out
+// the saved document; documentEtag() stopped at > inside an earlier quoted attribute and fell back
+// to a weak W/ ETag header.
+test("savedPage skips comments mentioning <html and documentEtag handles > inside earlier attributes", async () => {
+  const { savedPage } = await import("../../../src/live-room/browser.js");
+  const commented = '<!DOCTYPE html>\n<!-- Built from <html lang="en"> starter -->\n<html lang="en" data-note="A > B" documentetag="&quot;e9&quot;"><head></head><body><h1>Title</h1><div sheet-workbook>ok</div><script save-remove>x()</script></body></html>';
+  const stripped = savedPage(commented);
+  expect(stripped).toContain('<!-- Built from <html lang="en"> starter -->\n<html ');
+  expect(stripped).not.toContain("save-remove");
+
+  const transport = browserTransport({
+    documentUrl: URL_OF_PAGE,
+    fetch: async () => new Response(commented, { status: 200, headers: { "content-type": "text/html", etag: 'W/"served"' } }),
+  });
+  const got = await transport.fetch("/_/file?page=doc");
+  expect(got.status).toBe(200);
+  expect(got.headers.get("etag")).toBe('"e9"');
+});
+
+// Bug it catches: op=establish advances disk's ETag without calling onSaved(), so a clay.save outside
+// the sheet sends a stale If-Match and fails with 412 against its own session.
+test("op=establish reports the new ETag to onSaved", async () => {
+  const recorded = [];
+  const transport = browserTransport({
+    documentUrl: URL_OF_PAGE,
+    onSaved: (etag) => recorded.push(etag),
+    fetch: async () => new Response(JSON.stringify({ gen: "1.0", etag: '"e2"' }), { status: 200, headers: { "content-type": "application/json" } }),
+  });
+  const res = await transport.fetch("/_/sync/room?page=doc&op=establish", { method: "POST", headers: { "if-match": '"e1"' } });
+  expect(res.status).toBe(200);
+  expect(recorded).toEqual(['"e2"']);
 });

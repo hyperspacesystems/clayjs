@@ -85,7 +85,10 @@ function append(env, room, frame, sent, by) {
   const removed = origin ? unseenBy(room.state.wb, frame.action, frame.saw) : [];
   const result = applyFrame(room.state, frame, room.epoch);
   if (result.applied && removed.length) room.removals.push({ copy: origin[0], by: frame.e, at: [room.gen, frame.seq], cells: removed });
-  if (!frame.open && (!result.dup || planted("skipped-frame-settles-an-open-edit"))) room.settled.add(frame.e);
+  if (!frame.open && (!result.dup || planted("skipped-frame-settles-an-open-edit"))) {
+    room.settled.add(frame.e);
+    if (frame.take && !frame.keep) room.settled.add(frame.take[2]);
+  }
   env.observer.onAdmit(env, room, frame, result, sent, by);
 }
 
@@ -269,6 +272,7 @@ function admitPart(env, room, part, by) {
     room.staging.set(key, stage);
     room.bytes.staged += stage.size;
   }
+  if (stage.size !== part.size) return "bad-size";
   if (stage.parts[part.i]) return "staged";
   stage.parts[part.i] = part;
   if (++stage.got < part.m) return "staged";

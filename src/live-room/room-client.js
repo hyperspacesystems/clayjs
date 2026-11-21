@@ -6,7 +6,7 @@
 // `answered`, `toTab`, `waited`). The transport is injected: `fetch` and `subscribe`.
 import { newTab, edit as addEdit, flush as flushTab, post, answered, waited, toTab, sync, link, capture, deliver, view, attached, retry, restoreCopy, decide } from "./core/tab.js";
 import { view as fileView, edit as fileEdit, save as fileSave, deliver as fileDeliver, refresh as fileRefresh, push as filePush } from "./core/fileonly.js";
-import { parse } from "./core/record.js";
+import { parse, serialize, DOC } from "./core/record.js";
 import { useCodec } from "./core/codec.js";
 import { REAL_LIMITS } from "./core/limits.js";
 import { copyStore } from "./copy-store.js";
@@ -14,16 +14,34 @@ import { copyStore } from "./copy-store.js";
 const silent = new Proxy({}, { get: () => () => {} });
 const SETTLED = new Set(["saved", "dropped", "recovered", "kept-refused"]);
 const ADMITTED = new Set(["shared", "saved"]);
+const CLOSING_VERDICTS = new Set(["taken", "saved", "kept", "misfit"]);
 const LOOP_CAP = 100_000;
+const MAX_BACKOFF_MS = 60_000;
+
+function openConflicts(notices, store) {
+  const latest = new Map();
+  for (const notice of notices) {
+    if (notice.kind === "restored" && notice.copy) latest.set(notice.copy, notice.conflicts ?? []);
+  }
+  let total = 0;
+  for (const conflicts of latest.values()) {
+    for (const item of conflicts) {
+      const verdict = store?.verdict?.(item.e)?.kind;
+      if (verdict && CLOSING_VERDICTS.has(verdict)) continue;
+      total += 1;
+    }
+  }
+  return total;
+}
 
 /**
  * @param {{ page: string, codec: object, clientId: string, fetch: typeof fetch,
  *   subscribe: (page: string, clientId: string, listener: (event: object) => void) => () => void,
  *   limits?: object, idleMs?: number, maxMs?: number, waitMs?: number, firstId?: number,
- *   copies?: boolean }} options
+ *   copies?: boolean, extras?: ((doc: object) => unknown) | null }} options
  * `copies` is whether the host announces `recovery-copies`.
  */
-export function createRoomClient({ page, codec, clientId, fetch, subscribe, limits = REAL_LIMITS, idleMs = 2000, maxMs = 8000, waitMs = 10000, firstId = Math.floor(Math.random() * 2 ** 40), copies = true }) {
+export function createRoomClient({ page, codec, clientId, fetch, subscribe, limits = REAL_LIMITS, idleMs = 2000, maxMs = 8000, waitMs = 10000, firstId = Math.floor(Math.random() * 2 ** 40), copies = true, extras = null }) {
   const tab = newTab(clientId);
   const timers = new Set();
   let lastEstablish = -Infinity;
@@ -45,6 +63,8 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
   let waitTimer = null;
   let closed = false;
   let failure = null;
+  let saveError = null;
+  let saveFails = 0;
   let unsubscribe = () => {};
   const restoring = new Set();
   const lostFrames = new Set();
@@ -79,6 +99,7 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
     pick: () => 0,
     onFull: () => {},
     onSpace: () => {},
+    ...(extras ? { extras: (wb) => (typeof extras === "function" ? extras(wb) : extras) } : {}),
   };
   const env = { hostMade: true, removals: false, split: false, limits, observer: silent, port };
 
@@ -155,6 +176,8 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
     if ((tab.base?.through ?? 0) > lastThrough) {
       lastThrough = tab.base.through;
       spaceMarks += 1;
+      saveFails = 0;
+      saveError = null;
     }
     // A copy this tab stored starts its restore job once the tab is attached (plan 09 section 3.2),
     // oldest first, each copy once per page load.
@@ -223,7 +246,8 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
       fetch(path, { method: "POST", headers: { "if-match": io.etag }, body }).then(
         // Only a 4xx proves the host wrote nothing: a 5xx can come after the file was written
         // (hyperclay's 503 save-unknown, a proxy timeout), so it is an answer this tab never got.
-        (answer) => (answer.status >= 500 ? land(io, 0, true) : land(io, answer.status, false)),
+        // 408 and 429 are transient too; treating them as lost avoids wedging on an unchanged ETag.
+        (answer) => (answer.status >= 500 || answer.status === 408 || answer.status === 429 ? land(io, 0, true) : land(io, answer.status, false)),
         () => land(io, 0, true),
       );
     };
@@ -251,6 +275,16 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
         () => true,
         () => false,
       );
+      if (status === 200 && !lost) {
+        saveFails = 0;
+        saveError = null;
+      } else if (!io.ask && (lost || status !== 412 || file?.etag === io.etag)) {
+        saveFails += 1;
+        if (!lost && status !== 412 && saveFails >= 2) {
+          saveError = new Error(`the host refused the save (${status})`);
+          emit({ type: "error", error: saveError });
+        }
+      }
       answers.push({ tab, io, status });
       deliver(env, answers.length - 1, lost || !read);
       if (lost && read) tab.wake = true;
@@ -379,9 +413,13 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
       return;
     }
     clearTimeout(idleTimer);
-    // A flush saves as soon as there is something admitted to save and no save on the way.
-    idleTimer = setTimeout(save, flushing && !tab.io ? 0 : idleMs);
-    maxTimer ??= setTimeout(save, maxMs);
+    // A flush saves as soon as there is something admitted to save and no save on the way,
+    // backing off exponentially after repeated save refusals so an expired session or 413 never
+    // turns into a tight loop of whole-page transfers.
+    const backoff = Math.min(MAX_BACKOFF_MS, idleMs * 2 ** Math.min(saveFails, 5));
+    const delay = saveFails > 0 ? backoff : flushing && !tab.io ? 0 : idleMs;
+    idleTimer = setTimeout(save, delay);
+    maxTimer ??= setTimeout(save, Math.max(maxMs, delay));
   }
   function save() {
     clearTimeout(idleTimer);
@@ -389,7 +427,7 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
     idleTimer = maxTimer = null;
     pump(async () => {
       await refresh();
-      capture(env, tab);
+      if (!capture(env, tab) && unsaved()) saveFails += 1;
       await settle();
     });
   }
@@ -430,7 +468,10 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
         through: tab.base?.through ?? null,
         copies: store.copies().length,
         unstored: tab.unstored.length,
-        error: failure,
+        restoring: Boolean(tab.job),
+        pendingMarks: tab.marks.length,
+        conflicts: openConflicts(tab.notices, store),
+        error: failure ?? saveError,
       };
     },
     // The action is recorded with what the author saw, before any other task can change the view.
@@ -452,21 +493,37 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
     async flush() {
       const ids = [...handles.keys()];
       flushing = true;
+      saveFails = 0;
       const saved = new Promise((resolve) => whenSaved.push(resolve));
       save();
       const states = await Promise.all(ids.map((id) => handles.get(id).durable));
       await saved;
       return Object.fromEntries(ids.map((id, i) => [id, states[i]]));
     },
-    view: () => view(tab),
+    view: () => (tab.state ? view(tab) : null),
     committed: () => fileRaw,
+    admitted: () => tab.state?.wb ?? null,
+    capture(extra = extras) {
+      if (!tab.state) return null;
+      useCodec(codec);
+      const record = { v: 2, doc: tab.doc ?? DOC, gen: tab.gen, epoch: tab.epoch, commit: tab.base?.commit ?? null, parent: tab.base?.commit ?? null, through: tab.a, room: tab.room?.id ?? null };
+      const resolvedExtras = typeof extra === "function" ? extra(tab.state.wb) : extra;
+      return { bytes: serialize(record, tab.state, resolvedExtras), record };
+    },
     notices: () => tab.notices,
     copies: () => store.copies(),
+    unstoredCopies: () => tab.unstored.map(({ id, about, body }) => ({ id, about, body })),
+    refreshCopies: () =>
+      pump(async () => {
+        await store.load();
+        report();
+      }),
     // A person's restore of a stored copy (another tab's included), and their decisions on a finished
     // job's conflicts: picks are [[e, "keep" | "take"], ...] for edits that job listed as conflicts.
     // Both read the host's copies and marks first: another tab may have stored the copy or decided
     // some of its edits since this tab last looked. Each resolves true when the job started.
     async restore(copyId) {
+      if (closed) return false;
       let started = false;
       await pump(async () => {
         await store.load();
@@ -480,6 +537,7 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
       return started;
     },
     async decide(jobId, picks) {
+      if (closed) return false;
       let started = false;
       await pump(async () => {
         await store.load();
@@ -515,7 +573,7 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
 
 // File-only mode (a host that announces `ordered-file`): no room, every save a conditional write
 // of the whole file, over the generated file-only core.
-export function createFileClient({ page, codec, clientId, fetch, subscribe, limits = REAL_LIMITS, idleMs = 2000, maxMs = 8000, firstId = Math.floor(Math.random() * 2 ** 40), copies = true }) {
+export function createFileClient({ page, codec, clientId, fetch, subscribe, limits = REAL_LIMITS, idleMs = 2000, maxMs = 8000, firstId = Math.floor(Math.random() * 2 ** 40), copies = true, extras = null }) {
   const tab = { id: clientId, alive: true, client: clientId, clients: new Set([clientId]), born: null, n: 0, base: null, pending: [], io: null, unknown: null, unstored: [], judged: new Map(), edits: new Map(), notices: [] };
   const answers = [];
   const pushes = [];
@@ -532,6 +590,8 @@ export function createFileClient({ page, codec, clientId, fetch, subscribe, limi
   let retryTimer = null;
   let closed = false;
   let failure = null;
+  let saveError = null;
+  let saveFails = 0;
   let unsubscribe = () => {};
   // File-only mode keeps copies for a person to read and copy (plan 09 section 3.7): no restore job.
   const store = copyStore({ codec, fetch, query, remote: copies, retryMs: idleMs * 5, wake: () => pump(async () => { fileRefresh(env, tab); after(); }) });
@@ -545,6 +605,7 @@ export function createFileClient({ page, codec, clientId, fetch, subscribe, limi
     send: (_, io) => send(io),
     takeAnswer: (at) => answers.splice(at, 1)[0],
     takePush: () => pushes.shift() ?? null,
+    ...(extras ? { extras: (wb) => (typeof extras === "function" ? extras(wb) : extras) } : {}),
   };
   const env = { limits, observer: silent, port };
 
@@ -590,7 +651,7 @@ export function createFileClient({ page, codec, clientId, fetch, subscribe, limi
   function send(io) {
     fetch(`/_/save?${query}`, { method: "POST", headers: { "if-match": io.etag }, body: io.body }).then(
       async (answer) => {
-        if (answer.status >= 500) return land(io, 0, null, true);
+        if (answer.status >= 500 || answer.status === 408 || answer.status === 429) return land(io, 0, null, true);
         if (!answer.ok) return land(io, answer.status, null, false);
         const etag = await answer.json().then(
           (data) => (typeof data?.etag === "string" ? data.etag : null),
@@ -609,6 +670,16 @@ export function createFileClient({ page, codec, clientId, fetch, subscribe, limi
         () => true,
         () => false,
       );
+      if (status === 200 && !lost) {
+        saveFails = 0;
+        saveError = null;
+      } else if (lost || status !== 412 || file?.etag === io.etag) {
+        saveFails += 1;
+        if (!lost && status !== 412 && saveFails >= 2) {
+          saveError = new Error(`the host refused the save (${status})`);
+          emit({ type: "error", error: saveError });
+        }
+      }
       answers.push({ tab, io, status, etag });
       fileDeliver(env, answers.length - 1, lost || !read);
       after();
@@ -655,9 +726,12 @@ export function createFileClient({ page, codec, clientId, fetch, subscribe, limi
       return;
     }
     clearTimeout(idleTimer);
-    // A flush (a host about to quit gives it two seconds) saves again at once after a refusal.
-    idleTimer = setTimeout(save, flushing && !tab.io ? 0 : idleMs);
-    maxTimer ??= setTimeout(save, maxMs);
+    // A flush (a host about to quit gives it two seconds) saves again at once after a 412 race,
+    // backing off exponentially after repeated refusals so a lasting 4xx never loops tightly.
+    const backoff = Math.min(MAX_BACKOFF_MS, idleMs * 2 ** Math.min(saveFails, 5));
+    const delay = saveFails > 0 ? backoff : flushing && !tab.io ? 0 : idleMs;
+    idleTimer = setTimeout(save, delay);
+    maxTimer ??= setTimeout(save, Math.max(maxMs, delay));
   }
 
   function save() {
@@ -668,6 +742,7 @@ export function createFileClient({ page, codec, clientId, fetch, subscribe, limi
       await readFile();
       keepUnstorable();
       fileSave(env, tab);
+      if (!tab.io && tab.pending.length) saveFails += 1;
       // A save the core held back (a copy it had to judge first) is tried again.
       after();
     });
@@ -698,7 +773,7 @@ export function createFileClient({ page, codec, clientId, fetch, subscribe, limi
     ready,
     get status() {
       const states = [...tab.edits.values()].map((one) => one.state);
-      return { mode: "file", connected: !closed, pending: states.filter((state) => state === "pending").length, unsaved: 0, unknownSave: Boolean(tab.unknown), generation: tab.base?.record.gen ?? null, through: null, copies: store.copies().length, unstored: tab.unstored.length + kept.length, error: failure };
+      return { mode: "file", connected: !closed, pending: states.filter((state) => state === "pending").length, unsaved: 0, unknownSave: Boolean(tab.unknown), generation: tab.base?.record.gen ?? null, through: null, copies: store.copies().length, unstored: tab.unstored.length + kept.length, restoring: false, pendingMarks: 0, conflicts: 0, error: failure ?? saveError };
     },
     submit(action) {
       if (!tab.base) throw new Error("clay.liveRoom: wait for room.ready before submitting an edit");
@@ -713,14 +788,28 @@ export function createFileClient({ page, codec, clientId, fetch, subscribe, limi
     async flush() {
       const ids = [...handles.keys()];
       flushing = true;
+      saveFails = 0;
       save();
       const states = await Promise.all(ids.map((id) => handles.get(id).durable));
       return Object.fromEntries(ids.map((id, i) => [id, states[i]]));
     },
-    view: () => fileView(tab),
+    view: () => (tab.base ? fileView(tab) : null),
     committed: () => fileRaw,
+    admitted: () => tab.base?.state?.wb ?? null,
+    capture(extra = extras) {
+      if (!tab.base) return null;
+      useCodec(codec);
+      const resolvedExtras = typeof extra === "function" ? extra(tab.base.state.wb) : extra;
+      return { bytes: serialize(tab.base.record, tab.base.state, resolvedExtras), record: tab.base.record };
+    },
     notices: () => tab.notices,
     copies: () => store.copies(),
+    unstoredCopies: () => [...tab.unstored, ...kept].map(({ id, about, body }) => ({ id, about, body })),
+    refreshCopies: () =>
+      pump(async () => {
+        await store.load();
+        report();
+      }),
     restore: async () => false,
     decide: async () => false,
     subscribe(listener) {

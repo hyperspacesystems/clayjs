@@ -837,6 +837,8 @@ class LiveSync {
     this._startupRetry = null;
     clearTimeout(this._engineRetry);
     this._engineRetry = null;
+    clearTimeout(this._pauseTimer);
+    this._pauseTimer = null;
     this._servedFetchId++;
   }
 
@@ -1114,7 +1116,7 @@ class LiveSync {
       // document to close. Each live room saves what it holds first; then the stream closes
       // and opens again after a pause, so a restarted host is back in sync without a reload.
       if (data.type === "flush") {
-        hostFlush(data).then(() => this.pauseStream());
+        Promise.race([hostFlush(data), new Promise((resolve) => setTimeout(resolve, 1500))]).then(() => this.pauseStream());
         return;
       }
 
@@ -2746,10 +2748,21 @@ class LiveSync {
     this.sse = null;
     streamClosed();
     clearTimeout(this._pauseTimer);
-    this._pauseTimer = setTimeout(() => {
+    const reconnect = () => {
       this._pauseTimer = null;
-      if (!this.isDestroyed && !this.sse) this.connect();
-    }, ms);
+      if (this.isDestroyed || this.sse) return;
+      if (this.isPaused) {
+        this._pauseTimer = setTimeout(reconnect, 100);
+        return;
+      }
+      // A restarted host starts its sequence numbers from 1 again, so clear the prior
+      // process's watermarks and mint a fresh resume id before reconnecting.
+      this.lastSeenSeq = 0;
+      this._lastExternalSeq = 0;
+      this.resumeId = this.generateResumeId();
+      this.connect();
+    };
+    this._pauseTimer = setTimeout(reconnect, ms);
   }
 
   stop() {

@@ -37,7 +37,7 @@
   },
   "sheet.html": {
     "view": { "requests": 45, "depth": 22, "brotli": 216064, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } },
-    "edit": { "requests": 126, "depth": 48, "brotli": 532480, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } },
+    "edit": { "requests": 126, "depth": 48, "brotli": 536576, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } },
     "draft": { "requests": 106, "depth": 42, "brotli": 466944, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } }
   },
   "built": {
@@ -79,7 +79,7 @@
     },
     "sheet.html": {
       "view": { "requests": 34, "depth": 3, "brotli": 158208, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } },
-      "edit": { "requests": 83, "depth": 3, "brotli": 195584, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } },
+      "edit": { "requests": 84, "depth": 3, "brotli": 196608, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } },
       "draft": { "requests": 78, "depth": 3, "brotli": 184320, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } }
     }
   },

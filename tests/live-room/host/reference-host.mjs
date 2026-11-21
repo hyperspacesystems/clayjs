@@ -5,6 +5,7 @@
 import { randomInt } from "node:crypto";
 import { createOrderedRooms } from "../../../src/server/rooms/index.js";
 import { outsideFold } from "../../../src/live-room/core/fileonly.js";
+import { resolved } from "../../../src/live-room/core/ledger.js";
 import { parse } from "../../../src/live-room/core/record.js";
 import { useCodec } from "../../../src/live-room/core/codec.js";
 import { REAL_LIMITS } from "../../../src/live-room/core/limits.js";
@@ -198,6 +199,41 @@ export function createReferenceHost({ codecs, codec, room = true, keep = true, r
     });
   }
 
+  // A host client's action (an agent cell patch while people edit, plan 09 section 2.9): admits
+  // the action in the open room, broadcasts it, waits up to `waitMs` for a tab's commit covering
+  // `seq`, then falls back to `finalSave` so the caller hears "ok" only after it is on disk.
+  async function submit(key, action, { waitMs = 150 } = {}) {
+    const admitted = await locked(key, () => {
+      const live = rooms.get(key);
+      if (!live) return { answer: "closed", applied: false, seq: null, id: null, gen: null };
+      const res = rooms.submit(live, action);
+      broadcast(key, res.send);
+      return { answer: res.answer, applied: res.applied, seq: res.seq, id: res.id, gen: live.gen };
+    });
+    if (admitted.answer !== "ok") return { ...admitted, etag: doc(key).etag };
+    const end = Date.now() + waitMs;
+    while (Date.now() < end) {
+      const live = rooms.get(key);
+      if (!live || live.gen !== admitted.gen) break;
+      if (live.base.through >= admitted.seq) return { ...admitted, etag: doc(key).etag };
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    const live = rooms.get(key);
+    if (live && live.gen === admitted.gen && live.base.through < admitted.seq) await finalSave(key);
+    const after = rooms.get(key);
+    if (after && after.gen === admitted.gen && after.base.through >= admitted.seq) {
+      return { ...admitted, etag: doc(key).etag };
+    }
+    // Room closed or moved before our commit landed: check whether the file ledger resolved our id.
+    useCodec(codecs[codec]);
+    const file = parse(doc(key).bytes);
+    const sep = admitted.id.lastIndexOf(":");
+    const client = sep > 0 ? admitted.id.slice(0, sep) : admitted.id;
+    const num = Number(admitted.id.slice(sep + 1));
+    const durable = resolved(file.state, client) >= num;
+    return { ...admitted, answer: durable ? "ok" : "lost", applied: durable, etag: doc(key).etag };
+  }
+
   async function route(request) {
     const url = new URL(request.url);
     const key = url.searchParams.get("page");
@@ -261,6 +297,7 @@ export function createReferenceHost({ codecs, codec, room = true, keep = true, r
     file: (key) => ({ bytes: doc(key).bytes, etag: doc(key).etag }),
     versions: (key) => doc(key).versions,
     outside,
+    submit,
     fault(kind, matches = () => true, change = null) {
       faults.push({ kind, matches, change });
     },

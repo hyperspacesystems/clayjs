@@ -1029,3 +1029,176 @@ test("a 200 HTML login page with a weak ETag header is not reported saved", asyn
   expect(resolved[typed.id]).toBe("saved");
   expect(parse(host.file("doc").bytes).state.wb.rows.r1.cells.c1).toBe("important-figure");
 });
+
+// Story: Ana's first autosave hits a momentary 429 rate limit while disk stays at the same ETag;
+// refused() set tab.refused on an unchanged ETag so solo saves wedged forever and flush() spun in
+// a 0ms HTTP polling storm.
+// Bug it catches: non-412 4xx save answers set tab.refused, and flushing schedules 0ms retries on failure.
+// Found on clayjs with C4p2a, C9a, X1 r1-r3 (X1 round 4, 2026-11-20).
+test("a transient 429 on save does not wedge solo saves or spin flush() at 0ms", async () => {
+  const host = createReferenceHost({ codecs: { tiny }, codec: "tiny", rooms: { limits: labLimits() } });
+  useCodec(tiny);
+  host.put("doc", serialize(RECORD, START));
+  let rateLimitOnce = true;
+  let fileReads = 0;
+  const fetch = async (url, init = {}) => {
+    if ((init.method ?? "GET") === "GET" && String(url).includes("/_/file")) fileReads++;
+    if (init.method === "POST" && String(url).includes("/_/save") && rateLimitOnce) {
+      rateLimitOnce = false;
+      return new Response(JSON.stringify({ error: "rate-limited" }), { status: 429, headers: { "content-type": "application/json" } });
+    }
+    return host.fetch(url, init);
+  };
+  const ana = createRoomClient({ page: "doc", codec: tiny, clientId: "ana", fetch, subscribe: host.subscribe, limits: labLimits(), idleMs: 10, maxMs: 30, waitMs: 30 });
+  open.push(ana);
+  await ana.ready;
+  await ana.submit(set("r1", "c1", "q4-revenue")).admitted;
+  await pause(50);
+  await ana.submit(set("r2", "c1", "q4-notes")).admitted;
+  const readsBefore = fileReads;
+  await inTime(ana.flush(), 1000, "transient-4xx-save-wedges-and-storms: flush timed out");
+  useCodec(tiny);
+  const saved = parse(host.file("doc").bytes).state.wb;
+  expect(saved.rows.r1.cells.c1).toBe("q4-revenue");
+  expect(saved.rows.r2.cells.c1).toBe("q4-notes");
+  expect(fileReads - readsBefore).toBeLessThan(20);
+});
+
+// Story: Dana resolves a late conflict on ana:1 with "Take copy" and then edits r1.c1 back to
+// "ben-val" before her autosave writes /done; Ana also clicks "Take copy" on her open card, and
+// because room.settled never recorded ana:1, Ana's take overwrote Dana's newer live edit.
+// Bug it catches: append() records the synthetic take request id instead of frame.take[2] in room.settled.
+// Found on clayjs with C4p2a, C9a, X1 r1-r3 (X1 round 4, 2026-11-20).
+test("a second tab clicking take on a late conflict already taken does not overwrite a newer live edit", async () => {
+  const host = createReferenceHost({ codecs: { tiny }, codec: "tiny", rooms: { limits: labLimits() } });
+  useCodec(tiny);
+  const base = serialize(RECORD, START);
+  host.put("doc", base);
+  {
+    const { record, state } = parse(base);
+    state.wb.rows.r2.cells.c2 = "prep";
+    await host.outside("doc", serialize(record, state), "agent");
+  }
+  let holdCopyPut = true;
+  const ana = createRoomClient({
+    page: "doc",
+    codec: tiny,
+    clientId: "ana",
+    fetch: (url, init = {}) => (holdCopyPut && init.method === "PUT" && String(url).includes("/_/copies/") ? Promise.reject(new TypeError("offline")) : host.fetch(url, init)),
+    subscribe: host.subscribe,
+    limits: labLimits(),
+    idleMs: 2000,
+    maxMs: 8000,
+    waitMs: 30,
+  });
+  open.push(ana);
+  await ana.ready;
+  await ana.submit(set("r1", "c1", "ana-stale")).admitted;
+  await ana.submit(set("r2", "c1", "ana-row2")).admitted;
+  host.loseRoom("doc");
+  await host.outside("doc", base, "restore");
+  const ben = createRoomClient({ page: "doc", codec: tiny, clientId: "ben", fetch: host.fetch, subscribe: host.subscribe, limits: labLimits(), idleMs: 10, maxMs: 30, waitMs: 30 });
+  open.push(ben);
+  await ben.ready;
+  await ben.submit(set("r1", "c1", "ben-val")).admitted;
+  await ben.flush();
+  await ben.close();
+  holdCopyPut = false;
+  await until(() => ana.status.copies === 1);
+  await ana.flush();
+  const anaConflict = ana.notices().find((n) => n.kind === "restored" && n.conflicts.some((c) => c.e === "ana:1"));
+  const [copy] = ana.copies();
+  const dana = createRoomClient({ page: "doc", codec: tiny, clientId: "dana", fetch: host.fetch, subscribe: host.subscribe, limits: labLimits(), idleMs: 2000, maxMs: 8000, waitMs: 30 });
+  open.push(dana);
+  await dana.ready;
+  await dana.restore(copy.id);
+  await until(() => dana.notices().some((n) => n.kind === "restored" && n.conflicts.some((c) => c.e === "ana:1")));
+  const danaConflict = dana.notices().find((n) => n.kind === "restored" && n.conflicts.some((c) => c.e === "ana:1"));
+  await dana.decide(danaConflict.job, [["ana:1", "take"]]);
+  await until(() => dana.view().rows.r1.cells.c1 === "ana-stale");
+  await dana.submit(set("r1", "c1", "ben-val")).admitted;
+  await until(() => ana.view().rows.r1.cells.c1 === "ben-val");
+  await ana.decide(anaConflict.job, [["ana:1", "take"]]);
+  await Promise.all([ana.flush(), dana.flush()]);
+  useCodec(tiny);
+  expect(parse(host.file("doc").bytes).state.wb.rows.r1.cells.c1).toBe("ben-val");
+});
+
+// Story: Ana resolves a conflict with "Take copy" on a cell clear ("") while the save answer blips
+// (503 save-unknown) and its receipt is missed; learnFromFile settled via codec.holds(), which
+// returned false for "", falsely marking her saved clear as "dropped"/"refused".
+// Bug it catches: codec.holds() rejects empty string cell values instead of checking row presence and shown value.
+// Found on clayjs with C4p2a, C9a, X1 r1-r3 (X1 round 4, 2026-11-20).
+test("taking a conflicting cell clear settled from disk is not falsely reported refused", async () => {
+  const host = createReferenceHost({ codecs: { tiny }, codec: "tiny", rooms: { limits: labLimits() } });
+  useCodec(tiny);
+  const base = serialize(RECORD, START_OLD);
+  host.put("doc", base);
+  {
+    const { record, state } = parse(base);
+    state.wb.rows.r2.cells.c2 = "prep";
+    await host.outside("doc", serialize(record, state), "agent");
+  }
+  let holdCopyPut = true;
+  let dropSaveReceipt = false;
+  const ana = createRoomClient({
+    page: "doc",
+    codec: tiny,
+    clientId: "ana",
+    fetch: (url, init = {}) => (holdCopyPut && init.method === "PUT" && String(url).includes("/_/copies/") ? Promise.reject(new TypeError("offline")) : host.fetch(url, init)),
+    subscribe: (page, clientId, listener) => host.subscribe(page, clientId, (ev) => (dropSaveReceipt && ev.type === "room" && ev.frame?.k === "receipt" ? undefined : listener(ev))),
+    limits: labLimits(),
+    idleMs: 15,
+    maxMs: 40,
+    waitMs: 30,
+  });
+  open.push(ana);
+  await ana.ready;
+  await ana.submit(set("r1", "c1", "")).admitted;
+  await ana.submit(set("r2", "c1", "ana2")).admitted;
+  host.loseRoom("doc");
+  await host.outside("doc", base, "restore");
+  const ben = createRoomClient({ page: "doc", codec: tiny, clientId: "ben", fetch: host.fetch, subscribe: host.subscribe, limits: labLimits(), idleMs: 10, maxMs: 30, waitMs: 30 });
+  open.push(ben);
+  await ben.ready;
+  await ben.submit(set("r1", "c1", "ben-val")).admitted;
+  await ben.flush();
+  await ben.close();
+  holdCopyPut = false;
+  await until(() => ana.notices().some((n) => n.kind === "restored" && n.conflicts.length === 1));
+  await ana.flush();
+  const conflict = ana.notices().find((n) => n.kind === "restored" && n.conflicts.length === 1);
+  dropSaveReceipt = true;
+  host.fault("unknown", (req) => req.method === "POST" && req.url.includes("/_/save"));
+  await ana.decide(conflict.job, [["ana:1", "take"]]);
+  await ana.flush();
+  dropSaveReceipt = false;
+  useCodec(tiny);
+  expect(parse(host.file("doc").bytes).state.wb.rows.r1.cells.c1 ?? "").toBe("");
+  expect(ana.notices().filter((n) => n.kind === "refused")).toEqual([]);
+  expect(ana.notices().filter((n) => n.kind === "restored").at(-1)?.conflicts ?? []).toEqual([]);
+});
+
+// Story: when initial load hits a 503 during boot, room.ready resolves with tab.state/tab.base null;
+// calling room.view() immediately after await room.ready crashed with a TypeError.
+// Bug it catches: view() dereferences tab.state or tab.base without checking if initial load succeeded.
+// Found on clayjs with C4p2a, C9a, X1 r1-r3 (X1 round 4, 2026-11-20).
+test("room.view() returns null instead of crashing when initial load failed", async () => {
+  const host = createReferenceHost({ codecs: { tiny }, codec: "tiny", rooms: { limits: labLimits() } });
+  useCodec(tiny);
+  host.put("doc", serialize(RECORD, START));
+  let failOnce = true;
+  const flakyFetch = async (url, init) => (failOnce ? ((failOnce = false), new Response("Service Unavailable", { status: 503 })) : host.fetch(url, init));
+  const roomClient = createRoomClient({ page: "doc", codec: tiny, clientId: "ana", fetch: flakyFetch, subscribe: host.subscribe, limits: labLimits(), waitMs: 50 });
+  open.push(roomClient);
+  await roomClient.ready;
+  expect(() => roomClient.view()).not.toThrow();
+  expect(roomClient.view()).toBeNull();
+
+  failOnce = true;
+  const fileClient = createFileClient({ page: "doc", codec: tiny, clientId: "ben", fetch: flakyFetch, subscribe: host.subscribe, limits: labLimits(), idleMs: 20 });
+  open.push(fileClient);
+  await fileClient.ready;
+  expect(() => fileClient.view()).not.toThrow();
+  expect(fileClient.view()).toBeNull();
+});

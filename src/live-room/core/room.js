@@ -49,7 +49,7 @@ function append(env, room, frame, sent, by) {
   if (frame.no = room.log.length, room.log.push(frame), frame.k === "receipt") return;
   frame.bytes = frameBytes(frame.action, frame), frame.parts = Math.ceil(opsOf(frame.action) / env.limits.opsPerFrame), room.bytes.tail += frame.bytes;
   const origin = env.removals && removesOf(frame.action).length > 0 && !frame.keep ? originOf(frame) : null, removed = origin ? unseenBy(room.state.wb, frame.action, frame.saw) : [], result = applyFrame(room.state, frame, room.epoch);
-  result.applied && removed.length && room.removals.push({ copy: origin[0], by: frame.e, at: [room.gen, frame.seq], cells: removed }), !frame.open && !result.dup && room.settled.add(frame.e), env.observer.onAdmit(env, room, frame, result, sent, by);
+  result.applied && removed.length && room.removals.push({ copy: origin[0], by: frame.e, at: [room.gen, frame.seq], cells: removed }), !frame.open && !result.dup && (room.settled.add(frame.e), frame.take && !frame.keep && room.settled.add(frame.take[2])), env.observer.onAdmit(env, room, frame, result, sent, by);
 }
 function park(room, frame, by, bytes) {
   room.wait.has(frame.c) || room.wait.set(frame.c, /* @__PURE__ */ new Map());
@@ -145,6 +145,7 @@ function admitPart(env, room, part, by) {
     if (!(next(room, part.order) ? makeRoom(env, room, part.size) : inRoom(env, room, part.size))) return "full";
     stage = { by, order: part.order, size: part.size, got: 0, parts: new Array(part.m).fill(null) }, room.staging.set(key, stage), room.bytes.staged += stage.size;
   }
+  if (stage.size !== part.size) return "bad-size";
   if (stage.parts[part.i] || (stage.parts[part.i] = part, ++stage.got < part.m)) return "staged";
   room.staging.delete(key), room.bytes.staged -= stage.size;
   const whole = assemble(stage.parts);

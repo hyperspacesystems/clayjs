@@ -111,6 +111,16 @@ describe("stream bridge", () => {
       jest.advanceTimersByTime(3000);
       expect(eventSourceInstances.length).toBe(opened + 1);
       expect(sync.isDestroyed).toBe(false);
+      // After a restart, the new server numbers events from seq=1 again; reset watermarks so they are not dropped.
+      expect(sync.lastSeenSeq).toBe(0);
+      const sse2 = eventSourceInstances.at(-1);
+      const received = [];
+      const offMsg = bridge.onStream({ message: (data) => received.push(data) });
+      sse2.onopen();
+      sse2.onmessage({ data: JSON.stringify({ type: "notification", seq: 1, data: { kind: "external-change", etag: '"e2"' } }) });
+      expect(received).toHaveLength(1);
+      expect(received[0].seq).toBe(1);
+      offMsg();
     } finally {
       jest.useRealTimers();
       off();

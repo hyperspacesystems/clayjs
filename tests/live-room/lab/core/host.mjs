@@ -1,13 +1,13 @@
 import { planted } from "./planted.mjs";
-import { W, nextGeneration, trimLedger } from "./ledger.mjs";
-import { newRoom, newInstance, hostReceipt } from "./room.mjs";
+import { W, nextGeneration, trimLedger, resolved } from "./ledger.mjs";
+import { newRoom, newInstance, hostReceipt, admit } from "./room.mjs";
 import { codec } from "./codec.mjs";
 import { serialize, DOC } from "./record.mjs";
 import { nextGen, nextCommit, nudgeAll } from "./tab.mjs";
 
 export const sameTables = (a, b) => codec().write(a.state.wb, {}) === codec().write(b.state.wb, {});
 
-export function establishing(env, file) {
+export function establishing(env, file, extras) {
   const room = env.port.room();
   const epoch = file.record.epoch + 1;
   const gen = nextGen(env, epoch);
@@ -15,7 +15,7 @@ export function establishing(env, file) {
   const record = { v: 2, doc: file.record.doc ?? DOC, gen, epoch, commit, parent: file.record.commit, through: 0, room: room.id };
   const [own, before] = file.state.opened ?? [file.record.epoch, file.record.epoch];
   const state = nextGeneration(file.state, file.record.gen, file.record.through, epoch, env.limits.ledgerCap, file.record.room === room.id ? [planted("ledger-turn-restarts-the-room") ? epoch : own, before] : [epoch, own]);
-  return { gen, commit, record, state, body: serialize(record, state) };
+  return { gen, commit, record, state, body: serialize(record, state, extras) };
 }
 
 export function openOn(env, record, etag, state) {
@@ -39,7 +39,7 @@ export function fileAccepted(env, file, before) {
     room.base = { ...room.base, etag: file.etag };
     return "same";
   }
-  if (record.gen === room.gen && record.room === room.id && record.commit !== room.base.commit && (record.parent === room.base.commit || planted("host-commit-not-next"))) {
+  if (record.gen === room.gen && record.room === room.id && record.commit !== room.base.commit && (record.parent === room.base.commit || planted("host-commit-not-next")) && ((record.through > room.base.through && record.through <= room.seq) || planted("host-commit-not-next"))) {
     room.accepted = { commit: record.commit, etag: file.etag, through: record.through };
     if (!planted("host-receipt-not-made")) hostReceipt(env, room, { k: "receipt", gen: room.gen, ...room.accepted });
     return "commit";
@@ -50,16 +50,35 @@ export function fileAccepted(env, file, before) {
 }
 
 // The host's own commit of the room's state, on top of the file on disk (rule 17's final save).
-export function render(env, file) {
+export function render(env, file, extras) {
   const room = env.port.room();
   const record = { v: 2, doc: file.record.doc ?? DOC, gen: room.gen, epoch: room.epoch, commit: nextCommit(env), parent: file.record.commit, through: room.seq, room: room.id };
-  return { record, body: serialize(record, room.state) };
+  return { record, body: serialize(record, room.state, extras) };
+}
+
+// A host client's action (an agent cell patch while people edit, plan 09 section 2.9): enters the
+// room's one order under a per-generation host client id through the same `admit` path as a tab's
+// request. Refused before changing the room or ledger when invalid or unfitted.
+export function hostSubmit(env, room, action) {
+  if (!room?.gen) return { answer: "closed", applied: false, seq: null, id: null };
+  if (!codec().validate(action)) return { answer: "bad-action", applied: false, seq: null, id: null };
+  if (!codec().fits(room.state.wb, action)) return { answer: "refused", applied: false, seq: null, id: null };
+  const c = `h:${room.gen}`;
+  const n = Math.max(room.hostN ?? 0, resolved(room.state, c)) + 1;
+  const id = `${c}:${n}`;
+  const saw = codec().seen(room.state.wb, action);
+  const frame = { k: "req", gen: room.gen, c, n, p: n - 1, b: room.epoch, e: id, action, saw };
+  env.observer?.onEdit?.(env, { id: "host", client: c, n, born: room.epoch }, id, action, null, env.observer.seenOf?.(room.state.wb, action) ?? null);
+  const answer = admit(env, room, frame, c);
+  if (answer !== "ok") return { answer, applied: false, seq: null, id: null };
+  room.hostN = n;
+  return { answer: "ok", applied: true, seq: room.seq, id };
 }
 
 // The one host step for a write that did not come from the room (rule 19). `source` is the file to
 // write, already holding the outside change; `current` is the file on disk. `keep` reopens the
 // room on the new generation; otherwise the room is dropped and the file names no instance.
-export function outsideStep(env, source, current, keep, replace = false) {
+export function outsideStep(env, source, current, keep, replace = false, extras = undefined, backupExtras = undefined) {
   const live = env.port.room();
   const room = live?.gen ? live : null;
   const dirty = Boolean(room) && (room.gen !== current.record.gen || room.seq > current.record.through);
@@ -68,7 +87,7 @@ export function outsideStep(env, source, current, keep, replace = false) {
   let backup = null;
   if (dirty && !planted("restore-no-backup")) {
     const record = { v: 2, doc: current.record.doc ?? DOC, gen: room.gen, epoch: room.epoch, commit: nextCommit(env), parent: room.base.commit, through: room.seq, room: room.id };
-    backup = { record, body: serialize(record, room.state) };
+    backup = { record, body: serialize(record, room.state, backupExtras) };
   }
   const epoch = current.record.epoch + 1;
   const before = planted("restore-replays-admitted") ? {} : (room ?? current).state.seen;
@@ -98,5 +117,5 @@ export function outsideStep(env, source, current, keep, replace = false) {
   if (keep && !live) env.port.setRoom(newInstance(env));
   const instance = keep ? env.port.room() : null;
   const record = { v: 2, doc: current.record.doc ?? DOC, gen: nextGen(env, epoch), epoch, commit: nextCommit(env), parent: current.record.commit, through: 0, room: keep ? instance.id : null, restored: source.record.commit };
-  return { same: false, room, dirty, backup, record, state, instance, body: serialize(record, state) };
+  return { same: false, room, dirty, backup, record, state, instance, body: serialize(record, state, extras) };
 }

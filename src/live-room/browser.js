@@ -26,13 +26,49 @@ const onOrigin = (path) => (typeof location === "undefined" ? path : new URL(pat
 // the same way, so they never become part of the file. A page with none keeps its bytes exactly.
 // The calculator's stale mark (<meta name="clay-stale" clay="no-save">) stays: the page as served
 // still holds the old computed values, and only ClayJS's repaint, which clears the mark, renews them.
+// Locates the opening `<html ...>` tag while skipping HTML comments and quoted attribute values
+// (which may contain `<html` or `>`).
+function findHtmlStartTag(html) {
+  let i = 0;
+  const n = html.length;
+  while (i < n) {
+    const lt = html.indexOf("<", i);
+    if (lt < 0) return null;
+    if (html.startsWith("<!--", lt)) {
+      const end = html.indexOf("-->", lt + 4);
+      if (end < 0) return null;
+      i = end + 3;
+      continue;
+    }
+    if (/^<html(?=[\s/>])/i.test(html.slice(lt, lt + 6))) {
+      let j = lt + 5;
+      let quote = "";
+      while (j < n) {
+        const ch = html[j];
+        if (quote) {
+          if (ch === quote) quote = "";
+        } else if (ch === '"' || ch === "'") {
+          quote = ch;
+        } else if (ch === ">") {
+          return { start: lt, end: j + 1, tag: html.slice(lt, j + 1) };
+        }
+        j += 1;
+      }
+      return null;
+    }
+    i = lt + 1;
+  }
+  return null;
+}
+
 export function savedPage(base) {
   if (typeof DOMParser === "undefined") return base;
   const doc = new DOMParser().parseFromString(base, "text/html");
   const extra = [...doc.querySelectorAll(STRIP_FROM_SAVE)].filter((element) => !element.matches('meta[name="clay-stale"]'));
   if (!extra.length) return base;
   for (const element of extra) element.remove();
-  const start = base.search(/<html\b/i);
+  const found = findHtmlStartTag(base);
+  const start = found ? found.start : -1;
   return `${start > 0 ? base.slice(0, start) : "<!DOCTYPE html>\n"}${doc.documentElement.outerHTML}`;
 }
 
@@ -45,12 +81,19 @@ const fileChanged = (data) => data?.type === "notification" || typeof data?.etag
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 // The ETag of the document a page was built from: the `documentetag` the host stamps on <html>
-// (spec section 4). An HTTP ETag header names the served bytes, which carry that stamp, so it is
-// the fallback only.
+// (spec section 4). A strong HTTP ETag header is the fallback only; a weak W/ ETag names served
+// bytes and is never sent back as If-Match.
 function documentEtag(html, answer) {
-  const tag = /<html\b[^>]*?\sdocumentetag\s*=\s*"([^"]*)"/i.exec(html);
-  if (tag) return tag[1].replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&amp;/g, "&");
-  return answer.headers.get("etag");
+  const found = findHtmlStartTag(html);
+  if (found) {
+    const attr = /\sdocumentetag\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(found.tag);
+    if (attr) {
+      const raw = attr[1] ?? attr[2] ?? "";
+      return raw.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+    }
+  }
+  const header = answer.headers.get("etag");
+  return typeof header === "string" && !/^W\//i.test(header.trim()) ? header : null;
 }
 
 /**
@@ -145,7 +188,7 @@ export function browserTransport({ documentUrl = location.href.split("#")[0], fe
       try {
         const body = await answer.clone().json();
         const etag = typeof body?.etag === "string" ? body.etag : answer.headers.get("etag");
-        if (etag) onSaved(etag);
+        if (etag && !/^W\//i.test(etag.trim())) onSaved(etag);
       } catch {}
     }
     return answer;
@@ -220,7 +263,7 @@ function streamClientId(ms, stopped) {
 // ClayJS's page ETag (core/etag.js), loaded when first needed: it reads the page as it loads.
 const recordPageEtag = (etag) => import("../core/etag.js").then((module) => module.recordEtag(etag));
 
-export function liveRoom(name, { codec, page = null, documentUrl, fetch, discover = () => import("../core/host-meta.js").then((meta) => meta.hostMeta()), onSaved = recordPageEtag, ...timings } = {}) {
+export function liveRoom(name, { codec, page = null, extras = null, documentUrl, fetch, discover = () => import("../core/host-meta.js").then((meta) => meta.hostMeta()), onSaved = recordPageEtag, ...timings } = {}) {
   if (!codec || typeof codec.apply !== "function" || typeof codec.read !== "function") throw new TypeError("clay.liveRoom: a room codec is required (read, write, apply, ...)");
   let inner = null;
   let mode = "connecting";
@@ -243,7 +286,7 @@ export function liveRoom(name, { codec, page = null, documentUrl, fetch, discove
       mode = "closed";
       return;
     }
-    inner = await connect({ page: name, codec, clientId, fetch: transport.fetch, subscribe: transport.subscribe, extensions, ...timings });
+    inner = await connect({ page: name, codec, clientId, fetch: transport.fetch, subscribe: transport.subscribe, extensions, extras, ...timings });
     if (!inner) {
       mode = "unavailable";
       return;
@@ -261,14 +304,18 @@ export function liveRoom(name, { codec, page = null, documentUrl, fetch, discove
   return {
     ready,
     get status() {
-      return inner ? inner.status : { mode, connected: false, pending: 0, unsaved: 0, unknownSave: false, generation: null, through: null, copies: 0, unstored: 0, error: null };
+      return inner ? inner.status : { mode, connected: false, pending: 0, unsaved: 0, unknownSave: false, generation: null, through: null, copies: 0, unstored: 0, restoring: false, pendingMarks: 0, conflicts: 0, error: null };
     },
     submit: (action) => need().submit(action),
     flush: () => (inner ? inner.flush() : Promise.resolve({})),
     view: () => inner?.view() ?? null,
     committed: () => inner?.committed?.() ?? null,
+    admitted: () => inner?.admitted() ?? null,
+    capture: (extra) => inner?.capture(extra) ?? null,
     notices: () => inner?.notices() ?? [],
     copies: () => inner?.copies() ?? [],
+    unstoredCopies: () => inner?.unstoredCopies() ?? [],
+    refreshCopies: () => (inner ? inner.refreshCopies() : Promise.resolve()),
     restore: (id) => need().restore(id),
     decide: (job, picks) => need().decide(job, picks),
     subscribe(listener) {

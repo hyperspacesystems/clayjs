@@ -257,12 +257,13 @@ export function createChrome({
   };
   const inMore = (id) => ALWAYS_IN_MORE.has(id) || (!PHONE_ONLY.has(id) && !shownIn(id));
 
+  let extraMoreItems = [];
   const moreBtn = makeToolButton(["more", "More tools", "more"], theme, () => onMoreMenu?.(moreItems(), moreBtn)).btn;
   moreBtn.setAttribute("aria-haspopup", "menu");
   toolbar.append(moreBtn);
 
   function paintMore() {
-    moreBtn.setDisabled(![...buttonMeta.keys()].some((id) => inMore(id) && registry.has(id)));
+    moreBtn.setDisabled(extraMoreItems.length === 0 && ![...buttonMeta.keys()].some((id) => inMore(id) && registry.has(id)));
   }
 
   function moreItems() {
@@ -280,7 +281,16 @@ export function createChrome({
         });
       }
     }
+    if (extraMoreItems.length > 0) {
+      if (items.length) items.push({ type: "separator" });
+      items.push(...extraMoreItems);
+    }
     return items;
+  }
+
+  function setRoomMenu(items = []) {
+    extraMoreItems = Array.isArray(items) ? items : [];
+    if (layout) paintMore();
   }
 
   const formulaBar = bevelBox("div", [
@@ -511,6 +521,9 @@ export function createChrome({
   const tabsHolder = bevelBox("div", ["display:inline-flex", "align-items:center", "gap:2px"], { theme });
   tabStrip.append(addTabBtn, tabsHolder);
 
+  const roomChipSlot = bevelBox("div", ["display:none", "align-items:center"], { theme });
+  roomChipSlot.setAttribute("data-sheet-room-slot", "");
+
   const statusText = bevelText("div", [
     "display:inline-flex",
     "align-items:center",
@@ -520,7 +533,15 @@ export function createChrome({
   ], "", { theme, role: "mutedText" });
   statusText.setAttribute("data-sheet-status", "");
 
-  bottomRoot.append(tabStrip, statusText);
+  const bottomRight = bevelBox("div", ["display:inline-flex", "align-items:center", "gap:8px", "flex:none"], { theme });
+  bottomRight.append(roomChipSlot, statusText);
+  bottomRoot.append(tabStrip, bottomRight);
+
+  function setRoomChip(el = null) {
+    roomChipSlot.textContent = "";
+    if (el) roomChipSlot.append(el);
+    setShown(roomChipSlot, Boolean(el), "inline-flex");
+  }
 
   const topUI = mountEditorUI({
     name: "sheet-top",
@@ -803,6 +824,9 @@ export function createChrome({
     noticeBar,
     tabStrip,
     statusText,
+    roomChipSlot,
+    setRoomChip,
+    setRoomMenu,
     showNotice,
     hideNotice,
     setEditing,

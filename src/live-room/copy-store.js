@@ -155,7 +155,7 @@ export function copyStore({ codec, fetch, query, wake, remote = true, retryMs = 
     copies: () =>
       [...held.keys()].flatMap((id) => {
         const one = record(id);
-        return one ? [{ id, ...one, marks: [...marks.values()].filter((mark) => mark.copy === id) }] : [];
+        return one ? [{ id, ...one, body: held.get(id), marks: [...marks.values()].filter((mark) => mark.copy === id) }] : [];
       }),
     close() {
       closed = true;

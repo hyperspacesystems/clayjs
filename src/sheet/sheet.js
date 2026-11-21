@@ -11,6 +11,7 @@ let mounted = false;
 // While the first workbook is in its document's live room: the binding, and each Grid's original
 // dispatch and repair methods before the room wrapped them.
 let joined = null;
+let roomUI = null;
 const originals = new Map();
 const REPAIR_BANNER = "Repair this sheet to edit it with others.";
 const books = ownWorkbooks({
@@ -38,6 +39,9 @@ export const sheet = {
   },
   get room() {
     return joined?.binding ?? null;
+  },
+  leaveRoom() {
+    leaveRoom();
   },
 };
 
@@ -85,10 +89,106 @@ function unwrapGrids() {
   originals.clear();
 }
 
+function teardownRoomUI() {
+  if (!roomUI) return;
+  const { chip, panel, inst } = roomUI;
+  roomUI = null;
+  try { chip?.destroy?.(); } catch {}
+  try { panel?.destroy?.(); } catch {}
+  inst?.chrome?.setRoomChip?.(null);
+  inst?.chrome?.setRoomMenu?.([]);
+  inst?.setConflicts?.([]);
+}
+
+async function downloadSheetCopy(book, payload = null) {
+  const base =
+    typeof window.clay?.getHTML === "function"
+      ? window.clay.getHTML({ purpose: "export" })
+      : book.serialize({ purpose: "export" });
+  let html = base;
+  let body = typeof payload?.body === "string" ? payload.body : null;
+  if (!body && payload?.preview && typeof window.Sap?.grid?.roomCodec?.write === "function") {
+    try {
+      body = window.Sap.grid.roomCodec.write(payload.preview, {});
+    } catch {}
+  }
+  if (typeof body === "string") {
+    if (/<html\b/i.test(body)) {
+      html = body;
+    } else {
+      const { findRegion, spliceRegion } = await import("../live-room/region.js");
+      const region = findRegion(base);
+      html = region ? spliceRegion(base, region, body) : body;
+    }
+  }
+  const name = payload?.id ? `recovered-${payload.id}.html` : `${(document.title || "sheet").replace(/[^\w.-]+/g, "-")}.html`;
+  if (typeof Blob === "undefined" || typeof URL?.createObjectURL !== "function") return;
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
+async function mountRoomUI(book, binding, room) {
+  const inst = ui?.of?.(book.root);
+  if (!inst) return;
+  try {
+    const { createSaveChip } = await import("../live-room/ui/save-chip.js");
+    if (joined?.binding !== binding) return;
+    const onDownload = (payload) => downloadSheetCopy(book, payload);
+    let panel = null;
+    let panelPromise = null;
+    const openRecovery = async () => {
+      if (joined?.binding !== binding) return;
+      if (!panel) {
+        panelPromise ??= import("../live-room/ui/recovery-panel.js").then(({ createRecoveryPanel }) => {
+          if (joined?.binding !== binding) return null;
+          const created = createRecoveryPanel({
+            room,
+            codec: window.Sap.grid.roomCodec,
+            onReveal: (target) => inst.reveal(target),
+            onDownload,
+            onConflictsHighlight: (targets) => inst.setConflicts(targets),
+            theme: inst.chrome.theme,
+          });
+          if (joined?.binding !== binding) {
+            created.destroy();
+            return null;
+          }
+          panel = created;
+          if (roomUI) roomUI.panel = panel;
+          return panel;
+        }).catch((err) => {
+          panelPromise = null;
+          throw err;
+        });
+        const readyPanel = await panelPromise;
+        if (!readyPanel || joined?.binding !== binding) return;
+      }
+      panel.open();
+    };
+    const chip = createSaveChip({
+      room,
+      onOpenRecovery: openRecovery,
+      onDownload,
+      theme: inst.chrome.theme,
+    });
+    roomUI = { chip, panel, inst };
+    inst.chrome.setRoomChip(chip.el);
+    inst.chrome.setRoomMenu([{ id: "recovered-edits", label: "Recovered edits", onSelect: openRecovery }]);
+  } catch (error) {
+    console.error("clayjs: could not mount live room UI", error);
+  }
+}
+
 function leaveRoom() {
   if (!joined) return;
   const { book, binding } = joined;
   joined = null;
+  teardownRoomUI();
   binding.stop();
   unwrapGrids();
   if (gridsOf(book).some((grid) => grid.issues?.length)) showRepairBanner(book);
@@ -140,5 +240,6 @@ export async function joinRooms() {
     leaveRoom();
     return null;
   }
+  mountRoomUI(book, binding, room);
   return binding;
 }
