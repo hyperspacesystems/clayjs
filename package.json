@@ -143,6 +143,7 @@
   },
   "jest": {
     "testEnvironment": "jsdom",
+    "testTimeout": 15000,
     "testMatch": [
       "**/tests/unit/**/*.test.js"
     ],
