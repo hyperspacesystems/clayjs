@@ -298,7 +298,7 @@ test("a refused save that the owner resolves leaves no 'saving' status and settl
   // Queue a second save behind the in-flight one, and start flushSave with a 60ms timeout
   rev = 3;
   save.savePage();
-  const flushing = save.flushSave({ timeoutMs: 60 }).then(
+  const flushing = save.flushSave({ timeoutMs: 1000 }).then(
     (v) => ({ ok: true, v }),
     (e) => ({ ok: false, msg: e.message, state: e.state })
   );

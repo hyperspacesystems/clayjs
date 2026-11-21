@@ -407,9 +407,11 @@ test("8. Page save while Ana has a pending edit returns committed region byte fo
 
 // Case 9. Plant: extras ignore quiet, or ordered-file mode fails quietCheck because pending >= 1 during save.
 test("9. Non-quiet room save writes stale and keeps file's chart figure; next quiet save and ordered-file save clear stale and write DOM drawing", async () => {
-  const { host, ana, assertNoDrift } = await setupPair({ chart: true });
-  const figure = ana.root.querySelector('section[data-id="s1"] figure[chart]');
-  figure.innerHTML = figure.innerHTML.replace("#3170b8", "#00aa55");
+  const { host, ana, ben, assertNoDrift } = await setupPair({ chart: true });
+  for (const side of [ana, ben]) {
+    const figure = side.root.querySelector('section[data-id="s1"] figure[chart]');
+    figure.innerHTML = figure.innerHTML.replace("#3170b8", "#00aa55");
+  }
 
   const inner = host.file("doc").bytes;
   const base = wrapPage(inner);
