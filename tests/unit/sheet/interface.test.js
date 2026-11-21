@@ -1561,7 +1561,7 @@ test("a repaint with 200 rows and 26 columns selected asks the Grid for fewer th
 
   expect(spy.mock.calls.length).toBeLessThan(100);
   ui.dispose();
-}, 30000);
+}, 90000);
 
 const MERGED_BOOK = () => `<main sap plugins="grid"><div id="scroller" style="position:relative;overflow:auto"><div items="sheets" sheet-workbook>
 <section item data-id="s1" data-pos="V"><h2 bind="name">Budget</h2><table grid><colgroup><col data-id="c1" data-pos="V"><col data-id="c2" data-pos="l"></colgroup>

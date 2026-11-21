@@ -573,6 +573,8 @@ test("a newer local operation and a peer edit survive the proof", async () => {
   expect(result.ok).toBe(false);
 
   // B, made while the answer is missing, and an unrelated peer edit.
+  let openPost;
+  postGate = new Promise((resolve) => { openPost = resolve; });
   s.add("m", 1);
   await flushAsync();
   expect(pendingIds(name)).toEqual([1, 2]);
@@ -580,7 +582,9 @@ test("a newer local operation and a peer edit survive the proof", async () => {
   expect(await untilTaken()).toBeNull();
   expect(pendingIds(name)).toEqual([2]);
   expect(s.toJSON()).toEqual({ n: 1, m: 1, peer: 1 });
-  await wait(120);
+  postGate = null;
+  openPost();
+  await untilPosted(name, 1);
   expect(posted(name)).toHaveLength(1);
   expect(posted(name)[0].frame.ops).toEqual([{ op: "add", path: ["m"], n: 1 }]);
 });

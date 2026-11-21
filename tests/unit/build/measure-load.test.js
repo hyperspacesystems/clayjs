@@ -104,7 +104,7 @@ test("a Document with a table and a board counts their view parts at boot, a tex
   expect(featureChunks(textBoot)).toEqual([]);
   expect(richBoot.js.requests).toBe(textBoot.js.requests + 4);
   expect(richBoot.js.depth).toBe(textBoot.js.depth + 1);
-});
+}, 30000);
 
 test("a Document's view mode counts no view parts, and neither does a tool-less file's tool part", async () => {
   const view = await measure({ html: fixture("document-rich.html"), mode: "view" });

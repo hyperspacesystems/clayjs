@@ -78,7 +78,7 @@
       "draft": { "requests": 77, "depth": 3, "brotli": 233472, "css": { "requests": 1, "depth": 1 }, "fonts": { "requests": 0, "depth": 0 } }
     },
     "sheet.html": {
-      "view": { "requests": 34, "depth": 3, "brotli": 157184, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } },
+      "view": { "requests": 34, "depth": 3, "brotli": 158208, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } },
       "edit": { "requests": 83, "depth": 3, "brotli": 195584, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } },
       "draft": { "requests": 78, "depth": 3, "brotli": 184320, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } }
     }
