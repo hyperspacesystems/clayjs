@@ -14,7 +14,9 @@ let joined = null;
 let joining = null;
 let roomUI = null;
 const originals = new Map();
-const REPAIR_BANNER = "Repair this sheet to edit it with others.";
+const REPAIR_BANNER = "This sheet's markup has errors and is read-only until repaired.";
+const RELOAD_BANNER = "This sheet was updated with a newer version. Reload to keep editing.";
+const RELOAD_UNSAVED_BANNER = "This sheet was updated with a newer version. Download your copy or reload to keep editing.";
 const books = ownWorkbooks({
   onRebuild: () => {
     shell.restart();
@@ -158,7 +160,7 @@ async function downloadSheetCopy(book, payload = null) {
   a.href = href;
   a.download = name;
   a.click();
-  setTimeout(() => URL.revokeObjectURL(href), 1000);
+  setTimeout(() => URL.revokeObjectURL?.(href), 1000);
 }
 
 async function mountRoomUI(book, binding, room) {
@@ -213,19 +215,38 @@ async function mountRoomUI(book, binding, room) {
   }
 }
 
-function leaveRoom() {
+function showReloadBanner(book, { hasUnsaved = false } = {}) {
+  ui?.notice?.(hasUnsaved ? RELOAD_UNSAVED_BANNER : RELOAD_BANNER, {
+    label: "Reload",
+    onAction: () => window.location?.reload?.(),
+    ...(hasUnsaved
+      ? {
+          secondary: {
+            label: "Download copy",
+            onAction: () => downloadSheetCopy(book),
+          },
+        }
+      : {}),
+  });
+}
+
+function leaveRoom(reason = null, detail = null) {
   if (!joined) return;
   const { book, binding } = joined;
   joined = null;
   teardownRoomUI();
   binding.stop();
   unwrapGrids();
+  if (reason === "codec-mismatch") {
+    showReloadBanner(book, detail ?? {});
+    return;
+  }
   if (gridsOf(book).some((grid) => grid.issues?.length)) showRepairBanner(book);
 }
 
 function showRepairBanner(book) {
   ui?.notice?.(REPAIR_BANNER, {
-    label: "Repair",
+    label: "Repair sheet",
     async onAction() {
       if (joined && joined.book === book) leaveRoom();
       for (const grid of gridsOf(book)) {
@@ -260,7 +281,7 @@ export async function joinRooms() {
     const { createRoomBinding } = await import("./room.js");
     const binding = createRoomBinding(book, {
       notice: (text, action) => ui?.notice?.(text, action),
-      onLeave: () => leaveRoom(),
+      onLeave: (reason, detail) => leaveRoom(reason, detail),
       reveal: (target) => ui?.reveal?.(target) ?? false,
       setConflicts: (targets) => ui?.setConflicts?.(targets),
     });

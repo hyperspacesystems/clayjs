@@ -584,7 +584,9 @@ test("13. A page with rule_id_duplicate does not join and offers repair; after r
 
   expect(joinCalls).toBe(0);
   const inst = sheet.ui.of(document.querySelector("[sheet-workbook]"));
-  expect(inst.chrome.noticeBar.textContent).toContain("Repair this sheet to edit it with others.");
+  expect(inst.chrome.noticeBar.textContent).toContain(
+    "This sheet's markup has errors and is read-only until repaired.",
+  );
 
   inst.chrome.topShadow.querySelector("[data-sheet-notice-action]").click();
   await until(() => Boolean(sheet.room));

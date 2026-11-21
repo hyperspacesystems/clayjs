@@ -120,7 +120,7 @@ test("partial undo keeps its notice visible in the sheet chrome", async () => {
   undoBtn.click();
 
   expect(inst.chrome.noticeBar.hidden).toBe(false);
-  expect(inst.chrome.noticeBar.textContent).toContain("Undid your change except");
+  expect(inst.chrome.noticeBar.textContent).toContain("Undid your edit, leaving");
   expect(inst.chrome.noticeBar.textContent).toContain("Sheet1!B1");
 });
 
@@ -131,7 +131,9 @@ test("undo stack byte cap drops oldest entries and shows the cap notice once", a
   grid.set("A1", "11");
   grid.set("A2", "22");
   expect(inst.chrome.noticeBar.hidden).toBe(false);
-  expect(inst.chrome.noticeBar.textContent).toContain("Older changes can no longer be undone.");
+  expect(inst.chrome.noticeBar.textContent).toContain(
+    "Undo history is full, so your oldest steps were cleared. Recent changes still undo.",
+  );
 
   inst.chrome.hideNotice();
   grid.set("B1", "33");
@@ -224,11 +226,13 @@ test("a sheet with rule_id_duplicate offers repair on a room host, joins after r
   expect(liveRooms).toHaveLength(0);
   const inst = sheet.ui.of(document.querySelector("[sheet-workbook]"));
   expect(inst.chrome.noticeBar.hidden).toBe(false);
-  expect(inst.chrome.noticeBar.textContent).toContain("Repair this sheet to edit it with others.");
+  expect(inst.chrome.noticeBar.textContent).toContain(
+    "This sheet's markup has errors and is read-only until repaired.",
+  );
 
   // A failed repair save keeps the banner and does not join the room.
   const repairBtn = inst.chrome.topShadow.querySelector("[data-sheet-notice-action]");
-  expect(repairBtn.textContent).toBe("Repair");
+  expect(repairBtn.textContent).toBe("Repair sheet");
   repairBtn.click();
   await turn();
   await turn();
@@ -499,4 +503,73 @@ test("joining a room mounts the save chip, downloads stored recovery copies clea
     URL.createObjectURL = origCreateObjectURL;
     URL.revokeObjectURL = origRevokeObjectURL;
   }
+});
+
+// Bug: an old tab whose codec mismatches a newer sheet silently left the room without asking the user to reload (or offering Download copy when local edits were unsaved).
+test("codec-mismatch room error leaves the room and shows a Reload banner (with Download copy when unsaved)", async () => {
+  const runCase = async ({ unsaved }) => {
+    resetPage(BOOK());
+    const Sap = (await import("../../../src/vendor/sap-core.vendor.js")).default;
+    window.clay.region = (await import("../../../src/lib/region-policy.js")).regionShape;
+
+    let listeners = [];
+    let status = { mode: "room", pending: 0, unsaved: unsaved ? 1 : 0, unstored: 0, error: null };
+    let sheet;
+    let ready;
+    window.clay.liveRoom = jest.fn((_name, { codec }) => {
+      const root = document.querySelector("[sheet-workbook]");
+      const book = sheet.books.get(root);
+      const doc = codec.read(book.serialize({ purpose: "recovery" })).doc;
+      return {
+        ready: Promise.resolve(),
+        get status() {
+          return status;
+        },
+        view: () => doc,
+        submit: () => ({ id: "e1", durable: Promise.resolve("saved") }),
+        flush: () => Promise.resolve(),
+        subscribe(fn) {
+          listeners.push(fn);
+          return () => {
+            listeners = listeners.filter((f) => f !== fn);
+          };
+        },
+        close() {},
+      };
+    });
+
+    ({ sheet, ready } = await import("../../../src/sheet/sheet.js"));
+    await ready;
+    Sap.mount();
+    await turn();
+    await turn();
+    await turn();
+
+    const inst = sheet.ui.of(document.querySelector("[sheet-workbook]"));
+    status = { ...status, error: new Error("sheet codec: unsupported version 9") };
+    for (const fn of [...listeners]) fn({ type: "error", error: status.error });
+    await turn();
+
+    expect(sheet.room).toBeNull();
+    expect(inst.chrome.noticeBar.hidden).toBe(false);
+    const primary = inst.chrome.topShadow.querySelector("[data-sheet-notice-action]");
+    const secondary = inst.chrome.topShadow.querySelector("[data-sheet-notice-secondary]");
+    expect(primary.hidden).toBe(false);
+    expect(primary.textContent).toBe("Reload");
+    if (unsaved) {
+      expect(inst.chrome.noticeBar.textContent).toContain(
+        "This sheet was updated with a newer version. Download your copy or reload to keep editing.",
+      );
+      expect(secondary.hidden).toBe(false);
+      expect(secondary.textContent).toBe("Download copy");
+    } else {
+      expect(inst.chrome.noticeBar.textContent).toContain(
+        "This sheet was updated with a newer version. Reload to keep editing.",
+      );
+      expect(secondary.hidden).toBe(true);
+    }
+  };
+
+  await runCase({ unsaved: false });
+  await runCase({ unsaved: true });
 });

@@ -3,9 +3,14 @@ import { savedPage } from "../live-room/browser.js";
 
 const UNDO_LIMIT = 200;
 const UNDO_MAX_BYTES = 64 * 1024 * 1024;
-const UNDO_CAP_NOTICE = "Older changes can no longer be undone.";
+const UNDO_CAP_NOTICE = "Undo history is full, so your oldest steps were cleared. Recent changes still undo.";
 const TOO_LARGE_NOTICE = "That change is too large to share.";
 const TAB_ACTIONS = new Set(["insertSheet", "deleteSheet", "renameSheet", "moveSheet"]);
+
+const isCodecMismatchError = (error) => {
+  const msg = typeof error === "string" ? error : error?.message ?? "";
+  return /sheet codec:/i.test(msg);
+};
 
 const isPermanentError = (error) => {
   const msg = typeof error === "string" ? error : error?.message ?? "";
@@ -395,7 +400,7 @@ export function createRoomBinding(
     }
     if (!appliedAny) {
       const who = labels(initialView, skippedAll, lastAction);
-      notice(who ? `Couldn't ${verb}: ${who} changed since.` : `Couldn't ${verb}: that sheet changed since.`);
+      notice(who ? `Can't ${verb}: ${who} changed after your edit.` : `Can't ${verb}: this sheet changed after your edit.`);
       return { ok: false, why: "changed", skipped: skippedAll };
     }
     const next = { steps: nextSteps.reverse(), bytes: 0 };
@@ -407,7 +412,7 @@ export function createRoomBinding(
       notice(TOO_LARGE_NOTICE);
     } else if (skippedAll.length) {
       const who = labels(initialView, skippedAll, lastAction);
-      notice(`${past} your change except ${who || "what someone changed"}, which someone changed since.`);
+      notice(who ? `${past} your edit, leaving ${who} as changed since.` : `${past} the parts nobody else changed.`);
     }
     reconcile(room.view());
     return { ok: true, skipped: skippedAll, targets };
@@ -711,9 +716,12 @@ export function createRoomBinding(
     unsubscribe = room.subscribe((event) => {
       if (!room) return;
       const mode = room.status?.mode;
-      if (mode === "unavailable" || mode === "closed" || (event.type === "error" && isPermanentError(event.error ?? room.status?.error))) {
+      const err = event.error ?? room.status?.error;
+      if (mode === "unavailable" || mode === "closed" || (event.type === "error" && isPermanentError(err))) {
+        const unsaved = hasUnsaved();
+        const reason = event.type === "error" && isCodecMismatchError(err) ? "codec-mismatch" : (mode ?? "error");
         stop();
-        onLeave(mode ?? "error");
+        onLeave(reason, { hasUnsaved: unsaved });
         return;
       }
       if (!ready && !room.status?.error && room.view()) {
@@ -744,8 +752,10 @@ export function createRoomBinding(
     const mode = room.status?.mode;
     const err = room.status?.error;
     if (mode === "unavailable" || mode === "closed" || isPermanentError(err)) {
+      const unsaved = hasUnsaved();
+      const reason = isCodecMismatchError(err) ? "codec-mismatch" : (mode ?? "unavailable");
       stop();
-      onLeave(mode ?? "unavailable");
+      onLeave(reason, { hasUnsaved: unsaved });
       return;
     }
     attachListener();

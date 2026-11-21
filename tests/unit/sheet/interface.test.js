@@ -918,7 +918,7 @@ test("a redo that finds changed cells says that step was not redone", async () =
 
   press(inst.editor.textarea, "Z", { metaKey: true, shiftKey: true });
 
-  expect(inst.chrome.noticeBar.textContent).toContain("Those cells changed since, so that step was not redone.");
+  expect(inst.chrome.noticeBar.textContent).toContain("Can't redo: those cells changed after this step.");
 
   ui.dispose();
 });
@@ -2508,7 +2508,7 @@ test("undoing a sort after a later edit in the sorted rows shows the changed-sin
   press(textarea, "z", { metaKey: true });
 
   expect(inst.chrome.noticeBar.hidden).toBe(false);
-  expect(inst.chrome.noticeBar.textContent).toContain("Those cells changed since, so that step was not undone.");
+  expect(inst.chrome.noticeBar.textContent).toContain("Can't undo: those cells changed after this step.");
   expect(grid().get("A2:B5")).toEqual([
     ["third", 10],
     ["edited-later", 30],

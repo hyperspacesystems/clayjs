@@ -453,6 +453,7 @@ export function createChrome({
 
   const noticeText = bevelText("span", ["flex:1 1 auto", `font:500 12.5px/1.4 ${FONT_SANS}`, `color:${TOKENS.ox}`], "", { theme });
   let noticeActionFn = null;
+  let noticeSecondaryFn = null;
   const noticeActionBtn = bevelButton("", {
     small: true,
     variant: "primary",
@@ -462,6 +463,15 @@ export function createChrome({
   noticeActionBtn.setAttribute("data-sheet-notice-action", "");
   noticeActionBtn.addEventListener("mousedown", (e) => e.preventDefault());
   setShown(noticeActionBtn, false, "inline-flex");
+  const noticeSecondaryBtn = bevelButton("", {
+    small: true,
+    variant: "default",
+    onClick: () => noticeSecondaryFn?.(),
+    theme,
+  });
+  noticeSecondaryBtn.setAttribute("data-sheet-notice-secondary", "");
+  noticeSecondaryBtn.addEventListener("mousedown", (e) => e.preventDefault());
+  setShown(noticeSecondaryBtn, false, "inline-flex");
   const noticeDismiss = bevelButton("Dismiss", {
     small: true,
     variant: "quiet",
@@ -482,7 +492,7 @@ export function createChrome({
   noticeBar.setAttribute("role", "alert");
   noticeBar.setAttribute("data-sheet-notice", "");
   noticeBar.hidden = true;
-  noticeBar.append(noticeText, noticeActionBtn, noticeDismiss);
+  noticeBar.append(noticeText, noticeSecondaryBtn, noticeActionBtn, noticeDismiss);
 
   const findSlot = doc.createElement("div");
   topRoot.append(toolbar, formulaBar, findSlot, noticeBar);
@@ -568,13 +578,23 @@ export function createChrome({
       noticeActionFn = null;
       setShown(noticeActionBtn, false, "inline-flex");
     }
+    if (action?.secondary && typeof action.secondary.onAction === "function") {
+      noticeSecondaryFn = action.secondary.onAction;
+      noticeSecondaryBtn.textContent = action.secondary.label || "";
+      setShown(noticeSecondaryBtn, true, "inline-flex");
+    } else {
+      noticeSecondaryFn = null;
+      setShown(noticeSecondaryBtn, false, "inline-flex");
+    }
     setShown(noticeBar, true, "flex");
   }
 
   function hideNotice() {
     noticeText.textContent = "";
     noticeActionFn = null;
+    noticeSecondaryFn = null;
     setShown(noticeActionBtn, false, "inline-flex");
+    setShown(noticeSecondaryBtn, false, "inline-flex");
     setShown(noticeBar, false, "flex");
   }
 

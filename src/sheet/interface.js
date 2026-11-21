@@ -33,8 +33,8 @@ import { createTabs } from "./tabs.js";
 
 const WORKBOOK = "[sheet-workbook]";
 const STATUS_CELL_CAP = 100_000;
-const CHANGED_MSG = "Those cells changed since, so that step was not undone.";
-const REDONE_MSG = "Those cells changed since, so that step was not redone.";
+const CHANGED_MSG = "Can't undo: those cells changed after this step.";
+const REDONE_MSG = "Can't redo: those cells changed after this step.";
 
 const FORMAT_LABELS = new Map([
   [null, "Automatic"],
