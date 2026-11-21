@@ -99,6 +99,7 @@ function createBook(root, { onRebuild, notify }) {
   let made = null;
   let writer = null;
   let revision = 0;
+  let room = null;
   // Per tab: the revision of its last edit, and the last of those a save wrote. A tab holds
   // unsaved work of ours while the first is past the second.
   const editedAt = new Map();
@@ -113,7 +114,7 @@ function createBook(root, { onRebuild, notify }) {
   function onChange(event) {
     writer.touch(event.sheet, event);
     if (event.structure && watchTabs()) onRebuild();
-    if (event.source === "derived") return;
+    if (room || event.source === "derived") return;
     revision += 1;
     editedAt.set(event.sheet, revision);
     notify(root);
@@ -160,6 +161,7 @@ function createBook(root, { onRebuild, notify }) {
 
   function serialize({ purpose }) {
     if (!made) return htmlOf(root).replace(/^<[^>]*>|<\/[^>]*>$/g, "");
+    if (room && room.isReady?.() !== false && (purpose === "save" || purpose === "sync")) return room.committedInner();
     pending = purpose === "save" ? new Map(editedAt) : null;
     let out = "";
     for (const node of root.childNodes) {
@@ -223,6 +225,10 @@ function createBook(root, { onRebuild, notify }) {
   // peer changed and we did not, and reports whether work of ours is still unsaved.
   function merge(incoming) {
     if (!made) throw new Error("the sheet's workbook has not started");
+    if (room) {
+      room.heard(incoming);
+      return () => false;
+    }
     // Read now: live sync empties the peer's owned roots once merge returns.
     const index = [...document.querySelectorAll(WORKBOOK)].indexOf(root);
     const theirs = tabsOf(incoming.document?.querySelectorAll(WORKBOOK)[index] ?? null);
@@ -267,22 +273,7 @@ function createBook(root, { onRebuild, notify }) {
     }
     return () => {
       for (const id of agreed) savedAt.set(id, editedAt.get(id) ?? 0);
-      for (const { id, here, there } of take) {
-        editedAt.delete(id);
-        savedAt.delete(id);
-        if (there === null) {
-          here.section.remove();
-        } else if (here === null) {
-          place(document.importNode(there.section, true));
-        } else {
-          if (here.name !== there.name) nameIn(here.section).textContent = there.name;
-          if (here.table !== there.table) tableIn(here.section).replaceWith(document.importNode(tableIn(there.section), true));
-          if (here.pos !== there.pos) {
-            here.section.setAttribute("data-pos", there.pos);
-            place(here.section);
-          }
-        }
-      }
+      replaceTabs(take);
       if (takeCommit) {
         const ourCommit = commitIn(root);
         if (!theirCommit) ourCommit?.remove();
@@ -301,14 +292,65 @@ function createBook(root, { onRebuild, notify }) {
     };
   }
 
+  // Every tab the peer changed and we did not becomes its: a tab removed, a tab added, or a tab
+  // renamed, given the peer's table, or moved to its place. Nothing counts as an edit of ours.
+  function replaceTabs(take) {
+    for (const { id, here, there } of take) {
+      editedAt.delete(id);
+      savedAt.delete(id);
+      if (there === null) {
+        here.section.remove();
+      } else if (here === null) {
+        place(document.importNode(there.section, true));
+      } else {
+        if (here.name !== there.name) nameIn(here.section).textContent = there.name;
+        if (here.table !== there.table) tableIn(here.section).replaceWith(document.importNode(tableIn(there.section), true));
+        if (here.pos !== there.pos) {
+          here.section.setAttribute("data-pos", there.pos);
+          place(here.section);
+        }
+      }
+    }
+  }
+
   return {
     root,
     build,
     serialize,
     merge,
+    // A live room owns this workbook's bytes while bound: no Grid change moves the page's
+    // revision, ClayJS's page save carries the committed region as the file holds it, and a
+    // merge from live sync updates that region without touching the tabs (the room delivers them).
+    bind(binding) {
+      room = binding;
+    },
+    unbind({ edited = [] } = {}) {
+      room = null;
+      if (edited.length > 0) {
+        revision += 1;
+        const ids = edited.filter(Boolean);
+        for (const id of ids.length > 0 ? ids : tabsIn(root).map((el) => el.getAttribute("data-id")).filter(Boolean)) {
+          editedAt.set(id, revision);
+        }
+        notify(root);
+      }
+    },
+    get room() {
+      return room;
+    },
+    // After a live room adds, removes, renames or moves tabs directly on the workbook, mount any
+    // new Grid, unhook removed ones, drop their cached HTML and let the shell and UI rebuild.
+    syncTabs(ids = []) {
+      for (const id of ids) writer?.touch(id);
+      const changed = watchTabs();
+      if (changed || ids.length > 0) onRebuild?.();
+    },
+    // The live tabs become `theirs` (a parsed workbook's tabs, as `merge` takes them).
+    replaceTabs,
     // A chart drawn on open that differs from its saved drawing: one change for the page, so the
     // next save writes it, never an edit of a tab (a merge must not count it as ours).
     redrawn() {
+      if (room) return;
       revision += 1;
       notify(root);
     },

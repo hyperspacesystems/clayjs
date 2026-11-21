@@ -6,7 +6,7 @@ import { allowedInList, boundRange, COL_DEFAULT, createGeometry, filteredRows, i
 import { createHistory } from "./history.js";
 import { keyIntent } from "./keys.js";
 import { createOverlays } from "./overlays.js";
-import { loadCharts, peekCharts } from "./shell.js";
+import { loadCharts, peekCharts, sheetHooks } from "./shell.js";
 import {
   axisSpan,
   clipSelection,
@@ -320,7 +320,21 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     });
   }
   const gridOf = (table) => (table && typeof win.Sap?.grid === "function" ? win.Sap.grid(table) : null);
-  const history = createHistory(workbook, gridOf);
+  const rawHistory = createHistory(workbook, gridOf);
+  // A live room owns the workbook's history while bound: undo is the room's guarded revert,
+  // and multi-step commands grouped for one undo travel as one room batch.
+  const room = () => sheetHooks.bookOf?.(workbook)?.room ?? null;
+  const history = {
+    ...rawHistory,
+    group(tab, fn) {
+      const live = room();
+      if (live?.group) return live.group(tab, fn);
+      return rawHistory.group(tab, fn);
+    },
+  };
+  const canUndo = (tab) => room()?.canUndo(tab) ?? history.canUndo(tab);
+  const canRedo = (tab) => room()?.canRedo(tab) ?? history.canRedo(tab);
+  let conflictTargets = [];
   const isMac = () => /mac|iphone|ipad|ipod/i.test(String(platform ?? win.navigator?.platform ?? ""));
 
   function withMine(fn) {
@@ -339,7 +353,9 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       return true;
     } catch (error) {
       if (error?.name !== "GridRefused") throw error;
-      chrome.showNotice(error.message || "That step could not be applied.");
+      if (!sheetHooks.onGridRefused?.(workbook)) {
+        chrome.showNotice(error.message || "That step could not be applied.");
+      }
       return false;
     }
   }
@@ -589,7 +605,27 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     return { row: Math.max(0, row), col: Math.max(0, col) };
   }
 
-  function onForeignChange(tabId) {
+  function touchesSelection(tabId, cells) {
+    if (!cells?.length || !sel || sel.tab !== tabId) return false;
+    const view = viewOf(tabId);
+    const box = selectionBox(view, sel);
+    if (!box) return false;
+    const rows = new Set(view.rows.slice(box.top, box.bottom + 1));
+    const cols = new Set(view.cols.slice(box.left, box.right + 1));
+    return cells.some((cell) => rows.has(cell.row) && cols.has(cell.col));
+  }
+
+  function onForeignChange(tabId, event = null) {
+    if (room() && event) {
+      const structural = Boolean(
+        event.structure ||
+          event.rows?.added?.length ||
+          event.rows?.removed?.length ||
+          event.cols?.added?.length ||
+          event.cols?.removed?.length,
+      );
+      if (!structural && !touchesSelection(tabId, event.cells)) return;
+    }
     if (liveMenu?.isOpen && tabId === sel?.tab) liveMenu.close({ restoreFocus: false });
     if (ruleSurface && ruleSurface.tab === tabId) closeRuleSurface();
     if (activeDialog && dialogTab === tabId) closeDialog();
@@ -1038,8 +1074,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       mState.isSingleMerge ? "Unmerge cells" : "Merge cells",
     );
 
-    chrome.registerCommand("undo", canEdit && history.canUndo(sel.tab) ? () => replayStep("undo") : null);
-    chrome.registerCommand("redo", canEdit && history.canRedo(sel.tab) ? () => replayStep("redo") : null);
+    chrome.registerCommand("undo", canEdit && canUndo(sel.tab) ? () => replayStep("undo") : null);
+    chrome.registerCommand("redo", canEdit && canRedo(sel.tab) ? () => replayStep("redo") : null);
     for (const id of LAZY_TOOLBAR_IDS) {
       const ok = canEdit && (id !== "merge" || mState.canAct);
       chrome.registerCommand(id, ok ? () => runLazy(cmdTool, (b) => ensureCommands(b).actions.runToolbarCommand(id)) : null);
@@ -1188,6 +1224,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       whole: shownId === sel.tab ? (sel.whole ?? null) : null,
       editing: editor.editing && shownId === sel.tab,
       refs: editor.refs(),
+      conflicts: resolveConflictBoxes(),
       shownTab: shownId,
       fillPreviewBox: fillDrag?.tab === shownId ? fillDrag.targetBox : null,
       linkUrl,
@@ -1333,7 +1370,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   function writeCheckboxes(grid, cells) {
     const next = !cells.every((cell) => cell.on);
     const writes = cells.map((cell) => [cell.row, cell.col, next]);
-    if (!writeGrid(() => grid.apply({ v: 1, t: "set", sheet: cells[0].tab, cells: writes }))) return false;
+    if (!writeGrid(() => grid.dispatch({ v: 1, t: "set", sheet: cells[0].tab, cells: writes }))) return false;
     refreshStatus();
     syncUI({ announce: true });
     return true;
@@ -1384,7 +1421,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     }
     const area = commandArea(view, sel);
     const unchanged = rows.length === box.bottom - box.top + 1;
-    if (!writeGrid(() => (unchanged ? grid.clear(area) : cells.length > 0 && grid.apply({ v: 1, t: "set", sheet: sel.tab, cells })))) return;
+    if (!writeGrid(() => (unchanged ? grid.clear(area) : cells.length > 0 && grid.dispatch({ v: 1, t: "set", sheet: sel.tab, cells })))) return;
     refreshStatus();
     syncUI({ announce: true });
   }
@@ -1407,6 +1444,25 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   }
 
   function replayStep(kind) {
+    const live = room();
+    if (live) {
+      const res = kind === "undo" ? live.undo(sel.tab) : live.redo(sel.tab);
+      if (res.ok) {
+        if (!res.skipped?.length) chrome.hideNotice();
+        const coords = [];
+        for (const target of res.targets ?? []) {
+          const box = resolveTarget(target);
+          if (!box || box.tab !== sel.tab) continue;
+          coords.push({ r: box.r0, c: box.c0 }, { r: box.r1, c: box.c1 });
+        }
+        if (coords.length > 0) applyMove(boxSelection(viewOf(sel.tab), sel, coords));
+        else {
+          refreshStatus();
+          syncUI({ announce: true });
+        }
+      } else if (res.why !== "changed") syncUI();
+      return;
+    }
     let res;
     try {
       res = kind === "undo" ? history.undo(sel.tab) : history.redo(sel.tab);
@@ -2471,8 +2527,11 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       unsubGrids.push(
         grid.on("change", (event) => {
           if (disposed) return;
-          if (mine) history.record(tab.id, event);
-          else onForeignChange(tab.id);
+          if (mine) {
+            if (!room()) history.record(tab.id, event);
+          } else if (event.source !== "derived") {
+            onForeignChange(tab.id, event);
+          }
           const rw = windowOf(tab.table);
           if (rw?.geometry && event.rows?.changed?.length) {
             for (const rowId of event.rows.changed) {
@@ -2644,6 +2703,94 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     chrome.dispose();
   }
 
+  // Resolves a room target id (`s1/r2/c2`, `s1#rule:k1`) or `{ tab, row, col }` / `{ tab, rule }`
+  // into a cell box on its tab so C9b's conflict panel can reveal and tint it.
+  function resolveTarget(target) {
+    if (!target) return null;
+    let tab = null;
+    let row = null;
+    let col = null;
+    let ruleId = null;
+    if (typeof target === "string") {
+      const hash = target.indexOf("#");
+      const base = hash >= 0 ? target.slice(0, hash) : target;
+      const extra = hash >= 0 ? target.slice(hash + 1) : "";
+      const parts = base.split("/").map((p) => {
+        try {
+          return decodeURIComponent(p);
+        } catch {
+          return p;
+        }
+      });
+      tab = parts[0] || null;
+      row = parts[1] || null;
+      col = parts[2] || null;
+      if (extra.startsWith("rule:")) ruleId = extra.slice(5);
+    } else if (typeof target === "object") {
+      tab = target.tab ?? target.sheet ?? null;
+      row = target.row ?? null;
+      col = target.col ?? null;
+      ruleId = target.rule ?? null;
+    }
+    if (!tab) return null;
+    const table = tabTable(workbook, tab);
+    if (!table) return null;
+    const view = viewOf(tab);
+    if (view.rows.length === 0 || view.cols.length === 0) return null;
+    if (ruleId) {
+      const grid = gridOf(table);
+      const rule = grid?.rules?.()?.find((one) => one.id === ruleId) ?? null;
+      const b = rule ? boundRange(rule.range, { rows: view.rows.length, cols: view.cols.length }) : null;
+      if (!b) return null;
+      return { tab, r0: b.r0, c0: b.c0, r1: b.r1, c1: b.c1 };
+    }
+    if (row && col) {
+      const r = view.rows.indexOf(row);
+      const c = view.cols.indexOf(col);
+      if (r < 0 || c < 0) return null;
+      return { tab, r0: r, c0: c, r1: r, c1: c };
+    }
+    if (row && !col) {
+      const r = view.rows.indexOf(row);
+      if (r < 0) return null;
+      return { tab, r0: r, c0: 0, r1: r, c1: view.cols.length - 1 };
+    }
+    if (!row && col) {
+      const c = view.cols.indexOf(col);
+      if (c < 0) return null;
+      return { tab, r0: 0, c0: c, r1: view.rows.length - 1, c1: c };
+    }
+    return { tab, r0: 0, c0: 0, r1: 0, c1: 0 };
+  }
+
+  function resolveConflictBoxes() {
+    const out = [];
+    for (const target of conflictTargets) {
+      const box = resolveTarget(target);
+      if (box) out.push(box);
+    }
+    return out;
+  }
+
+  function reveal(target) {
+    const box = resolveTarget(target);
+    if (!box) return false;
+    const view = viewOf(box.tab);
+    if (tabs.activeId !== box.tab) tabs.show(box.tab);
+    applyMove({
+      tab: box.tab,
+      anchor: { row: view.rows[box.r0], col: view.cols[box.c0] },
+      focus: { row: view.rows[box.r1], col: view.cols[box.c1] },
+    });
+    revealFocus();
+    return true;
+  }
+
+  function setConflicts(targets = []) {
+    conflictTargets = Array.isArray(targets) ? [...targets] : [];
+    syncUI({ announce: false });
+  }
+
   return {
     workbook,
     chrome,
@@ -2659,6 +2806,11 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       else delete externalCommands[id];
       chrome.registerCommand(id, fn);
     },
+    // What the sheet says to the person: the interface's own notice line.
+    notice: (text, action) => chrome.showNotice(text, action),
+    hideNotice: () => chrome.hideNotice(),
+    reveal,
+    setConflicts,
     restart,
     dispose,
   };
@@ -2698,6 +2850,22 @@ export function startInterface({
       return first ? first.selection : null;
     },
     of: (workbook) => instances.get(workbook) ?? null,
+    notice(text, action) {
+      const first = instances.values().next().value;
+      first?.notice(text, action);
+    },
+    hideNotice() {
+      const first = instances.values().next().value;
+      first?.hideNotice();
+    },
+    reveal(target) {
+      const first = instances.values().next().value;
+      return first ? first.reveal(target) : false;
+    },
+    setConflicts(targets) {
+      const first = instances.values().next().value;
+      first?.setConflicts(targets);
+    },
     restart() {
       mountMissing();
       for (const inst of instances.values()) inst.restart();

@@ -114,6 +114,12 @@ const OVERLAY_CSS = `
   background: color-mix(in srgb, var(--ref-fill) 32%, transparent);
   z-index: 3;
 }
+.sheet-conflict-box {
+  position: absolute;
+  pointer-events: none;
+  background: color-mix(in srgb, ${TOKENS["ox-soft"]} 65%, transparent);
+  z-index: 2;
+}
 .sheet-fill-handle {
   position: absolute;
   width: 7px;
@@ -409,6 +415,8 @@ export function createOverlays(
   winObj.addEventListener("mouseup", onWinMouseUp);
 
   const refsLayer = doc.createElement("div");
+  const conflictLayer = doc.createElement("div");
+  conflictLayer.className = "sheet-conflict-layer";
   const filterLayer = doc.createElement("div");
   filterLayer.className = "sheet-filter-layer";
   const selFill = doc.createElement("div");
@@ -497,7 +505,7 @@ export function createOverlays(
   live.setAttribute("aria-live", "polite");
   live.setAttribute("aria-atomic", "true");
 
-  root.append(corner, colsLayer, rowsLayer, refsLayer, filterLayer, selFill, activeRing, fillPreview, fillHandle, startHandle, endHandle, chartRing, chartHandle, resizeGuide, linkChip, editorSlot, live);
+  root.append(corner, colsLayer, rowsLayer, conflictLayer, refsLayer, filterLayer, selFill, activeRing, fillPreview, fillHandle, startHandle, endHandle, chartRing, chartHandle, resizeGuide, linkChip, editorSlot, live);
 
   const ui = mountEditorUI({
     name: "sheet-overlays",
@@ -530,6 +538,7 @@ export function createOverlays(
     whole = null,
     editing = false,
     refs = [],
+    conflicts = [],
     shownTab = "",
     fillPreviewBox = null,
     linkUrl = null,
@@ -541,6 +550,7 @@ export function createOverlays(
     if (!table || !view || view.rows.length === 0 || view.cols.length === 0) {
       colsLayer.textContent = "";
       rowsLayer.textContent = "";
+      conflictLayer.textContent = "";
       refsLayer.textContent = "";
       filterLayer.textContent = "";
       selFill.hidden = true;
@@ -601,6 +611,23 @@ export function createOverlays(
       el.setAttribute("data-active-next", active && r < box.bottom ? "true" : "false");
       setHeaderContent(el, String(r + 1), "sheet-row-grip", "data-row-resize", r);
       placeBox(el, origin, { left: firstCell.left - GUTTER_W, top: rb.top, width: GUTTER_W, height: rb.height });
+    });
+
+    const visibleConflicts = conflicts.filter((item) => item.tab === shownTab);
+    while (conflictLayer.children.length > visibleConflicts.length) conflictLayer.lastElementChild.remove();
+    visibleConflicts.forEach((item, idx) => {
+      let el = conflictLayer.children[idx];
+      if (!el) {
+        el = doc.createElement("div");
+        el.className = "sheet-conflict-box";
+        el.setAttribute("data-sheet-conflict", "");
+        conflictLayer.append(el);
+      }
+      const r0 = Math.max(0, Math.min(view.rows.length - 1, item.r0 ?? 0));
+      const r1 = Math.max(0, Math.min(view.rows.length - 1, item.r1 ?? r0));
+      const c0 = Math.max(0, Math.min(view.cols.length - 1, item.c0 ?? 0));
+      const c1 = Math.max(0, Math.min(view.cols.length - 1, item.c1 ?? c0));
+      placeBox(el, origin, metrics.spanBox(r0, c0, r1, c1));
     });
 
     const visibleRefs = refs.filter((ref) => ref.tab === shownTab);

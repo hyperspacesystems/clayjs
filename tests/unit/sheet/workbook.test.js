@@ -377,3 +377,33 @@ test("redrawn moves the revision and leaves every tab unedited", async () => {
   expect(bytes).toContain(">9<");
   expect(bytes).toContain(FIGURE);
 });
+
+// Bug: a Grid change in a room moved the page's revision, so ClayJS's own save raced the room's.
+test("while bound, a Grid edit moves no revision and the page save carries the committed region", async () => {
+  const { Sap, book } = await start();
+  book.bind({ committedInner: () => "<x>", heard: jest.fn() });
+
+  Sap.grid(tableOf("s1")).set("A1", "5");
+
+  expect(book.revision).toBe(0);
+  expect(book.serialize({ purpose: "save" })).toBe("<x>");
+  expect(book.serialize({ purpose: "sync" })).toBe("<x>");
+  expect(book.serialize({ purpose: "recovery" })).toContain(">5<");
+});
+
+// Bug: a merge while bound replaced the live tabs itself, so the room's own delivery was undone.
+test("while bound, a merge hands the incoming page to the binding and leaves the tabs", async () => {
+  const { Sap, book, root } = await start();
+  const saved = book.serialize({ purpose: "save" });
+  Sap.grid(tableOf("s1")).set("A1", "5");
+  const binding = { committedInner: () => "<x>", heard: jest.fn() };
+  book.bind(binding);
+  const live = root.innerHTML;
+
+  const after = book.merge({ document: withCell(saved, "s1", "r1", 2, "nine"), base: docOf(saved) });
+
+  expect(after()).toBe(false);
+  expect(binding.heard).toHaveBeenCalledTimes(1);
+  expect(root.innerHTML).toBe(live);
+  expect(tableOf("s1").querySelector("td").textContent).toBe("5");
+});

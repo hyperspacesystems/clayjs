@@ -442,6 +442,16 @@ export function createChrome({
   viewport?.addEventListener("scroll", onViewport);
 
   const noticeText = bevelText("span", ["flex:1 1 auto", `font:500 12.5px/1.4 ${FONT_SANS}`, `color:${TOKENS.ox}`], "", { theme });
+  let noticeActionFn = null;
+  const noticeActionBtn = bevelButton("", {
+    small: true,
+    variant: "primary",
+    onClick: () => noticeActionFn?.(),
+    theme,
+  });
+  noticeActionBtn.setAttribute("data-sheet-notice-action", "");
+  noticeActionBtn.addEventListener("mousedown", (e) => e.preventDefault());
+  setShown(noticeActionBtn, false, "inline-flex");
   const noticeDismiss = bevelButton("Dismiss", {
     small: true,
     variant: "quiet",
@@ -462,7 +472,7 @@ export function createChrome({
   noticeBar.setAttribute("role", "alert");
   noticeBar.setAttribute("data-sheet-notice", "");
   noticeBar.hidden = true;
-  noticeBar.append(noticeText, noticeDismiss);
+  noticeBar.append(noticeText, noticeActionBtn, noticeDismiss);
 
   const findSlot = doc.createElement("div");
   topRoot.append(toolbar, formulaBar, findSlot, noticeBar);
@@ -527,13 +537,23 @@ export function createChrome({
     attributes: { "sap-ignore": "" },
   });
 
-  function showNotice(message) {
+  function showNotice(message, action = null) {
     noticeText.textContent = message;
+    if (action && typeof action.onAction === "function") {
+      noticeActionFn = action.onAction;
+      noticeActionBtn.textContent = action.label || "Fix";
+      setShown(noticeActionBtn, true, "inline-flex");
+    } else {
+      noticeActionFn = null;
+      setShown(noticeActionBtn, false, "inline-flex");
+    }
     setShown(noticeBar, true, "flex");
   }
 
   function hideNotice() {
     noticeText.textContent = "";
+    noticeActionFn = null;
+    setShown(noticeActionBtn, false, "inline-flex");
     setShown(noticeBar, false, "flex");
   }
 

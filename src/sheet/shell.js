@@ -41,7 +41,7 @@ function paintRulesSoon(table, grid) {
 // Charts draw through the lazy charts.js, loaded only once some tab's rules hold a chart (or the
 // editor inserts one). The editor sets `sheetHooks.chartRedrawn` so a drawing that differs from
 // the saved one on open counts as a change; readers never set it.
-export const sheetHooks = { chartRedrawn: null };
+export const sheetHooks = { chartRedrawn: null, bookOf: null };
 let chartsModule = null;
 let chartsReady = null;
 const chartsWatched = new WeakSet();

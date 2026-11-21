@@ -2362,13 +2362,13 @@ test("column and cell menus disable Sort range on one row, offer Sort range on p
   window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
   expect(inst.chrome.nameBox.value).toBe("A2:C3");
 
-  const applySpy = jest.spyOn(grid(), "apply");
+  const dispatchSpy = jest.spyOn(grid(), "dispatch");
   rows()[1].children[0].dispatchEvent(
     new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 60, clientY: 70 }),
   );
   inst.chrome.topShadow.querySelector('[data-menu-item="sort-range-desc"]').click();
 
-  expect(applySpy).toHaveBeenCalledWith(expect.objectContaining({ v: 1, t: "sort", sheet: "s1", cols: null }));
+  expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ v: 1, t: "sort", sheet: "s1", cols: null }));
   expect(inst.chrome.nameBox.value).toBe("A2:C3");
   expect(grid().get("A1:C3")).toEqual([
     ["k3", 20, "z"],
