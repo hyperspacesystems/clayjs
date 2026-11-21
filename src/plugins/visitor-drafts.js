@@ -170,13 +170,17 @@ if (isDraftMode && slot && rulesTag) {
 
   const held = store.held();
   const head = held?.v === 2 && held.idb === true;
+  const hasJournal = !direct && store.hasRegions() && store.journalSlots().length > 0;
   const foreignReset = !direct && held?.v === 1 && held.w === undefined && store.generation() !== "";
-  if (head || foreignReset || (!direct && held?.w && held.w.reset !== store.generation())) {
-    // The full draft is only in the database, or this copy is from before the last Start
-    // over: the page waits for the database's record, and plugins that read the document
-    // wait with the page.
+  if (head || hasJournal || foreignReset || (!direct && held?.w && held.w.reset !== store.generation())) {
+    // The full draft is only in the database, an unsettled journal slot is waiting to commit,
+    // or this copy is from before the last Start over: the page waits for the database's record,
+    // and plugins that read the document wait with the page.
     restoring = opening.then(() => session?.first).then((result) => {
-      if (result) return finish(store.restore(result.record && { raw: JSON.stringify(result.record), record: result.record }));
+      if (result) {
+        const applied = store.restore(result.record && { raw: JSON.stringify(result.record), record: result.record, regionsHtml: result.regionsHtml });
+        return finish(result.partial ? { ...applied, partial: true } : applied);
+      }
       throw new Error("the draft database did not open");
     }).catch((error) => {
       if (!head) {

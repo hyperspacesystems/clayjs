@@ -130,7 +130,7 @@ test("a rules tag this version cannot read is not a draft page", async () => {
   const spy = jest.spyOn(console, "warn").mockImplementation((line) => warns.push(String(line)));
   try {
     const newer = await bootPage({
-      api: '<script data-rules-name="api" data-rules-version="2" type="application/json">{"title":"h1"}</script>',
+      api: '<script data-rules-name="api" data-rules-version="3" type="application/json">{"title":"h1"}</script>',
     });
     expect(newer.clay.isDraftMode).toBe(false);
     expect(newer.clay.isEditMode).toBe(false);
@@ -150,8 +150,18 @@ test("a rules tag this version cannot read is not a draft page", async () => {
   }
 
   expect(warns).toHaveLength(2);
-  expect(warns[0]).toContain('data-rules-version="2"');
+  expect(warns[0]).toContain('data-rules-version="3"');
   expect(warns[1]).toContain("readable JSON");
+});
+
+test("a version 2 rules tag with a codec rule is a draft page", async () => {
+  const { clay } = await bootPage({
+    api: '<script data-rules-name="api" data-rules-version="2" type="application/json">{"title":"h1","sheets":"[items=sheets]@codec(sheet)"}</script>',
+  });
+
+  expect(clay.isDraftMode).toBe(true);
+  expect(clay.isEditMode).toBe(true);
+  expect(clay.visitorDrafts.active).toBe(true);
 });
 
 test("a file: page is not a draft page", async () => {

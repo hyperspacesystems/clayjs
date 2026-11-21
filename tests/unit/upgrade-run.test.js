@@ -668,3 +668,24 @@ test("a view-mode upgrade writes the bytes it copied with the stamp it read, eve
   expect(saved).toContain("Referral program for early users");
   expect(saved).not.toContain("Changed by the other tab");
 });
+
+test("prepare with sourceHtml preserves canonical @codec(sheet) region bytes verbatim across upgrade", async () => {
+  const sheetHtml = (version, name, cellText) =>
+    `<!DOCTYPE html><html><head><meta name="hyper-version" content="${version}"><meta name="clay-template" content="sheet owned"><script type="application/json" data-rules-name="api" data-rules-version="2">{"name":"#docName","sheets":"[items=sheets]@codec(sheet)"}</script></head><body><h1 id="docName">${name}</h1><div items="sheets" sheet-workbook><section item data-id="s1" data-pos="V"><h2 bind="name">Budget</h2><table grid><colgroup><col data-id="c1" data-pos="V"></colgroup><tbody><tr data-id="r1" data-pos="V"><td>${cellText}</td></tr></tbody></table></section><script type="application/json" sheet-commit>{"rev":1}</script></div></body></html>`;
+  const current = sheetHtml("0.1.0", "My Budget", "Row\u00a0with nbsp");
+  const newer = sheetHtml("0.2.0", "Default Budget", "Sample");
+  const doc = new DOMParser().parseFromString(current, "text/html");
+  const result = await prepare(updateFor(newer, { id: "sheet", variant: "owned", version: "0.2.0" }), {
+    doc,
+    sourceHtml: current,
+    loc: location,
+    fetchFn: sourceFetcher(newer, manifestFor(newer, { id: "sheet", variant: "owned", version: "0.2.0" })),
+  });
+
+  expect(result.ok).toBe(true);
+  expect(result.html).toContain("My Budget");
+  expect(result.html).toContain("<table grid>");
+  expect(result.html).not.toContain('<table grid="">');
+  expect(result.html).toContain("Row\u00a0with nbsp");
+  expect(result.html).not.toContain("&nbsp;");
+});

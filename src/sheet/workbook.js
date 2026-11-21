@@ -396,6 +396,19 @@ export function ownWorkbooks({ onRebuild = () => {} } = {}) {
   document.addEventListener("clay:save-saved", (event) => {
     for (const book of books.values()) book.saved(event.detail?.captureId);
   });
+  // Another open draft tab wrote this region: the live grid redraws from the new bytes.
+  document.addEventListener("clay:drafts-region-external", (event) => {
+    const selector = event.detail?.selector;
+    if (!selector) return;
+    for (const [root, book] of books) {
+      if (book.room || !book.built) continue;
+      if (root.matches?.(selector)) {
+        book.build();
+        window.Sap?.flush?.();
+        onRebuild();
+      }
+    }
+  });
 
   // The engine is sapjs's grid plugin, which derive.js installs. The engine's own wait has a
   // time limit, so a slow download is joined here: the mount waits for this ready. A grid that

@@ -25,8 +25,8 @@ function rulesReady(doc) {
   if (!tag) return false;
   const version = tag.getAttribute("data-rules-version");
   let problem = null;
-  if (version !== "1") {
-    problem = `the api rules tag says data-rules-version="${version ?? ""}" and this version reads version 1`;
+  if (version !== "1" && version !== "2") {
+    problem = `the api rules tag says data-rules-version="${version ?? ""}" and this version reads version 1 or 2`;
   } else {
     try { JSON.parse(tag.textContent); } catch { problem = "the api rules tag does not hold readable JSON"; }
   }

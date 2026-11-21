@@ -76,20 +76,58 @@ export function applyKeys(data, keys, merge3) {
 export const isChain = (value) => isPlain(value) && typeof value.tab === "string" && typeof value.reset === "string" && Array.isArray(value.ops);
 export const recoveryMark = (copy) => isChain(copy) ? `op:${copy.tab}:${copy.ops.at(-1)?.seq ?? copy.acked ?? 0}` : foreignMark(copy);
 
+// Snapshot a v2 record's active region part texts onto an archived conflict/recovery copy so
+// later writes or deletions on the active `parts` rows never destroy the archived copy's cells.
+function snapshotRecord(rec, parts) {
+  if (!rec) return null;
+  const copy = clone(rec);
+  if (isPlain(copy.regions) && Object.keys(copy.regions).length > 0) {
+    const snap = {};
+    for (const [rKey, reg] of Object.entries(copy.regions)) {
+      const byPart = parts?.[rKey];
+      if (!byPart) continue;
+      const kept = {};
+      for (const partId of reg.order ?? []) {
+        if (typeof byPart[partId]?.text === "string") kept[partId] = byPart[partId].text;
+      }
+      if (Object.keys(kept).length > 0) snap[rKey] = kept;
+    }
+    if (Object.keys(snap).length > 0) copy.regionParts = snap;
+  }
+  return copy;
+}
+
 // Ended journals carry only the fields they changed; other fields use the served page.
 export function recoveryRecord(copy, seed) {
-  if (isPlain(copy) && copy.v === 1 && isPlain(copy.data)) return clone(copy);
+  if (isPlain(copy) && (copy.v === 1 || copy.v === 2) && isPlain(copy.data)) return clone(copy);
   if (!isChain(copy) || !copy.ops.length) return null;
   const data = clone(seed);
   let unit = null;
+  let chainRegions = null;
+  let chainParts = null;
   for (const op of copy.ops) {
     for (const [name, pair] of Object.entries(op.keys ?? {})) {
       if ("m" in pair) Object.defineProperty(data, name, { value: clone(pair.m), enumerable: true, writable: true, configurable: true });
       else delete data[name];
     }
     if (op.unit !== undefined) unit = op.unit.to;
+    if (isPlain(op.regions) && Object.keys(op.regions).length > 0) {
+      chainRegions ??= {};
+      chainParts ??= {};
+      for (const [rKey, reg] of Object.entries(op.regions)) {
+        chainRegions[rKey] = { selector: reg.selector, codec: reg.codec, rev: (chainRegions[rKey]?.rev ?? 0) + 1, order: [...(reg.order ?? [])] };
+        chainParts[rKey] = clone(reg.parts ?? {});
+      }
+    }
   }
-  return { v: 1, savedAt: copy.ops.at(-1).savedAt, data, ...(unit && { live: clone(unit.live), blockeditor: clone(unit.blockeditor) }) };
+  const hasReg = Boolean(chainRegions && Object.keys(chainRegions).length > 0);
+  return {
+    v: hasReg ? 2 : 1,
+    savedAt: copy.ops.at(-1).savedAt,
+    data,
+    ...(unit && { live: clone(unit.live), blockeditor: clone(unit.blockeditor) }),
+    ...(hasReg && { regions: chainRegions, regionParts: chainParts }),
+  };
 }
 
 // Cleanup needs proof for this exact chain, even when its generation has ended.
@@ -146,6 +184,11 @@ export function commit(stored, { seed, newId, now, merge3, same, unitMark, marke
   if (!stored.meta && Number.isInteger(local?.w?.rev)) meta.rev = local.w.rev;
   let record = stored.record ? clone(stored.record) : null;
   let v1base = stored.v1base ? clone(stored.v1base) : null;
+  let regions = isPlain(record?.regions) ? clone(record.regions) : null;
+  let partState = {};
+  for (const [name, byPart] of Object.entries(isPlain(stored.parts) ? stored.parts : {})) {
+    if (isPlain(byPart)) partState[name] = clone(byPart);
+  }
   const out = { conflicts: [], recovered: [], released: [], dropped: [], stale: [], applied: {}, changed: !stored.meta };
 
   function recover(copy, supersedes = []) {
@@ -164,7 +207,7 @@ export function commit(stored, { seed, newId, now, merge3, same, unitMark, marke
   for (const reset of ends) {
     if (reset.marker === meta.reset || meta.ended?.includes(reset.marker) || (reset.ends !== null && reset.ends < meta.gen)) continue;
     if (reset.ends !== meta.gen) {
-      if (record) recover(record);
+      if (record) recover(snapshotRecord(record, partState));
     }
     const follows = typeof local?.reset === "string" ? local.reset === reset.marker
       : reset.ends === null || (Array.isArray(local?.ancestry) && local.ancestry.includes("root:" + reset.marker));
@@ -177,19 +220,37 @@ export function commit(stored, { seed, newId, now, merge3, same, unitMark, marke
     meta.rev++;
     record = null;
     v1base = null;
+    regions = null;
+    partState = {};
+    if (meta.regions) delete meta.regions;
     out.changed = true;
   }
 
   // Nothing stored yet: the full copy in `localStorage` is the first record, whether a
   // 1.23.0 tab wrote it (the move) or it is this ClayJS's cache, of this generation, of a
-  // database the browser has since cleared.
-  if (!stored.meta && !record && isPlain(local) && local.v === 1 && isPlain(local.data) && (local.w === undefined || local.w.reset === meta.reset)) {
-    const { w, ...copy } = local;
-    record = clone(copy);
-    if (w === undefined) {
-      v1base = clone(copy);
-      meta.foreign = foreignMark(local);
-      meta.rev++;
+  // database the browser has since cleared. A surviving v2 head (`idb: true`) restores its
+  // surviving small keys over `seed` (Read Rule #4 in 05-drafts-indexeddb.md) instead of
+  // wiping `localStorage`.
+  if (!stored.meta && !record && isPlain(local) && isPlain(local.data) && (local.w === undefined || local.w.reset === meta.reset)) {
+    if (local.v === 1) {
+      const { w, ...copy } = local;
+      record = clone(copy);
+      if (w === undefined) {
+        v1base = clone(copy);
+        meta.foreign = foreignMark(local);
+        meta.rev++;
+      }
+    } else if (local.v === 2 && local.idb === true) {
+      const mergedData = local.full === true ? clone(local.data) : { ...clone(seed), ...clone(local.data) };
+      record = {
+        v: 1,
+        savedAt: local.savedAt ?? new Date(now).toISOString(),
+        id: typeof local.id === "string" ? local.id : newId(),
+        ...(Array.isArray(local.ancestry) && { ancestry: clone(local.ancestry) }),
+        data: mergedData,
+      };
+      if (local.full !== true) out.partial = true;
+      out.changed = true;
     }
   }
   if (!stored.meta) meta.unit = unitMark(unitOf(record));
@@ -214,15 +275,17 @@ export function commit(stored, { seed, newId, now, merge3, same, unitMark, marke
       const page = unitOf(local);
       const paged = Boolean(page) && unitMark(page) !== unitMark(unitOf(base));
       const pageMoved = paged && unitOf(record) && unitMark(unitOf(base)) !== meta.unit;
-      if (merged.conflict || pageMoved) out.conflicts.push(clone(record));
+      if (merged.conflict || pageMoved) out.conflicts.push(snapshotRecord(record, partState));
       const unit = paged ? page : unitOf(record);
+      const held = Boolean(regions && Object.keys(regions).length > 0);
       record = {
-        v: 1,
+        v: held ? 2 : 1,
         savedAt: local.savedAt ?? new Date(now).toISOString(),
         id: newId(),
         ancestry: lineage(typeof local.id === "string" ? [local.id] : [], record, meta),
         data: merged.value,
         ...(unit && { live: unit.live, blockeditor: unit.blockeditor }),
+        ...(held && { regions }),
       };
       if (paged) meta.unit = unitMark(unit);
       v1base = clone(local);
@@ -253,16 +316,41 @@ export function commit(stored, { seed, newId, now, merge3, same, unitMark, marke
       if (op.seq !== at + 1) break;
       const merged = applyKeys(record ? record.data : seed, op.keys ?? {}, merge3);
       const unitMoved = op.unit !== undefined && record && unitOf(record) && op.unit.seen !== meta.unit;
-      if (record && (merged.conflict || unitMoved)) out.conflicts.push(clone(record));
+      let regionMoved = false;
+      const priorSnapshot = record ? snapshotRecord(record, partState) : null;
+      if (isPlain(op.regions) && Object.keys(op.regions).length > 0) {
+        const nextRegions = regions ? { ...regions } : {};
+        const nextMetaRegions = meta.regions ? { ...meta.regions } : {};
+        for (const [rKey, reg] of Object.entries(op.regions)) {
+          const prevMark = nextMetaRegions[rKey] ?? null;
+          if (record && prevMark !== null && reg.seen !== prevMark) regionMoved = true;
+          const nextRev = (nextRegions[rKey]?.rev ?? 0) + 1;
+          nextRegions[rKey] = { selector: reg.selector, codec: reg.codec, rev: nextRev, order: [...reg.order] };
+          const prevParts = partState[rKey] ?? {};
+          const nextParts = {};
+          for (const partId of reg.order) {
+            const text = reg.parts[partId];
+            if (prevParts[partId] && prevParts[partId].text === text) nextParts[partId] = { rev: prevParts[partId].rev, text };
+            else nextParts[partId] = { rev: nextRev, text };
+          }
+          partState[rKey] = nextParts;
+          nextMetaRegions[rKey] = reg.mark;
+        }
+        regions = nextRegions;
+        meta.regions = nextMetaRegions;
+      }
+      if (priorSnapshot && (merged.conflict || unitMoved || regionMoved)) out.conflicts.push(priorSnapshot);
       const unit = op.unit !== undefined ? op.unit.to : unitOf(record);
       const id = newId();
+      const hasRegions = Boolean(regions && Object.keys(regions).length > 0);
       record = {
-        v: 1,
+        v: hasRegions ? 2 : 1,
         savedAt: op.savedAt ?? new Date(now).toISOString(),
         id,
         ancestry: lineage([], record, meta),
         data: merged.value,
         ...(unit && { live: unit.live, blockeditor: unit.blockeditor }),
+        ...(hasRegions && { regions }),
       };
       if (op.unit !== undefined) meta.unit = unitMark(unit);
       meta.rev++;
@@ -288,16 +376,38 @@ export function commit(stored, { seed, newId, now, merge3, same, unitMark, marke
       const chosen = recoveryRecord(found[1], seed);
       if (!chosen) throw new Error("This draft cannot be restored by this version.");
       if (meta.recovery?.includes(recovery.mark)) meta.recovery = [recovery.mark, ...meta.recovery.filter((mark) => mark !== recovery.mark)];
-      const alreadyKept = record && copies.some(([mark, copy]) => {
+      const currentSnap = record ? snapshotRecord(record, partState) : null;
+      const alreadyKept = currentSnap && copies.some(([mark, copy]) => {
         if (!meta.recovery?.includes(mark)) return false;
         const kept = recoveryRecord(copy, seed);
-        return kept && same(record.data, kept.data) && same(unitOf(record), unitOf(kept));
+        return kept && same(currentSnap.data, kept.data) && same(unitOf(currentSnap), unitOf(kept)) && same(currentSnap.regionParts ?? null, kept.regionParts ?? null);
       });
-      if (record && !alreadyKept) recover(record);
+      if (currentSnap && !alreadyKept) recover(currentSnap);
+      const hasChosenRegions = isPlain(chosen.regions) && Object.keys(chosen.regions).length > 0;
+      if (hasChosenRegions) {
+        const nextRegions = {};
+        const nextParts = {};
+        for (const [rKey, reg] of Object.entries(chosen.regions)) {
+          const rev = (regions?.[rKey]?.rev ?? 0) + 1;
+          nextRegions[rKey] = { selector: reg.selector, codec: reg.codec, rev, order: [...(reg.order ?? [])] };
+          nextParts[rKey] = {};
+          for (const partId of reg.order ?? []) {
+            const text = chosen.regionParts?.[rKey]?.[partId];
+            if (typeof text === "string") nextParts[rKey][partId] = { rev, text };
+          }
+        }
+        regions = nextRegions;
+        partState = nextParts;
+      } else {
+        regions = null;
+        partState = {};
+      }
+      if (meta.regions) delete meta.regions;
       record = {
-        v: 1, savedAt: new Date(now).toISOString(), id: newId(),
+        v: hasChosenRegions ? 2 : 1, savedAt: new Date(now).toISOString(), id: newId(),
         ancestry: lineage([], record, meta), data: chosen.data,
         ...(chosen.blockeditor && { live: chosen.live, blockeditor: chosen.blockeditor }),
+        ...(hasChosenRegions && { regions }),
       };
       meta.unit = unitMark(unitOf(record));
       meta.rev++;
@@ -312,7 +422,7 @@ export function commit(stored, { seed, newId, now, merge3, same, unitMark, marke
       out.changed = true;
     }
   }
-  return { meta, record, v1base, ...out };
+  return { meta, record, v1base, parts: partState, ...out };
 }
 
 const parse = (text) => {
@@ -328,7 +438,15 @@ const parse = (text) => {
  */
 export function transact(drafts, key, input, options) {
   return drafts.change(key, (raw) => {
-    const stored = { meta: parse(raw.meta), record: parse(raw.record), v1base: parse(raw.v1base) };
+    const storedParts = {};
+    const existingPartKeys = new Map();
+    for (const [k, val] of raw.parts ?? []) {
+      if (!Array.isArray(k) || k.length !== 3) continue;
+      const [, rKey, partId] = k;
+      (storedParts[rKey] ??= {})[partId] = val;
+      existingPartKeys.set(`${rKey}\u0000${partId}`, { key: k, val });
+    }
+    const stored = { meta: parse(raw.meta), record: parse(raw.record), v1base: parse(raw.v1base), parts: storedParts };
     const rows = raw.rows.map(([name, text]) => [name, parse(text)]);
     const given = input(stored);
     const copies = (raw.recovery ?? []).map(([name, text]) => [name.slice((key + ":recovery:").length), parse(text)]);
@@ -345,6 +463,35 @@ export function transact(drafts, key, input, options) {
     for (const copy of result.recovered) puts.push([recoveryKey(key, recoveryMark(copy)), JSON.stringify(copy)]);
     for (const mark of result.dropped) deletes.push(recoveryKey(key, mark));
     for (const [name, chain] of rows) if (settled(chain, result.meta) || (result.removedMark && isChain(chain) && recoveryMark(chain) === result.removedMark)) deletes.push(name);
-    return { puts, deletes, result };
+    const partPuts = [];
+    const partDeletes = [];
+    const keepKeys = new Set();
+    if (result.record?.regions) {
+      for (const [rKey, reg] of Object.entries(result.record.regions)) {
+        for (const partId of reg.order) {
+          const idKey = `${rKey}\u0000${partId}`;
+          keepKeys.add(idKey);
+          const nextVal = result.parts?.[rKey]?.[partId];
+          const prev = existingPartKeys.get(idKey)?.val;
+          if (nextVal && (!prev || prev.text !== nextVal.text || prev.rev !== nextVal.rev)) partPuts.push([[key, rKey, partId], nextVal]);
+        }
+      }
+    }
+    for (const [idKey, entry] of existingPartKeys) if (!keepKeys.has(idKey)) partDeletes.push(entry.key);
+    if (result.record?.regions) {
+      const regionsHtml = {};
+      for (const [rKey, reg] of Object.entries(result.record.regions)) {
+        const pMap = result.parts?.[rKey] ?? {};
+        if (reg.order.every((partId) => typeof pMap[partId]?.text === "string")) {
+          regionsHtml[rKey] = {
+            selector: reg.selector,
+            codec: reg.codec,
+            html: reg.order.map((partId) => pMap[partId].text).join(""),
+          };
+        }
+      }
+      if (Object.keys(regionsHtml).length) result.regionsHtml = regionsHtml;
+    }
+    return { puts, deletes, partPuts, partDeletes, result };
   }, options);
 }

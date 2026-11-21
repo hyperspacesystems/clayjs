@@ -205,6 +205,165 @@ export function merge3(base, mine, theirs) {
   return merged;
 }
 
+const RAW_TEXT = new Set(["script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes", "noscript", "plaintext"]);
+const TAG_NAME = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)/y;
+const TAG_ATTR = /\s+([^\s"'>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>][^\s>]*)))?/y;
+const TAG_CLOSE = /\s*(\/?)>/y;
+
+function parseSimpleSelector(selector) {
+  if (typeof selector !== "string") return null;
+  let rest = selector.trim();
+  if (!rest || /[\s>+~,]/.test(rest)) return null;
+  let tag = null;
+  const attrs = [];
+  const tagMatch = /^([a-zA-Z][a-zA-Z0-9-]*)/.exec(rest);
+  if (tagMatch) {
+    tag = tagMatch[1].toLowerCase();
+    rest = rest.slice(tagMatch[0].length);
+  }
+  while (rest.length > 0) {
+    const idMatch = /^#([^\s.#\[]+)/.exec(rest);
+    if (idMatch) {
+      attrs.push({ attr: "id", value: idMatch[1] });
+      rest = rest.slice(idMatch[0].length);
+      continue;
+    }
+    const attrMatch = /^\[([^\s=\]]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\]]*)))?\]/.exec(rest);
+    if (attrMatch) {
+      attrs.push({ attr: attrMatch[1].toLowerCase(), value: attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? null });
+      rest = rest.slice(attrMatch[0].length);
+      continue;
+    }
+    return null;
+  }
+  return tag || attrs.length > 0 ? { tag, attrs } : null;
+}
+
+function tagAt(html, at) {
+  TAG_NAME.lastIndex = at;
+  const name = TAG_NAME.exec(html);
+  if (!name) return null;
+  const attrs = new Map();
+  let i = TAG_NAME.lastIndex;
+  for (;;) {
+    TAG_ATTR.lastIndex = i;
+    const attr = TAG_ATTR.exec(html);
+    if (!attr) break;
+    attrs.set(attr[1].toLowerCase(), attr[2] ?? attr[3] ?? attr[4] ?? "");
+    i = TAG_ATTR.lastIndex;
+  }
+  TAG_CLOSE.lastIndex = i;
+  const close = TAG_CLOSE.exec(html);
+  if (!close) return null;
+  return { closing: name[1] === "/", selfClosing: close[1] === "/", name: name[2].toLowerCase(), attrs, start: at, end: TAG_CLOSE.lastIndex };
+}
+
+function walkRaw(html, from, onTag) {
+  let i = from;
+  let template = 0;
+  while (i < html.length) {
+    const lt = html.indexOf("<", i);
+    if (lt < 0) return;
+    if (html.startsWith("<!--", lt)) {
+      if (html[lt + 4] === ">") { i = lt + 5; continue; }
+      if (html.startsWith("->", lt + 4)) { i = lt + 6; continue; }
+      const end = html.indexOf("-->", lt + 4);
+      if (end < 0) return;
+      i = end + 3;
+      continue;
+    }
+    if (html[lt + 1] === "!" || html[lt + 1] === "?") {
+      const end = html.indexOf(">", lt);
+      if (end < 0) return;
+      i = end + 1;
+      continue;
+    }
+    const tag = tagAt(html, lt);
+    if (!tag) { i = lt + 1; continue; }
+    if (tag.name === "template" && !tag.selfClosing) template = Math.max(0, template + (tag.closing ? -1 : 1));
+    else if (template === 0 && onTag(tag, lt) === false) return;
+    i = tag.end;
+    if (!tag.closing && !tag.selfClosing && RAW_TEXT.has(tag.name)) {
+      const closeRe = new RegExp(`</${tag.name}(?=[\\s/>])`, "gi");
+      closeRe.lastIndex = i;
+      const found = closeRe.exec(html);
+      if (!found) return;
+      i = found.index;
+    }
+  }
+}
+
+function findRawRegion(html, selector) {
+  if (typeof html !== "string") return null;
+  const want = parseSimpleSelector(selector);
+  if (!want) return null;
+  let open = null;
+  walkRaw(html, 0, (tag) => {
+    if (tag.closing) return true;
+    if (want.tag && tag.name !== want.tag) return true;
+    for (const clause of want.attrs) {
+      if (!tag.attrs.has(clause.attr)) return true;
+      if (clause.value !== null && tag.attrs.get(clause.attr) !== clause.value) return true;
+    }
+    open = tag;
+    return false;
+  });
+  if (!open) return null;
+  if (open.selfClosing) return { start: open.end, end: open.end, inner: "" };
+  let depth = 1;
+  let end = -1;
+  walkRaw(html, open.end, (tag, at) => {
+    if (tag.name !== open.name) return true;
+    if (tag.closing) {
+      depth -= 1;
+      if (depth === 0) { end = at; return false; }
+    } else if (!tag.selfClosing) depth += 1;
+    return true;
+  });
+  return end < 0 ? null : { start: open.end, end, inner: html.slice(open.end, end) };
+}
+
+export function rawRegionInner(html, selector) {
+  return findRawRegion(html, selector)?.inner ?? null;
+}
+
+export function spliceRawRegion(html, selector, inner) {
+  const found = findRawRegion(html, selector);
+  return found ? html.slice(0, found.start) + inner + html.slice(found.end) : null;
+}
+
+// Compares served DOM innerHTML (which writes bare boolean attributes as `attr=""` and `\u00a0`
+// as `&nbsp;`) against serialized region bytes so an untouched sheet is never falsely recorded.
+function servedRegionMark(inner) {
+  return textMark(
+    inner
+      .replace(/&nbsp;/g, "\u00a0")
+      .replace(/<(?:"[^"]*"|'[^']*'|[^>"'])+>/g, (tag) =>
+        tag.replace(/\s(grid|item|sheet-commit|rules|stale|hidden|n|t|open|stacked)=""(?=[\s/>])/gi, " $1"),
+      )
+      .trim(),
+  );
+}
+
+// A region's inner HTML cut where the codec cuts it, as parts that join back to it exactly.
+function splitRegion(inner, def) {
+  const chunks = inner === "" ? [""] : inner.split(/(?=<section\b|<tbody\b)|(?<=<\/tbody>|<\/section>)/).filter(Boolean);
+  const order = [];
+  const parts = {};
+  const counts = new Map();
+  let sid = "_";
+  for (const chunk of chunks) {
+    const m = /^<section\b[^>]*\bdata-id=(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i.exec(chunk);
+    if (m) sid = m[1] ?? m[2] ?? m[3];
+    const n = counts.get(sid) ?? 0;
+    counts.set(sid, n + 1);
+    const id = `${sid}:${n}`;
+    order.push(id);
+    parts[id] = chunk;
+  }
+  return { selector: def.selector, codec: def.codec, mark: textMark(inner), servedMark: servedRegionMark(inner), order, parts };
+}
+
 export function storageFailure(doc, error) {
   setDraftStoreFailed(true);
   doc.dispatchEvent(new CustomEvent("clay:drafts-store-failed", { detail: { error } }));
@@ -273,7 +432,16 @@ function withoutSiteKey(value) {
 export function createStore({ doc = document, storage = safeStorage(), gate = draftGate, now = () => new Date(), path = draftPath(), fallback = null, slotLimit = SLOT_LIMIT, pendingLimit = PENDING_LIMIT } = {}) {
   const slot = draftSlot(doc);
   const key = draftKey(slot, path);
-  const rules = withoutSiteKey(engine.findRulesIn(doc, "api").rules);
+  const foundRules = engine.findRulesIn(doc, "api");
+  const rawRules = withoutSiteKey(foundRules.rules);
+  const rules = {};
+  const regionDefs = {};
+  for (const [name, rule] of Object.entries(rawRules)) {
+    const codec = foundRules.version === "2" ? engine.codecOf(rule) : null;
+    if (codec) regionDefs[name] = { selector: codec.selector, codec: codec.name };
+    else rules[name] = rule;
+  }
+  const hasRegionRules = Object.keys(regionDefs).length > 0;
 
   let lastRaw = null;
   let base = null;
@@ -298,7 +466,14 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
   let editorUnit = null;
   let seenUnit = null;
 
+  // The page's regions as the served file states them, read once before any restore, and the
+  // regions this tab's editor holds and the ones its record last held.
+  let servedRegions;
+  let editorRegions = {};
+  let seenRegions = {};
+
   const readServed = () => { if (served === undefined) served = readUnit(doc); };
+
   function recordable(unit) {
     if (!unit) return null;
     readServed();
@@ -309,6 +484,45 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
     // never wrote in it. Once this tab has held a recorded page, every page is recorded,
     // even one returned to the served text, so a deletion reaches the other tabs too.
     return differs || editorUnit || seenUnit ? unit : null;
+  }
+
+  const readServedRegions = () => {
+    if (servedRegions) return servedRegions;
+    servedRegions = {};
+    for (const [rKey, def] of Object.entries(regionDefs)) {
+      const el = doc.querySelector(def.selector);
+      if (el) servedRegions[rKey] = splitRegion(el.innerHTML, def);
+    }
+    return servedRegions;
+  };
+
+  // A page's codec regions: read verbatim from the raw HTML string (never via DOMParser
+  // .innerHTML, which rewrites `<table grid>` -> `<table grid="">` and `\u00a0` -> `&nbsp;`).
+  function readRegions(parsed, html) {
+    const out = {};
+    for (const [rKey, def] of Object.entries(regionDefs)) {
+      const inner = typeof html === "string" ? rawRegionInner(html, def.selector) : parsed.querySelector(def.selector)?.innerHTML ?? null;
+      if (inner !== null) out[rKey] = splitRegion(inner, def);
+    }
+    return out;
+  }
+
+  // An untouched region is never recorded, so the owner's later page reaches a visitor who
+  // never wrote in it. Once this tab has held a record's region, every region is recorded.
+  function recordableRegions(current) {
+    readServedRegions();
+    const out = {};
+    for (const [rKey, reg] of Object.entries(current)) {
+      if (reg.servedMark !== servedRegions[rKey]?.servedMark || editorRegions[rKey] || seenRegions[rKey]) out[rKey] = reg;
+    }
+    return out;
+  }
+
+  function sameRegionState(a, b) {
+    for (const rKey of Object.keys(regionDefs)) {
+      if (a?.[rKey]?.mark !== b?.[rKey]?.mark) return false;
+    }
+    return true;
   }
 
   // Runs once the article exists. The visitor-drafts module runs before the page and live
@@ -382,7 +596,7 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
   function parse(raw) {
     try {
       const parsed = JSON.parse(raw);
-      if (isPlain(parsed) && parsed.v === RECORD_VERSION && isPlain(parsed.data)) return parsed;
+      if (isPlain(parsed) && (parsed.v === 1 || parsed.v === 2) && parsed.idb !== true && isPlain(parsed.data)) return parsed;
     } catch {}
     return null;
   }
@@ -491,6 +705,7 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
   // database's when the page waited for it (null: it holds none).
   function restore(found = read()) {
     seedData();
+    readServedRegions();
     if (!found) {
       base = tip = seed;
       whenArticle(readServed);
@@ -499,14 +714,24 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
     fresh = false;
     if (!found.record) return parkedResult(found);
     const unit = unitOf(found.record);
+    const regionsHtml = isPlain(found.regionsHtml) ? found.regionsHtml : null;
+    const hasRegions = Boolean(regionsHtml && Object.keys(regionsHtml).length > 0);
     const hasData = Object.keys(found.record.data).length > 0;
     const fitted = hasData ? fit(found.record.data) : { data: {}, dropped: [] };
     const dataFits = Boolean(fitted) && (!hasData || Object.keys(fitted.data).length > 0);
-    // The page does not depend on the rules: a page is placed even when no saved field fits,
-    // and the whole record is kept aside as well.
-    if (!unit && !dataFits) return parkedResult(found);
-    if (!unit && !hasData) return parkedResult(found);
+    // The page does not depend on the rules: a page or a region is placed even when no saved
+    // field fits, and the whole record is kept aside as well.
+    if (!unit && !hasRegions && !dataFits) return parkedResult(found);
+    if (!unit && !hasRegions && !hasData) return parkedResult(found);
     if (hasData && dataFits) applyData(doc, fitted.data, rules);
+    for (const [rKey, reg] of Object.entries(regionsHtml ?? {})) {
+      const el = doc.querySelector(reg.selector);
+      if (!el) continue;
+      el.innerHTML = reg.html;
+      const split = splitRegion(reg.html, regionDefs[rKey] ?? reg);
+      editorRegions[rKey] = split;
+      seenRegions[rKey] = split;
+    }
     if (unit) {
       whenArticle(() => {
         if (placeUnit(unit)) return;
@@ -533,10 +758,14 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
     try {
       const getHTML = window.clay?.getHTML;
       if (typeof getHTML !== "function") return !fitsInto(live(), base);
-      const parsed = new DOMParser().parseFromString(getHTML.call(window.clay), "text/html");
+      const html = getHTML.call(window.clay);
+      const parsed = new DOMParser().parseFromString(html, "text/html");
       const unit = recordable(readUnit(parsed));
       // A page equal to the one another tab recorded and this tab took in is not this tab's change.
-      return !fitsInto(extractData(parsed, rules), base) || (!sameUnit(unit, editorUnit) && !sameUnit(unit, seenUnit));
+      if (!fitsInto(extractData(parsed, rules), base) || (!sameUnit(unit, editorUnit) && !sameUnit(unit, seenUnit))) return true;
+      if (!hasRegionRules) return false;
+      const current = recordableRegions(readRegions(parsed, html));
+      return !sameRegionState(current, editorRegions) && !sameRegionState(current, seenRegions);
     } catch { return true; }
   }
 
@@ -621,7 +850,8 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
   function capture(html, { reset = tab.reset, at = null } = {}) {
     if (stopped) return null;
     const parsed = pageOf(html);
-    const op = captureData(extractData(parsed, rules), recordable(readUnit(parsed)), reset);
+    const mineRegions = hasRegionRules ? recordableRegions(readRegions(parsed, html)) : {};
+    const op = captureData(extractData(parsed, rules), recordable(readUnit(parsed)), mineRegions, reset);
     capturedAt = at;
     return op;
   }
@@ -641,16 +871,24 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
   function captureLate(reset = tab.reset) {
     if (stopped) return null;
     const settled = capturedAt !== null && doc.querySelector(HANDLER_SEL) !== null && gate()?.unchangedSince(capturedAt) === true;
-    const parsed = pageOf(window.clay?.getHTML?.());
-    return captureData(settled ? base : extractData(parsed, rules), recordable(readUnit(parsed)), reset);
+    const html = window.clay?.getHTML?.();
+    const parsed = pageOf(html);
+    const mineRegions = hasRegionRules ? recordableRegions(readRegions(parsed, html)) : {};
+    return captureData(settled ? base : extractData(parsed, rules), recordable(readUnit(parsed)), mineRegions, reset);
   }
 
-  function captureData(mine, mineUnit, reset = tab.reset) {
+  function captureData(mine, mineUnit, mineRegions = {}, reset = tab.reset) {
     if (unparked != null && park(unparked, { keepSlot: true }) === null) {
       throw storageFailure(doc, new Error("an earlier saved copy could not be kept aside"));
     }
     // Too much is waiting: nothing more is taken until it drains, and the page keeps it.
     if (tab.sizes.reduce((sum, size) => sum + size, 0) >= pendingLimit) throw storageFailure(doc, new Error("too many changes are waiting to be saved"));
+    const regionsOp = {};
+    for (const [rKey, reg] of Object.entries(mineRegions)) {
+      if (reg.mark === editorRegions[rKey]?.mark) continue;
+      regionsOp[rKey] = { selector: reg.selector, codec: reg.codec, seen: seenRegions[rKey]?.mark ?? null, mark: reg.mark, order: reg.order, parts: reg.parts };
+    }
+    const regionsChanged = Object.keys(regionsOp).length > 0;
     const unitChanged = !sameUnit(mineUnit, editorUnit);
     const keys = {};
     for (const name of Object.keys(mine)) {
@@ -658,15 +896,15 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
       // Fields the stored value has and this page's rules lack are carried through.
       keys[name] = name in tip ? { b: tip[name], m: complete(mine[name], tip[name]) } : { m: mine[name] };
     }
-    if (!Object.keys(keys).length && !unitChanged) {
+    if (!Object.keys(keys).length && !unitChanged && !regionsChanged) {
       if (!tab.ops.length) {
         setDraftStoreFailed(false);
         doc.dispatchEvent(new CustomEvent("clay:drafts-saved", { detail: { data: mine, unchanged: true } }));
       }
       return null;
     }
-    if (!tab.ops.length) before = { base, editorUnit, seenUnit };
-    const op = { seq: ++tab.seq, savedAt: now().toISOString(), keys, ...(unitChanged && { unit: { seen: unitMark(seenUnit), to: mineUnit } }) };
+    if (!tab.ops.length) before = { base, editorUnit, seenUnit, editorRegions: { ...editorRegions }, seenRegions: { ...seenRegions } };
+    const op = { seq: ++tab.seq, savedAt: now().toISOString(), keys, ...(unitChanged && { unit: { seen: unitMark(seenUnit), to: mineUnit } }), ...(regionsChanged && { regions: regionsOp }) };
     base = { ...base };
     tip = { ...tip };
     for (const name of Object.keys(keys)) {
@@ -674,6 +912,7 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
       tip[name] = keys[name].m;
     }
     if (unitChanged) editorUnit = seenUnit = mineUnit;
+    for (const [rKey, reg] of Object.entries(regionsOp)) editorRegions[rKey] = seenRegions[rKey] = reg;
     fresh = false;
     tab.reset = reset;
     tab.ops.push(op);
@@ -711,21 +950,36 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
   // The database did not open: what the journal holds goes back to being this page's
   // unsaved changes, for `write` to save.
   function release() {
-    if (tab.ops.length) ({ base, editorUnit, seenUnit } = before);
+    if (tab.ops.length) ({ base, editorUnit, seenUnit, editorRegions, seenRegions } = before);
     capturedAt = null;
     drop();
   }
 
   // A page with nothing unsaved takes in what the database holds: the keys whose stored
   // value is no longer the one this tab was built on.
-  function take(data) {
-    const moved = Object.fromEntries(Object.entries(data).filter(([name, value]) => !same(value, tip[name])));
-    if (!Object.keys(moved).length) return false;
-    const shown = adopt(moved);
-    tip = { ...tip, ...moved };
-    if (shown) base = { ...base, ...shown };
-    fresh = false;
-    return true;
+  function take(data, regionsHtml = null) {
+    let dataUpdated = false;
+    let regionUpdated = false;
+    const moved = Object.fromEntries(Object.entries(data ?? {}).filter(([name, value]) => !same(value, tip[name])));
+    if (Object.keys(moved).length) {
+      const shown = adopt(moved);
+      tip = { ...tip, ...moved };
+      if (shown) base = { ...base, ...shown };
+      fresh = false;
+      dataUpdated = true;
+    }
+    for (const [rKey, reg] of Object.entries(regionsHtml ?? {})) {
+      if (textMark(reg.html) === seenRegions[rKey]?.mark) continue;
+      const el = doc.querySelector(reg.selector);
+      if (el) el.innerHTML = reg.html;
+      const split = splitRegion(reg.html, regionDefs[rKey] ?? reg);
+      editorRegions[rKey] = split;
+      seenRegions[rKey] = split;
+      doc.dispatchEvent(new CustomEvent("clay:drafts-region-external", { detail: { key: rKey, selector: reg.selector, codec: reg.codec, html: reg.html } }));
+      fresh = false;
+      regionUpdated = true;
+    }
+    return Boolean(dataUpdated || regionUpdated);
   }
 
   // The generation this page shows has ended, by this tab's Start over or another tab's:
@@ -745,6 +999,10 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
     const parsed = new DOMParser().parseFromString(html, "text/html");
     const mine = extractData(parsed, rules);
     const mineUnit = recordable(readUnit(parsed));
+    if (hasRegionRules) {
+      const mineRegions = recordableRegions(readRegions(parsed, html));
+      if (Object.keys(mineRegions).length > 0) throw storageFailure(doc, new Error("drafts with regions require IndexedDB"));
+    }
     const mineChanged = !sameUnit(mineUnit, editorUnit);
     const current = getRaw();
     if (fitsInto(mine, base) && !mineChanged && (current === lastRaw || current == null)) {
@@ -857,9 +1115,11 @@ export function createStore({ doc = document, storage = safeStorage(), gate = dr
     merge3,
     unitMark,
     newId,
+    spliceRegion: spliceRawRegion,
     failed: (error) => storageFailure(doc, error),
     generation: () => tab.reset,
     enter: (reset) => { tab.reset = reset; },
+    hasRegions: () => hasRegionRules,
     fresh: () => fresh,
     shown: () => base !== null,
     pending: () => tab.ops.length,

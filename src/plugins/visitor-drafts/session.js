@@ -161,14 +161,19 @@ export async function openSession({ store, storage, doc = document, now = () => 
     const w = { rev: meta.rev, reset: meta.reset };
     const full = JSON.stringify({ ...record, w });
     try {
-      if (full.length <= FULL_COPY_LIMIT) {
+      if (!record.regions && full.length <= FULL_COPY_LIMIT) {
         storage.setItem(key, full);
         lastCache = { ...record, w };
+        remove(key + ":pending");
         return;
       }
     } catch {}
-    // No room for the full copy: a head still says a draft exists.
-    try { storage.setItem(key, headOf(record, w)); } catch {}
+    // No room for the full copy, or a region only the database holds: a head still says a
+    // draft exists.
+    try {
+      storage.setItem(key, headOf(record, w));
+      remove(key + ":pending");
+    } catch {}
   }
 
   async function stopWithPending() {
@@ -299,7 +304,7 @@ export async function openSession({ store, storage, doc = document, now = () => 
     }
     // A page with unsaved changes is never rewritten: its next operation merges instead.
     if (!store.changed()) {
-      if (record && meta.rev !== rev) store.take(record.data);
+      if (record && meta.rev !== rev) store.take(record.data, result.regionsHtml ?? null);
       shownId = record?.id;
       rev = meta.rev;
     }

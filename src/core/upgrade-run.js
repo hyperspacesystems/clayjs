@@ -4,6 +4,133 @@ import { claimDocumentOperation, releaseDocumentOperation } from "./save-core.js
 import { isNewerVersion } from "./version.js";
 import { upgrade, readMeta } from "../vendor/hyper-html-api-upgrade.vendor.js";
 
+const RAW_TEXT = new Set(["script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes", "noscript", "plaintext"]);
+const TAG_NAME = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)/y;
+const TAG_ATTR = /\s+([^\s"'>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>][^\s>]*)))?/y;
+const TAG_CLOSE = /\s*(\/?)>/y;
+const CODEC_RULE = /^(.*?)@codec\(([^)]+)\)$/;
+
+function parseSimpleSelector(selector) {
+  if (typeof selector !== "string") return null;
+  let rest = selector.trim();
+  if (!rest || /[\s>+~,]/.test(rest)) return null;
+  let tag = null;
+  const attrs = [];
+  const tagMatch = /^([a-zA-Z][a-zA-Z0-9-]*)/.exec(rest);
+  if (tagMatch) { tag = tagMatch[1].toLowerCase(); rest = rest.slice(tagMatch[0].length); }
+  while (rest.length > 0) {
+    const idMatch = /^#([^\s.#\[]+)/.exec(rest);
+    if (idMatch) { attrs.push({ attr: "id", value: idMatch[1] }); rest = rest.slice(idMatch[0].length); continue; }
+    const attrMatch = /^\[([^\s=\]]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\]]*)))?\]/.exec(rest);
+    if (attrMatch) { attrs.push({ attr: attrMatch[1].toLowerCase(), value: attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? null }); rest = rest.slice(attrMatch[0].length); continue; }
+    return null;
+  }
+  return tag || attrs.length > 0 ? { tag, attrs } : null;
+}
+
+function tagAt(html, at) {
+  TAG_NAME.lastIndex = at;
+  const name = TAG_NAME.exec(html);
+  if (!name) return null;
+  const attrs = new Map();
+  let i = TAG_NAME.lastIndex;
+  for (;;) {
+    TAG_ATTR.lastIndex = i;
+    const attr = TAG_ATTR.exec(html);
+    if (!attr) break;
+    attrs.set(attr[1].toLowerCase(), attr[2] ?? attr[3] ?? attr[4] ?? "");
+    i = TAG_ATTR.lastIndex;
+  }
+  TAG_CLOSE.lastIndex = i;
+  const close = TAG_CLOSE.exec(html);
+  if (!close) return null;
+  return { closing: name[1] === "/", selfClosing: close[1] === "/", name: name[2].toLowerCase(), attrs, start: at, end: TAG_CLOSE.lastIndex };
+}
+
+function walkRaw(html, from, onTag) {
+  let i = from;
+  let template = 0;
+  while (i < html.length) {
+    const lt = html.indexOf("<", i);
+    if (lt < 0) return;
+    if (html.startsWith("<!--", lt)) {
+      if (html[lt + 4] === ">") { i = lt + 5; continue; }
+      if (html.startsWith("->", lt + 4)) { i = lt + 6; continue; }
+      const end = html.indexOf("-->", lt + 4);
+      if (end < 0) return;
+      i = end + 3;
+      continue;
+    }
+    if (html[lt + 1] === "!" || html[lt + 1] === "?") {
+      const end = html.indexOf(">", lt);
+      if (end < 0) return;
+      i = end + 1;
+      continue;
+    }
+    const tag = tagAt(html, lt);
+    if (!tag) { i = lt + 1; continue; }
+    if (tag.name === "template" && !tag.selfClosing) template = Math.max(0, template + (tag.closing ? -1 : 1));
+    else if (template === 0 && onTag(tag, lt) === false) return;
+    i = tag.end;
+    if (!tag.closing && !tag.selfClosing && RAW_TEXT.has(tag.name)) {
+      const closeRe = new RegExp(`</${tag.name}(?=[\\s/>])`, "gi");
+      closeRe.lastIndex = i;
+      const found = closeRe.exec(html);
+      if (!found) return;
+      i = found.index;
+    }
+  }
+}
+
+function findRawRegion(html, selector) {
+  if (typeof html !== "string") return null;
+  const want = parseSimpleSelector(selector);
+  if (!want) return null;
+  let open = null;
+  walkRaw(html, 0, (tag) => {
+    if (tag.closing) return true;
+    if (want.tag && tag.name !== want.tag) return true;
+    for (const clause of want.attrs) {
+      if (!tag.attrs.has(clause.attr)) return true;
+      if (clause.value !== null && tag.attrs.get(clause.attr) !== clause.value) return true;
+    }
+    open = tag;
+    return false;
+  });
+  if (!open) return null;
+  if (open.selfClosing) return { start: open.end, end: open.end, inner: "" };
+  let depth = 1;
+  let end = -1;
+  walkRaw(html, open.end, (tag, at) => {
+    if (tag.name !== open.name) return true;
+    if (tag.closing) { depth -= 1; if (depth === 0) { end = at; return false; } }
+    else if (!tag.selfClosing) depth += 1;
+    return true;
+  });
+  return end < 0 ? null : { start: open.end, end, inner: html.slice(open.end, end) };
+}
+
+const rawRegionInner = (html, selector) => findRawRegion(html, selector)?.inner ?? null;
+const spliceRawRegion = (html, selector, inner) => {
+  const found = findRawRegion(html, selector);
+  return found ? html.slice(0, found.start) + inner + html.slice(found.end) : null;
+};
+
+function codecRulesIn(doc) {
+  const tag = doc?.querySelector?.('script[data-rules-name~="api"]');
+  if (!tag || String(tag.getAttribute("data-rules-version") || "1").trim() !== "2") return {};
+  let parsed;
+  try { parsed = JSON.parse(tag.textContent || ""); } catch { return {}; }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const out = {};
+  for (const [key, rule] of Object.entries(parsed)) {
+    if (typeof rule !== "string") continue;
+    const m = CODEC_RULE.exec(rule.trim());
+    if (m && m[1].trim() && m[2].trim()) out[key] = { selector: m[1].trim(), codec: m[2].trim() };
+  }
+  return out;
+}
+
 const MANIFEST_FAILED = "The new version could not be downloaded. Nothing was changed.";
 const SAVE_FAILED = "The upgrade could not be saved. Nothing was changed.";
 const CONFLICT = "This document changed somewhere else. Reload and try again.";
@@ -140,6 +267,7 @@ function carryPage(doc, afterDoc, article) {
 
 export async function prepare(update, {
   doc = document,
+  sourceHtml = null,
   loc = location,
   fetchFn = (url, init) => fetch(url, init),
 } = {}) {
@@ -219,6 +347,17 @@ export async function prepare(update, {
     if (!carried) return { ok: false, code: "lost", lost: [], discarded: 0, message: PAGE_LOST };
     html = carried;
   }
+  // Preserve canonical `@codec(...)` region bytes (e.g. bare `<table grid>`, literal `\u00a0`)
+  // verbatim from `sourceHtml`, bypassing `DOMParser` + `.outerHTML` serialization.
+  if (typeof sourceHtml === "string") {
+    const codecRules = codecRulesIn(doc);
+    for (const def of Object.values(codecRules)) {
+      const inner = rawRegionInner(sourceHtml, def.selector);
+      if (inner === null) continue;
+      const spliced = spliceRawRegion(html, def.selector, inner);
+      if (spliced !== null) html = spliced;
+    }
+  }
   const after = upgrade.extractAll(afterDoc).dataByName;
   const lost = lostValues(before, after, renames);
   const discarded = result.summary && result.summary.totals ? result.summary.totals.discarded || 0 : 0;
@@ -294,18 +433,21 @@ async function applyUnderSlot(update, { doc, loc, fetchFn, clay, reload, replace
   // An editing tab's live article holds the editor, not the page: the upgrade starts from
   // the document as a save writes it.
   let source = doc;
+  let sourceHtml = null;
   if (pageClay.isEditMode && typeof pageClay.getHTML === "function") {
     try {
-      source = new DOMParser().parseFromString(await pageClay.getHTML(), "text/html");
+      sourceHtml = await pageClay.getHTML();
+      source = new DOMParser().parseFromString(sourceHtml, "text/html");
     } catch {
       return { ok: false, code: "failed", message: SAVE_FAILED };
     }
   } else {
     // A view-mode tab's live document can change under the download (a disk frame from
     // another tab), so it is copied now, at the same moment as the stamp.
-    source = new DOMParser().parseFromString("<!DOCTYPE html>\n" + doc.documentElement.outerHTML, "text/html");
+    sourceHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+    source = new DOMParser().parseFromString(sourceHtml, "text/html");
   }
-  const prepared = await prepare(update, { doc: source, loc, fetchFn });
+  const prepared = await prepare(update, { doc: source, sourceHtml, loc, fetchFn });
   if (!prepared.ok) return prepared;
 
   const save = typeof replace === "function"

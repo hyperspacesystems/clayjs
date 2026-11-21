@@ -15,7 +15,9 @@ export function createRecovery({ store, session, getHTML = () => window.clay.get
     const rows = await session.listRecovery();
     return rows.map(({ mark, copy }) => {
       const record = recordOf(copy);
-      const fields = copy?.ops ? new Set(copy.ops.flatMap((op) => Object.keys(op.keys ?? {}))).size : Object.keys(record?.data ?? {}).length;
+      const fields = copy?.ops
+        ? new Set(copy.ops.flatMap((op) => [...Object.keys(op.keys ?? {}), ...Object.keys(op.regions ?? {})])).size
+        : Object.keys(record?.data ?? {}).length + Object.keys(record?.regions ?? {}).length;
       return { mark, copy, savedAt: savedAt(copy), fields, available: Boolean(record) };
     }).sort((a, b) => (Date.parse(b.savedAt) || 0) - (Date.parse(a.savedAt) || 0));
   }
@@ -44,7 +46,18 @@ export function createRecovery({ store, session, getHTML = () => window.clay.get
       article.innerHTML = unit.blockeditor.html;
     }
     for (const control of doc.querySelectorAll('input:not([type="password"]):not([type="file"]), textarea, select')) finalizeControlForSave(control);
-    return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+    let out = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+    if (record.regions && record.regionParts) {
+      for (const [rKey, reg] of Object.entries(record.regions)) {
+        const byPart = record.regionParts[rKey];
+        if (!byPart || !Array.isArray(reg.order)) continue;
+        if (!reg.order.every((partId) => typeof byPart[partId] === "string")) continue;
+        const inner = reg.order.map((partId) => byPart[partId]).join("");
+        const spliced = store.spliceRegion(out, reg.selector, inner);
+        if (spliced !== null) out = spliced;
+      }
+    }
+    return out;
   }
 
   async function downloadCopy(copy) {

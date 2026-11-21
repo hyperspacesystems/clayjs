@@ -172,9 +172,13 @@ function wrap(db, keyRange) {
           reads.copyNames = store.getAllKeys(copies);
           reads.copyValues = store.getAll(copies);
         }
+        const partsStore = tx.objectStore(PARTS);
+        const partRange = keyRange.bound([key], [key, []]);
+        reads.partKeys = partsStore.getAllKeys(partRange);
+        reads.partValues = partsStore.getAll(partRange);
         // Requests in one transaction answer in the order they were made: the last one in
         // means every read is.
-        (reads.copyValues ?? reads.values).onsuccess = () => {
+        reads.partValues.onsuccess = () => {
           if (settled) return;
           try {
             const raw = {
@@ -183,10 +187,13 @@ function wrap(db, keyRange) {
               v1base: reads.v1base.result ?? null,
               rows: reads.names.result.map((name, i) => [name, reads.values.result[i]]),
               ...(copies && { recovery: reads.copyNames.result.map((name, i) => [name, reads.copyValues.result[i]]) }),
+              parts: reads.partKeys.result.map((k, i) => [k, reads.partValues.result[i]]),
             };
             const planned = build(raw);
             for (const [name, value] of planned.puts) store.put(value, name);
             for (const name of planned.deletes) store.delete(name);
+            if (planned.partPuts) for (const [k, value] of planned.partPuts) partsStore.put(value, k);
+            if (planned.partDeletes) for (const k of planned.partDeletes) partsStore.delete(k);
             result = planned.result;
           } catch (error) {
             thrown = failure(codeFor(error), error);
