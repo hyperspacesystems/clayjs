@@ -12,26 +12,33 @@ import { REAL_LIMITS } from "./core/limits.js";
 import { copyStore } from "./copy-store.js";
 
 const silent = new Proxy({}, { get: () => () => {} });
-const SETTLED = new Set(["saved", "dropped", "recovered", "kept-refused"]);
+const SETTLED = new Set(["saved", "dropped", "recovered", "kept-refused", "unstored"]);
 const ADMITTED = new Set(["shared", "saved"]);
 const CLOSING_VERDICTS = new Set(["taken", "saved", "kept", "misfit"]);
 const LOOP_CAP = 100_000;
 const MAX_BACKOFF_MS = 60_000;
 
 function openConflicts(notices, store) {
+  const open = new Set();
   const latest = new Map();
   for (const notice of notices) {
     if (notice.kind === "restored" && notice.copy) latest.set(notice.copy, notice.conflicts ?? []);
   }
-  let total = 0;
   for (const conflicts of latest.values()) {
     for (const item of conflicts) {
       const verdict = store?.verdict?.(item.e)?.kind;
       if (verdict && CLOSING_VERDICTS.has(verdict)) continue;
-      total += 1;
+      open.add(item.e);
     }
   }
-  return total;
+  for (const copy of store?.copies?.() ?? []) {
+    for (const mark of copy?.marks ?? []) {
+      if (mark?.e && mark.kind === "open" && store?.verdict?.(mark.e)?.kind === "open") {
+        open.add(mark.e);
+      }
+    }
+  }
+  return open.size;
 }
 
 /**
@@ -68,7 +75,9 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
   let unsubscribe = () => {};
   const restoring = new Set();
   const lostFrames = new Set();
+  const kept = [];
   let spaceMarks = 0;
+  let lastGen = null;
   let lastThrough = 0;
   // The store asks for a read when the host answered: the core's read retries unstored copies and
   // unwritten marks (`storeAgain`, `writeMarks`). It needs no new download of the page: the read
@@ -172,7 +181,28 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
     if (held && editing()) releaseHeld();
     for (let tries = 0; tab.fetched && tries < 8; tries++) link(env, tab);
     let turns = 0;
-    while (toTab(env, tab)) if (++turns > LOOP_CAP) throw new Error("the room client stopped: the room log did not advance");
+    while (true) {
+      if (attached(env, tab) && mirror && tab.cursor < mirror.log.length) {
+        const nextFrame = mirror.log[tab.cursor];
+        if (nextFrame && nextFrame.k !== "receipt" && nextFrame.action && handles.has(nextFrame.e) && tab.state?.wb && typeof codec?.apply === "function") {
+          const handle = handles.get(nextFrame.e);
+          if (!handle.inverse) {
+            try {
+              const beforeDoc = structuredClone(tab.state.wb);
+              const applied = codec.apply(beforeDoc, nextFrame.action);
+              if (applied?.inverse) handle.inverse = applied.inverse;
+            } catch {}
+          }
+        }
+      }
+      if (!toTab(env, tab)) break;
+      if (++turns > LOOP_CAP) throw new Error("the room client stopped: the room log did not advance");
+    }
+    keepUnstorable();
+    if (tab.gen !== lastGen) {
+      lastGen = tab.gen;
+      lastThrough = tab.base?.through ?? 0;
+    }
     if ((tab.base?.through ?? 0) > lastThrough) {
       lastThrough = tab.base.through;
       spaceMarks += 1;
@@ -393,6 +423,23 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
     });
   }
 
+  // A recovery copy the host will never store (413/409/400 or no copy store) stays in this tab
+  // (counted in status.unstored) while its edits settle as "unstored" so flush() and rotation
+  // are never wedged forever.
+  function keepUnstorable() {
+    for (const draft of tab.unstored.filter((one) => store.unstorable(one.id))) {
+      kept.push(draft);
+      tab.unstored = tab.unstored.filter((one) => one !== draft);
+      const ids = draft.fresh ?? draft.about?.edits?.map((entry) => entry.e) ?? draft.edits?.map((entry) => entry.e) ?? [];
+      for (const id of ids) {
+        const one = tab.edits.get(id);
+        if (one && !SETTLED.has(one.state)) one.state = "unstored";
+      }
+    }
+    if (kept.length) {
+      tab.pending = tab.pending.filter((req) => tab.edits.get(req.id)?.state !== "unstored");
+    }
+  }
   // The save loop: a save when edits pause for idleMs, and at the latest maxMs after the first
   // unsaved one. Every save is a conditional write, so a second writer is refused, never merged.
   const unsaved = () => Boolean(tab.state) && tab.a > (tab.base?.through ?? 0);
@@ -427,7 +474,8 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
     idleTimer = maxTimer = null;
     pump(async () => {
       await refresh();
-      if (!capture(env, tab) && unsaved()) saveFails += 1;
+      keepUnstorable();
+      if (!tab.io && !capture(env, tab) && !tab.io && unsaved() && attached(env, tab) && !tab.fetched && !tab.wake) saveFails += 1;
       await settle();
     });
   }
@@ -467,7 +515,7 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
         generation: tab.gen,
         through: tab.base?.through ?? null,
         copies: store.copies().length,
-        unstored: tab.unstored.length,
+        unstored: tab.unstored.length + kept.length,
         restoring: Boolean(tab.job),
         pendingMarks: tab.marks.length,
         conflicts: openConflicts(tab.notices, store),
@@ -485,7 +533,7 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
       handles.set(id, handle);
       releaseHeld();
       nudge();
-      return { id, admitted: handle.admitted, durable: handle.durable };
+      return { id, admitted: handle.admitted, durable: handle.durable, get inverse() { return handle.inverse ?? null; } };
     },
     // Waits for the edits that exist now and for the file to hold everything this tab has seen
     // admitted (a coworker's edit included), and says what happened to each of this tab's edits.
@@ -512,7 +560,7 @@ export function createRoomClient({ page, codec, clientId, fetch, subscribe, limi
     },
     notices: () => tab.notices,
     copies: () => store.copies(),
-    unstoredCopies: () => tab.unstored.map(({ id, about, body }) => ({ id, about, body })),
+    unstoredCopies: () => [...tab.unstored, ...kept].map(({ id, about, edits, body }) => ({ id, about, edits, body })),
     refreshCopies: () =>
       pump(async () => {
         await store.load();
@@ -783,7 +831,7 @@ export function createFileClient({ page, codec, clientId, fetch, subscribe, limi
       handle.durable = new Promise((resolve) => (handle.settle = resolve));
       handles.set(id, handle);
       after();
-      return { id, admitted: handle.admitted, durable: handle.durable };
+      return { id, admitted: handle.admitted, durable: handle.durable, get inverse() { return handle.inverse ?? null; } };
     },
     async flush() {
       const ids = [...handles.keys()];
@@ -804,7 +852,7 @@ export function createFileClient({ page, codec, clientId, fetch, subscribe, limi
     },
     notices: () => tab.notices,
     copies: () => store.copies(),
-    unstoredCopies: () => [...tab.unstored, ...kept].map(({ id, about, body }) => ({ id, about, body })),
+    unstoredCopies: () => [...tab.unstored, ...kept].map(({ id, about, edits, body }) => ({ id, about, edits, body })),
     refreshCopies: () =>
       pump(async () => {
         await store.load();

@@ -222,12 +222,14 @@ export function startShell({ root = document, windowOptions = {} } = {}) {
     delayTimer?.unref?.();
   }
 
+const GRID_TABLES = "[sheet-workbook] table[grid], [sap] table[grid]";
+
   // A window for every table that has none; a table that left the page loses its window. A
   // table that stayed keeps its window and the row heights it measured.
   function open() {
     if (!canWindow) return;
     const keep = new Set();
-    for (const table of root.querySelectorAll("[sap] table[grid]")) {
+    for (const table of root.querySelectorAll(GRID_TABLES)) {
       // A rule that would also select another table hides that table's rows too, so a
       // table its scope does not name alone gets no window: it shows every row, slower.
       const named = doc.querySelectorAll(scopeOf(table));
@@ -247,14 +249,17 @@ export function startShell({ root = document, windowOptions = {} } = {}) {
     for (const off of unsubscribe.splice(0)) off();
     const sapRef = win.Sap;
     scanOpenFormats(gridOf, sapRef);
+    const tables = [...root.querySelectorAll(GRID_TABLES)];
     if (!formatsRequested && !formatsInstalled() && typeof gridOf?.fmtKind === "function") {
-      for (const table of root.querySelectorAll("[sap] table[grid]")) {
+      for (const table of tables) {
         unsubscribe.push(gridOf(table).on("change", (ev) => checkChangeFormats(table, gridOf, sapRef, ev)));
       }
     }
+    for (const table of tables) {
+      watchRules(table, gridOf(table), () => windows.get(table) ?? null);
+    }
     for (const [table, winRow] of windows) {
       unsubscribe.push(gridOf(table).on("change", winRow.follow));
-      watchRules(table, gridOf(table), () => windows.get(table) ?? null);
       winRow.follow({ rescanned: true });
     }
   }
@@ -265,7 +270,7 @@ export function startShell({ root = document, windowOptions = {} } = {}) {
   // engine stops waiting for plugins after a few seconds, so on a slow connection the mount can
   // come before the grid: this joins the download still on its way.
   const followed = Promise.resolve(win.clay?.ready).then(async () => {
-    if (disposed || (windows.size === 0 && !root.querySelector("[sap] table[grid]"))) return;
+    if (disposed || (windows.size === 0 && !root.querySelector(GRID_TABLES))) return;
     if (typeof win.Sap?.grid !== "function") await win.Sap?.plugins?.load?.("grid");
     if (disposed) return;
     if (typeof win.Sap?.grid === "function") {

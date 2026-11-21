@@ -89,21 +89,26 @@ export function outsideStep(env, source, current, keep, replace = false, extras 
     const record = { v: 2, doc: current.record.doc ?? DOC, gen: room.gen, epoch: room.epoch, commit: nextCommit(env), parent: room.base.commit, through: room.seq, room: room.id };
     backup = { record, body: serialize(record, room.state, backupExtras) };
   }
-  const epoch = current.record.epoch + 1;
-  const before = planted("restore-replays-admitted") ? {} : (room ?? current).state.seen;
+  const beforeState = (room ?? current).state;
+  const before = planted("restore-replays-admitted") ? {} : beforeState.seen;
   const merged = [];
   const range = {};
   for (const client of new Set([...Object.keys(source.state.seen), ...Object.keys(before)])) {
     const [low, lowAt] = source.state.seen[client] ?? [0, -1];
     const [high, highAt] = before[client] ?? [0, -1];
-    merged.push([client, [Math.max(low, high), Math.max(lowAt, highAt)]]);
+    const dropped = !planted("restore-replays-admitted") && !(client in before) && lowAt <= beforeState.floor;
+    const stale = !(client in source.state.seen) && highAt <= source.state.floor;
+    if (Math.max(low, high) > 0 && !dropped && !stale) {
+      merged.push([client, [Math.max(low, high), Math.max(lowAt, highAt)]]);
+    }
     range[client] = [low, high];
   }
-  const folded = trimLedger(merged, Math.max(source.state.floor, (room ?? current).state.floor), env.limits.ledgerCap);
+  const folded = trimLedger(merged, Math.max(source.state.floor, beforeState.floor), env.limits.ledgerCap);
+  const epoch = Math.max(current.record.epoch, room?.epoch ?? 0, folded.floor) + 1;
   const seen = {};
   const bounds = {};
-  for (const [client, [n]] of folded.kept) {
-    seen[client] = [n, epoch];
+  for (const [client, [n, at]] of folded.kept) {
+    seen[client] = [n, Math.max(at, 0)];
     if (range[client][1] > range[client][0]) bounds[client] = range[client];
   }
   const kept = planted("restore-keeps-lineage");

@@ -327,12 +327,16 @@ export function openFilterPanel(ctx, tabId, colId, anchor) {
   }
 
   function apply() {
+    const current = ctx.viewOf(tabId);
+    if (current.rows.indexOf(spec.header) === -1 || current.cols.indexOf(colId) === -1) {
+      close();
+      return;
+    }
     const conditionValue = condition.value === "none" ? null : { op: condition.value, arg: arg.value };
     const keptValues = allTexts.filter((text) => checked.has(text));
     const nextValues = keptValues.length === allTexts.length ? null : new Set(keptValues);
     if (nextValues === null && conditionValue === null) spec.criteria.delete(colId);
     else spec.criteria.set(colId, { values: nextValues, condition: conditionValue });
-    const current = ctx.viewOf(tabId);
     const hidden = hiddenRowsFor(current, spec);
     spec.hidden = hidden;
     ctx.setFilter(tabId, spec);
@@ -348,16 +352,17 @@ export function openFilterPanel(ctx, tabId, colId, anchor) {
 
   function sortBy(direction) {
     const current = ctx.viewOf(tabId);
+    const liveColIndex = current.cols.indexOf(colId);
     const table = tabTable(ctx.workbook, tabId);
     const grid = ctx.gridOf(table);
     const rows = rangeRows(current, spec);
     const heading = current.rows.indexOf(spec.header);
-    if (!grid || heading === -1 || rows.length < 2) {
+    if (!grid || heading === -1 || liveColIndex === -1 || rows.length < 2) {
       close();
       return;
     }
     const box = { top: heading + 1, left: 0, bottom: rows[rows.length - 1], right: current.cols.length - 1 };
-    const action = buildRangeSortAction(grid, current, { sheet: tabId, box, col: colIndex, direction });
+    const action = buildRangeSortAction(grid, current, { sheet: tabId, box, col: liveColIndex, direction });
     if (action) {
       ctx.writeGrid(() => grid.dispatch(action));
       ctx.refreshStatus();

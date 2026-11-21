@@ -7,30 +7,56 @@ import { style } from "../../lib/hostile-css.js";
 const CLOSING_MARKS = new Set(["taken", "saved", "kept", "misfit"]);
 
 function fallbackOpenConflicts(room) {
-  if (typeof room?.notices !== "function") return 0;
-  const notices = room.notices();
-  if (!Array.isArray(notices) || notices.length === 0) return 0;
   const closed = new Set();
+  const open = new Set();
   for (const copy of room?.copies?.() ?? []) {
     for (const mark of copy?.marks ?? []) {
       if (mark?.e && CLOSING_MARKS.has(mark.kind)) closed.add(mark.e);
     }
   }
+  const notices = typeof room?.notices === "function" ? room.notices() : [];
+  if (Array.isArray(notices)) {
+    const latestByCopy = new Map();
+    for (const notice of notices) {
+      if (notice && notice.kind === "restored" && notice.copy) {
+        latestByCopy.set(notice.copy, notice);
+      }
+    }
+    for (const notice of latestByCopy.values()) {
+      if (!Array.isArray(notice.conflicts)) continue;
+      for (const item of notice.conflicts) {
+        if (item?.e && closed.has(item.e)) continue;
+        if (item?.e) open.add(item.e);
+      }
+    }
+  }
+  for (const copy of room?.copies?.() ?? []) {
+    for (const mark of copy?.marks ?? []) {
+      if (mark?.e && mark.kind === "open" && !closed.has(mark.e)) open.add(mark.e);
+    }
+  }
+  return open.size;
+}
+
+function recoveryAttention(room) {
+  const notices = typeof room?.notices === "function" ? room.notices() ?? [] : [];
+  const copies = typeof room?.copies === "function" ? room.copies() ?? [] : [];
   const latestByCopy = new Map();
   for (const notice of notices) {
     if (notice && notice.kind === "restored" && notice.copy) {
       latestByCopy.set(notice.copy, notice);
     }
   }
-  let total = 0;
+  let unapplied = 0;
   for (const notice of latestByCopy.values()) {
-    if (!Array.isArray(notice.conflicts)) continue;
-    for (const item of notice.conflicts) {
-      if (item?.e && closed.has(item.e)) continue;
-      total += 1;
-    }
+    unapplied += (notice.misfit?.length ?? 0) + (notice.left?.length ?? 0);
   }
-  return total;
+  if (unapplied > 0) return { count: unapplied, kind: "unapplied" };
+  if (room?.status?.mode === "file" && copies.length > 0) {
+    const edits = copies.reduce((sum, copy) => sum + (Array.isArray(copy.edits) ? copy.edits.length : 0), 0);
+    if (edits > 0) return { count: edits, kind: "file-copy" };
+  }
+  return null;
 }
 
 function classifyStatus(room) {
@@ -53,6 +79,7 @@ function classifyStatus(room) {
       : fallbackOpenConflicts(room);
   const restoring = Boolean(status.restoring);
   const error = status.error ?? null;
+  const attention = recoveryAttention(room);
 
   const isSaved =
     (mode === "ordered" || mode === "file") &&
@@ -63,6 +90,7 @@ function classifyStatus(room) {
     unstored === 0 &&
     pendingMarks === 0 &&
     conflicts === 0 &&
+    !attention &&
     !restoring &&
     !error;
 
@@ -190,6 +218,21 @@ function classifyStatus(room) {
     };
   }
 
+  if (attention) {
+    const noun = attention.count === 1 ? "edit" : "edits";
+    return {
+      key: "recovery",
+      tone: "brass",
+      text: null,
+      buttonLabel:
+        attention.kind === "file-copy"
+          ? `${attention.count} recovered ${noun}`
+          : `${attention.count} ${noun} not applied`,
+      buttonKind: "recovery",
+      mono: true,
+    };
+  }
+
   if (isSaved) {
     return {
       key: "saved",
@@ -283,7 +326,7 @@ export function createSaveChip({ room, onOpenRecovery, onDownload, theme = null 
       else onDownload?.();
       return;
     }
-    if (kind === "conflicts") {
+    if (kind === "conflicts" || kind === "recovery") {
       onOpenRecovery?.();
     }
   }

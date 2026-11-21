@@ -5,7 +5,8 @@
 import { randomInt } from "node:crypto";
 import { createOrderedRooms } from "../../../src/server/rooms/index.js";
 import { outsideFold } from "../../../src/live-room/core/fileonly.js";
-import { resolved } from "../../../src/live-room/core/ledger.js";
+import { covered, epochOf, resolved } from "../../../src/live-room/core/ledger.js";
+import { accounted } from "../../../src/live-room/core/recover.js";
 import { parse } from "../../../src/live-room/core/record.js";
 import { useCodec } from "../../../src/live-room/core/codec.js";
 import { REAL_LIMITS } from "../../../src/live-room/core/limits.js";
@@ -199,6 +200,21 @@ export function createReferenceHost({ codecs, codec, room = true, keep = true, r
     });
   }
 
+  function isDurable(file, admitted, client, num) {
+    const entry = {
+      c: client,
+      n: num,
+      b: epochOf(admitted.gen),
+      src: [admitted.gen, admitted.seq],
+      org: [admitted.gen, admitted.seq],
+      via: [],
+    };
+    const how = accounted(file, entry);
+    if (how === "saved") return true;
+    if (how === "replaced") return false;
+    return how === "resolved" && Boolean(covered(file.state, admitted.gen));
+  }
+
   // A host client's action (an agent cell patch while people edit, plan 09 section 2.9): admits
   // the action in the open room, broadcasts it, waits up to `waitMs` for a tab's commit covering
   // `seq`, then falls back to `finalSave` so the caller hears "ok" only after it is on disk.
@@ -211,26 +227,39 @@ export function createReferenceHost({ codecs, codec, room = true, keep = true, r
       return { answer: res.answer, applied: res.applied, seq: res.seq, id: res.id, gen: live.gen };
     });
     if (admitted.answer !== "ok") return { ...admitted, etag: doc(key).etag };
+    const sep = admitted.id.lastIndexOf(":");
+    const client = sep > 0 ? admitted.id.slice(0, sep) : admitted.id;
+    const num = Number(admitted.id.slice(sep + 1));
     const end = Date.now() + waitMs;
     while (Date.now() < end) {
       const live = rooms.get(key);
-      if (!live || live.gen !== admitted.gen) break;
-      if (live.base.through >= admitted.seq) return { ...admitted, etag: doc(key).etag };
+      if (!live) break;
+      if (live.gen === admitted.gen) {
+        if (live.base.through >= admitted.seq) return { ...admitted, etag: doc(key).etag };
+      } else {
+        const cov = covered(live.state, admitted.gen);
+        if (!cov) break;
+        if (cov[1] >= admitted.seq) return { ...admitted, etag: doc(key).etag };
+        useCodec(codecs[codec]);
+        if (isDurable(parse(doc(key).bytes), admitted, client, num)) {
+          return { ...admitted, etag: doc(key).etag };
+        }
+      }
       await new Promise((r) => setTimeout(r, 5));
     }
     const live = rooms.get(key);
-    if (live && live.gen === admitted.gen && live.base.through < admitted.seq) await finalSave(key);
+    if (live && ((live.gen === admitted.gen && live.base.through < admitted.seq) || (live.gen !== admitted.gen && covered(live.state, admitted.gen) && live.seq > live.base.through))) {
+      await finalSave(key);
+    }
     const after = rooms.get(key);
     if (after && after.gen === admitted.gen && after.base.through >= admitted.seq) {
       return { ...admitted, etag: doc(key).etag };
     }
-    // Room closed or moved before our commit landed: check whether the file ledger resolved our id.
+    // Check whether the file on disk actually holds our admitted action (same gen, covered lineage,
+    // or adopted into an unbroken lineage successor) rather than a cut from outsideWrite.
     useCodec(codecs[codec]);
     const file = parse(doc(key).bytes);
-    const sep = admitted.id.lastIndexOf(":");
-    const client = sep > 0 ? admitted.id.slice(0, sep) : admitted.id;
-    const num = Number(admitted.id.slice(sep + 1));
-    const durable = resolved(file.state, client) >= num;
+    const durable = isDurable(file, admitted, client, num);
     return { ...admitted, answer: durable ? "ok" : "lost", applied: durable, etag: doc(key).etag };
   }
 

@@ -159,6 +159,12 @@ export function createRoomBinding(
     const targetTab = tabId ?? action.sheet ?? (action.t === "batch" ? action.actions[0]?.sheet : null);
     if (probe?.inverse && targetTab && !TAB_ACTIONS.has(action.t)) {
       const stepItem = { revert: { ...probe.inverse, of: handle.id }, of: handle.id };
+      handle.admitted?.then?.(() => {
+        if (handle.inverse) {
+          stepItem.revert = { ...handle.inverse, of: handle.id };
+          recomputeStackBytes(targetTab);
+        }
+      });
       if (collect) {
         collect.push({ tab: targetTab, step: stepItem, handle });
       } else {
@@ -302,6 +308,21 @@ export function createRoomBinding(
     stack.done.push(item);
     stack.bytes += item.bytes;
     trimStack(stack);
+  }
+
+  function recomputeStackBytes(tab) {
+    const stack = stacks.get(tab);
+    if (!stack) return;
+    let total = 0;
+    for (const item of stack.done) {
+      item.bytes = entryBytes(item.steps);
+      total += item.bytes;
+    }
+    for (const item of stack.undone) {
+      item.bytes = entryBytes(item.steps);
+      total += item.bytes;
+    }
+    stack.bytes = total;
   }
 
   function dropEntry(tab, id) {
@@ -481,6 +502,10 @@ export function createRoomBinding(
     const rows = backing.rows();
     const sheet = want.sheet;
     const fmtChangedCols = new Set();
+    let needsFormatter = false;
+    const checkFmt = (code) => {
+      if (code && Sap.grid?.fmtKind?.(code) === "unknown") needsFormatter = true;
+    };
     const structural =
       cols.length !== sheet.cols.length ||
       rows.length !== sheet.rows.length ||
@@ -491,13 +516,16 @@ export function createRoomBinding(
     if (structural) {
       if (!touched()) return;
       whole(want.id);
-      syncRecords(want, backing, changed, fmtChangedCols);
+      syncRecords(want, backing, changed, fmtChangedCols, checkFmt);
     } else {
       sheet.cols.forEach((col, c) => {
         const here = cols[c];
         if (here.pos === col.pos && here.width === col.width && here.fmt === col.fmt && Boolean(here.hidden) === Boolean(col.hidden)) return;
         if (!touched()) return;
-        if (here.fmt !== col.fmt) fmtChangedCols.add(c);
+        if (here.fmt !== col.fmt) {
+          fmtChangedCols.add(c);
+          checkFmt(col.fmt);
+        }
         backing.putCol(c, { pos: col.pos, width: col.width, fmt: col.fmt, hidden: col.hidden });
         changed.cols.push({ sheet: want.id, col: col.id, kind: "change" });
       });
@@ -521,10 +549,12 @@ export function createRoomBinding(
           continue;
         }
         if (!touched()) return;
+        if (nextCell?.fmt) checkFmt(nextCell.fmt);
         backing.putCell(r, c, nextCell ? { ...nextCell } : null);
         if (c < widths.length) changed.cells.push({ sheet: want.id, row: row.id, col: widths[c].id });
       }
     });
+    if (needsFormatter) backing.setStale?.(true);
     const here = JSON.stringify(backing.rules());
     const there = JSON.stringify(sheet.rules ?? []);
     if (here !== there && touched()) {
@@ -534,8 +564,9 @@ export function createRoomBinding(
   }
 
   // Every column and row the room has and the page lacks, in the room's order, then the freeze.
-  function syncRecords(want, backing, changed, fmtChangedCols) {
+  function syncRecords(want, backing, changed, fmtChangedCols, checkFmt) {
     const sheet = want.sheet;
+    let reordered = false;
     const wanted = new Set(sheet.cols.map((col) => col.id));
     for (let i = backing.cols().length - 1; i >= 0; i--) {
       if (wanted.has(backing.cols()[i].id)) continue;
@@ -545,6 +576,7 @@ export function createRoomBinding(
     sheet.cols.forEach((col, at) => {
       const here = backing.colIndex(col.id);
       if (here === -1) {
+        if (col.fmt) checkFmt?.(col.fmt);
         backing.insertCol(at, { ...col });
         changed.cols.push({ sheet: want.id, col: col.id, kind: "insert" });
         return;
@@ -552,10 +584,14 @@ export function createRoomBinding(
       if (here !== at) {
         backing.moveCol(here, at);
         changed.cols.push({ sheet: want.id, col: col.id, kind: "move" });
+        reordered = true;
       }
       const now = backing.cols()[at];
       if (now.pos === col.pos && now.width === col.width && now.fmt === col.fmt && Boolean(now.hidden) === Boolean(col.hidden)) return;
-      if (now.fmt !== col.fmt) fmtChangedCols?.add(at);
+      if (now.fmt !== col.fmt) {
+        fmtChangedCols?.add(at);
+        checkFmt?.(col.fmt);
+      }
       backing.putCol(at, { pos: col.pos, width: col.width, fmt: col.fmt, hidden: col.hidden });
       changed.cols.push({ sheet: want.id, col: col.id, kind: "change" });
     });
@@ -575,12 +611,14 @@ export function createRoomBinding(
       if (here !== at) {
         backing.moveRow(here, at);
         changed.rows.push({ sheet: want.id, row: row.id, kind: "move" });
+        reordered = true;
       }
       const now = backing.rows()[at];
       if (now.pos === row.pos && now.style === row.style && Boolean(now.hidden) === Boolean(row.hidden)) return;
       backing.putRow(at, { pos: row.pos, style: row.style, hidden: row.hidden });
       changed.rows.push({ sheet: want.id, row: row.id, kind: "change" });
     });
+    if (reordered) changed.sorted.push(want.id);
     const frozen = { rows: bindingFrozen(sheet.rows), cols: sheet.freezeCols ?? 0 };
     const now = backing.frozen();
     if (now.rows !== frozen.rows || now.cols !== frozen.cols) {
@@ -802,9 +840,11 @@ function servedInner(incoming, index) {
   }
   const root = incoming.document?.querySelectorAll("[sheet-workbook]")[index] ?? null;
   if (!root) return null;
-  return root.innerHTML.replace(/<[^>]+\/?>/g, (tag) =>
-    tag.replace(/\s(grid|item|sheet-commit|rules|stale|hidden|n|t)=""(?=[\s>])/g, " $1"),
-  );
+  return root.innerHTML
+    .replace(/<(?:"[^"]*"|'[^']*'|[^>"'])+>/g, (tag) =>
+      tag.replace(/\s(grid|item|sheet-commit|rules|stale|hidden|n|t|open|stacked)=""(?=[\s/>])/g, " $1"),
+    )
+    .replace(/&nbsp;/g, "\u00a0");
 }
 
 // A tab's `<table grid>` bytes, as a tab insert takes them.

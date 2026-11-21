@@ -4852,3 +4852,39 @@ test("Shift+F10 over a chart's box opens that chart's menu", async () => {
   expect(inst.overlays.chartRing.hidden).toBe(false);
   ui.dispose();
 });
+
+// Bug (X2 round 1 #5): reveal() jumped to another tab without settling an open cell editor,
+// discarding uncommitted text on the original tab.
+test("reveal commits an open cell edit before switching tabs", async () => {
+  const { Sap, ui, inst } = await start(BOOK());
+  const s1 = tableOf("s1");
+  const grid1 = Sap.grid(s1);
+  // Start editing A1 on s1 without committing.
+  press(inst.editor.textarea, "Enter");
+  inst.editor.textarea.value = "CommittedBeforeReveal";
+  inst.editor.textarea.dispatchEvent(new Event("input", { bubbles: true }));
+
+  // Jump to a cell on s2 via reveal().
+  expect(inst.reveal("s2/r1/c1")).toBe(true);
+  await turn();
+
+  expect(grid1.get("A1")).toBe("CommittedBeforeReveal");
+  ui.dispose();
+});
+
+// Bug (X2 round 1 #11): a foreign change left the open filter panel targeting a stale column index.
+test("onForeignChange closes an open filter panel on the affected tab", async () => {
+  const { Sap, ui, inst } = await start(BOOK());
+  inst.chrome.topShadow.querySelector('[data-command="filter"]')?.click();
+  await turn();
+  const filterBtn = inst.overlays.shadow.querySelector('[data-filter-col="0"]');
+  expect(filterBtn).not.toBeNull();
+  filterBtn.click();
+  await turn();
+  expect(inst.chrome.topShadow.querySelector("[data-filter-panel]")).not.toBeNull();
+  // Simulate a foreign structural change (peer inserts a column before A).
+  Sap.grid(tableOf("s1")).insertCols("A", 1);
+  await turn();
+  expect(inst.chrome.topShadow.querySelector("[data-filter-panel]")).toBeNull();
+  ui.dispose();
+});

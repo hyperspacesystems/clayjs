@@ -3,7 +3,7 @@
  */
 import v8 from "node:v8";
 import { createReferenceHost } from "../../live-room/host/reference-host.mjs";
-import { createRoomClient } from "../../../src/live-room/room-client.js";
+import { createRoomClient, connect } from "../../../src/live-room/room-client.js";
 import { serialize, parse } from "../../../src/live-room/core/record.js";
 import { useCodec } from "../../../src/live-room/core/codec.js";
 import { labLimits } from "../../../src/live-room/core/limits.js";
@@ -1000,4 +1000,253 @@ describe("createRecoveryPanel", () => {
     expect(chip.el.textContent).toContain("Saved");
     expect(panel.el.querySelectorAll("[data-conflict-card]").length).toBe(0);
   }, 15_000);
+
+  // Bug it catches: after reload, a misfit edit on a deleted row was classified via countedSet as
+  // "1 already saved" (green teal badge in Earlier) and its lost value was hidden (X1 round 5 #5).
+  test("surfaces dropped misfit edit on deleted row after reload instead of reporting already saved", async () => {
+    const w = createWorld();
+    let holdCopy = true;
+    const ana = w.join("ana", {
+      idleMs: 10,
+      maxMs: 25,
+      waitMs: 25,
+      fetch: gated(w.host, isCopyWrite, () => holdCopy),
+    });
+    await ana.ready;
+    await strandEdits(w, ana, [setCell("r1", "c1", "LOST_BUDGET_50000")]);
+    const ben = w.join("ben");
+    await ben.ready;
+    await ben.submit(delRow("r1")).durable;
+    await ben.flush();
+    await ben.close();
+
+    holdCopy = false;
+    await until(() => ana.notices().some((n) => n.kind === "restored" && n.misfit.includes("ana:1")));
+    await ana.flush();
+
+    // Same-session save chip must not show green "Saved" with no recovery button when misfit dropped (X1 round 5 #10B).
+    const chip = createSaveChip({ room: ana, onOpenRecovery: () => {} });
+    openDisposables.push(chip);
+    expect(chip.el.getAttribute("data-save-state")).toBe("recovery");
+    expect(chip.el.querySelectorAll("button")).toHaveLength(1);
+    expect(chip.el.textContent).toContain("1 edit not applied");
+
+    await ana.close();
+
+    const ana2 = w.join("ana-reloaded", { idleMs: 10, maxMs: 25, waitMs: 25 });
+    await ana2.ready;
+    const panel = createRecoveryPanel({ room: ana2, codec: tiny });
+    openDisposables.push(panel);
+    panel.open();
+    const checkBtn = buttonByText(panel.el, "Check and restore");
+    expect(checkBtn).toBeDefined();
+    checkBtn.click();
+
+    await until(() => Boolean(panel.el.querySelector('[data-unsettleable-kind="misfit"]')));
+    expect(panel.el.textContent).toContain("LOST_BUDGET_50000");
+    expect(panel.el.textContent).toContain("1 no longer has a place");
+    expect(panel.el.textContent).not.toContain("already saved");
+    expect(panel.el.querySelector("[data-earlier-section]")).toBeNull();
+  }, 15_000);
+
+  // Bug it catches: reloading while an open conflict mark exists on the host dropped status.conflicts
+  // to 0 and turned the save chip green "Saved" with no recovery button (X1 round 5 #10A).
+  test("keeps open conflict visible on save chip and room.status.conflicts after reload", async () => {
+    const w = createWorld();
+    let holdCopy = true;
+    const ana = w.join("ana", {
+      idleMs: 10,
+      maxMs: 25,
+      waitMs: 25,
+      fetch: gated(w.host, isCopyWrite, () => holdCopy),
+    });
+    await ana.ready;
+    await strandEdits(w, ana, [setCell("r1", "c1", "ANA_MINE")]);
+    const ben = w.join("ben");
+    await ben.ready;
+    await ben.submit(setCell("r1", "c1", "BEN_COWORKER")).durable;
+    await ben.close();
+
+    holdCopy = false;
+    await until(() => ana.status.conflicts === 1);
+    await ana.flush();
+    await ana.close();
+
+    const anaReloaded = w.join("ana_reload", { idleMs: 10, maxMs: 25, waitMs: 25 });
+    await anaReloaded.ready;
+    expect(anaReloaded.status.conflicts).toBe(1);
+    const chip = createSaveChip({ room: anaReloaded, onOpenRecovery: () => {} });
+    openDisposables.push(chip);
+    expect(chip.el.getAttribute("data-save-state")).toBe("conflicts");
+    expect(chip.el.textContent).toContain("1 conflict to review");
+    expect(chip.el.querySelectorAll("button")).toHaveLength(1);
+  }, 15_000);
+
+  // Bug it catches: file-only mode trapped stored copies behind a dead-end "Check and restore" button
+  // while showing "Saved", and createFileClient.unstoredCopies() stripped `edits` (X1 round 5 #6).
+  test("file-only mode surfaces stored copy values directly without dead-end restore and preserves unstored edits", async () => {
+    async function retireAna(withCopies) {
+      const limits = labLimits({ ledgerCap: 120 });
+      const host = createReferenceHost({ codecs: { tiny }, codec: "tiny", room: false, rooms: { limits } });
+      useCodec(tiny);
+      host.put("doc", serialize(RECORD, structuredClone(START)));
+      let dropSaves = false;
+      let mutePushes = false;
+      const ana = await connect({
+        page: "doc",
+        codec: tiny,
+        clientId: "ana",
+        fetch: (url, init = {}) =>
+          dropSaves && init.method === "POST" && String(url).includes("/_/save")
+            ? Promise.reject(new TypeError("save lost"))
+            : host.fetch(url, init),
+        subscribe: (page, clientId, listener) => host.subscribe(page, clientId, (ev) => !mutePushes && listener(ev)),
+        extensions: withCopies ? ["ordered-file", "recovery-copies"] : ["ordered-file"],
+        limits,
+        idleMs: 10,
+        maxMs: 25,
+      });
+      openClients.push(ana);
+      await ana.ready;
+      dropSaves = true;
+      mutePushes = true;
+      ana.submit(setCell("r1", "c1", "STRANDED_ONE"));
+      ana.submit(setCell("r2", "c1", "STRANDED_TWO"));
+      ana.submit(setCell("r2", "c2", "STRANDED_THREE"));
+      await new Promise((r) => setTimeout(r, 30));
+      for (let i = 1; i <= 8; i++) {
+        const peer = await connect({
+          page: "doc",
+          codec: tiny,
+          clientId: `peer_${i}`,
+          fetch: host.fetch,
+          subscribe: host.subscribe,
+          extensions: ["ordered-file"],
+          limits,
+          idleMs: 5,
+          maxMs: 15,
+        });
+        await peer.ready;
+        peer.submit(setCell("r1", "c2", `p${i}`));
+        await peer.flush();
+        await peer.close();
+      }
+      dropSaves = false;
+      mutePushes = false;
+      ana.submit(setCell("r1", "c2", "after-retire"));
+      await ana.flush();
+      return ana;
+    }
+
+    const anaStored = await retireAna(true);
+    await until(() => anaStored.copies().length === 1);
+    const chip = createSaveChip({ room: anaStored, onOpenRecovery: () => {} });
+    const panel = createRecoveryPanel({ room: anaStored, codec: tiny });
+    openDisposables.push(chip, panel);
+    expect(chip.el.getAttribute("data-save-state")).toBe("recovery");
+    expect(chip.el.textContent).toContain("3 recovered edits");
+    panel.open();
+    expect(buttonByText(panel.el, "Check and restore")).toBeUndefined();
+    expect(panel.el.textContent).toContain("STRANDED_ONE");
+    expect(panel.el.textContent).toContain("STRANDED_TWO");
+    expect(panel.el.textContent).toContain("STRANDED_THREE");
+
+    const anaUnstored = await retireAna(false);
+    const unstoredPanel = createRecoveryPanel({ room: anaUnstored, codec: tiny });
+    openDisposables.push(unstoredPanel);
+    unstoredPanel.open();
+    const cardText = unstoredPanel.el.querySelector("[data-unstored-copy]")?.textContent ?? "";
+    expect(cardText).toContain("3 edits could not be stored");
+    expect(cardText).toContain("STRANDED_ONE");
+    expect(cardText).toContain("STRANDED_TWO");
+    expect(cardText).toContain("STRANDED_THREE");
+  }, 15_000);
+
+  // Bug it catches: recovery-panel crashed when an adopted dup frame had action: null, and leaked
+  // raw internal IDs (r3/r1, s1/r2) in freeze conflicts and unsettleable deleteRows cards (X2 round 1 #7).
+  test("handles null action without crashing and formats freeze and deleteRows labels without raw IDs", async () => {
+    const Sap = (await import("../../../src/vendor/sap-core.vendor.js")).default;
+    const gridPlugin = (await import("../../../src/vendor/sap-grid.vendor.js")).default;
+    if (!Sap.grid) Sap.use(gridPlugin);
+    const sheetCodec = Sap.grid.roomCodec;
+    const initialDoc = {
+      tabs: [
+        {
+          id: "s1",
+          name: "Budget",
+          pos: "b",
+          sheet: {
+            cols: [{ id: "c1", pos: "b" }, { id: "c2", pos: "c" }],
+            rows: [
+              { id: "r1", pos: "b", cells: [{ text: "Header" }, { text: "Amount" }] },
+              { id: "r2", pos: "c", cells: [{ text: "Travel" }, { text: "500", n: true }] },
+              { id: "r3", pos: "d", cells: [{ text: "Meals" }, { text: "120", n: true }] },
+            ],
+            rules: [],
+          },
+        },
+      ],
+    };
+    const room1 = mockRoom(
+      { unstored: 1 },
+      {
+        view: () => structuredClone(initialDoc),
+        unstoredCopies: () => [{ id: "r1", about: { edits: [{ e: "c1:1", c: "c1", n: 1, out: "applied", action: null, saw: null }] }, body: "" }],
+      },
+    );
+    const panel1 = createRecoveryPanel({ room: room1, codec: sheetCodec });
+    openDisposables.push(panel1);
+    expect(() => panel1.open()).not.toThrow();
+
+    const freezeAction = { v: 1, t: "freeze", sheet: "s1", rowsThrough: "r3" };
+    const sawFreeze = sheetCodec.seen(initialDoc, freezeAction);
+    const deleteRowAction = { v: 1, t: "deleteRows", sheet: "s1", rows: ["r2"] };
+    const peerDoc = structuredClone(initialDoc);
+    sheetCodec.apply(peerDoc, { v: 1, t: "freeze", sheet: "s1", rowsThrough: "r1" });
+    sheetCodec.apply(peerDoc, { v: 1, t: "deleteRows", sheet: "s1", rows: ["r2"] });
+    const freezeConflicts = sheetCodec.conflicts(peerDoc, freezeAction, sawFreeze);
+
+    const room2 = mockRoom(
+      { copies: 1, conflicts: 1 },
+      {
+        view: () => structuredClone(peerDoc),
+        copies: () => [
+          {
+            id: "r2",
+            v: 4,
+            edits: [
+              { e: "c1:2", c: "c1", n: 2, out: "applied", action: freezeAction, saw: sawFreeze },
+              { e: "c1:3", c: "c1", n: 3, out: "applied", action: deleteRowAction, saw: null },
+            ],
+            marks: [{ e: "c1:2", kind: "open" }, { e: "c1:3", kind: "misfit" }],
+          },
+        ],
+        notices: () => [
+          {
+            kind: "restored",
+            job: "t1#1",
+            copy: "r2",
+            conflicts: [{ e: "c1:2", cells: freezeConflicts }],
+            applied: [],
+            kept: [],
+            misfit: ["c1:3"],
+            saved: [],
+            replaced: [],
+            counted: [],
+            refused: [],
+            held: [],
+            removed: [],
+            left: [],
+          },
+        ],
+      },
+    );
+    const panel2 = createRecoveryPanel({ room: room2, codec: sheetCodec });
+    openDisposables.push(panel2);
+    panel2.open();
+    const text = panel2.el.textContent;
+    expect(text).toContain("Row 1");
+    expect(text).toContain("Row 2");
+    expect(text).not.toContain("Delete rows · s1/r2");
+  });
 });

@@ -53,6 +53,14 @@ function walk(html, from, onTag) {
     const lt = html.indexOf('<', i);
     if (lt < 0) return;
     if (html.startsWith('<!--', lt)) {
+      if (html[lt + 4] === '>') {
+        i = lt + 5;
+        continue;
+      }
+      if (html.startsWith('->', lt + 4)) {
+        i = lt + 6;
+        continue;
+      }
       const end = html.indexOf('-->', lt + 4);
       if (end < 0) return;
       i = end + 3;

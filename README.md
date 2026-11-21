@@ -138,7 +138,7 @@ attribute:
 ```
 
 Tokens: `no-save`, `no-snapshot`, `no-trigger-autosave`, `no-dirty`, `no-watch`, `no-undo`,
-`no-data`, `editor-ui`, `freeze`, `live`. `no-data` excludes a subtree from content-aware reads without
+`no-data`, `no-copy`, `no-copy-unless:paid-forms`, `editor-ui`, `freeze`, `live`. `no-data` excludes a subtree from content-aware reads without
 changing save, watch, snapshot, or undo behavior. `editor-ui` combines `no-data`, `no-save`,
 `no-snapshot`, `no-watch`, and `no-undo` for live editing controls. Native DOM queries still see
 both markers. Add `autosave` to `<html>` to save automatically on change.

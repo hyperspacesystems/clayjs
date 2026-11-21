@@ -617,3 +617,52 @@ test("re-attaching the same connection under a new clientId frees the previous c
   rooms.leave(room, "conn-1");
   expect(rooms.used()).toBe(baseline);
 });
+
+// Bug it catches: establish() on an open dirty room overwrote the room from stale disk bytes,
+// silently destroying unsaved admitted edits (X1 round 5 #2).
+test("establish() carries unsaved admitted edits when the open room is dirty and refuses stale-generation bytes", () => {
+  const { rooms, room, bytes } = opened();
+  rooms.attach(room, "ana", "conn-ana");
+  const admitted = rooms.submit(room, set("r1", "c1", "CRITICAL_PATCH"));
+  expect(admitted.answer).toBe("ok");
+
+  // Stale bytes from an earlier generation are refused while the open room is dirty.
+  expect(rooms.establish("doc", { bytes: serialize(RECORD, START), etag: "e0", codec: "tiny" })).toBeNull();
+
+  // Same-generation establish carries the dirty tail into the new generation and records lineage through room.seq.
+  const next = rooms.establish("doc", { bytes, etag: "e1", codec: "tiny" });
+  expect(next).not.toBeNull();
+  useCodec(tiny);
+  const parsed = parse(next.bytes);
+  expect(parsed.state.wb.rows.r1.cells.c1).toBe("CRITICAL_PATCH");
+  expect(parsed.state.lineage[0]).toEqual([room.gen, admitted.seq]);
+  expect(rooms.fileAccepted("doc", { bytes: next.bytes, etag: "e2" }).answer).toBe("establishing");
+  expect(rooms.get("doc").state.wb.rows.r1.cells.c1).toBe("CRITICAL_PATCH");
+});
+
+// Bug it catches: establish() and outsideWrite() hardcoded calc=false even when recalculate:true,
+// stamping <table grid stale> on clean sheets and leaving dependent formulas stale (X1 round 5 #4).
+test("establish() and outsideWrite() honor recalculate: true without stamping stale on clean sheets", async () => {
+  const Sap = (await import("../../../src/vendor/sap-core.vendor.js")).default;
+  const gridPlugin = (await import("../../../src/vendor/sap-grid.vendor.js")).default;
+  if (!Sap.grid) Sap.use(gridPlugin);
+  const sheetCodec = Sap.grid.roomCodec;
+  const cleanHtml =
+    `<section item data-id="s1" data-pos="V"><h2 bind="name">Sheet1</h2>` +
+    `<table grid><colgroup><col data-id="c1" data-pos="V"><col data-id="c2" data-pos="l"></colgroup>` +
+    `<tbody><tr data-id="r1" data-pos="V"><td n v="5">5</td><td n f="=A1*2">10</td></tr></tbody></table></section>` +
+    `<script type="application/json" sheet-commit>{"rev":1}</script>`;
+
+  const rooms = createOrderedRooms({ codecs: { sheet: sheetCodec }, recalculate: true });
+  const est = rooms.establish("doc", { bytes: cleanHtml, etag: '"e0"', codec: "sheet" });
+  expect(est.bytes).not.toMatch(/<table\b[^>]*\bstale\b/i);
+  rooms.open("doc", { bytes: est.bytes, etag: '"e1"' });
+
+  const { doc, record } = sheetCodec.read(est.bytes);
+  sheetCodec.apply(doc, { v: 1, t: "set", sheet: "s1", cells: [["r1", "c1", 50]] });
+  const incoming = sheetCodec.write(doc, record);
+  const step = rooms.outsideWrite("doc", { bytes: incoming, current: est.bytes, codec: "sheet" });
+  expect(step.same).toBe(false);
+  expect(step.bytes).toMatch(/f="=A1\*2">100<\/td>|v="100"/);
+  expect(step.bytes).not.toMatch(/<table\b[^>]*\bstale\b/i);
+});

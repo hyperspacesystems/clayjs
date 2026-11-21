@@ -63,7 +63,7 @@ test("ordered-room render preserves chart drawings and recalculates when recalcu
 
   const est = rooms.establish("doc", { bytes: initial, etag: "e0", codec: "rich" });
   expect(est.bytes).toContain("<!--drawing:svg-v1-->");
-  expect(est.bytes).not.toContain("<!--calc:");
+  expect(est.bytes).toContain("<!--calc:calc(a)-->");
 
   const room = rooms.open("doc", { bytes: est.bytes, etag: "e1" });
   const sub = rooms.submit(room, set("r1", "c1", "42"));

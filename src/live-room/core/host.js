@@ -42,14 +42,14 @@ function outsideStep(env, source, current, keep, replace = !1, extras = void 0, 
     const record2 = { v: 2, doc: current.record.doc ?? DOC, gen: room.gen, epoch: room.epoch, commit: nextCommit(env), parent: room.base.commit, through: room.seq, room: room.id };
     backup = { record: record2, body: serialize(record2, room.state, backupExtras) };
   }
-  const epoch = current.record.epoch + 1, before = (room ?? current).state.seen, merged = [], range = {};
+  const beforeState = (room ?? current).state, before = beforeState.seen, merged = [], range = {};
   for (const client of /* @__PURE__ */ new Set([...Object.keys(source.state.seen), ...Object.keys(before)])) {
-    const [low, lowAt] = source.state.seen[client] ?? [0, -1], [high, highAt] = before[client] ?? [0, -1];
-    merged.push([client, [Math.max(low, high), Math.max(lowAt, highAt)]]), range[client] = [low, high];
+    const [low, lowAt] = source.state.seen[client] ?? [0, -1], [high, highAt] = before[client] ?? [0, -1], dropped = !(client in before) && lowAt <= beforeState.floor, stale = !(client in source.state.seen) && highAt <= source.state.floor;
+    Math.max(low, high) > 0 && !dropped && !stale && merged.push([client, [Math.max(low, high), Math.max(lowAt, highAt)]]), range[client] = [low, high];
   }
-  const folded = trimLedger(merged, Math.max(source.state.floor, (room ?? current).state.floor), env.limits.ledgerCap), seen = {}, bounds = {};
-  for (const [client, [n]] of folded.kept)
-    seen[client] = [n, epoch], range[client][1] > range[client][0] && (bounds[client] = range[client]);
+  const folded = trimLedger(merged, Math.max(source.state.floor, beforeState.floor), env.limits.ledgerCap), epoch = Math.max(current.record.epoch, room?.epoch ?? 0, folded.floor) + 1, seen = {}, bounds = {};
+  for (const [client, [n, at]] of folded.kept)
+    seen[client] = [n, Math.max(at, 0)], range[client][1] > range[client][0] && (bounds[client] = range[client]);
   const kept = !1, state = {
     wb: source.state.wb,
     seen,

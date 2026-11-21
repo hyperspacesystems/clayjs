@@ -1202,3 +1202,206 @@ test("room.view() returns null instead of crashing when initial load failed", as
   expect(() => fileClient.view()).not.toThrow();
   expect(fileClient.view()).toBeNull();
 });
+
+// Story: an agent submits a cell patch via host.submit() while a human restores an earlier version
+// (cutting the room) or triggers a generation rotation; submit() reported false "ok" on cut and
+// false "lost" on rotation.
+// Bug it catches: submit() judged durability with raw resolved() ignoring cut/lineage and broke out
+// of its wait loop on generation rotation (X1 round 5 #1).
+test("host.submit() reports lost on outsideWrite cut and ok across generation rotation", async () => {
+  const hostA = createReferenceHost({ codecs: { tiny }, codec: "tiny", rooms: { limits: labLimits() } });
+  useCodec(tiny);
+  const initialBytes = serialize(RECORD, structuredClone(START));
+  hostA.put("doc", initialBytes);
+  const anaA = createRoomClient({ page: "doc", codec: tiny, clientId: "ana", fetch: hostA.fetch, subscribe: hostA.subscribe, limits: labLimits(), idleMs: 60_000, maxMs: 120_000, waitMs: 30 });
+  open.push(anaA);
+  await anaA.ready;
+  await anaA.submit(set("r2", "c1", "human-open")).admitted;
+  await anaA.flush();
+  const cutSubmit = hostA.submit("doc", set("r1", "c1", "AGENT_PATCH"), { waitMs: 120 });
+  await pause(15);
+  await hostA.outside("doc", initialBytes, "restore");
+  const cutRes = await cutSubmit;
+  expect(cutRes.answer).toBe("lost");
+  expect(cutRes.applied).toBe(false);
+
+  const hostB = createReferenceHost({ codecs: { tiny }, codec: "tiny", rooms: { limits: labLimits() } });
+  useCodec(tiny);
+  hostB.put("doc", serialize(RECORD, structuredClone(START)));
+  const anaB = createRoomClient({ page: "doc", codec: tiny, clientId: "ana", fetch: hostB.fetch, subscribe: hostB.subscribe, limits: labLimits(), idleMs: 40, maxMs: 80, waitMs: 20 });
+  open.push(anaB);
+  await anaB.ready;
+  await anaB.submit(set("r2", "c1", "open-room")).admitted;
+  await anaB.flush();
+  const beforeRotateEtag = hostB.file("doc").etag;
+  const rotSubmit = hostB.submit("doc", set("r1", "c1", "AGENT_ROTATED"), { waitMs: 150 });
+  await pause(10);
+  const rotRes = await hostB.fetch("/_/sync/room?page=doc&op=establish", { method: "POST", headers: { "if-match": beforeRotateEtag } });
+  expect(rotRes.ok).toBe(true);
+  const resB = await rotSubmit;
+  expect(resB.answer).toBe("ok");
+  expect(resB.applied).toBe(true);
+  useCodec(tiny);
+  expect(parse(hostB.file("doc").bytes).state.wb.rows.r1.cells.c1).toBe("AGENT_ROTATED");
+});
+
+// Story: uploading a downloaded sheet with floor=6 onto epoch=0 bricked co-editing as retired, and
+// restoring a pre-trim version revived a retired client so a stale request replayed.
+// Bug it catches: outsideStep ignored folded.floor when advancing epoch and omitted outsideFold's
+// dropped/stale filters (X1 round 5 #3).
+test("outsideStep keeps epoch above floor on upload and does not revive retired clients on restore", async () => {
+  const hostA = createReferenceHost({ codecs: { tiny }, codec: "tiny", rooms: { limits: labLimits() } });
+  useCodec(tiny);
+  hostA.put("doc", serialize(RECORD, structuredClone(START)));
+  const uploadedCopy = serialize(
+    { v: 2, doc: "doc0123456789abc", gen: "8.00000009", epoch: 8, commit: "c00000000099", parent: "c00000000098", through: 1 },
+    { wb: { rows: { r1: { pos: "1", cells: { c1: "uploaded-v8" } }, r2: { pos: "2", cells: {} } } }, seen: { oldUser: [1, 8] }, lineage: [], cut: null, floor: 6 },
+  );
+  await hostA.outside("doc", uploadedCopy, "upload");
+  useCodec(tiny);
+  const afterUpload = parse(hostA.file("doc").bytes);
+  expect(afterUpload.record.epoch).toBeGreaterThan(afterUpload.state.floor);
+  const ana = createRoomClient({ page: "doc", codec: tiny, clientId: "ana", fetch: hostA.fetch, subscribe: hostA.subscribe, limits: labLimits(), idleMs: 10, maxMs: 30, waitMs: 20 });
+  open.push(ana);
+  await ana.ready;
+  ana.submit(set("r1", "c1", "ana-fresh-edit"));
+  await inTime(ana.flush(), 1000, "upload-epoch-floor: flush timed out");
+  useCodec(tiny);
+  expect(parse(hostA.file("doc").bytes).state.wb.rows.r1.cells.c1).toBe("ana-fresh-edit");
+
+  const limits = labLimits({ ledgerCap: 120 });
+  const hostB = createReferenceHost({ codecs: { tiny }, codec: "tiny", rooms: { limits } });
+  useCodec(tiny);
+  hostB.put("doc", serialize(RECORD, structuredClone(START)));
+  const anaB = createRoomClient({ page: "doc", codec: tiny, clientId: "ana", fetch: hostB.fetch, subscribe: hostB.subscribe, limits, idleMs: 5, maxMs: 15, waitMs: 20 });
+  await anaB.ready;
+  await anaB.submit(set("r1", "c1", "v1-ana1")).durable;
+  await anaB.flush();
+  const version1Bytes = hostB.file("doc").bytes;
+  await anaB.submit(set("r1", "c1", "STALE_ANA_2")).durable;
+  await anaB.flush();
+  const anaEpoch = parse(hostB.file("doc").bytes).record.epoch;
+  await anaB.close();
+  for (let i = 1; i <= 10; i++) {
+    const p = createRoomClient({ page: "doc", codec: tiny, clientId: `ed_${i}`, fetch: hostB.fetch, subscribe: hostB.subscribe, limits, idleMs: 5, maxMs: 15, waitMs: 20 });
+    await p.ready;
+    await p.submit(set("r2", "c1", `step-${i}`)).durable;
+    await p.flush();
+    await pause(20);
+    await p.close();
+    useCodec(tiny);
+    const cur = parse(hostB.file("doc").bytes);
+    if (!("ana" in cur.state.seen) && cur.state.floor >= anaEpoch && Object.keys(cur.state.seen).length <= 2) break;
+  }
+  await hostB.outside("doc", version1Bytes, "restore");
+  const ben = createRoomClient({ page: "doc", codec: tiny, clientId: "ben", fetch: hostB.fetch, subscribe: hostB.subscribe, limits, idleMs: 5, maxMs: 15, waitMs: 20 });
+  open.push(ben);
+  await ben.ready;
+  await ben.submit(set("r2", "c1", "open-after-restore")).admitted;
+  const openRoom = hostB.rooms.get("doc");
+  const replayRes = hostB.rooms.frame(openRoom, "ana", {
+    k: "req",
+    gen: openRoom.gen,
+    c: "ana",
+    n: 2,
+    p: 1,
+    b: anaEpoch,
+    e: "ana:2",
+    action: set("r1", "c1", "STALE_ANA_2"),
+    saw: ["v1-ana1"],
+  });
+  expect(replayRes.answer).toBe("retired");
+  expect(openRoom.state.wb.rows.r1.cells.c1).not.toBe("STALE_ANA_2");
+});
+
+// Story: in ordered-room mode, a recovery copy refused with final 413 left its edit permanently
+// "shared", hanging flush() forever, sticking status.unsaved > 0, and blocking ledger rotation.
+// Bug it catches: createRoomClient lacked keepUnstorable() to settle unstorable copy edits as "unstored" (X1 round 5 #7).
+test("in room mode an unstorable 413 recovery copy settles as unstored without hanging flush or blocking rotation", async () => {
+  const limits = labLimits({ ledgerCap: 120 });
+  const host = createReferenceHost({ codecs: { tiny }, codec: "tiny", rooms: { limits } });
+  useCodec(tiny);
+  const base = serialize(RECORD, structuredClone(START));
+  host.put("doc", base);
+  {
+    const { record, state } = parse(base);
+    state.wb.rows.r2.cells.c2 = "prep";
+    await host.outside("doc", serialize(record, state), "agent");
+  }
+  const ana = createRoomClient({
+    page: "doc",
+    codec: tiny,
+    clientId: "ana",
+    fetch: async (url, init = {}) =>
+      init.method === "PUT" && String(url).includes("/_/copies/")
+        ? new Response(JSON.stringify({ error: "the copy does not fit" }), { status: 413, headers: { "content-type": "application/json" } })
+        : host.fetch(url, init),
+    subscribe: host.subscribe,
+    limits,
+    idleMs: 10,
+    maxMs: 25,
+    waitMs: 25,
+  });
+  open.push(ana);
+  await ana.ready;
+  const stranded = ana.submit(set("r1", "c1", "stranded-val"));
+  await stranded.admitted;
+  host.loseRoom("doc");
+  await host.outside("doc", base, "restore");
+  await until(() => ana.status.unstored === 1);
+  const later = ana.submit(set("r2", "c1", "saved-later"));
+  await later.durable;
+  const flushed = await inTime(ana.flush(), 500, "room-mode-413-hangs-flush: flush timed out");
+  expect(flushed[stranded.id]).toBe("unstored");
+  expect(flushed[later.id]).toBe("saved");
+  expect(ana.status.unsaved).toBe(0);
+  expect(ana.status.unstored).toBe(1);
+});
+
+// Story: Ana types a final edit while an earlier autosave is in flight (which receives a normal 412
+// after Ben saves) right before HTML Clay's 1500ms quit flush; save() incremented saveFails on busy
+// tab.io and backed off for 4000ms, losing Ana's edit on quit.
+// Bug it catches: createRoomClient.save() incremented saveFails when capture() returned false only
+// because tab.io was already busy (X1 round 5 #8).
+test("flush() during an in-flight autosave 412 race saves immediately instead of backing off", async () => {
+  const host = createReferenceHost({ codecs: { tiny }, codec: "tiny", rooms: { limits: labLimits() } });
+  useCodec(tiny);
+  host.put("doc", serialize(RECORD, structuredClone(START)));
+  let holdFirst = true;
+  let releaseFirst;
+  const firstGate = new Promise((r) => (releaseFirst = r));
+  let markStarted;
+  const firstStarted = new Promise((r) => (markStarted = r));
+  const ana = createRoomClient({
+    page: "doc",
+    codec: tiny,
+    clientId: "ana",
+    fetch: async (url, init = {}) => {
+      if (holdFirst && init.method === "POST" && String(url).includes("/_/save")) {
+        holdFirst = false;
+        markStarted();
+        await firstGate;
+      }
+      return host.fetch(url, init);
+    },
+    subscribe: host.subscribe,
+    limits: labLimits(),
+    idleMs: 2000,
+    maxMs: 8000,
+    waitMs: 50,
+  });
+  const ben = createRoomClient({ page: "doc", codec: tiny, clientId: "ben", fetch: host.fetch, subscribe: host.subscribe, limits: labLimits(), idleMs: 60_000, maxMs: 120_000, waitMs: 50 });
+  open.push(ana, ben);
+  await Promise.all([ana.ready, ben.ready]);
+  await ana.submit(set("r1", "c1", "ana-1")).admitted;
+  await firstStarted;
+  ben.submit(set("r2", "c1", "ben-1"));
+  await ben.flush();
+  await ana.submit(set("r1", "c2", "ana-2-before-quit")).admitted;
+  const flushPromise = ana.flush();
+  await pause(20);
+  releaseFirst();
+  await inTime(flushPromise, 600, "busy-io-phantom-save-fail: flush backed off past quit deadline");
+  useCodec(tiny);
+  expect(parse(host.file("doc").bytes).state.wb.rows.r1.cells.c2).toBe("ana-2-before-quit");
+});

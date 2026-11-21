@@ -174,7 +174,8 @@ test("a host without recovery-copies keeps the edit in the tab", async () => {
   typed.durable.then((state) => (settled = state));
   await until(() => ana.status.unstored === 1);
   await new Promise((resolve) => setTimeout(resolve, 200));
-  expect(settled).toBeNull();
+  expect(settled).toBe("unstored");
+  expect(ana.unstoredCopies()).toHaveLength(1);
   expect(ana.status.copies).toBe(0);
   expect(asked).toBe(0);
   await w.close();

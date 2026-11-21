@@ -44,6 +44,60 @@ function compareCopiesOldestFirst(a, b) {
   return 0;
 }
 
+function colLetters(n) {
+  let out = "";
+  for (n += 1; n > 0; n = Math.floor((n - 1) / 26)) out = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[(n - 1) % 26] + out;
+  return out;
+}
+
+function formatTargetValue(doc, target, value) {
+  if (typeof target === "string" && doc?.tabs) {
+    const hash = target.indexOf("#");
+    const extra = hash >= 0 ? target.slice(hash + 1) : "";
+    if (extra === "freezeRows" || extra === "freezeCols") {
+      if (value === null || value === undefined || value === "") return "None";
+      const tabId = decodeURIComponent((hash >= 0 ? target.slice(0, hash) : target).split("/")[0] ?? "");
+      const tab = doc.tabs.find((one) => one.id === tabId);
+      if (tab && extra === "freezeRows") {
+        const idx = tab.sheet.rows.findIndex((r) => r.id === value);
+        if (idx >= 0) return `Row ${idx + 1}`;
+        return "Deleted row";
+      }
+      if (tab && extra === "freezeCols") {
+        const idx = tab.sheet.cols.findIndex((c) => c.id === value);
+        if (idx >= 0) return `Column ${colLetters(idx)}`;
+        return "Deleted column";
+      }
+    }
+  }
+  return formatValue(value);
+}
+
+function formatFallbackTarget(doc, target) {
+  if (typeof target !== "string" || !target) return "";
+  if (!doc?.tabs) return target;
+  const hash = target.indexOf("#");
+  const base = hash >= 0 ? target.slice(0, hash) : target;
+  const parts = base.split("/").map((p) => {
+    try {
+      return decodeURIComponent(p);
+    } catch {
+      return p;
+    }
+  });
+  const [tabId, rowId, colId] = parts;
+  const tab = doc.tabs.find((one) => one.id === tabId);
+  if (!tab) return tabId || target;
+  const r = rowId ? tab.sheet.rows.findIndex((one) => one.id === rowId) : -1;
+  const c = colId ? tab.sheet.cols.findIndex((one) => one.id === colId) : -1;
+  if (r >= 0 && c >= 0) return `${tab.name}!${colLetters(c)}${r + 1}`;
+  if (r >= 0) return `${tab.name} · Row ${r + 1}`;
+  if (c >= 0) return `${tab.name} · Column ${colLetters(c)}`;
+  if (rowId && !colId) return `${tab.name} (removed row)`;
+  if (!rowId && colId) return `${tab.name} (removed column)`;
+  return tab.name;
+}
+
 function formatValue(value) {
   if (value === undefined || value === null || value === "") return "(empty)";
   if (typeof value === "string") return value;
@@ -158,12 +212,13 @@ function describeEntry(codec, entry, doc, conflictCells = null) {
     return { title, cells: mapped };
   }
 
-  const fallbackTarget =
-    codec?.targets?.(action)?.[0] ??
-    codec?.removes?.(action)?.[0] ??
-    codec?.creates?.(action)?.[0] ??
-    codec?.needs?.(action)?.[0] ??
-    null;
+  const fallbackTarget = action
+    ? (codec?.targets?.(action)?.[0] ??
+      codec?.removes?.(action)?.[0] ??
+      codec?.creates?.(action)?.[0] ??
+      codec?.needs?.(action)?.[0] ??
+      null)
+    : null;
 
   if (entry?.saw && typeof entry.saw === "object" && !Array.isArray(entry.saw)) {
     const pairs = Object.entries(entry.saw);
@@ -172,7 +227,7 @@ function describeEntry(codec, entry, doc, conflictCells = null) {
         title,
         cells: pairs.map(([key, sawVal]) => ({
           target: fallbackTarget ? `${fallbackTarget}/${key}` : key,
-          label: fallbackTarget ? `${fallbackTarget} ${key}` : key,
+          label: fallbackTarget ? `${formatFallbackTarget(doc, fallbackTarget)} ${key}` : key,
           stored: "",
           saw: sawVal,
         })),
@@ -182,7 +237,7 @@ function describeEntry(codec, entry, doc, conflictCells = null) {
 
   return {
     title,
-    cells: fallbackTarget ? [{ target: fallbackTarget, label: fallbackTarget, stored: "", saw: undefined }] : [],
+    cells: fallbackTarget ? [{ target: fallbackTarget, label: formatFallbackTarget(doc, fallbackTarget), stored: "", saw: undefined }] : [],
   };
 }
 
@@ -211,11 +266,12 @@ function conflictTargetSet(conflict, descCells) {
 function primaryTargetOf(codec, entry, descCells, conflict = null) {
   if (descCells[0]?.target) return descCells[0].target;
   const action = entry?.action;
-  const fromCodec =
-    codec?.targets?.(action)?.[0] ??
-    codec?.removes?.(action)?.[0] ??
-    codec?.needs?.(action)?.[0] ??
-    codec?.creates?.(action)?.[0];
+  const fromCodec = action
+    ? (codec?.targets?.(action)?.[0] ??
+      codec?.removes?.(action)?.[0] ??
+      codec?.needs?.(action)?.[0] ??
+      codec?.creates?.(action)?.[0])
+    : null;
   if (fromCodec) return fromCodec;
   const firstConflict = conflict?.cells?.[0];
   if (typeof firstConflict === "string") return firstConflict;
@@ -234,7 +290,7 @@ function safeCurrent(codec, doc, target) {
   }
 }
 
-function analyzeCopy(copy, allNotices, dismissedEdits) {
+function analyzeCopy(copy, allNotices, dismissedEdits, { codec = null, currentDoc = null, fileMode = false } = {}) {
   const edits = Array.isArray(copy.edits) ? copy.edits : [];
   const editById = new Map(edits.map((entry) => [entry.e, entry]));
   const marksByEdit = new Map();
@@ -257,12 +313,14 @@ function analyzeCopy(copy, allNotices, dismissedEdits) {
       restored: 0,
       kept: 0,
       alreadySaved: 0,
+      superseded: 0,
       replaced: 0,
       refused: 0,
       conflicts: 0,
       waiting: 0,
       misfit: 0,
       unjudged: 0,
+      fileCopy: 0,
     };
     const unsettleable = [];
     for (const entry of edits) {
@@ -280,10 +338,15 @@ function analyzeCopy(copy, allNotices, dismissedEdits) {
         if (!dismissedEdits.has(`${copy.id}:${entry.e}`)) {
           unsettleable.push({ kind: "refused", e: entry.e, entry });
         }
+      } else if (fileMode) {
+        counts.fileCopy += 1;
+        if (!dismissedEdits.has(`${copy.id}:${entry.e}`)) {
+          unsettleable.push({ kind: "file-copy", e: entry.e, entry });
+        }
       }
     }
 
-    const needsRestore = !allMarkedClosed;
+    const needsRestore = !fileMode && !allMarkedClosed;
     const isSettled = !needsRestore && unsettleable.length === 0;
     return {
       copy,
@@ -353,12 +416,14 @@ function analyzeCopy(copy, allNotices, dismissedEdits) {
     restored: 0,
     kept: 0,
     alreadySaved: 0,
+    superseded: 0,
     replaced: 0,
     refused: 0,
     conflicts: 0,
     waiting: 0,
     misfit: 0,
     unjudged: 0,
+    fileCopy: 0,
   };
   const unsettleable = [];
 
@@ -390,7 +455,7 @@ function analyzeCopy(copy, allNotices, dismissedEdits) {
       counts.restored += 1;
     } else if (keptSet.has(id) || closedMark === "kept") {
       counts.kept += 1;
-    } else if (savedSet.has(id) || countedSet.has(id) || closedMark === "saved") {
+    } else if (savedSet.has(id) || closedMark === "saved") {
       if (everApplied.has(id)) counts.restored += 1;
       else if (everKept.has(id)) counts.kept += 1;
       else if (everMisfit.has(id)) {
@@ -400,6 +465,27 @@ function analyzeCopy(copy, allNotices, dismissedEdits) {
         }
       } else {
         counts.alreadySaved += 1;
+      }
+    } else if (countedSet.has(id)) {
+      const fitsCurrent =
+        !currentDoc || !entry?.action || typeof codec?.fits !== "function"
+          ? true
+          : (() => {
+              try {
+                return codec.fits(currentDoc, entry.action);
+              } catch {
+                return true;
+              }
+            })();
+      if (everApplied.has(id)) counts.restored += 1;
+      else if (everKept.has(id)) counts.kept += 1;
+      else if (everMisfit.has(id) || !fitsCurrent) {
+        counts.misfit += 1;
+        if (!dismissedEdits.has(`${copy.id}:${id}`)) {
+          unsettleable.push({ kind: "misfit", e: id, entry });
+        }
+      } else {
+        counts.superseded += 1;
       }
     } else if (entry.out === "refused") {
       counts.refused += 1;
@@ -524,6 +610,9 @@ function outcomeBadgesFor(counts, needsRestore, totalEdits) {
   if (counts.refused > 0) {
     items.push({ text: `${counts.refused} refused when made`, tone: "brass" });
   }
+  if (counts.fileCopy > 0) {
+    items.push({ text: `${plural(counts.fileCopy, "edit")} to copy`, tone: "brass" });
+  }
   if (counts.restored > 0) {
     items.push({ text: `${counts.restored} restored and saved`, tone: "teal" });
   }
@@ -532,6 +621,9 @@ function outcomeBadgesFor(counts, needsRestore, totalEdits) {
   }
   if (counts.alreadySaved > 0) {
     items.push({ text: `${counts.alreadySaved} already saved`, tone: "teal" });
+  }
+  if (counts.superseded > 0) {
+    items.push({ text: `${counts.superseded} replaced by later edit`, tone: "muted" });
   }
   if (counts.replaced > 0) {
     items.push({ text: `${counts.replaced} removed by version restore`, tone: "muted" });
@@ -1019,7 +1111,7 @@ export function createRecoveryPanel({
     const cellSnapshots = desc.cells.map((cell, idx) => {
       const targetKey = `${cardKey}:${cell.target ?? idx}`;
       const liveRaw = safeCurrent(codec, currentDoc, cell.target);
-      const liveText = formatValue(liveRaw);
+      const liveText = formatTargetValue(currentDoc, cell.target, liveRaw);
       if (!initialCardValues.has(targetKey)) {
         initialCardValues.set(targetKey, liveText);
         lastCardValues.set(targetKey, liveText);
@@ -1169,7 +1261,7 @@ export function createRecoveryPanel({
         cellBlock.append(cellHeader);
       }
 
-      cellBlock.append(buildValueRow("Copy", formatValue(cell.stored), { highlight: true }));
+      cellBlock.append(buildValueRow("Copy", formatTargetValue(currentDoc, cell.target, cell.stored), { highlight: true }));
       if (cell.saw !== undefined) {
         cellBlock.append(buildValueRow("Saw then", formatValue(cell.saw), { muted: true }));
       }
@@ -1293,7 +1385,9 @@ export function createRecoveryPanel({
         ? "No longer has a place in this document."
         : kind === "refused"
           ? "Could not be applied when it was made."
-          : "This document can no longer tell whether this edit was already applied.";
+          : kind === "file-copy"
+            ? "Saved in a recovery copy. Copy any values you want to keep."
+            : "This document can no longer tell whether this edit was already applied.";
 
     const card = bevelBox(
       "div",
@@ -1366,8 +1460,8 @@ export function createRecoveryPanel({
           );
         }
         block.append(
-          buildValueRow("Stored", formatValue(cell.stored), { highlight: true }),
-          buildValueRow("Current", formatValue(liveVal), { muted: true }),
+          buildValueRow("Stored", formatTargetValue(currentDoc, cell.target, cell.stored), { highlight: true }),
+          buildValueRow("Current", formatTargetValue(currentDoc, cell.target, liveVal), { muted: true }),
         );
         valuesBox.append(block);
       }
@@ -1743,12 +1837,13 @@ export function createRecoveryPanel({
     const savedScroll = body.scrollTop;
 
     const currentDoc = typeof room?.view === "function" ? room.view() : null;
+    const fileMode = room?.status?.mode === "file";
     const allNotices = typeof room?.notices === "function" ? room.notices() ?? [] : [];
     const rawCopies = typeof room?.copies === "function" ? (room.copies() ?? []).slice() : [];
     rawCopies.sort(compareCopiesOldestFirst);
     const unstoredDrafts = typeof room?.unstoredCopies === "function" ? room.unstoredCopies() ?? [] : [];
 
-    const analyzedCopies = rawCopies.map((copy) => analyzeCopy(copy, allNotices, dismissedEdits));
+    const analyzedCopies = rawCopies.map((copy) => analyzeCopy(copy, allNotices, dismissedEdits, { codec, currentDoc, fileMode }));
     const openCopies = analyzedCopies.filter((c) => !c.isSettled);
     const settledCopies = analyzedCopies.filter((c) => c.isSettled);
 

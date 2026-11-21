@@ -629,6 +629,7 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     if (liveMenu?.isOpen && tabId === sel?.tab) liveMenu.close({ restoreFocus: false });
     if (ruleSurface && ruleSurface.tab === tabId) closeRuleSurface();
     if (activeDialog && dialogTab === tabId) closeDialog();
+    if (filterPanelKey && filterPanelKey.startsWith(`${tabId}:`)) closeFilterPanel();
   }
 
   const windowOf = (table) => shell?.windowOf?.(table) ?? null;
@@ -2711,10 +2712,11 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
     let row = null;
     let col = null;
     let ruleId = null;
+    let extra = "";
     if (typeof target === "string") {
       const hash = target.indexOf("#");
       const base = hash >= 0 ? target.slice(0, hash) : target;
-      const extra = hash >= 0 ? target.slice(hash + 1) : "";
+      extra = hash >= 0 ? target.slice(hash + 1) : "";
       const parts = base.split("/").map((p) => {
         try {
           return decodeURIComponent(p);
@@ -2743,6 +2745,15 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
       const b = rule ? boundRange(rule.range, { rows: view.rows.length, cols: view.cols.length }) : null;
       if (!b) return null;
       return { tab, r0: b.r0, c0: b.c0, r1: b.r1, c1: b.c1 };
+    }
+    if (extra === "freezeRows") {
+      const r = Math.max(0, Math.min(view.rows.length - 1, (view.frozenRows || 1) - 1));
+      return { tab, r0: r, c0: 0, r1: r, c1: view.cols.length - 1 };
+    }
+    if (extra === "freezeCols") {
+      const frozenCols = gridOf(table)?.frozen?.()?.cols ?? 0;
+      const c = Math.max(0, Math.min(view.cols.length - 1, (frozenCols || 1) - 1));
+      return { tab, r0: 0, c0: c, r1: view.rows.length - 1, c1: c };
     }
     if (row && col) {
       const r = view.rows.indexOf(row);
@@ -2775,6 +2786,8 @@ function createWorkbookInterface(workbook, { shell, storage, tabOptions, command
   function reveal(target) {
     const box = resolveTarget(target);
     if (!box) return false;
+    editor.settle();
+    if (editor.editing && !commitEdit().ok) editor.cancel();
     const view = viewOf(box.tab);
     if (tabs.activeId !== box.tab) tabs.show(box.tab);
     applyMove({

@@ -200,12 +200,22 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       if (!Object.hasOwn(codecs, codec) || !this.mayFit(key, bytes)) return null;
       let slot = slots.get(key);
       const fresh = !slot || slot.codec !== codec;
+      if (fresh && dirty(open(slot))) return null;
       const candidate = fresh ? { codec, room: null, bytes: null, docBytes: 0, copyBytes: 0, parts: new Map(), notices: [], idle: now() } : slot;
       let file;
       try {
         file = read(candidate, bytes, etag);
       } catch {
         return null;
+      }
+      const live = !fresh ? open(slot) : null;
+      if (dirty(live)) {
+        if (live.gen !== file.record.gen) return null;
+        file = {
+          etag: file.etag,
+          record: { ...file.record, through: live.seq },
+          state: live.state,
+        };
       }
       if (fresh) {
         if (slot) forget(key);
@@ -214,7 +224,7 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       }
       const env = envOf(slot);
       if (!slot.room) slot.room = newInstance(env);
-      const built = establishing(env, file, extrasFor(codecs[slot.codec], file.state.wb, bytes, false));
+      const built = establishing(env, file, extrasFor(codecs[slot.codec], file.state.wb, bytes, recalculate));
       return { bytes: built.body, record: built.record };
     },
 
@@ -392,7 +402,7 @@ export function createOrderedRooms({ codecs, limits = REAL_LIMITS, now = Date.no
       const env = slot ? envOf(slot) : { hostMade: true, limits, observer: silent, port: { room: () => null, setRoom: () => {}, next } };
       const replace = kind === 'restore' || kind === 'reset' || kind === 'upload';
       const backupExtras = slot?.room?.gen ? extrasFor(codecs[kindName], slot.room.state.wb, slot.bytes ?? current, recalculate) : undefined;
-      const step = outsideStep(env, source, disk, reopen, replace, extrasFor(codecs[kindName], source.state.wb, bytes, false), backupExtras);
+      const step = outsideStep(env, source, disk, reopen, replace, extrasFor(codecs[kindName], source.state.wb, bytes, recalculate), backupExtras);
       if (step.same) {
         if (made) forget(key);
         // Equal tables: nothing changes for the room. The other bytes (a title) are taken only when

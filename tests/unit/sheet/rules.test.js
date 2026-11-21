@@ -362,3 +362,28 @@ test("paintRules keys its sheet by the tab's scope, so a replaced table repaints
   expect(doc.adoptedStyleSheets[0]).toBe(sheet);
   expect(sheet.text).toContain('section[data-id="s1"]>table[grid]>*>tr[data-id="r2"]>td:nth-child(2)');
 });
+
+// Bug (X2 round 1 #13): bare tables without section[data-id] collided under table[grid], and
+// startShell skipped watchRules when a table did not qualify for a row window or sat under
+// [sheet-workbook] without [sap].
+test("scopeOf qualifies bare tables by id and paintRules adopts separate sheets for each", () => {
+  document.body.innerHTML = `<main sap>
+    <table id="t1" grid><colgroup><col data-id="c1"></colgroup><tbody><tr data-id="r1"><td>1</td></tr></tbody></table>
+    <table id="t2" grid><colgroup><col data-id="c1"></colgroup><tbody><tr data-id="r1"><td>2</td></tr></tbody></table>
+  </main>`;
+  const t1 = document.getElementById("t1");
+  const t2 = document.getElementById("t2");
+  expect(scopeOf(t1)).toBe('table[grid][id="t1"]');
+  expect(scopeOf(t2)).toBe('table[grid][id="t2"]');
+  expect(document.querySelectorAll(scopeOf(t1))).toHaveLength(1);
+  expect(document.querySelectorAll(scopeOf(t2))).toHaveLength(1);
+
+  const doc = fakeDocument();
+  const g1 = ruleGrid([[1]], { rules: [{ id: "k1", pos: "V", kind: "when", range: "A1", test: "filled", style: "color:#aa0000" }] });
+  const g2 = ruleGrid([[2]], { rules: [{ id: "k2", pos: "V", kind: "when", range: "A1", test: "filled", style: "color:#0000aa" }] });
+  paintRules(t1, g1, doc);
+  paintRules(t2, g2, doc);
+  expect(doc.adoptedStyleSheets).toHaveLength(2);
+  expect(doc.adoptedStyleSheets[0].text).toContain('table[grid][id="t1"]');
+  expect(doc.adoptedStyleSheets[1].text).toContain('table[grid][id="t2"]');
+});

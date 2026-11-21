@@ -11,6 +11,7 @@ let mounted = false;
 // While the first workbook is in its document's live room: the binding, and each Grid's original
 // dispatch and repair methods before the room wrapped them.
 let joined = null;
+let joining = null;
 let roomUI = null;
 const originals = new Map();
 const REPAIR_BANNER = "Repair this sheet to edit it with others.";
@@ -104,21 +105,49 @@ async function downloadSheetCopy(book, payload = null) {
   const base =
     typeof window.clay?.getHTML === "function"
       ? window.clay.getHTML({ purpose: "export" })
-      : book.serialize({ purpose: "export" });
+      : typeof document?.documentElement?.outerHTML === "string"
+        ? `<!DOCTYPE html>\n${document.documentElement.outerHTML}`
+        : book.serialize({ purpose: "export" });
+  const codec = window.Sap?.grid?.roomCodec;
+  const drawings =
+    typeof window.Sap?.grid?.drawingsIn === "function"
+      ? window.Sap.grid.drawingsIn(base)
+      : undefined;
+  const enrichInner = (rawInner) => {
+    if (!codec || typeof codec.read !== "function" || typeof codec.write !== "function") return rawInner;
+    try {
+      const { doc, record } = codec.read(rawInner);
+      const extras = {
+        ...(typeof codec.results === "function" ? { result: codec.results(doc) } : {}),
+        ...(drawings ? { drawing: drawings } : {}),
+      };
+      return codec.write(doc, record, extras);
+    } catch {
+      return rawInner;
+    }
+  };
   let html = base;
   let body = typeof payload?.body === "string" ? payload.body : null;
-  if (!body && payload?.preview && typeof window.Sap?.grid?.roomCodec?.write === "function") {
+  if (!body && payload?.preview && typeof codec?.write === "function") {
     try {
-      body = window.Sap.grid.roomCodec.write(payload.preview, {});
+      const extras = {
+        ...(typeof codec.results === "function" ? { result: codec.results(payload.preview) } : {}),
+        ...(drawings ? { drawing: drawings } : {}),
+      };
+      body = codec.write(payload.preview, {}, extras);
     } catch {}
   }
   if (typeof body === "string") {
-    if (/<html\b/i.test(body)) {
+    const isFullDoc = /^\s*(?:<!--[\s\S]*?-->\s*)*(?:<!doctype\b|<html\b)/i.test(body);
+    if (isFullDoc) {
       html = body;
     } else {
+      const enriched = enrichInner(body);
       const { findRegion, spliceRegion } = await import("../live-room/region.js");
       const region = findRegion(base);
-      html = region ? spliceRegion(base, region, body) : body;
+      html = region
+        ? spliceRegion(base, region, enriched)
+        : `<!DOCTYPE html>\n<html><body><div sheet-workbook>${enriched}</div></body></html>`;
     }
   }
   const name = payload?.id ? `recovered-${payload.id}.html` : `${(document.title || "sheet").replace(/[^\w.-]+/g, "-")}.html`;
@@ -198,6 +227,7 @@ function showRepairBanner(book) {
   ui?.notice?.(REPAIR_BANNER, {
     label: "Repair",
     async onAction() {
+      if (joined && joined.book === book) leaveRoom();
       for (const grid of gridsOf(book)) {
         if (grid.issues?.length) grid.repair();
       }
@@ -219,27 +249,33 @@ function showRepairBanner(book) {
 // workbook only, and only when no tab has sheet issues (those are repaired first, outside a room).
 export async function joinRooms() {
   if (joined) return joined.binding;
-  const [, book] = [...books.books.entries()][0] ?? [];
-  if (!book || typeof window.clay?.liveRoom !== "function") return null;
-  if (gridsOf(book).some((grid) => grid.issues?.length)) {
-    showRepairBanner(book);
-    return null;
-  }
-  const { createRoomBinding } = await import("./room.js");
-  const binding = createRoomBinding(book, {
-    notice: (text, action) => ui?.notice?.(text, action),
-    onLeave: () => leaveRoom(),
-    reveal: (target) => ui?.reveal?.(target) ?? false,
-    setConflicts: (targets) => ui?.setConflicts?.(targets),
+  if (joining) return joining;
+  joining = (async () => {
+    const [, book] = [...books.books.entries()][0] ?? [];
+    if (!book || typeof window.clay?.liveRoom !== "function") return null;
+    if (gridsOf(book).some((grid) => grid.issues?.length)) {
+      showRepairBanner(book);
+      return null;
+    }
+    const { createRoomBinding } = await import("./room.js");
+    const binding = createRoomBinding(book, {
+      notice: (text, action) => ui?.notice?.(text, action),
+      onLeave: () => leaveRoom(),
+      reveal: (target) => ui?.reveal?.(target) ?? false,
+      setConflicts: (targets) => ui?.setConflicts?.(targets),
+    });
+    const room = window.clay.liveRoom("sheet", { codec: window.Sap.grid.roomCodec, page: binding.page });
+    joined = { book, binding };
+    wrapGrids();
+    const started = await binding.start(room).then(() => true, () => false);
+    if (!started || !book.room || room.status.mode === "unavailable" || room.status.mode === "closed") {
+      leaveRoom();
+      return null;
+    }
+    mountRoomUI(book, binding, room);
+    return binding;
+  })().finally(() => {
+    joining = null;
   });
-  const room = window.clay.liveRoom("sheet", { codec: window.Sap.grid.roomCodec, page: binding.page });
-  joined = { book, binding };
-  wrapGrids();
-  const started = await binding.start(room).then(() => true, () => false);
-  if (!started || !book.room || room.status.mode === "unavailable" || room.status.mode === "closed") {
-    leaveRoom();
-    return null;
-  }
-  mountRoomUI(book, binding, room);
-  return binding;
+  return joining;
 }

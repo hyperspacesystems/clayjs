@@ -723,3 +723,97 @@ test("18. Pre-ready tab insert stays mounted on ready, and outside corruption wh
   expect(ana.client.status.connected).toBe(false);
   assertNoDrift();
 });
+
+// Case 19. X2 round 1 #2: guarded undo uses admission-time inverse so a concurrent peer edit is not clobbered.
+test("19. Guarded undo after a concurrent peer edit on the same cell restores the peer's admitted value", async () => {
+  const { ana, ben, assertNoDrift } = await setupPair();
+  // Gate Ana's frames briefly so Ben's edit admits at seq 1 before Ana's seq 2, while Ana's pre-admission view still holds "1".
+  const holdAna = [];
+  const origSubmit = ana.client.submit.bind(ana.client);
+  let delayOnce = true;
+  ana.client.submit = (action) => {
+    if (delayOnce) {
+      delayOnce = false;
+      const real = origSubmit(action);
+      return real;
+    }
+    return origSubmit(action);
+  };
+  void holdAna;
+
+  // Ben writes "from-ben" and flushes, while Ana's stream temporarily drops Ben's frame until Ana types "from-ana".
+  ben.grid().set("A1", "from-ben");
+  await ben.client.flush();
+  await until(() => ana.cell(0, 0).textContent === "from-ben");
+  // Now test the true concurrent race on B1 using a gated room:
+  let releaseAnaPost;
+  const anaPostGate = new Promise((r) => (releaseAnaPost = r));
+  const { Sap, codec, host } = await setupPair({ autoStart: false });
+  // Directly test two real createRoomClient instances racing on r1/c1:
+  const { createRoomBinding } = await import("../../../src/sheet/room.js");
+  const { ownWorkbooks } = await import("../../../src/sheet/workbook.js");
+  const rootA = document.createElement("div");
+  rootA.setAttribute("sheet-workbook", "");
+  rootA.innerHTML = host.file("doc").bytes;
+  document.body.append(rootA);
+  const booksA = ownWorkbooks({ root: rootA });
+  await booksA.ready;
+  const bookA = booksA.books.get(rootA);
+  const bindingA = createRoomBinding(bookA, { Sap, quietMs: 0 });
+  openBindings.push(bindingA);
+
+  let holdFrames = false;
+  let muteA = false;
+  const clientA = createRoomClient({
+    page: "doc",
+    codec,
+    clientId: "race-a",
+    fetch: async (url, init = {}) => {
+      if (holdFrames && init.method === "POST" && String(url).includes("/_/sync/room") && !String(url).includes("op=")) {
+        await anaPostGate;
+      }
+      return host.fetch(url, init);
+    },
+    subscribe: (page, cid, fn) => host.subscribe(page, cid, (ev) => (!muteA ? fn(ev) : undefined)),
+    limits: labLimits(),
+    firstId: 40_000,
+    idleMs: 10,
+    maxMs: 40,
+    waitMs: 25,
+  });
+  const clientB = createRoomClient({
+    page: "doc",
+    codec,
+    clientId: "race-b",
+    fetch: host.fetch,
+    subscribe: host.subscribe,
+    limits: labLimits(),
+    firstId: 50_000,
+    idleMs: 10,
+    maxMs: 40,
+    waitMs: 25,
+  });
+  openClients.push(clientA, clientB);
+  await Promise.all([bindingA.start(clientA), clientB.ready]);
+  const gridA = Sap.grid(rootA.querySelector("table[grid]"));
+  gridA.dispatch = bindingA.dispatchFor(gridA, gridA.dispatch.bind(gridA));
+
+  // Mute A's stream and hold A's frame POST so B admits "from-b" at seq 1 while A still sees "1".
+  muteA = true;
+  holdFrames = true;
+  await clientB.submit({ v: 1, t: "set", sheet: "s1", cells: [["r1", "c1", "from-b"]] }).admitted;
+  gridA.set("A1", "from-a");
+  holdFrames = false;
+  muteA = false;
+  releaseAnaPost();
+  await clientA.flush();
+  await until(() => clientA.view().tabs[0].sheet.rows[0].cells[0].text === "from-a");
+
+  // Ana undoes her edit: must restore Ben's admitted "from-b", NOT "1"!
+  expect(bindingA.undo("s1").ok).toBe(true);
+  await clientA.flush();
+  await until(() => clientB.view().tabs[0].sheet.rows[0].cells[0].text === "from-b");
+  expect(rootA.querySelector("table[grid] tbody tr td").textContent).toBe("from-b");
+  rootA.remove();
+  assertNoDrift();
+}, 15_000);

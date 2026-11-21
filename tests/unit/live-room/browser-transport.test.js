@@ -280,3 +280,27 @@ test("op=establish reports the new ETag to onSaved", async () => {
   expect(res.status).toBe(200);
   expect(recorded).toEqual(['"e2"']);
 });
+
+// Bug it catches: HTML5 empty comments (<!--> and <!--->) wedged browserTransport with 422 and
+// caused findRegion/spliceRegion to swallow </div> and delete page content outside the workbook (X1 round 5 #9).
+test("HTML5 empty comments <!--> and <!---> do not break documentEtag or corrupt spliced pages", async () => {
+  const { spliceRegion } = await import("../../../src/live-room/region.js");
+  const pageHtml =
+    `<!DOCTYPE html>\n<!-->\n<!--->\n<html lang="en" documentetag="&quot;e1&quot;"><head><title>Sheet</title></head>` +
+    `<body><div class="app-shell"><div sheet-workbook><section item data-id="s1" data-pos="V"><h2 bind="name">S1</h2><table grid></table></section><!-->` +
+    `<script type="application/json" sheet-commit>{"rev":1}</script></div>` +
+    `<footer id="important-footer">Company Legal Footer 2026</footer><!-- end footer --></div></body></html>`;
+
+  const transport = browserTransport({
+    documentUrl: URL_OF_PAGE,
+    fetch: async () => new Response(pageHtml, { status: 200, headers: { "content-type": "text/html", etag: 'W/"weak"' } }),
+  });
+  const got = await transport.fetch("/_/file?page=doc");
+  expect(got.status).toBe(200);
+  expect(got.headers.get("etag")).toBe('"e1"');
+
+  const region = findRegion(pageHtml);
+  expect(region).not.toBeNull();
+  const afterSave = spliceRegion(pageHtml, region, `<section item data-id="s1" data-pos="V"></section><script type="application/json" sheet-commit>{"rev":2}</script>`);
+  expect(afterSave).toContain("Company Legal Footer 2026");
+});

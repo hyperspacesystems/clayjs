@@ -61,7 +61,9 @@ export function ruleText({ first, last, before, after }, scope, width = 0, hidde
 export function scopeOf(table) {
   const section = table.parentElement;
   const id = section?.matches("section[item][data-id]") ? section.getAttribute("data-id") : null;
-  return id ? `section[data-id="${id.replace(/["\\]/g, "\\$&")}"]>table[grid]` : "table[grid]";
+  if (id) return `section[data-id="${id.replace(/["\\]/g, "\\$&")}"]>table[grid]`;
+  const tableId = table.getAttribute?.("id");
+  return tableId ? `table[grid][id="${tableId.replace(/["\\]/g, "\\$&")}"]` : "table[grid]";
 }
 
 export function canAdopt(doc = document) {
