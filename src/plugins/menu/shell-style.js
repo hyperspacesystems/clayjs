@@ -15,21 +15,23 @@ export const MENU_SAFETY = `@layer clay-menu-safety {
 }
 `;
 
+export const MENU_SURFACE = { light: [0xFF, 0xFC, 0xF6], dark: [0x1A, 0x1D, 0x2C], mutedLight: [0x6B, 0x59, 0x42], mutedDark: [0xA3, 0xA9, 0xC2] };
+
 export const SHELL_A = `.clay-menu-dock, .clay-menu-spots, .clay-seo {
-  --bevel-font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bevel-font-sans: var(--clay-menu-font, system-ui, -apple-system, "Segoe UI", sans-serif);
   --bevel-font-serif: Newsreader, Georgia, "Times New Roman", serif;
-  --bevel-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --bevel-font-mono: var(--clay-menu-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   --bevel-ground: light-dark(#FDF8F0, #0B0C13);
-  --bevel-surface: light-dark(#FFFCF6, #1A1D2C);
-  --bevel-sunk: light-dark(#F4ECDF, #22263A);
-  --bevel-ink: light-dark(#2B241B, #ECEAF2);
-  --bevel-ink-2: light-dark(#4A4033, #C9CDE0);
-  --bevel-muted: light-dark(#6B5942, #A3A9C2);
+  --bevel-surface: var(--clay-menu-bg, light-dark(#FFFCF6, #1A1D2C));
+  --bevel-sunk: var(--clay-menu-hover-bg, light-dark(#F4ECDF, #22263A));
+  --bevel-ink: var(--clay-menu-text, light-dark(#2B241B, #ECEAF2));
+  --bevel-ink-2: var(--clay-menu-muted, light-dark(#4A4033, #C9CDE0));
+  --bevel-muted: var(--clay-menu-muted, light-dark(#6B5942, #A3A9C2));
   --bevel-faint: light-dark(#9A8A70, #6A7090);
-  --bevel-line: light-dark(#E8DCC6, #2C3149);
-  --bevel-line-2: light-dark(#D8C8AF, #3A4058);
-  --bevel-line-3: light-dark(#C4B192, #4A536F);
-  --bevel-brass: light-dark(#8F6310, #D9A445);
+  --bevel-line: var(--clay-menu-hr, light-dark(#E8DCC6, #2C3149));
+  --bevel-line-2: var(--clay-menu-border, light-dark(#D8C8AF, #3A4058));
+  --bevel-line-3: var(--clay-menu-border, light-dark(#C4B192, #4A536F));
+  --bevel-brass: var(--clay-menu-accent, light-dark(#8F6310, #D9A445));
   --bevel-brass-soft: light-dark(#F0E4CC, #3A2F17);
   --bevel-ox: light-dark(#A83A2C, #FF6B79);
   --bevel-ox-soft: light-dark(#F6DED6, #3A2226);
@@ -46,8 +48,8 @@ export const SHELL_A = `.clay-menu-dock, .clay-menu-spots, .clay-seo {
   --clay-shadow: 0 1px 2px light-dark(rgb(43 36 27 / .07), rgb(0 0 0 / .35)), 0 10px 28px -10px light-dark(rgb(43 36 27 / .32), rgb(0 0 0 / .7));
   --clay-sheet-shadow: 0 16px 30px -22px light-dark(rgb(43 36 27 / .45), rgb(0 0 0 / .85));
   color-scheme: inherit;
-  font-family: var(--bevel-font-sans);
-  color: var(--bevel-ink);
+  font-family: var(--clay-menu-font, var(--bevel-font-sans));
+  color: var(--clay-menu-text, var(--bevel-ink));
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
@@ -76,23 +78,23 @@ export const SHELL_C = `/* Popovers: the menu, the people panel, the status note
 
 .clay-menu-list { width: max-content; max-width: calc(100vw - 24px); max-height: calc(100dvh - 72px); overflow-y: auto; overscroll-behavior: contain; }
 .clay-menu-list[popover] { position: fixed; inset: auto; margin: 0; }
-.clay-menu-list [role^="menuitem"] { box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin: 0; border: 0; background: none; text-align: left; text-decoration: none; cursor: pointer; }
-.clay-menu-list [role^="menuitem"]:hover:not([aria-disabled="true"]), .clay-menu-list [role^="menuitem"]:focus-visible { outline: none; background: var(--bevel-sunk); }
-.clay-menu-list [role^="menuitem"][aria-disabled="true"] { cursor: default; opacity: .45; }
+.clay-menu-list [role^="menuitem"] { box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin: 0; border: 0; border-radius: var(--clay-menu-item-radius, 0px); background: none; text-align: left; text-decoration: none; cursor: pointer; }
+.clay-menu-list [role^="menuitem"].clay-menu-nested { justify-content: flex-start; gap: 7px; padding-left: 18px; color: var(--clay-menu-muted, var(--bevel-ink-2)); }
+.clay-menu-nested-icon { display: block; width: 14px; height: 14px; flex: none; fill: currentColor; opacity: .78; }
+.clay-menu-list [role^="menuitem"]:hover:not([aria-disabled="true"]), .clay-menu-list [role^="menuitem"]:focus-visible { outline: none; background: var(--clay-menu-hover-bg, var(--bevel-sunk)); }
+.clay-menu-list [role^="menuitem"][aria-disabled="true"] { cursor: default; opacity: var(--clay-menu-disabled, .45); }
 .clay-menu-pair { display: flex; flex-wrap: wrap; gap: 12px; padding: 3px 9px; }
 .clay-menu-list .clay-menu-pair [role="menuitem"] { flex: none; width: auto; justify-content: flex-start; gap: 9px; }
 .clay-menu-list kbd { flex: none; white-space: nowrap; }
-/* The message, then a small Dismiss right after its last word (David, Nov 11). Both are inline, so
-   Dismiss follows the text wherever it wraps; the message reaches over the whole row, and Dismiss
-   sits above it with its own reach. */
-.clay-menu-row { position: relative; padding: 5px 9px; }
-.clay-menu-row:has(> [part~="item"]:hover, > [part~="item"]:focus-visible) { background: var(--bevel-sunk); }
-.clay-menu-list .clay-menu-row > [part~="item"], .clay-menu-list .clay-menu-row > [part~="item"]:is(:hover, :focus-visible) { display: inline; width: auto; padding: 0; background: none; }
+/* The message and a small Dismiss pinned cleanly at the right end of one flex line. */
+.clay-menu-row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 9px; border-radius: var(--clay-menu-item-radius, 0px); }
+.clay-menu-row:has(> [part~="item"]:hover, > [part~="item"]:focus-visible) { background: var(--clay-menu-hover-bg, var(--bevel-sunk)); }
+.clay-menu-list .clay-menu-row > [part~="item"], .clay-menu-list .clay-menu-row > [part~="item"]:is(:hover, :focus-visible) { display: inline; width: auto; min-height: 0; padding: 0; background: none; }
 .clay-menu-list .clay-menu-row > [part~="item"]::before { content: ""; position: absolute; inset: 0; }
-.clay-menu-list .clay-menu-row > [part~="dismiss"], .clay-menu-list .clay-menu-row > [part~="dismiss"]:is(:hover, :focus-visible) { position: relative; z-index: 1; display: inline; width: auto; min-height: 0; margin-left: 6px; padding: 0; background: none; white-space: nowrap; }
+.clay-menu-list .clay-menu-row > [part~="dismiss"], .clay-menu-list .clay-menu-row > [part~="dismiss"]:is(:hover, :focus-visible) { position: relative; z-index: 1; display: inline-flex; align-items: center; flex: none; width: auto; min-height: 0; margin-left: 6px; padding: 0; background: none; white-space: nowrap; }
 .clay-menu-list .clay-menu-row > [part~="dismiss"]::after { content: ""; position: absolute; inset: -6px -6px; }
-.clay-menu-row [part~="dismiss-label"] { display: inline-block; padding: 2px 7px; border-radius: 4px; background: var(--bevel-sunk); color: var(--bevel-ink-2); font: 500 11px/1.3 var(--bevel-font-sans); }
-.clay-menu-row > [part~="dismiss"]:hover [part~="dismiss-label"], .clay-menu-row > [part~="dismiss"]:focus-visible [part~="dismiss-label"] { color: var(--bevel-ink); }
+.clay-menu-row [part~="dismiss-label"] { display: inline-block; padding: 2px 7px; border-radius: 4px; background: var(--clay-menu-hover-bg, var(--bevel-sunk)); color: var(--clay-menu-muted, var(--bevel-ink-2)); font: 500 11px/1.3 var(--clay-menu-font, var(--bevel-font-sans)); }
+.clay-menu-row > [part~="dismiss"]:hover [part~="dismiss-label"], .clay-menu-row > [part~="dismiss"]:focus-visible [part~="dismiss-label"] { color: var(--clay-menu-text, var(--bevel-ink)); }
 .clay-menu-upgrade { display: inline-flex; align-items: center; gap: 8px; }
 .clay-menu-upgrade::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--bevel-brass); }
 .clay-menu-toggle .clay-menu-track { flex: none; }
@@ -118,21 +120,22 @@ export const SHELL_FLOATING = `/* The dock: the roster (when a page opts in) and
 .clay-menu-dock[data-corner^="bottom"] :is(.clay-menu-list, .clay-people, .clay-menu-note) { top: auto; bottom: calc(100% + 8px); }
 `;
 
-export const MENU_SKIN = `.clay-menu { height: 34px; padding: 0 4px 0 2px; border: 1px solid var(--bevel-line-3); background: var(--bevel-surface); box-shadow: var(--clay-shadow); }
-.clay-menu-goo { width: 30px; height: 30px; min-height: 0; border-radius: 0; border: 2px solid transparent; background: none; color: var(--bevel-ink); }
+export const MENU_SKIN = `.clay-menu { height: 34px; padding: 0 4px 0 2px; border: 1px solid var(--clay-menu-border, var(--bevel-line-3)); border-radius: var(--clay-menu-button-radius, 0px); background: var(--clay-menu-bg, var(--bevel-surface)); box-shadow: var(--clay-shadow); }
+.clay-menu-goo { width: 30px; height: 30px; min-height: 0; border-radius: var(--clay-menu-button-radius, 0px); border: 2px solid transparent; background: none; color: var(--clay-menu-text, var(--bevel-ink)); }
 .clay-menu-goo::before { content: ""; position: absolute; inset: -8px -8px -8px -4px; }
 .clay-menu-goo svg { width: 18px; height: 18px; }
 .clay-menu-goo svg[fill="currentColor"] { width: 21px; height: auto; fill: currentColor; }
 .clay-menu-goo:hover svg { translate: 0 -1px; }
-.clay-menu-goo:active, .clay-menu-goo[aria-expanded="true"] { background: var(--bevel-face-in); border-color: var(--bevel-edge-in) var(--bevel-edge-in-hi) var(--bevel-edge-in-hi) var(--bevel-edge-in); }
+.clay-menu-goo:active, .clay-menu-goo[aria-expanded="true"] { background: var(--clay-menu-hover-bg, var(--bevel-face-in)); border-color: var(--bevel-edge-in) var(--bevel-edge-in-hi) var(--bevel-edge-in-hi) var(--bevel-edge-in); }
 .clay-menu-goo:active svg, .clay-menu-goo[aria-expanded="true"] svg { translate: 1px 1px; }
-.clay-menu-list { min-width: 284px; padding: 6px; border: 1px solid var(--bevel-line-2); background: var(--bevel-surface); box-shadow: var(--clay-shadow); }
-.clay-menu-list [role^="menuitem"] { min-height: 32px; padding: 5px 9px; font: 400 13px/1.35 var(--bevel-font-sans); color: var(--bevel-ink); }
-.clay-menu-list .clay-menu-pair [role="menuitem"] { min-height: 30px; padding: 4px 6px 4px 9px; border: 1px solid var(--bevel-line); }
-.clay-menu-list kbd { font: 500 11px/1 var(--bevel-font-mono); padding: 3px 5px; border: 1px solid var(--bevel-line-2); background: var(--bevel-sunk); color: var(--bevel-muted); }
-.clay-menu-list [part~="quiet"] { font-size: 12px; color: var(--bevel-muted); }
-.clay-menu-sep { height: 1px; margin: 4px 2px; background: var(--bevel-line); }
-.clay-menu-version { font: 400 13px/1.35 var(--bevel-font-sans); color: var(--bevel-ink); }
+.clay-menu-list { min-width: 284px; padding: 6px; border: 1px solid var(--clay-menu-border, var(--bevel-line-2)); border-radius: var(--clay-menu-radius, 0px); background: var(--clay-menu-bg, var(--bevel-surface)); box-shadow: var(--clay-shadow); }
+.clay-menu-list [role^="menuitem"] { min-height: 32px; padding: 5px 9px; font: 400 13px/1.35 var(--clay-menu-font, var(--bevel-font-sans)); color: var(--clay-menu-text, var(--bevel-ink)); }
+.clay-menu-list [role^="menuitem"].clay-menu-nested { padding-left: 18px; color: var(--clay-menu-muted, var(--bevel-ink-2)); }
+.clay-menu-list .clay-menu-pair [role="menuitem"] { min-height: 26px; padding: 2px 4px 2px 7px; border: 1px solid var(--clay-menu-border, var(--bevel-line)); }
+.clay-menu-list kbd { font: 500 11px/1 var(--clay-menu-font-mono, var(--bevel-font-mono)); padding: 3px 5px; border: 1px solid var(--clay-menu-border, var(--bevel-line-2)); background: var(--clay-menu-hover-bg, var(--bevel-sunk)); color: var(--clay-menu-muted, var(--bevel-muted)); }
+.clay-menu-list [part~="quiet"] { font-size: 12px; color: var(--clay-menu-muted, var(--bevel-muted)); }
+.clay-menu-sep { height: 1px; margin: 4px 2px; background: var(--clay-menu-hr, var(--bevel-line)); }
+.clay-menu-version { font: 400 13px/1.35 var(--clay-menu-font, var(--bevel-font-sans)); color: var(--clay-menu-text, var(--bevel-ink)); }
 `;
 
 // Last, so no skin can shrink a touch target or bring motion back.

@@ -242,7 +242,6 @@ export function attachVariants({ root, capsule, addItem, removeItem, note, curre
       if (wantsRow) {
         addItem({
           id: "clay.look",
-          section: "start",
           stepper: {
             label: "Theme:",
             value: labelFor(name),
@@ -255,7 +254,7 @@ export function attachVariants({ root, capsule, addItem, removeItem, note, curre
       } else {
         removeItem("clay.look");
       }
-      if (!isEdit() && previewing !== null) addItem({ id: "clay.look.use", section: "start", label: "Use this look", run: useShown });
+      if (!isEdit() && previewing !== null) addItem({ id: "clay.look.use", label: "Use this look", run: useShown });
       else removeItem("clay.look.use");
       return;
     }

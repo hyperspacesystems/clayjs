@@ -1,6 +1,7 @@
 import { createShell } from "./shell.js";
-import { MENU_SAFETY, SHELL_BASE, SHELL_FLOATING, MENU_SKIN, MENU_TOUCH } from "./shell-style.js";
+import { MENU_SAFETY, SHELL_BASE, SHELL_FLOATING, MENU_SKIN, MENU_TOUCH, MENU_SURFACE } from "./shell-style.js";
 import { activeLook, labelOf, looks, nameOf, paintLook } from "./looks.js";
+import { followLook } from "../../ui/page-colour.js";
 import { keys } from "./preferences.js";
 
 // The page's looks for a visitor: painted and readable through clay.variants, with no row to switch them.
@@ -97,9 +98,10 @@ function attachBar({ addItem, removeItem }) {
 // drafts when this page has recovery copies (David, Nov 13).
 export function start() {
   if (document.querySelector('clay-editor-ui[data-clay-ui="menu"]')) return;
-  const shell = createShell({ sections: [["clay.new", "clay.undo"], null], icon: GEAR, label: "Settings" });
-  const { embedded, skin, addItem, removeItem, open, close, note, goo, beforeOpen } = shell;
+  const shell = createShell({ sections: [["clay.new", "clay.previous", "clay.undo"], null], icon: GEAR, label: "Settings" });
+  const { root, embedded, skin, addItem, removeItem, open, close, note, goo, beforeOpen } = shell;
   shell.mount(embedded ? [MENU_SAFETY, SHELL_BASE, skin ?? MENU_SKIN, MENU_TOUCH] : [MENU_SAFETY, SHELL_BASE, SHELL_FLOATING, MENU_SKIN, MENU_TOUCH]);
+  if (!skin) followLook(root, root.querySelector(".clay-menu"), MENU_SURFACE);
   let recoveryMenu;
   beforeOpen.push(() => {
     if (typeof globalThis.indexedDB?.open !== "function" || !globalThis.IDBKeyRange) return;
@@ -114,7 +116,7 @@ export function start() {
   publishLooks();
   attachUndo({ addItem, beforeOpen });
   if (document.querySelector('script[type="application/json"][clay-new-document]')) {
-    import("./new-document-item.js").then(({ addNewDocumentItem }) => addNewDocumentItem({ addItem, note })).catch(() => {});
+    import("./new-document-item.js").then(({ addVisitorNewDocumentItem }) => addVisitorNewDocumentItem({ addItem, removeItem, note, goo })).catch(() => {});
   }
   addItem({ id: "clay.download", label: "Download copy", run: () => window.clay.visitorDrafts.download() });
   addItem({ id: "clay.copy", label: "Make your own copy", href: copyUrl() });

@@ -1,10 +1,7 @@
 // The menu's look: Bevel tokens scoped to the menu family, solid surfaces, one soft
 // shadow, light or dark by the scheme ui/page-colour.js reads from the page behind it.
-import { SHELL_A, SHELL_B, SHELL_C, SHELL_FLOATING, MENU_SKIN, MENU_TOUCH } from "./shell-style.js";
-export { MENU_SKIN, MENU_TOUCH } from "./shell-style.js";
-
-// The surface and muted ink below, per scheme, for ui/page-colour.js's tint.
-export const MENU_SURFACE = { light: [0xFF, 0xFC, 0xF6], dark: [0x1A, 0x1D, 0x2C], mutedLight: [0x6B, 0x59, 0x42], mutedDark: [0xA3, 0xA9, 0xC2] };
+import { SHELL_A, SHELL_B, SHELL_C, SHELL_FLOATING, MENU_SKIN, MENU_TOUCH, MENU_SURFACE } from "./shell-style.js";
+export { MENU_SKIN, MENU_TOUCH, MENU_SURFACE } from "./shell-style.js";
 
 // The parts of the look a page may replace, through <style clay-menu-skin="1">. Everything
 // else stays: layout, hidden, focus rings, touch targets and reduced motion.

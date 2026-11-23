@@ -143,6 +143,39 @@ test("a page with a starting values tag also offers New blank document, first", 
   expect(listOf().querySelector('[data-menu-id="clay.new"]').textContent.trim()).toBe("New blank document");
 });
 
+test("clicking New [item] in visitor demo mode archives the current draft, blanks the live page, and reveals indented Previous [items] (N) with the stacked files icon", async () => {
+  await boot({
+    body:
+      BODY +
+      '<script type="application/json" clay-new-document="screenplay">{"title":"Untitled screenplay"}</script>',
+  });
+  click(gooOf());
+  expect(itemIds()).toEqual(["clay.new", "clay.download", "clay.copy"]);
+  expect(listOf().querySelector('[data-menu-id="clay.new"]').textContent.trim()).toBe("New screenplay");
+  expect(listOf().querySelector('[data-menu-id="clay.previous"]')).toBeNull();
+
+  // Type something in the initial draft and click "New screenplay"
+  document.getElementById("title").textContent = "The Night Train";
+  click(listOf().querySelector('[data-menu-id="clay.new"]'));
+  await flush();
+
+  expect(document.getElementById("title").textContent).toBe("Untitled screenplay");
+  click(gooOf());
+  expect(itemIds()).toEqual(["clay.new", "clay.previous", "clay.download", "clay.copy"]);
+  const prevBtn = listOf().querySelector('[data-menu-id="clay.previous"]');
+  expect(prevBtn).not.toBeNull();
+  expect(prevBtn.classList.contains("clay-menu-nested")).toBe(true);
+  expect(prevBtn.querySelector("svg.clay-menu-nested-icon")).not.toBeNull();
+  expect(prevBtn.textContent.trim()).toBe("Previous screenplays (1)");
+
+  // Click "New screenplay" a second time and verify the count increments to (2)
+  document.getElementById("title").textContent = "Millbrook Junction";
+  click(listOf().querySelector('[data-menu-id="clay.new"]'));
+  await flush();
+  click(gooOf());
+  expect(listOf().querySelector('[data-menu-id="clay.previous"]').textContent.trim()).toBe("Previous screenplays (2)");
+});
+
 test("the button is a gear named Settings, and a slot's own icon and label still win", async () => {
   await boot();
   expect(gooOf().getAttribute("aria-label")).toBe("Settings");

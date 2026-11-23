@@ -6,6 +6,7 @@ const EDGE_GAP = 8;
 const DISMISS_TEXT = "Dismiss";
 const ARROW_PREV = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"/></svg>';
 const ARROW_NEXT = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg>';
+const FILES_ICON = '<svg xmlns="http://www.w3.org/2000/svg" class="clay-menu-nested-icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" focusable="false"><path d="M213.66,66.34l-40-40A8,8,0,0,0,168,24H88A16,16,0,0,0,72,40V56H56A16,16,0,0,0,40,72V216a16,16,0,0,0,16,16H168a16,16,0,0,0,16-16V200h16a16,16,0,0,0,16-16V72A8,8,0,0,0,213.66,66.34ZM168,216H56V72h76.69L168,107.31v84.53c0,.06,0,.11,0,.16s0,.1,0,.16V216Zm32-32H184V104a8,8,0,0,0-2.34-5.66l-40-40A8,8,0,0,0,136,56H88V40h76.69L200,75.31Zm-56-32a8,8,0,0,1-8,8H88a8,8,0,0,1,0-16h48A8,8,0,0,1,144,152Zm0,32a8,8,0,0,1-8,8H88a8,8,0,0,1,0-16h48A8,8,0,0,1,144,184Z"/></svg>';
 export const TRACK = '<span class="clay-menu-track" aria-hidden="true"><span class="clay-menu-thumb"></span></span>';
 const NOTE_MS = 6000;
 
@@ -126,12 +127,21 @@ export function createShell({ capsuleStart = "", sections = [null], icon = CLAYG
     } else {
       button.type = "button";
     }
+    const parts = ["item"];
+    if (item.quiet) parts.push("quiet");
+    if (item.nested) parts.push("nested");
     button.setAttribute("role", "menuitem");
-    button.setAttribute("part", item.quiet ? "item quiet" : "item");
+    button.setAttribute("part", parts.join(" "));
+    if (item.nested) button.classList.add("clay-menu-nested");
     button.dataset.menuId = item.id;
     if (item.badge && item.id === "upgrade") {
       const label = document.createElement("span");
       label.className = "clay-menu-upgrade";
+      label.textContent = item.label;
+      button.append(label);
+    } else if (item.nested) {
+      button.insertAdjacentHTML("beforeend", FILES_ICON);
+      const label = document.createElement("span");
       label.textContent = item.label;
       button.append(label);
     } else {
@@ -243,11 +253,32 @@ export function createShell({ capsuleStart = "", sections = [null], icon = CLAYG
     return row;
   }
 
+  function matchesFilter(id, tokens) {
+    const short = id.replace(/^(?:clay|dom)\./, "");
+    return tokens.has(id) || tokens.has(short) || (id === "dom.appreciation" && tokens.has("thanks")) || (id === "clay.previous" && tokens.has("new"));
+  }
+
+  function itemAllowed(id) {
+    const allowRaw = (slot?.getAttribute("clay-menu-allow") ?? document.documentElement?.getAttribute("clay-menu-allow") ?? "").trim();
+    if (allowRaw) {
+      const allow = new Set(allowRaw.split(/[\s,]+/).filter(Boolean));
+      return matchesFilter(id, allow);
+    }
+    const denyRaw = (slot?.getAttribute("clay-menu-deny") ?? document.documentElement?.getAttribute("clay-menu-deny") ?? "").trim();
+    if (denyRaw) {
+      const deny = new Set(denyRaw.split(/[\s,]+/).filter(Boolean));
+      return !matchesFilter(id, deny);
+    }
+    return true;
+  }
+
   function grouped() {
-    const inSection = (name) => [...items.values()].filter((item) => item.section === name);
+    const visible = (list) => list.filter((item) => item && itemAllowed(item.id));
+    const inSection = (name) => visible([...items.values()].filter((item) => item.section === name));
     const extra = [...items.keys()].filter((id) => !slotted.has(id) && !items.get(id).section);
-    const fixed = sections.map((ids) => (ids || extra).map((id) => items.get(id)).filter(Boolean));
-    return [inSection("start"), ...fixed, inSection("end")].filter((group) => group.length);
+    const fixed = sections.map((ids) => visible((ids || extra).map((id) => items.get(id))));
+    const first = [...(fixed[0] || []), ...inSection("start")];
+    return [first, ...fixed.slice(1), inSection("end")].filter((group) => group.length);
   }
 
   function render() {
@@ -292,11 +323,12 @@ export function createShell({ capsuleStart = "", sections = [null], icon = CLAYG
     keepOpen: Boolean(keepOpen),
   });
 
-  function addItem({ id, label, run, badge, keys, disabled, text, pair, href, section, quiet, dismiss, toggle, checked, keepOpen, stepper } = {}) {
+  function addItem({ id, label, run, badge, keys, disabled, text, pair, href, section, quiet, nested, dismiss, toggle, checked, keepOpen, stepper } = {}) {
     if (!id) return null;
     const item = clean({ id, label, run, badge, keys, disabled, href, keepOpen });
     if (section === "start" || section === "end") item.section = section;
     if (quiet) item.quiet = true;
+    if (nested) item.nested = true;
     if (stepper) {
       item.stepper = {
         label: String(stepper.label ?? ""),

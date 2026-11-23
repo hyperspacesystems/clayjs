@@ -393,6 +393,33 @@ describe("embedded in a clay-menu-slot", () => {
     expect(anchor).toBe($(".clay-menu-goo", "menu"));
   });
 
+  test("built-in New and Undo items sit above custom section='start' items and above Theme:", async () => {
+    await boot({ edit: true, body: page("", "clay-menu-looks") });
+    window.clay.menu.addItem({ id: "journal.focus", label: "Focus", section: "start" });
+    window.clay.menu.addItem({ id: "clay.new", label: "New journal" });
+    window.clay.menu.addItem({ id: "clay.undo", pair: [{ id: "clay.undo.undo", label: "Undo" }, { id: "clay.undo.redo", label: "Redo" }] });
+    window.clay.menu.addItem({ id: "clay.look", stepper: { label: "Theme:", value: "Ruled", prev: () => {}, next: () => {} } });
+    window.clay.menu.open();
+    const ids = [...listOf().children].map((node) => node.dataset.menuId).filter(Boolean);
+    expect(ids.indexOf("clay.new")).toBe(0);
+    expect(ids.indexOf("clay.undo")).toBe(1);
+    expect(ids.indexOf("journal.focus")).toBe(2);
+    expect(ids.indexOf("clay.look")).toBe(3);
+  });
+
+  test("clay-menu-allow and clay-menu-deny filter visible menu items", async () => {
+    await boot({ edit: true, body: page("", 'clay-menu-deny="seo"') });
+    window.clay.menu.open();
+    const deniedIds = [...listOf().children].map((node) => node.dataset.menuId).filter(Boolean);
+    expect(deniedIds).not.toContain("seo");
+    expect(deniedIds).toContain("clay.download");
+
+    await boot({ edit: true, body: page("", 'clay-menu-allow="download"') });
+    window.clay.menu.open();
+    const allowedIds = [...listOf().children].map((node) => node.dataset.menuId).filter(Boolean);
+    expect(allowedIds).toEqual(["clay.download"]);
+  });
+
   test("a dismissible item goes on its x, and the x keeps the menu open", async () => {
     await boot({ edit: true, body: page() });
     let dismissed = 0;
