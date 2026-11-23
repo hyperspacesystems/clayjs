@@ -78,7 +78,7 @@ export const SHELL_C = `/* Popovers: the menu, the people panel, the status note
 .clay-menu-list[popover] { position: fixed; inset: auto; margin: 0; }
 .clay-menu-list [role^="menuitem"] { box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin: 0; border: 0; background: none; text-align: left; text-decoration: none; cursor: pointer; }
 .clay-menu-list [role^="menuitem"]:hover:not([aria-disabled="true"]), .clay-menu-list [role^="menuitem"]:focus-visible { outline: none; background: var(--bevel-sunk); }
-.clay-menu-list [role^="menuitem"][aria-disabled="true"] { cursor: default; }
+.clay-menu-list [role^="menuitem"][aria-disabled="true"] { cursor: default; opacity: .45; }
 .clay-menu-pair { display: flex; flex-wrap: wrap; gap: 12px; padding: 3px 9px; }
 .clay-menu-list .clay-menu-pair [role="menuitem"] { flex: none; width: auto; justify-content: flex-start; gap: 9px; }
 .clay-menu-list kbd { flex: none; white-space: nowrap; }
@@ -100,10 +100,10 @@ export const SHELL_C = `/* Popovers: the menu, the people panel, the status note
 
 .clay-menu-note { z-index: 2; width: max-content; max-width: 264px; padding: 8px 12px; font-size: 13px; line-height: 1.45; }
 
-.clay-menu-stepper { display: flex; align-items: center; gap: 2px; padding-left: 9px; font: 400 13px/1.35 var(--bevel-font-sans); color: var(--bevel-ink); }
+.clay-menu-stepper { display: flex; align-items: center; gap: 2px; padding: 0 2px 0 9px; font: 400 13px/1.35 var(--bevel-font-sans); color: var(--bevel-ink); }
 .clay-menu-stepper-label { flex: 1; margin-right: 12px; white-space: nowrap; }
 .clay-menu-stepper-value { min-width: 5.5em; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.clay-menu-list .clay-menu-stepper [role="menuitem"] { flex: none; display: inline-grid; place-items: center; box-sizing: border-box; width: 36px; min-height: 36px; padding: 0; }
+.clay-menu-list .clay-menu-stepper [role="menuitem"] { flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 36px; min-height: 36px; padding: 0; color: var(--bevel-ink); }
 .clay-menu-stepper svg { display: block; width: 16px; height: 16px; fill: currentColor; }
 
 `;
@@ -119,16 +119,15 @@ export const SHELL_FLOATING = `/* The dock: the roster (when a page opts in) and
 `;
 
 export const MENU_SKIN = `.clay-menu { height: 34px; padding: 0 4px 0 2px; border: 1px solid var(--bevel-line-3); background: var(--bevel-surface); box-shadow: var(--clay-shadow); }
-.clay-menu-goo { width: 28px; height: 28px; min-height: 0; border-radius: 0; border: 2px solid transparent; background: none; color: var(--bevel-ink); }
+.clay-menu-goo { width: 30px; height: 30px; min-height: 0; border-radius: 0; border: 2px solid transparent; background: none; color: var(--bevel-ink); }
 .clay-menu-goo::before { content: ""; position: absolute; inset: -8px -8px -8px -4px; }
-.clay-menu-goo svg { width: 18px; height: auto; fill: currentColor; }
+.clay-menu-goo svg { width: 18px; height: 18px; }
+.clay-menu-goo svg[fill="currentColor"] { width: 21px; height: auto; fill: currentColor; }
 .clay-menu-goo:hover svg { translate: 0 -1px; }
 .clay-menu-goo:active, .clay-menu-goo[aria-expanded="true"] { background: var(--bevel-face-in); border-color: var(--bevel-edge-in) var(--bevel-edge-in-hi) var(--bevel-edge-in-hi) var(--bevel-edge-in); }
 .clay-menu-goo:active svg, .clay-menu-goo[aria-expanded="true"] svg { translate: 1px 1px; }
 .clay-menu-list { min-width: 284px; padding: 6px; border: 1px solid var(--bevel-line-2); background: var(--bevel-surface); box-shadow: var(--clay-shadow); }
 .clay-menu-list [role^="menuitem"] { min-height: 32px; padding: 5px 9px; font: 400 13px/1.35 var(--bevel-font-sans); color: var(--bevel-ink); }
-.clay-menu-list [role^="menuitem"][aria-disabled="true"] { color: var(--bevel-faint); }
-.clay-menu-list [role^="menuitem"][aria-disabled="true"] kbd { opacity: .6; }
 .clay-menu-list .clay-menu-pair [role="menuitem"] { min-height: 30px; padding: 4px 6px 4px 9px; border: 1px solid var(--bevel-line); }
 .clay-menu-list kbd { font: 500 11px/1 var(--bevel-font-mono); padding: 3px 5px; border: 1px solid var(--bevel-line-2); background: var(--bevel-sunk); color: var(--bevel-muted); }
 .clay-menu-list [part~="quiet"] { font-size: 12px; color: var(--bevel-muted); }

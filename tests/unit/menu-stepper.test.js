@@ -1,5 +1,5 @@
 import { jest } from "@jest/globals";
-import { hostOf, rootOf, $, $$, active } from "./helpers/editor-ui.js";
+import { hostOf, rootOf, $, $$, active, sheetText } from "./helpers/editor-ui.js";
 import { MENU_SAFETY } from "../../src/plugins/menu/shell-style.js";
 
 // Scenario: a document adds a row like "Switch look < Ruled 1/3 >". Its two arrows
@@ -203,4 +203,27 @@ test("the safety sheet comes first for a visitor", async () => {
   const texts = styleTexts();
   expect(texts.length).toBeGreaterThan(1);
   expect(texts[1]).toBe(MENU_SAFETY);
+});
+
+test("stepper arrows stay centered in --bevel-ink and disabled items dim once even when a page skin replaces MENU_SKIN", async () => {
+  await boot({
+    body: '<style clay-menu-skin="1" media="not all">[part~="button"] { width: 34px; }</style>' + BODY,
+  });
+  addStepper("Ruled 1/3");
+  window.clay.menu.addItem({ id: "doc.disabled", label: "Cannot run", disabled: true });
+  window.clay.menu.open();
+
+  const baseCss = sheetText("menu").replace(/@media[^{]+\{(?:[^{}]|\{[^{}]*\})*\}/g, "");
+  const rules = new Map();
+  for (const [, sel, decls] of baseCss.matchAll(/([^{}@]+)\{([^{}]+)\}/g)) {
+    rules.set(sel.trim(), (rules.get(sel.trim()) || "") + " " + decls.trim());
+  }
+  const stepDecls = rules.get('.clay-menu-list .clay-menu-stepper [role="menuitem"]') || "";
+  expect(stepDecls).toMatch(/justify-content:\s*center/);
+  expect(stepDecls).toMatch(/color:\s*var\(--bevel-ink\)/);
+  expect(stepDecls).not.toMatch(/border-radius/);
+
+  const disabledDecls = rules.get('.clay-menu-list [role^="menuitem"][aria-disabled="true"]') || "";
+  expect(disabledDecls).toMatch(/opacity:\s*\.45/);
+  expect(disabledDecls).not.toMatch(/color:/);
 });
