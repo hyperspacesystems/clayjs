@@ -136,6 +136,28 @@
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-11-23
+
+### Added
+- A live room offers recovery for work that was not saved.
+- Hosts can submit a change to an ordered room with `orderedRooms.submit`.
+- Visitor drafts now keep edits made in a sheet or another region that saves through a codec.
+
+### Changed
+- The save-size notice follows the page's theme.
+- Sheet overlays follow the page's live theme, so they match the page.
+- An upgrade writes the same page bytes as before.
+
+### Fixed
+- A sheet's undo history works after a repair.
+- A sheet shows a notice to reload when its codec changed.
+- On a phone, the sheet's add-tab control no longer collapses.
+- The page menu's stepper arrows are centred.
+- Page menu text stays readable in dark mode.
+- Disabled page menu items look disabled.
+- Live rooms and sheets keep working through reconnects and codec changes.
+- Bevel controls keep their exact fallback colours when a theme is missing.
+
 ## [1.27.0] - 2026-11-20
 
 ### Added
