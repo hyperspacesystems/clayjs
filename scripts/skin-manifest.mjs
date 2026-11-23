@@ -140,6 +140,8 @@ export const SKINS = {
       '.richclay-editor h3': PROSE, '.richclay-editor h4': PROSE, '.richclay-editor h5': PROSE,
       '.richclay-editor h6': PROSE, '.richclay-editor blockquote': PROSE, '.richclay-editor pre': PROSE,
       '.richclay-editor ul': PROSE, '.richclay-editor ol': PROSE, '.richclay-editor > :last-child': PROSE,
+      '.richclay-editor ul[data-checklist]': PROSE, '.richclay-inline ul[data-checklist]': PROSE,
+      '.richclay-editor li > input[type="checkbox"]': PROSE, '.richclay-inline li > input[type="checkbox"]': PROSE,
       '.richclay-inline': PROSE, '.richclay-inline:hover': PROSE, '.richclay-inline.richclay-focused': PROSE,
       '.richclay-inline:focus-visible': PROSE, '.richclay-inline.richclay-empty': PROSE,
       '.richclay-inline.richclay-empty::before': PROSE, '.richclay-inline pre': PROSE,
