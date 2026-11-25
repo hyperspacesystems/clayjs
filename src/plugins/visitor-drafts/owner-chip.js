@@ -8,9 +8,9 @@ import { followLook } from "../../ui/page-colour.js";
 const OWNER_LEAN = 0.8;
 
 export const COPY = {
-  draft: "You're seeing a private draft, like a visitor.",
+  draft: "Owner only (visitors don't see this): you're in a private draft.",
   draftAction: "Edit the original",
-  edit: "You're editing the original. Visitors get these changes.",
+  edit: "Owner only (visitors don't see this): you're editing the live original.",
   editAction: "Back to my draft",
   close: "Hide this note",
 };
@@ -36,7 +36,7 @@ const CHIP_CSS = `.clay-owner {
 .clay-owner {
   position: fixed; left: 12px; bottom: calc(12px + var(--hcp-lift)); z-index: 2147482000;
   display: flex; align-items: center; gap: 10px;
-  max-width: min(460px, calc(100vw - 24px));
+  max-width: min(560px, calc(100vw - 24px));
   padding: 8px 8px 8px 12px;
   font-family: var(--hcp-sans); font-size: 13px; font-weight: 400; line-height: 1.45;
   color: var(--hcp-ink-2); text-align: left; background: var(--hcp-ground);

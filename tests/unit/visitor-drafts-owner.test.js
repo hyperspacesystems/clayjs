@@ -102,7 +102,7 @@ test("an owner editing the original gets the chip and nothing else the drafts UI
   expect(clay.isEditMode).toBe(true);
   expect(ownerChip()).not.toBeNull();
   expect(ownerChip().querySelector(".clay-owner__lead").textContent)
-    .toBe("You're editing the original. Visitors get these changes.");
+    .toBe("Owner only (visitors don't see this): you're editing the live original.");
   expect(hostOf("download-prompt")).toBeNull();
   expect(document.querySelector(".clay-intro")).toBeNull();
 });
