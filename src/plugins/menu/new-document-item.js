@@ -180,10 +180,22 @@ export function addVisitorNewDocumentItem({ addItem, removeItem, note, goo }) {
     try { window.clay?.visitorDrafts?.saveNow?.(); } catch {}
   }
 
-  // Capture the starter example once before the visitor ever clicks New.
-  if (!readJson(starterKey(), null) && !window.clay?.visitorDrafts?.hasDraft?.()) {
-    writeJson(starterKey(), captureSnapshot("starter"));
+  // Keep the untouched starter example in memory on load so a reload with no edits leaves
+  // zero keys in localStorage; persist it only once the visitor edits or starts a new copy.
+  const bootStarter =
+    !readJson(starterKey(), null) && !window.clay?.visitorDrafts?.hasDraft?.()
+      ? captureSnapshot("starter")
+      : null;
+
+  function ensureStarterSaved() {
+    if (bootStarter && !readJson(starterKey(), null)) {
+      writeJson(starterKey(), bootStarter);
+    }
   }
+
+  document.addEventListener("clay:drafts-saved", (event) => {
+    if (!event.detail?.unchanged) ensureStarterSaved();
+  });
 
   function syncPreviousItem() {
     const drafts = readPreviousDrafts();
@@ -200,6 +212,7 @@ export function addVisitorNewDocumentItem({ addItem, removeItem, note, goo }) {
   }
 
   function startNewVisitorDraft() {
+    ensureStarterSaved();
     try { window.clay?.visitorDrafts?.saveNow?.(); } catch {}
     const current = captureSnapshot("draft");
     const list = [current, ...readPreviousDrafts()].slice(0, MAX_PREVIOUS_DRAFTS);
@@ -303,7 +316,7 @@ export function addVisitorNewDocumentItem({ addItem, removeItem, note, goo }) {
         list.append(item);
       }
 
-      const starter = readJson(starterKey(), null);
+      const starter = readJson(starterKey(), null) || bootStarter;
       if (starter) {
         const starterItem = bevelBox(
           "li",
@@ -344,6 +357,7 @@ export function addVisitorNewDocumentItem({ addItem, removeItem, note, goo }) {
   }
 
   function duplicateVisitorDraft() {
+    ensureStarterSaved();
     try { window.clay?.visitorDrafts?.saveNow?.(); } catch {}
     const current = captureSnapshot("draft");
     const list = [current, ...readPreviousDrafts()].slice(0, MAX_PREVIOUS_DRAFTS);
