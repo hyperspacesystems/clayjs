@@ -80,6 +80,7 @@ export const CONTENT_TYPES = new Map([
   [".json", "application/json"],
   [".css", "text/css; charset=utf-8"],
   [".woff2", "font/woff2"],
+  [".ttf", "font/ttf"],
   [".md", "text/markdown; charset=utf-8"],
 ]);
 

@@ -124,6 +124,20 @@ const FONTS = [
     css: 'fonts/newsreader.css',
     license: 'newsreader-LICENSE',
   },
+  // Screenplay's script face. The four TTFs serve both the italic faces on screen and the
+  // PDF export, which embeds whole TrueType files and fetches them beside this stylesheet.
+  {
+    files: [
+      'courier-prime-latin-400-normal.woff2',
+      'courier-prime-latin-700-normal.woff2',
+      'CourierPrime-Regular.ttf',
+      'CourierPrime-Bold.ttf',
+      'CourierPrime-Italic.ttf',
+      'CourierPrime-BoldItalic.ttf',
+    ],
+    css: 'fonts/courier-prime.css',
+    license: 'courier-prime-LICENSE',
+  },
 ];
 
 // The single-file build, for pages that must load with no network: src/standalone.js

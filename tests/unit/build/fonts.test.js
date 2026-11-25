@@ -73,10 +73,34 @@ const FAMILIES = [
   },
 ];
 
+// Families committed under fonts/ from outside npm, checked against the committed bytes.
+// Courier Prime comes from DraftLine's repo: woff2 for the upright faces and the four TTFs
+// that Screenplay's PDF export embeds, which also serve the italic faces on screen.
+const VENDORED = [
+  {
+    css: "courier-prime.css",
+    files: [
+      "courier-prime-latin-400-normal.woff2",
+      "courier-prime-latin-700-normal.woff2",
+      "CourierPrime-Regular.ttf",
+      "CourierPrime-Bold.ttf",
+      "CourierPrime-Italic.ttf",
+      "CourierPrime-BoldItalic.ttf",
+    ],
+    faces: 4,
+    license: "courier-prime-LICENSE",
+  },
+];
+
 const WOFF2 = FAMILIES.flatMap((family) => family.woff2);
 const CSS = [...new Set(FAMILIES.map((family) => family.css))];
 const LICENSE = FAMILIES.map((family) => family.license);
-const SHIPPED = [...WOFF2, ...CSS, ...LICENSE].sort();
+const SHIPPED = [
+  ...WOFF2,
+  ...CSS,
+  ...LICENSE,
+  ...VENDORED.flatMap((family) => [...family.files, family.css, family.license]),
+].sort();
 
 const PACKAGE_DIRS = ["src", "entries", "scripts", "website", "docs", "fonts", "compat", "tool-generation", "tests/fixtures/offline-runtime"];
 
@@ -140,7 +164,7 @@ test("the pinned prefix carries every package's woff2 bytes, the stylesheets and
       sha256(await readFile(inPackage(family.pkg, "LICENSE"))),
     );
   }
-  for (const file of CSS) {
+  for (const file of [...CSS, ...VENDORED.flatMap((family) => [...family.files, family.css, family.license])]) {
     expect(sha256(await readFile(path.join(dir, file)))).toBe(
       sha256(await readFile(path.join(ROOT, "fonts", file))),
     );
@@ -182,4 +206,15 @@ test("_headers gives the fonts folder CORS and the pinned prefix immutable cachi
   expect(block("/:prefix/fonts/*")).toContain("Access-Control-Allow-Origin: *");
   expect(block(`/${version}/*`)).toContain("max-age=31536000, immutable");
   expect(block("/v1/*")).toContain("max-age=600");
+});
+
+test("each vendored stylesheet names only its own files, relatively", async () => {
+  for (const family of VENDORED) {
+    const css = await readFile(path.join(ROOT, "fonts", family.css), "utf8");
+    expect(css.match(/@font-face/g)).toHaveLength(family.faces);
+    expect(css).toContain("font-display: swap");
+    expect(css).not.toMatch(/https?:/);
+    const named = [...css.matchAll(/url\(\.\/([^)]+)\)/g)].map((m) => m[1]);
+    expect([...new Set(named)].sort()).toEqual([...family.files].sort());
+  }
 });
