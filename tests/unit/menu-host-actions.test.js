@@ -112,9 +112,9 @@ test("all three host links render as new-tab anchors in their sections", async (
   expect(duplicate.textContent).toBe("Duplicate as a new page");
   expect(versions.textContent).toBe("Version history\u2026");
 
-  expect(indexOf("clay.code")).toBeGreaterThan(-1);
+  expect(indexOf("clay.duplicate")).toBe(0);
+  expect(indexOf("clay.code")).toBeGreaterThan(indexOf("clay.duplicate"));
   expect(indexOf("clay.code")).toBeLessThan(indexOf("seo"));
-  expect(indexOf("clay.duplicate")).toBe(indexOf("clay.download") - 1);
   expect(indexOf("clay.versions")).toBeGreaterThan(indexOf("clay.download"));
 });
 
@@ -174,8 +174,7 @@ test("the code editor link is reachable from the keyboard", async () => {
   expect(listOf().hidden).toBe(false);
 
   const code = buttonOf("clay.code");
-  key(active(), "ArrowUp");
-  expect(active()).not.toBe(code);
+  expect(active()).toBe(buttonOf("clay.duplicate"));
   key(active(), "ArrowDown");
   expect(active()).toBe(code);
   expect(active().tagName).toBe("A");
@@ -272,7 +271,9 @@ test("New blank document is the first item when the page has an api rules tag, o
   gooOf().click();
   await flush();
   expect(ids()[0]).toBe("clay.new");
+  expect(ids()[1]).toBe("clay.duplicate");
   expect(buttonOf("clay.new").textContent.trim()).toBe("New blank document");
+  expect(buttonOf("clay.duplicate").textContent.trim()).toBe("Duplicate document");
 
   buttonOf("clay.new").click();
   gooOf().click();

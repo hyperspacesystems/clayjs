@@ -25,10 +25,11 @@ const GRIP =
 // order it was added.
 // An item may also ask for the first or the last section with `section: "start" | "end"`.
 const SECTIONS = [
-  ["clay.new", "clay.undo", "clay.cms", "clay.ai", "clay.code"],
+  ["clay.new", "clay.duplicate", "clay.previous"],
+  ["clay.undo", "clay.cms", "clay.ai", "clay.code"],
   ["clay.look", "clay.look.use"],
   ["seo", "clay.share", "clay.people"],
-  ["clay.duplicate", "clay.download", "clay.export", "clay.reveal"],
+  ["clay.download", "clay.export", "clay.reveal"],
   ["clay.versions"],
   null,
   ["clay.mode"],

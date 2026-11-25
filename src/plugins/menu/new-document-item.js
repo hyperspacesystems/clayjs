@@ -14,6 +14,7 @@ export function newDocumentLabels(doc = document) {
     noun: noun || "document",
     plural,
     newLabel: noun ? `New ${noun}` : "New blank document",
+    duplicateLabel: `Duplicate ${noun || "document"}`,
     previousLabel: (count) => `Previous ${plural} (${count})`,
   };
 }
@@ -342,10 +343,24 @@ export function addVisitorNewDocumentItem({ addItem, removeItem, note, goo }) {
     return box;
   }
 
+  function duplicateVisitorDraft() {
+    try { window.clay?.visitorDrafts?.saveNow?.(); } catch {}
+    const current = captureSnapshot("draft");
+    const list = [current, ...readPreviousDrafts()].slice(0, MAX_PREVIOUS_DRAFTS);
+    writeJson(listKey(), list);
+    try { window.clay?.visitorDrafts?.saveNow?.(); } catch {}
+    syncPreviousItem();
+  }
+
   addItem({
     id: "clay.new",
     label: labels.newLabel,
     run: startNewVisitorDraft,
+  });
+  addItem({
+    id: "clay.duplicate",
+    label: labels.duplicateLabel,
+    run: duplicateVisitorDraft,
   });
   syncPreviousItem();
 }

@@ -5,6 +5,7 @@ import { modeRefusalText } from "../../core/mode-refusal.js";
 import { downloadHtml, documentName, portableHtml } from "../../core/download.js";
 import { keys, revealLabel } from "./preferences.js";
 import { hostMeta } from "../../core/host-meta.js";
+import { newDocumentLabels } from "./new-document-item.js";
 
 const RESUME_KEY = "menu-resume";
 const READY_MS = 5000;
@@ -184,28 +185,30 @@ export function attachActions({ addItem, note, currentMode }) {
     });
   }
 
+  async function exportCurrentHtml(filename) {
+    let html = null;
+    try {
+      if (typeof clay().getHTML === "function") {
+        html = clay().getHTML({ purpose: "export" });
+      } else {
+        // Clay-Source asks a local host for the file's own bytes, not the copy it serves with
+        // its runtime addresses and page state written in.
+        const response = await fetch(location.href, { cache: "no-store", credentials: "same-origin", headers: { "Clay-Source": "1" } });
+        if (response.ok) html = await response.text();
+      }
+    } catch {}
+    html = portableHtml(html);
+    if (typeof html !== "string" || !(await downloadHtml({ html, name: filename }))) {
+      note("Couldn't build the download. Try again.");
+    }
+  }
+
   // The copy is what a save would send now, unsaved edits included. A reader has no
   // unsaved edits, so the saved file is the same document.
   addItem({
     id: "clay.download",
     label: "Download a copy",
-    run: async () => {
-      let html = null;
-      try {
-        if (typeof clay().getHTML === "function") {
-          html = clay().getHTML({ purpose: "export" });
-        } else {
-          // Clay-Source asks a local host for the file's own bytes, not the copy it serves with
-          // its runtime addresses and page state written in.
-          const response = await fetch(location.href, { cache: "no-store", credentials: "same-origin", headers: { "Clay-Source": "1" } });
-          if (response.ok) html = await response.text();
-        }
-      } catch {}
-      html = portableHtml(html);
-      if (typeof html !== "string" || !(await downloadHtml({ html, name: `${documentName()}.html` }))) {
-        note("Couldn't build the download. Try again.");
-      }
-    },
+    run: () => exportCurrentHtml(`${documentName()}.html`),
   });
 
   // What the host offers for this document. A page opens in a new tab so this one keeps
@@ -229,11 +232,21 @@ export function attachActions({ addItem, note, currentMode }) {
     else if (action?.post) addItem({ id, label, run: () => askHost(action.post) });
   };
 
+  const duplicateLabel = () => newDocumentLabels()?.duplicateLabel || "Duplicate as a new page";
+
   import("../../core/host-meta.js")
     .then(({ hostActions }) => hostActions())
     .then((host) => {
       hostItem("clay.code", "Open the code editor", host.codeEditor);
-      hostItem("clay.duplicate", "Duplicate as a new page", host.duplicate);
+      if (host.duplicate?.href || host.duplicate?.post) {
+        hostItem("clay.duplicate", duplicateLabel(), host.duplicate);
+      } else if (newDocumentLabels()) {
+        addItem({
+          id: "clay.duplicate",
+          label: duplicateLabel(),
+          run: () => exportCurrentHtml(`${documentName()}-copy.html`),
+        });
+      }
       hostItem("clay.export", "Export as zip", host.export);
       hostItem("clay.reveal", revealLabel(), host.reveal);
       hostItem("clay.versions", "Version history…", host.versions);

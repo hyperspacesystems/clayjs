@@ -136,22 +136,24 @@ test("Make your own copy links to this document's copy page on the host", async 
 });
 
 // The template says what a blank copy is with its starting values tag, so only such a page offers it.
-test("a page with a starting values tag also offers New blank document, first", async () => {
+test("a page with a starting values tag also offers New blank document and Duplicate document, first", async () => {
   await boot({ body: BODY + '<script type="application/json" clay-new-document>{}</script>' });
   click(gooOf());
-  expect(itemIds()).toEqual(["clay.new", "clay.download", "clay.copy"]);
+  expect(itemIds()).toEqual(["clay.new", "clay.duplicate", "clay.download", "clay.copy"]);
   expect(listOf().querySelector('[data-menu-id="clay.new"]').textContent.trim()).toBe("New blank document");
+  expect(listOf().querySelector('[data-menu-id="clay.duplicate"]').textContent.trim()).toBe("Duplicate document");
 });
 
-test("clicking New [item] in visitor demo mode archives the current draft, blanks the live page, and reveals indented Previous [items] (N) with the stacked files icon", async () => {
+test("clicking New [item] or Duplicate [item] in visitor demo mode archives the current draft and reveals indented Previous [items] (N) with the stacked files icon", async () => {
   await boot({
     body:
       BODY +
       '<script type="application/json" clay-new-document="screenplay">{"title":"Untitled screenplay"}</script>',
   });
   click(gooOf());
-  expect(itemIds()).toEqual(["clay.new", "clay.download", "clay.copy"]);
+  expect(itemIds()).toEqual(["clay.new", "clay.duplicate", "clay.download", "clay.copy"]);
   expect(listOf().querySelector('[data-menu-id="clay.new"]').textContent.trim()).toBe("New screenplay");
+  expect(listOf().querySelector('[data-menu-id="clay.duplicate"]').textContent.trim()).toBe("Duplicate screenplay");
   expect(listOf().querySelector('[data-menu-id="clay.previous"]')).toBeNull();
 
   // Type something in the initial draft and click "New screenplay"
@@ -161,7 +163,7 @@ test("clicking New [item] in visitor demo mode archives the current draft, blank
 
   expect(document.getElementById("title").textContent).toBe("Untitled screenplay");
   click(gooOf());
-  expect(itemIds()).toEqual(["clay.new", "clay.previous", "clay.download", "clay.copy"]);
+  expect(itemIds()).toEqual(["clay.new", "clay.duplicate", "clay.previous", "clay.download", "clay.copy"]);
   const prevBtn = listOf().querySelector('[data-menu-id="clay.previous"]');
   expect(prevBtn).not.toBeNull();
   expect(prevBtn.classList.contains("clay-menu-nested")).toBe(true);
@@ -174,6 +176,14 @@ test("clicking New [item] in visitor demo mode archives the current draft, blank
   await flush();
   click(gooOf());
   expect(listOf().querySelector('[data-menu-id="clay.previous"]').textContent.trim()).toBe("Previous screenplays (2)");
+
+  // Click "Duplicate screenplay" and verify current data stays intact while count increments to (3)
+  document.getElementById("title").textContent = "Station Zero";
+  click(listOf().querySelector('[data-menu-id="clay.duplicate"]'));
+  await flush();
+  expect(document.getElementById("title").textContent).toBe("Station Zero");
+  click(gooOf());
+  expect(listOf().querySelector('[data-menu-id="clay.previous"]').textContent.trim()).toBe("Previous screenplays (3)");
 });
 
 test("the button is a gear named Settings, and a slot's own icon and label still win", async () => {

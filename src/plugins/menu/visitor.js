@@ -98,7 +98,7 @@ function attachBar({ addItem, removeItem }) {
 // drafts when this page has recovery copies (David, Nov 13).
 export function start() {
   if (document.querySelector('clay-editor-ui[data-clay-ui="menu"]')) return;
-  const shell = createShell({ sections: [["clay.new", "clay.previous", "clay.undo"], null], icon: GEAR, label: "Settings" });
+  const shell = createShell({ sections: [["clay.new", "clay.duplicate", "clay.previous"], ["clay.undo"], null], icon: GEAR, label: "Settings" });
   const { root, embedded, skin, addItem, removeItem, open, close, note, goo, beforeOpen } = shell;
   shell.mount(embedded ? [MENU_SAFETY, SHELL_BASE, skin ?? MENU_SKIN, MENU_TOUCH] : [MENU_SAFETY, SHELL_BASE, SHELL_FLOATING, MENU_SKIN, MENU_TOUCH]);
   if (!skin) followLook(root, root.querySelector(".clay-menu"), MENU_SURFACE);

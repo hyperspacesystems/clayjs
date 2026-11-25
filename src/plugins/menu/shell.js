@@ -255,7 +255,7 @@ export function createShell({ capsuleStart = "", sections = [null], icon = CLAYG
 
   function matchesFilter(id, tokens) {
     const short = id.replace(/^(?:clay|dom)\./, "");
-    return tokens.has(id) || tokens.has(short) || (id === "dom.appreciation" && tokens.has("thanks")) || (id === "clay.previous" && tokens.has("new"));
+    return tokens.has(id) || tokens.has(short) || (id === "dom.appreciation" && tokens.has("thanks")) || (id === "clay.previous" && (tokens.has("new") || tokens.has("duplicate")));
   }
 
   function itemAllowed(id) {
@@ -277,8 +277,9 @@ export function createShell({ capsuleStart = "", sections = [null], icon = CLAYG
     const inSection = (name) => visible([...items.values()].filter((item) => item.section === name));
     const extra = [...items.keys()].filter((id) => !slotted.has(id) && !items.get(id).section);
     const fixed = sections.map((ids) => visible((ids || extra).map((id) => items.get(id))));
-    const first = [...(fixed[0] || []), ...inSection("start")];
-    return [first, ...fixed.slice(1), inSection("end")].filter((group) => group.length);
+    const startIdx = fixed.length > 2 ? 1 : 0;
+    fixed[startIdx] = [...(fixed[startIdx] || []), ...inSection("start")];
+    return [...fixed, inSection("end")].filter((group) => group.length);
   }
 
   function render() {
