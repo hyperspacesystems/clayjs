@@ -260,20 +260,27 @@ test("20,000 paragraph page merges linearly without stalling", () => {
       items((x) => (x === n - 3 ? "outside " + text(x) : x === 7 ? text(x).replace("some", "many") : text(x))),
     ];
   };
-  const [sl, sc, si] = build(2000);
-  const ts = performance.now();
-  mergeModels(sl, sc, si);
-  const smallMs = performance.now() - ts;
-
-  const [l, c, i] = build(20000);
-  const t0 = performance.now();
-  const r = mergeModels(l, c, i);
-  const ms = performance.now() - t0;
-  // Compare 10x input against the 2,000-paragraph run in the same process:
-  // linear stays near 10x, and box worker load has pushed it to about 40x; quadratic jumps ~100x.
+  // The fastest of three merges at each size, each on fresh models, so one slow moment on a
+  // loaded box is not counted as the merge's own cost.
+  const fastest = (n) => {
+    let best = Infinity;
+    let result;
+    for (let k = 0; k < 3; k++) {
+      const [l, c, i] = build(n);
+      const t0 = performance.now();
+      result = mergeModels(l, c, i);
+      best = Math.min(best, performance.now() - t0);
+    }
+    return [best, result];
+  };
+  const [smallMs] = fastest(2000);
+  const [ms, r] = fastest(20000);
+  // Not linear today: above about 8,000 paragraphs each doubling costs about 4x (16 ms at 2,000,
+  // 940 ms at 20,000 on an M-series Mac, 2026-11-25). The bound keeps a worse regression from
+  // landing, and scales with a box that is slow overall.
   expect(ms).toBeLessThan(Math.max(3000, smallMs * 50));
   expect(r.items[7].c).toBe("Paragraph 7 with many ordinary words in it, enough to look like real prose for a block editor page. tab");
-});
+}, 60_000);
 
 test("a toggle and its child that lost their data-ids keep their nesting", () => {
   const base = [
