@@ -176,8 +176,16 @@ export function addVisitorNewDocumentItem({ addItem, removeItem, note, goo }) {
         if (tag) tag.textContent = text;
       }
     }
+    forgetHistory();
     try { window.Sap?.refresh?.(); } catch {}
     try { window.clay?.visitorDrafts?.saveNow?.(); } catch {}
+  }
+
+  // A whole draft replaced the page, so the edits before it belong to another document:
+  // undoing one now would replay it into this draft, or do nothing. Same turn as the writes,
+  // so the undo engine drops their buffered records too and the switch itself is no step.
+  function forgetHistory() {
+    try { window.clay?.undo?.clear?.(); } catch {}
   }
 
   // Keep the untouched starter example in memory on load so a reload with no edits leaves
@@ -227,6 +235,7 @@ export function addVisitorNewDocumentItem({ addItem, removeItem, note, goo }) {
         applyData(document, blankData(rules, starting), rules);
       }
     }
+    forgetHistory();
     document.dispatchEvent(new CustomEvent("clay:newdocument", { detail: { document, live: true } }));
     try { window.Sap?.refresh?.(); } catch {}
     try { window.clay?.visitorDrafts?.saveNow?.(); } catch {}

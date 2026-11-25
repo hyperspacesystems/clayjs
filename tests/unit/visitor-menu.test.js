@@ -349,3 +349,21 @@ test("another kind of bar adds nothing to the menu", async () => {
   click(gooOf());
   expect(itemIds()).toEqual(["clay.download", "clay.copy"]);
 });
+
+test("New [item] forgets the replaced draft's edits, so Undo cannot replay them into the new draft", async () => {
+  await boot({
+    params: "plugins=visitor-drafts,visitor-menu,undo&exclude=richclay,source",
+    body:
+      BODY +
+      '<script type="application/json" clay-new-document="screenplay">{"title":"Untitled screenplay"}</script>',
+  });
+  window.clay.undo.commit("Edit", () => {
+    document.getElementById("title").textContent = "The Night Train";
+  });
+  expect(window.clay.undo.canUndo).toBe(true);
+  click(gooOf());
+  click(listOf().querySelector('[data-menu-id="clay.new"]'));
+  await flush();
+  expect(document.getElementById("title").textContent).toBe("Untitled screenplay");
+  expect(window.clay.undo.canUndo).toBe(false);
+});
