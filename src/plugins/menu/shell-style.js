@@ -79,7 +79,9 @@ export const SHELL_C = `/* Popovers: the menu, the people panel, the status note
 .clay-menu-list { width: max-content; max-width: calc(100vw - 24px); max-height: calc(100dvh - 72px); overflow-y: auto; overscroll-behavior: contain; }
 .clay-menu-list[popover] { position: fixed; inset: auto; margin: 0; }
 .clay-menu-list [role^="menuitem"] { box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin: 0; border: 0; border-radius: var(--clay-menu-item-radius, 0px); background: none; text-align: left; text-decoration: none; cursor: pointer; }
-.clay-menu-list [role^="menuitem"].clay-menu-nested { justify-content: flex-start; gap: 7px; padding-left: 18px; color: var(--clay-menu-muted, var(--bevel-ink-2)); }
+.clay-menu-list [role^="menuitem"].clay-menu-nested { justify-content: flex-start; gap: 7px; width: calc(100% - 18px); min-height: 29px; margin: 2px 4px 4px 14px; padding: 5px 9px; border: 1px solid var(--clay-menu-hr, var(--bevel-line)); border-radius: max(3px, var(--clay-menu-item-radius, 0px)); background: color-mix(in srgb, var(--clay-menu-hover-bg, var(--bevel-sunk)) 58%, var(--clay-menu-bg, var(--bevel-surface))); color: var(--clay-menu-muted, var(--bevel-ink-2)); }
+.clay-menu-list [role^="menuitem"].clay-menu-nested::after { content: "›"; margin-left: auto; font-size: 13px; line-height: 1; opacity: .55; }
+.clay-menu-list [role^="menuitem"].clay-menu-nested:hover:not([aria-disabled="true"]), .clay-menu-list [role^="menuitem"].clay-menu-nested:focus-visible { border-color: var(--clay-menu-border, var(--bevel-line-2)); color: var(--clay-menu-text, var(--bevel-ink)); }
 .clay-menu-nested-icon { display: block; width: 14px; height: 14px; flex: none; fill: currentColor; opacity: .78; }
 .clay-menu-list [role^="menuitem"]:hover:not([aria-disabled="true"]), .clay-menu-list [role^="menuitem"]:focus-visible { outline: none; background: var(--clay-menu-hover-bg, var(--bevel-sunk)); }
 .clay-menu-list [role^="menuitem"][aria-disabled="true"] { cursor: default; opacity: var(--clay-menu-disabled, .45); }
@@ -130,7 +132,7 @@ export const MENU_SKIN = `.clay-menu { height: 34px; padding: 0 4px 0 2px; borde
 .clay-menu-goo:active svg, .clay-menu-goo[aria-expanded="true"] svg { translate: 1px 1px; }
 .clay-menu-list { min-width: 284px; padding: 6px; border: 1px solid var(--clay-menu-border, var(--bevel-line-2)); border-radius: var(--clay-menu-radius, 0px); background: var(--clay-menu-bg, var(--bevel-surface)); box-shadow: var(--clay-shadow); }
 .clay-menu-list [role^="menuitem"] { min-height: 32px; padding: 5px 9px; font: 400 13px/1.35 var(--clay-menu-font, var(--bevel-font-sans)); color: var(--clay-menu-text, var(--bevel-ink)); }
-.clay-menu-list [role^="menuitem"].clay-menu-nested { padding-left: 18px; color: var(--clay-menu-muted, var(--bevel-ink-2)); }
+.clay-menu-list [role^="menuitem"].clay-menu-nested { min-height: 29px; padding: 5px 9px; color: var(--clay-menu-muted, var(--bevel-ink-2)); }
 .clay-menu-list .clay-menu-pair [role="menuitem"] { min-height: 26px; padding: 2px 4px 2px 7px; border: 1px solid var(--clay-menu-border, var(--bevel-line)); }
 .clay-menu-list kbd { font: 500 11px/1 var(--clay-menu-font-mono, var(--bevel-font-mono)); padding: 3px 5px; border: 1px solid var(--clay-menu-border, var(--bevel-line-2)); background: var(--clay-menu-hover-bg, var(--bevel-sunk)); color: var(--clay-menu-muted, var(--bevel-muted)); }
 .clay-menu-list [part~="quiet"] { font-size: 12px; color: var(--clay-menu-muted, var(--bevel-muted)); }
@@ -141,7 +143,9 @@ export const MENU_SKIN = `.clay-menu { height: 34px; padding: 0 4px 0 2px; borde
 // Last, so no skin can shrink a touch target or bring motion back.
 export const MENU_TOUCH = `@media (pointer: coarse), (max-width: 680px) {
   /* A phone menu fits the screen and never scrolls sideways: a little wider than on a desktop, long
-     labels wrap, and the shortcut keys a phone cannot press are hidden (David, Nov 11). */
+     labels wrap, and the shortcut keys a phone cannot press are hidden (David, Nov 11). The floating
+     theme pill folds into the menu's Theme: row so the dock never overflows the viewport. */
+  .clay-variants { display: none !important; }
   .clay-menu-list { min-width: min(300px, calc(100vw - 16px)) !important; max-width: calc(100vw - 16px) !important; overflow-x: hidden !important; }
   .clay-menu-list [role^="menuitem"], .clay-menu-list .clay-menu-version { white-space: normal; overflow-wrap: anywhere; }
   .clay-menu-list kbd { display: none !important; }

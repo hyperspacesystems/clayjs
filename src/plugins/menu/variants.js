@@ -70,6 +70,8 @@ export function attachVariants({ root, capsule, addItem, removeItem, note, curre
   let drawn = null;
 
   const wantsRow = Boolean(document.querySelector("[clay-menu-slot]")?.hasAttribute("clay-menu-looks"));
+  const phoneMedia = typeof window.matchMedia === "function" ? window.matchMedia("(pointer: coarse), (max-width: 680px)") : null;
+  const isPhone = () => Boolean(phoneMedia?.matches);
   const isEdit = () => currentMode() === "edit";
   const shown = () => previewing ?? savedName();
   const storage = () => window.clay && window.clay.storage && window.clay.storage.session;
@@ -235,11 +237,15 @@ export function attachVariants({ root, capsule, addItem, removeItem, note, curre
       removeItem("clay.look.use");
       return;
     }
-    if (root.hasAttribute("data-embedded")) {
+    const embedded = root.hasAttribute("data-embedded");
+    const phone = !embedded && isPhone();
+    if (embedded || phone) {
+      if (pill) pill.hidden = true;
       const name = shown();
       // "Theme: Dusk" and two arrows. While editing, each step is the choice and saves like any
-      // edit: no confirm, no Keep row (David, Nov 11).
-      if (wantsRow) {
+      // edit: no confirm, no Keep row (David, Nov 11). On phone width, a floating dock folds its
+      // theme pill into this menu row so the dock never overflows the screen.
+      if (wantsRow || phone) {
         addItem({
           id: "clay.look",
           stepper: {
@@ -258,7 +264,10 @@ export function attachVariants({ root, capsule, addItem, removeItem, note, curre
       else removeItem("clay.look.use");
       return;
     }
+    removeItem("clay.look");
+    removeItem("clay.look.use");
     if (!pill) pill = buildPill();
+    pill.hidden = false;
     if (!pill.isConnected) root.insertBefore(pill, root.querySelector(".clay-roster") ?? capsule);
     const name = shown();
     const label = pill.querySelector(".clay-variants-name");
@@ -329,6 +338,11 @@ export function attachVariants({ root, capsule, addItem, removeItem, note, curre
     choose,
     keep,
   };
+
+  phoneMedia?.addEventListener?.("change", () => {
+    if (!current()) return;
+    refresh();
+  });
 
   if (names().length >= 2) {
     if (isEdit()) applyReceipt();

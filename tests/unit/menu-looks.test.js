@@ -318,3 +318,19 @@ test("an owner's view-mode step previews this tab and offers Use this look", asy
   expect(window.clay.variants.shown).toBe("B");
   expect(look()).toBe(null);
 });
+
+test("on phone width, a floating dock folds its theme pill into the menu's Theme: stepper row", async () => {
+  const realMatchMedia = window.matchMedia;
+  window.matchMedia = jest.fn(() => ({ matches: true, addEventListener: jest.fn(), removeEventListener: jest.fn() }));
+  try {
+    await boot({ edit: true, body: PLAIN, looks: LOOKS("A", true) });
+    window.clay.menu.open();
+
+    expect(rowOf()).not.toBeNull();
+    expect(rowItemOf()).not.toBeNull();
+    expect(valueOf().textContent).toBe("Ruled");
+    expect(pillOf()).toBeNull();
+  } finally {
+    window.matchMedia = realMatchMedia;
+  }
+});
