@@ -1,6 +1,6 @@
-import { siblingSpan, BlockSelection, captureSpan, resolveSpan } from "./blocks.js";
+import { siblingSpan, captureSpan, resolveSpan } from "./blocks.js";
 import { outlineOf } from "./outline-cache.js";
-import { selectBlocks, asStep } from "./blocksel.js";
+import { selectBlocks, asStep, currentSpan } from "./blocksel.js";
 import { gapTargets, summaryTarget, pickTarget, moveSpanTo } from "./drop.js";
 import { announce } from "./announce.js";
 
@@ -9,6 +9,8 @@ const HOLD = 250;
 const HOLD_SLOP = 8;
 const EDGE = 56;
 const MAX_SPEED = 18;
+// Attributes a copy of the page's blocks must not repeat: ids, and what makes it editable.
+const STRIP = ["id", "contenteditable", "data-focus", "draggable"];
 
 export function scrollParent(el) {
   for (let n = el.parentElement; n; n = n.parentElement) {
@@ -82,8 +84,8 @@ export class BlockDrag {
     if (event.button !== 0 || this.state) return;
     const st = this.view.state, ents = outlineOf(st.doc), sel = st.selection;
     const index = Math.min(this.index(), ents.length - 1);
-    const inSel = sel instanceof BlockSelection && ents[index].at >= sel.from && ents[index].end <= sel.to;
-    const { lo, hi } = inSel ? sel.span(st.doc) : siblingSpan(ents, index, index);
+    const cur = sel.empty ? null : currentSpan(st, ents);
+    const { lo, hi } = cur && index >= cur.lo && index <= ents[cur.hi].subEnd ? cur : siblingSpan(ents, index, index);
     this.state = {
       index, span: captureSpan(ents, lo, hi), touch: event.pointerType === "touch",
       pointer: event.pointerId, x0: event.clientX, y0: event.clientY, x: event.clientX, y: event.clientY,
@@ -143,14 +145,43 @@ export class BlockDrag {
     this.indentPx = probe.getBoundingClientRect().width || 27;
     probe.remove();
     this.scroller = scrollParent(this.view.dom);
+    this.lift(st, ents, span);
     window.addEventListener("keydown", this.onKey, true);
     this.loop();
     this.track();
   }
 
+  // A copy of the dragged blocks follows the pointer while the page holds still, so
+  // the blocks feel picked up and the drop line alone says where they will land.
+  lift(st, ents, { lo, hi }) {
+    const s = this.state;
+    const doms = [];
+    for (let k = lo; k <= ents[hi].subEnd; k++) {
+      const dom = this.view.nodeDOM(ents[k].at);
+      if (dom?.nodeType === 1) doms.push(dom);
+    }
+    if (!doms.length) return;
+    const first = doms[0].getBoundingClientRect();
+    const ghost = this.view.dom.ownerDocument.createElement("div");
+    ghost.className = "blockeditor-editor blockeditor-drag-ghost";
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.setAttribute("inert", "");
+    for (const dom of doms) {
+      const copy = dom.cloneNode(true);
+      for (const node of [copy, ...copy.querySelectorAll("*")]) for (const name of STRIP) node.removeAttribute(name);
+      ghost.append(copy);
+    }
+    ghost.style.width = `${first.width}px`;
+    s.dx = s.x0 - first.left;
+    s.dy = s.y0 - first.top;
+    s.ghost = ghost;
+    this.shell.append(ghost);
+  }
+
   track() {
     const s = this.state, view = this.view, st = view.state;
     if (!s) return;
+    if (s.ghost) s.ghost.style.transform = `translate(${s.x - s.dx}px, ${s.y - s.dy}px)`;
     const ents = outlineOf(st.doc), span = resolveSpan(ents, s.span);
     if (!span) return this.cancel();
     const { lo, hi } = span;
@@ -255,6 +286,7 @@ export class BlockDrag {
     window.removeEventListener("blur", this.onBlur);
     window.removeEventListener("scroll", this.onScroll, true);
     window.removeEventListener("keydown", this.onKey, true);
+    s.ghost?.remove();
     this.shell.classList.remove("is-dragging");
     delete this.shell.dataset.drop;
     this.line.hidden = true;

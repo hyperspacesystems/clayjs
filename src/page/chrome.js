@@ -11,7 +11,7 @@ import { currentSpan, selectBlocks, duplicateBlocks, deleteBlocks, asStep, typeI
 import { BlockDrag } from "./drag.js";
 import { openLinkEditor } from "./link.js";
 import { BLOCK_TYPES, MENU_ITEMS, blockTypeOf, turnBlocks, turnInto, insertAfter, rankItems, runItem, retype, canTurnInto, insertItemsFor, loadChartPart, runMenuCommand } from "./items.js";
-import toast from "../ui/toast-lazy.js";
+import toast, { toastPersistent } from "../ui/toast-lazy.js";
 import { pickCsv } from "./csv-import.js";
 import { HISTORY_INTENT, typingIntent } from "./history-intent.js";
 import { composing } from "./markdown.js";
@@ -322,6 +322,8 @@ export function reanchorPageMenu(view, from, to) {
   view.dom.setAttribute("aria-controls", chrome.menuId);
   return true;
 }
+
+const isMedia = (item) => item.insert === "image" || item.insert === "file";
 
 class Chrome {
   constructor(view, onAiTool, mediaNote) {
@@ -755,7 +757,7 @@ class Chrome {
     const all = this.onAiTool
       ? [...MENU_ITEMS, { key: "ai", label: "Make a tool with AI…", icon: "✦", aliases: ["tool", "generate"], insert: "ai" }]
       : MENU_ITEMS;
-    const offered = this.mediaNote ? all.filter((item) => item.key !== "image" && item.key !== "file") : all;
+    const offered = this.mediaNote ? all.map((item) => (isMedia(item) ? { ...item, hint: this.mediaNote.hint } : item)) : all;
     const items = m.mode === "turn" ? BLOCK_TYPES : insertItemsFor(this.view.state, offered);
     return rankItems(items, m.query);
   }
@@ -821,12 +823,6 @@ class Chrome {
       }
       nodes.push(row);
     });
-    // A visitor's draft keeps no pictures or files: the menu says where they go instead.
-    if (this.mediaNote && m.mode !== "turn" && m.mode !== "actions" && m.mode !== "more" && m.mode !== "external") {
-      const note = el("div", "blockeditor-menu-note", { role: "note" });
-      note.textContent = this.mediaNote;
-      nodes.push(note);
-    }
     this.menuEl.replaceChildren(...nodes);
     if (slash && m.items.length) this.view.dom.setAttribute("aria-activedescendant", `${this.menuId}-${m.active}`);
     else this.view.dom.removeAttribute("aria-activedescendant");
@@ -868,8 +864,18 @@ class Chrome {
       if (!this.menu && item.focus !== false) this.view.focus();
     } else {
       if (item.insert === "ai") this.onAiTool(this.view, remove);
+      else if (this.mediaNote && isMedia(item)) this.explainMedia(remove);
       else runItem(this.view, item, index >= 0 ? index : this.blockIndex(), remove);
     }
+  }
+
+  // A visitor's draft cannot keep a picture or a file, so the pick says where they
+  // work instead of opening the file picker.
+  explainMedia(remove) {
+    if (remove) this.view.dispatch(this.view.state.tr.delete(remove.from, remove.to));
+    const note = this.mediaNote;
+    toastPersistent(note.title, "info", { detail: note.detail, actions: [{ label: note.download, onClick: note.onDownload }] });
+    this.view.focus();
   }
 
   // Keys while the menu is open; anything else falls through to the editor.

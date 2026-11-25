@@ -30,6 +30,8 @@
   --blockeditor-line-height: 1.65;
   --blockeditor-measure: 632px;
   --blockeditor-pad-top: 120px;
+  /* The toolbar's height in this theme: 12px above it, 4px padding, 28px buttons, 1px borders. */
+  --blockeditor-dock-space: 50px;
   --blockeditor-h1-size: 40px;
   --blockeditor-h1-weight: 500;
   --blockeditor-h1-tracking: -0.01em;

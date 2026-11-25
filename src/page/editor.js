@@ -136,7 +136,7 @@ ${INDENTS.map((n) => `:where(article[data-blockeditor], .blockeditor-editor) .bl
 /* One formatting bar at a time: the selection bar covers what the fixed bar offers. Hidden, not removed, so the page does not shift under the selection. */
 .blockeditor-shell:has(.blockeditor-bubble:not([hidden])) .blockeditor-dock { visibility: hidden; }
 .blockeditor-dock, .blockeditor-shell.is-moved .blockeditor-dock { background: var(--blockeditor-pop-bg); }
-.blockeditor-dock + .blockeditor-editor { padding-top: max(16px, calc(var(--blockeditor-pad-top) - 48px)); }
+.blockeditor-dock + .blockeditor-editor { padding-top: max(16px, calc(var(--blockeditor-pad-top) - var(--blockeditor-dock-space, 48px))); }
 .blockeditor-tool { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border: 0; border-radius: 5px; background: none; color: inherit; font: 500 13px/1 var(--blockeditor-font); cursor: pointer; }
 .blockeditor-tool:hover, .blockeditor-tool[aria-pressed="true"] { background: var(--blockeditor-pop-hover); }
 .blockeditor-tool-turn { gap: 4px; padding: 0 8px; }
@@ -172,11 +172,10 @@ ${INDENTS.map((n) => `:where(article[data-blockeditor], .blockeditor-editor) .bl
 .blockeditor-menu-text { display: flex; flex-direction: column; min-width: 0; }
 .blockeditor-menu-desc { color: var(--blockeditor-pop-muted); font-size: 12px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .blockeditor-menu-empty { padding: 8px 10px; color: var(--blockeditor-pop-muted); font-size: 13px; }
-.blockeditor-menu-note { padding: 8px 10px; color: var(--blockeditor-pop-muted); font-size: 13px; }
 .blockeditor-shell.is-dragging, .blockeditor-shell.is-dragging .blockeditor-grip { cursor: grabbing; }
 .blockeditor-shell[data-drop="none"] { cursor: no-drop; }
 .blockeditor-drop { position: absolute; z-index: 3; left: var(--blockeditor-drop-x, 0px); top: var(--blockeditor-drop-y, 0px); width: var(--blockeditor-drop-w, 0px); height: 2px; margin-top: -1px; border-radius: 1px; background: var(--blockeditor-drop, var(--blockeditor-accent)); pointer-events: none; }
-.blockeditor-shell.is-dragging .blockeditor-block-selected { opacity: 0.45; }
+.blockeditor-drag-ghost { position: fixed; z-index: 6; top: 0; left: 0; box-sizing: border-box; max-width: none; min-height: 0; max-height: 40vh; margin: 0; padding: 2px 10px; overflow: hidden; border-radius: 6px; background: var(--blockeditor-pop-bg); box-shadow: var(--blockeditor-pop-shadow); opacity: 0.92; pointer-events: none; }
 .blockeditor-editor.ProseMirror-hideselection { caret-color: transparent; }
 .blockeditor-editor.ProseMirror-hideselection *::selection { background: transparent; }
 .blockeditor-editor .blockeditor-block-selected { background: var(--blockeditor-block-selected, rgba(88, 120, 170, 0.12)); box-shadow: -6px 0 0 var(--blockeditor-block-selected, rgba(88, 120, 170, 0.12)), 6px 0 0 var(--blockeditor-block-selected, rgba(88, 120, 170, 0.12)); border-radius: 4px; }
@@ -318,7 +317,7 @@ ${INDENTS.map((n) => `:where(article[data-blockeditor], .blockeditor-editor) .bl
   .blockeditor-dock .blockeditor-tool-more { display: inline-flex; }
   .blockeditor-dock .blockeditor-tool { min-width: 44px; height: 44px; }
   .blockeditor-shell:has(.blockeditor-bubble:not([hidden])) .blockeditor-dock { visibility: visible; }
-  .blockeditor-dock + .blockeditor-editor { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .blockeditor-dock + .blockeditor-editor { padding-top: var(--blockeditor-pad-top); padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
   .blockeditor-plus { position: fixed; top: auto; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); width: 44px; height: 44px; border-radius: 22px; }
   .blockeditor-grip { position: fixed; top: auto; left: 68px; bottom: calc(16px + var(--blockeditor-grip-lift, 0px) + env(safe-area-inset-bottom)); width: 44px; height: 44px; border-radius: 22px; opacity: 1; color: var(--blockeditor-chrome-ink-rest); background: var(--blockeditor-chrome-bg-rest); border: 1px solid var(--blockeditor-chrome-line-rest); }
   .blockeditor-bubble { display: none; }

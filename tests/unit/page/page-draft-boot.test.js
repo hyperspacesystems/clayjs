@@ -196,16 +196,30 @@ test("a reload finds the visitor's page from the record alone", async () => {
   expect(second.fetchMock.mock.calls.length).toBe(0);
 }, 40000);
 
-test("a visitor's slash menu has no Image or File, and shows the note", async () => {
+const menuRow = (menu, label) => [...menu.querySelectorAll(".blockeditor-menu-item")].find((row) => row.querySelector(".blockeditor-menu-label").textContent === label);
+
+test("a visitor's slash menu offers Image and File, each marked as needing their own copy", async () => {
   const { clay } = await bootPage();
   await clay.blockeditor.ready;
   const menu = await openSlashMenu(clay.blockeditor.view);
   expect(menu).toBeTruthy();
-  const labels = menuLabels(menu);
-  expect(labels).not.toContain("Image");
-  expect(labels).not.toContain("File");
-  expect(labels).toContain("Text");
-  expect(menu.querySelector(".blockeditor-menu-note").textContent).toBe("Download your copy to add pictures and files.");
+  for (const label of ["Image", "File"]) expect(menuRow(menu, label).querySelector(".blockeditor-menu-hint").textContent).toBe("Needs your copy");
+  expect(menuRow(menu, "Text").querySelector(".blockeditor-menu-hint")?.textContent).not.toBe("Needs your copy");
+}, 30000);
+
+test("a visitor who picks Image gets the notice with a download button, not the file picker", async () => {
+  const { clay } = await bootPage();
+  await clay.blockeditor.ready;
+  const view = clay.blockeditor.view;
+  const picker = jest.spyOn(HTMLInputElement.prototype, "click");
+  const menu = await openSlashMenu(view);
+  menuRow(menu, "Image").click();
+  const toasts = () => document.querySelector('clay-editor-ui[data-clay-ui="toasts"]')?.shadowRoot;
+  await until(() => [...(toasts()?.querySelectorAll("button") ?? [])].some((b) => b.textContent === "Download copy"), { timeout: 15000, what: "the pictures notice" });
+  expect(toasts().textContent).toContain("Add pictures and files in your own copy");
+  expect(picker).not.toHaveBeenCalled();
+  picker.mockRestore();
+  expect(view.state.doc.textContent).not.toContain("/");
 }, 30000);
 
 test("a visitor's more menu has no Add cover", async () => {

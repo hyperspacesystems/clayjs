@@ -110,6 +110,10 @@
     line-height: var(--blockeditor-line-height);
     overflow-wrap: break-word;
   }
+  /* Once the editor is inside, its toolbar and its own padding take the place of this one,
+     so the text stays where the article first painted it. */
+  article[data-blockeditor]:has(> .blockeditor-shell) { padding-top: 0; }
+  article[data-blockeditor] > .blockeditor-shell { margin-block-start: 0; }
   article[data-blockeditor] ::selection { background: var(--blockeditor-selection); }
   article[data-blockeditor] > * { max-width: var(--blockeditor-measure); margin: var(--blockeditor-block-gap) auto; }
   article[data-blockeditor] > h1 { font-family: var(--blockeditor-font-display); font-size: var(--blockeditor-h1-size); font-weight: var(--blockeditor-h1-weight); letter-spacing: var(--blockeditor-h1-tracking); line-height: var(--blockeditor-h1-line); color: var(--blockeditor-ink-strong); margin-block: 0 0.6em; }
@@ -191,6 +195,8 @@
   --blockeditor-line-height: 1.65;
   --blockeditor-measure: 632px;
   --blockeditor-pad-top: 120px;
+  /* The toolbar's height in this theme: 12px above it, 4px padding, 28px buttons, 1px borders. */
+  --blockeditor-dock-space: 50px;
   --blockeditor-h1-size: 40px;
   --blockeditor-h1-weight: 500;
   --blockeditor-h1-tracking: -0.01em;

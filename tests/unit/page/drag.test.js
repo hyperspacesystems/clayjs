@@ -115,6 +115,20 @@ describe("dragging", () => {
     expect(line(view).hidden).toBe(true);
   });
 
+  test("a copy of the dragged blocks follows the pointer, the page holds still, and the copy goes on drop", () => {
+    const view = page(FOUR);
+    view.dispatch(view.state.tr.setSelection(selectBlocks(view.state.doc, 0, 1)));
+    layout(view);
+    drag(view, 1, 2 * ROW + 24);
+    const ghost = () => shell(view).querySelector(".blockeditor-drag-ghost");
+    expect(ghost().textContent).toBe("AB");
+    expect(ghost().querySelector("[id], [contenteditable]")).toBe(null);
+    expect(ghost().style.transform).toBe(`translate(25px, ${2 * ROW + 24 - 10 - ROW}px)`);
+    expect(shape(view)).toBe("A | B | C | D");
+    drop(view);
+    expect(ghost()).toBe(null);
+  });
+
   test("dropping moves the block, rewrites only its key, announces it, and one undo puts it back", () => {
     const view = page(FOUR);
     const before = keys(view);
@@ -144,6 +158,15 @@ describe("dragging", () => {
     drag(view, 1, 3 * ROW + 24);
     drop(view);
     expect(shape(view)).toBe("C | D | A | B");
+  });
+
+  test("a grip pressed on a block a text selection crosses drags every block it touches", () => {
+    const view = page(FOUR);
+    select(view, posOf(view, "a"), posOf(view, "c", true));
+    layout(view);
+    drag(view, 1, 3 * ROW + 24);
+    drop(view);
+    expect(shape(view)).toBe("D | A | B | C");
   });
 
   test("the pointer's x picks the nesting level at a gap, and the line moves with it", () => {

@@ -32,6 +32,15 @@ const GENERIC_OFFLINE = "Offline, will retry";
 const REPLACED_TEXT = "This page was changed outside the editor. Reload to see it.";
 const TOO_LARGE_TEXT = "That change is too large to share, so it was not saved. Reload the page to keep editing.";
 const VISITOR_MEDIA = "Download your copy to add pictures and files.";
+// A visitor's draft lives in browser storage, which keeps no pictures or files. The
+// menus still offer Image and File, marked, and picking one says where they work.
+const VISITOR_MEDIA_NOTE = {
+  hint: "Needs your copy",
+  title: "Add pictures and files in your own copy",
+  detail: "Your edits here save in your browser, while pictures and files need the file saved somewhere that keeps them. Download your copy, or host it on a service like Hyperclay.",
+  download: "Download copy",
+  onDownload: () => window.clay?.visitorDrafts?.download?.(),
+};
 const draftUpload = (file, opts) => Promise.resolve({ ok: false, code: "draft", msg: VISITOR_MEDIA });
 const CLIENT_KEY = /^[ur][0-9a-z]+(-[0-9a-z]+){2}$/;
 export const PAGE_FULL_MESSAGE = "This document is full, though your changes are still here to download. To edit again, reload this tab after another editor, or the owner in another browser, deletes content.";
@@ -1225,7 +1234,7 @@ function mountAndAttach(inst, source, loaded) {
         features,
         upload: isDraftMode ? draftUpload : options.upload,
         onAiTool: aiRequested() ? (_view, remove) => { openAi({ remove }); } : null,
-        mediaNote: isDraftMode ? VISITOR_MEDIA : null,
+        mediaNote: isDraftMode ? VISITOR_MEDIA_NOTE : null,
         reviseTool: aiRequested() ? (toolId) => { openAi({ target: { toolId } }); } : null,
         formatGate: inst.loadFormatGate,
       });
