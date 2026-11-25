@@ -90,8 +90,10 @@ test("carries the core, every plugin and every satellite", () => {
   // New blank document (2026-11-20, 8.53 MB measured on the box after the sheet's filters also landed).
   // Then to 8.9 MB for the live room's browser client, clay.liveRoom (2026-11-20, 8.81 MB
   // measured; 8.72 MB without it, the sheet lane's later changes), then to 9.05 MB for C9b's
-  // save chip and recovery panel plus C10 and sapjs Lane R (2026-11-20, 8.96 MB measured).
-  expect(bundle.length).toBeLessThan(9_050_000);
+  // save chip and recovery panel plus C10 and sapjs Lane R (2026-11-20, 8.96 MB measured), then to
+  // 9.15 MB for the visitor menu's New, Duplicate and Previous, the intro's storage rescue card and
+  // the re-vendored hypercms and sapjs (2026-11-25, 9.06 MB measured on the box).
+  expect(bundle.length).toBeLessThan(9_150_000);
 });
 
 // The chunk build adds a generated bootstrap per entry that has a target, plus the

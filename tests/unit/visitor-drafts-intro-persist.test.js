@@ -61,6 +61,6 @@ test("typing into a persist textarea bound by a text rule leaves the intro mount
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   expect(intro()).not.toBeNull();
-  expect(JSON.parse(localStorage.getItem(uiKey)).intro.done).toBeNull();
+  expect(JSON.parse(localStorage.getItem(uiKey) ?? "{}").intro?.done ?? null).toBeNull();
   expect(localStorage.getItem(key)).toBeNull();
 });

@@ -83,5 +83,5 @@
       "draft": { "requests": 78, "depth": 3, "brotli": 188416, "css": { "requests": 0, "depth": 0 }, "fonts": { "requests": 0, "depth": 0 } }
     }
   },
-  "visitorMenu": { "bootBrotli": 1024, "totalBrotli": 10240, "newRequests": 6 }
+  "visitorMenu": { "bootBrotli": 1024, "totalBrotli": 10240, "newRequests": 7 }
 }

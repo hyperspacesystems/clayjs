@@ -224,6 +224,6 @@ test("stepper arrows stay centered in --bevel-ink and disabled items dim once ev
   expect(stepDecls).not.toMatch(/border-radius/);
 
   const disabledDecls = rules.get('.clay-menu-list [role^="menuitem"][aria-disabled="true"]') || "";
-  expect(disabledDecls).toMatch(/opacity:\s*\.45/);
+  expect(disabledDecls).toMatch(/opacity:\s*(?:var\(--clay-menu-disabled,\s*)?\.45\)?;/);
   expect(disabledDecls).not.toMatch(/color:/);
 });
