@@ -136,6 +136,26 @@
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-11-25
+
+### Added
+- Rich text fields support checklists.
+- The visitor menu can create a new draft, duplicate the current draft, and switch to a previous draft.
+- The settings menu can be filtered with allow and deny lists.
+- A storage rescue card appears when the browser's storage fails.
+- Screenplay documents can use the Courier Prime font, including in PDF exports.
+
+### Changed
+- The settings menu has a new icon and reordered sections.
+- Menu submenus are styled, and on a phone the theme pill folds into the menu.
+- The visitor draft chip labels owner-only actions more clearly.
+- The download button now sits in the intro.
+- A starter document's snapshot is saved only after the first edit.
+- The owner chip is narrower on narrow screens.
+
+### Fixed
+- After switching to another draft with New or Previous, undo no longer replays edits from the draft you left. Duplicate keeps the history.
+
 ## [1.28.0] - 2026-11-23
 
 ### Added
