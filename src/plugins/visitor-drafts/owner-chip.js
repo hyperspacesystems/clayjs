@@ -36,7 +36,7 @@ const CHIP_CSS = `.clay-owner {
 .clay-owner {
   position: fixed; left: 12px; bottom: calc(12px + var(--hcp-lift)); z-index: 2147482000;
   display: flex; align-items: center; gap: 10px;
-  max-width: min(560px, calc(100vw - 24px));
+  max-width: min(320px, calc(100vw - 24px));
   padding: 8px 8px 8px 12px;
   font-family: var(--hcp-sans); font-size: 13px; font-weight: 400; line-height: 1.45;
   color: var(--hcp-ink-2); text-align: left; background: var(--hcp-ground);
@@ -44,6 +44,7 @@ const CHIP_CSS = `.clay-owner {
   box-shadow: var(--hcp-shadow);
   -webkit-font-smoothing: antialiased;
 }
+.clay-owner__lead { flex: 1; min-width: 0; }
 .clay-owner__action {
   flex: none; min-height: 0; font-weight: 600; color: var(--hcp-brass); cursor: pointer;
   text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--hcp-line-2);
