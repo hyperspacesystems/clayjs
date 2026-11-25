@@ -44,13 +44,17 @@ function reloads() {
   return { calls, restore: () => Object.defineProperty(window, "location", { value: real, configurable: true }) };
 }
 
-function expectFailure(page, code) {
+const promptRoot = () => document.querySelector('clay-editor-ui[data-clay-ui="download-prompt"]')?.shadowRoot?.getElementById("hcp") ?? null;
+
+async function expectFailure(page, code) {
   expect(page.events.filter((event) => event.name === "clay:drafts-store-failed")).toHaveLength(1);
   expect(page.events.find((event) => event.name === "clay:drafts-store-failed").detail.error.code).toBe(code);
-  expect(page.prompt.root.hidden).toBe(false);
-  expect(page.prompt.root.getAttribute("data-hcp-state")).toBe("card");
-  expect(page.prompt.root.getAttribute("data-hcp-reason")).toBe("error");
-  expect(page.prompt.root.querySelector(".hcp-body [data-hcp-for='error']").textContent).toBe("Storage is full or turned off here. Download the file to keep what you've done.");
+  await waitFor(() => promptRoot()?.getAttribute("data-hcp-reason") === "error", "storage error card");
+  const root = promptRoot();
+  expect(root.hidden).toBe(false);
+  expect(root.getAttribute("data-hcp-state")).toBe("card");
+  expect(root.getAttribute("data-hcp-reason")).toBe("error");
+  expect(root.querySelector(".hcp-body [data-hcp-for='error']").textContent).toBe("Storage is full or turned off here. Download the file to keep what you've done.");
 }
 
 test("an unreadable retry refuses Start over once, preserves the record and cache, and shows the existing failure message", async () => {
@@ -61,7 +65,7 @@ test("an unreadable retry refuses Start over once, preserves the record and cach
     expect(page.clay.visitorDrafts.reset()).toBe(true);
     await waitFor(() => page.count("clay:drafts-store-failed") > 0, "reset refusal");
     expect(page.control.attempts).toBe(2);
-    expectFailure(page, "quota");
+    await expectFailure(page, "quota");
     expect(reload.calls).toHaveLength(0);
     expect(page.local()).toBe(page.raw);
     expect(page.local(":reset")).toBe(OLD_MARKER);
@@ -158,7 +162,7 @@ test("a queued retry reaches its two-second deadline and cannot reset the draft 
     await waitFor(() => page.count("clay:drafts-store-failed") > 0, "retry deadline", 3500);
     expect(performance.now() - started).toBeGreaterThanOrEqual(1999);
     expect(page.control.attempts).toBe(2);
-    expectFailure(page, "blocked");
+    await expectFailure(page, "blocked");
     expect(reload.calls).toHaveLength(0);
     expect(page.local()).toBe(page.raw);
     expect(page.local(":reset")).toBe(OLD_MARKER);

@@ -44,7 +44,7 @@ function focusApp() {
   else document.body.focus({ preventScroll: true });
 }
 
-function buildSection({ template, appName, labelText, onClose }) {
+function buildSection({ template, appName, labelText, onClose, downloadLink, onDownload }) {
   stylesOnce();
 
   const section = document.createElement("section");
@@ -53,6 +53,12 @@ function buildSection({ template, appName, labelText, onClose }) {
   section.setAttribute("sap-ignore", "");
   section.setAttribute("aria-label", COPY.label(appName));
   section.appendChild(template.content.cloneNode(true));
+
+  if (downloadLink) {
+    for (const el of section.querySelectorAll("a[visitor-intro-download]")) {
+      el.setAttribute("href", downloadLink);
+    }
+  }
 
   const close = document.createElement("button");
   close.type = "button";
@@ -68,6 +74,19 @@ function buildSection({ template, appName, labelText, onClose }) {
   mountEditorUI({ name: "intro-close", content: close, css: [CLOSE_CSS], parent: section });
 
   section.addEventListener("click", (event) => {
+    const downloadEl = event.target.closest("[visitor-intro-download]");
+    if (downloadEl) {
+      if (event.defaultPrevented) return;
+      if (downloadEl.tagName === "A") {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (downloadEl.target && downloadEl.target !== "_self") return;
+      }
+      if (onDownload) {
+        event.preventDefault();
+        onDownload();
+      }
+      return;
+    }
     if (event.target.closest("[visitor-intro-dismiss]")) {
       onClose();
       return;
@@ -81,24 +100,24 @@ function buildSection({ template, appName, labelText, onClose }) {
   return section;
 }
 
-export function mountIntro({ memory, template, appName, hadDraft }) {
+export function mountIntro({ memory, template, appName, hadDraft, downloadLink, onDownload }) {
   if (!template || !template.content.textContent.trim() && !template.content.querySelector("img, svg, video, canvas")) return null;
   if (template.getAttribute("visitor-intro") === "manual") {
     const printing = window.matchMedia && window.matchMedia("print").matches;
     // A returning visitor keeps the intro until they hide it themselves; hiding it is remembered (David, Nov 11).
     const open = forced() || !(memory.get().intro.done || bootPhase.servedHash || printing);
-    return mountManual({ memory, template, appName, open });
+    return mountManual({ memory, template, appName, open, downloadLink, onDownload });
   }
   if (!forced()) {
     if (memory.get().intro.done || hadDraft) return null;
     if (bootPhase.servedHash) return null;
     if (window.matchMedia && window.matchMedia("print").matches) return null;
   }
-  return mount({ memory, template, appName });
+  return mount({ memory, template, appName, downloadLink, onDownload });
 }
 
-function mount({ memory, template, appName }) {
-  const section = buildSection({ template, appName, onClose: () => dismiss("closed") });
+function mount({ memory, template, appName, downloadLink, onDownload }) {
+  const section = buildSection({ template, appName, onClose: () => dismiss("closed"), downloadLink, onDownload });
 
   let gone = false;
   let frame = 0;
@@ -140,9 +159,9 @@ function mount({ memory, template, appName }) {
 
 // Hidden only by its own button, never by scrolling, and once hidden it stays hidden for this
 // visitor: there is no way back from a menu (David, Nov 11).
-function mountManual({ memory, template, appName, open }) {
+function mountManual({ memory, template, appName, open, downloadLink, onDownload }) {
   if (!open) return null;
-  const section = buildSection({ template, appName, labelText: COPY.hide, onClose: hide });
+  const section = buildSection({ template, appName, labelText: COPY.hide, onClose: hide, downloadLink, onDownload });
   function hide() {
     memory.get().intro.done = "closed";
     memory.save();

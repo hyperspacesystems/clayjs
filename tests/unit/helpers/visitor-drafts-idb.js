@@ -22,12 +22,12 @@ export const keyFor = (slot) => draftKey(slot, PAGE);
 
 // Every boot gets its own slot: the plugin's listeners outlive the module registry, so two
 // boots on one slot would let an earlier boot's store answer for the boot under test.
-export function setPage({ slot, rows = row("r1", "First"), localRaw = null, keep = false }) {
+export function setPage({ slot, rows = row("r1", "First"), localRaw = null, keep = false, extra = "" }) {
   const root = document.documentElement;
   for (const name of Array.from(root.attributes, (attribute) => attribute.name)) root.removeAttribute(name);
   root.setAttribute("visitor-drafts", slot);
   document.head.innerHTML = `<script type="application/json" data-rules-name="api" data-rules-version="1">${RULES}</script>`;
-  document.body.innerHTML = `<h1 id="title">owner title</h1><input id="note" persist value="owner note"><ul id="rows">${SEED}${rows}</ul>`;
+  document.body.innerHTML = `<h1 id="title">owner title</h1><input id="note" persist value="owner note"><ul id="rows">${SEED}${rows}</ul>${extra}`;
   if (keep) return;
   localStorage.clear();
   if (localRaw != null) localStorage.setItem(keyFor(slot), localRaw);
@@ -39,13 +39,13 @@ function notFound() {
   return { ok: false, status: 404, statusText: "Not Found", text: async () => "" };
 }
 
-export async function bootPage({ slot, params = PARAMS, url = PAGE, localRaw = null, keep = false, rows } = {}) {
+export async function bootPage({ slot, params = PARAMS, url = PAGE, localRaw = null, keep = false, rows, extra = "" } = {}) {
   jest.resetModules();
   delete window.clayEditMode;
   delete window.__hyperclayEditMode;
   document.cookie = "isAdminOfCurrentResource=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
   window.history.replaceState({}, "", url);
-  setPage({ slot, rows, localRaw, keep });
+  setPage({ slot, rows, localRaw, keep, extra });
   window.clay = {};
   let settleReady;
   window.clay.ready = new Promise((resolve) => { settleReady = resolve; });

@@ -1,8 +1,9 @@
 /**
  * The runtime chrome the visitor-drafts plugin puts on a free app in draft mode:
- * the download prompt, the intro area, the owner chip, their per-slot memory, and
- * the ?src= channel that rides along in the download link. Everything here is
- * thrown away on reload and never reaches the document.
+ * the intro area (including its [visitor-intro-download] CTA), the lazy storage-error
+ * rescue card, the owner-only chip, their per-slot memory, and the ?src= channel
+ * that rides along in the download link. Everything here is thrown away on reload
+ * and never reaches the document.
  */
 import { jest } from "@jest/globals";
 import { draftKey } from "../../src/plugins/visitor-drafts/store.js";
@@ -10,7 +11,7 @@ import { $, active, hostOf } from "./helpers/editor-ui.js";
 
 const PARAMS = "plugins=visitor-drafts&exclude=richclay,source";
 const RULES = '{"title":"#title","note":"#note@value"}';
-const INTRO = '<template visitor-intro><p>Track your week.</p></template>';
+const INTRO = '<template visitor-intro><p>Track your week.</p><a href="/_/download?as=htmlclay" visitor-intro-download>Download Notes</a></template>';
 
 const keyFor = (slot) => draftKey(slot) + ":ui";
 const draftKeyFor = (slot) => draftKey(slot);
@@ -34,7 +35,6 @@ function setPage({ slot, keepStorage = false, head = "", template = "", ui = nul
   if (draft) localStorage.setItem(draftKeyFor(slot), JSON.stringify(draft));
 }
 
-// jsdom has no Response, so a mock built from one throws the moment it is called.
 function notFound() {
   return { ok: false, status: 404, statusText: "Not Found", text: async () => "" };
 }
@@ -83,14 +83,14 @@ function styleText(id) {
   return document.getElementById(id).textContent;
 }
 
-function typeInto(el, value) {
-  el.focus();
-  el.value = value;
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
 function prompt() {
   return $(".hcp", "download-prompt");
+}
+
+async function triggerStorageError(detail = { error: new Error("full") }) {
+  document.dispatchEvent(new CustomEvent("clay:drafts-store-failed", { detail }));
+  for (let i = 0; i < 20 && !prompt(); i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  return prompt();
 }
 
 function clickDownload() {
@@ -127,19 +127,11 @@ function readBlob(blob) {
   });
 }
 
-function linkHref() {
-  return prompt().querySelector("[data-hcp-link]").getAttribute("href");
-}
-
-test("draft mode mounts one prompt whose link points at this page's download", async () => {
-  await bootPage({ slot: "ui-prompt-1", url: "/" });
-  expect(document.querySelectorAll('clay-editor-ui[data-clay-ui="download-prompt"]').length).toBe(1);
-  expect(prompt().tagName).toBe("ASIDE");
-  expect(prompt().getAttribute("clay")).toBe("editor-ui");
-  expect(prompt().hasAttribute("sap-ignore")).toBe(true);
-  expect(linkHref()).toBe("/_/download?as=htmlclay");
-  expect(hostOf("download-prompt").getAttribute("clay")).toBe("editor-ui");
-  // A visitor's browser asks no third party for fonts: the prompt uses system stacks.
+test("draft mode mounts no floating prompt on load and wires [visitor-intro-download] to this page's download URL", async () => {
+  const { clay } = await bootPage({ slot: "ui-prompt-1", url: "/", template: INTRO });
+  expect(hostOf("download-prompt")).toBeNull();
+  expect(clay.visitorDrafts.downloadUrl()).toBe("/_/download?as=htmlclay");
+  expect(intro().querySelector("[visitor-intro-download]").getAttribute("href")).toBe("/_/download?as=htmlclay");
   expect(document.querySelector("head link[href*='fonts.googleapis.com']")).toBeNull();
 
   const forms = [
@@ -149,84 +141,57 @@ test("draft mode mounts one prompt whose link points at this page's download", a
     ["/apps/kanban/", "/_/download?as=htmlclay"],
   ];
   for (const [path, expected] of forms) {
-    await bootPage({ slot: "ui-prompt-" + path.replace(/\W/g, "-"), url: path });
-    expect(document.querySelectorAll('clay-editor-ui[data-clay-ui="download-prompt"]').length).toBe(1);
-    expect(linkHref()).toBe(expected);
+    const next = await bootPage({ slot: "ui-prompt-" + path.replace(/\W/g, "-"), url: path, template: INTRO });
+    expect(hostOf("download-prompt")).toBeNull();
+    expect(next.clay.visitorDrafts.downloadUrl()).toBe(expected);
+    expect(intro().querySelector("[visitor-intro-download]").getAttribute("href")).toBe(expected);
   }
 });
 
-test("closing the notice keeps a download icon labeled Keep, remembers it, and can reopen the card", async () => {
-  const { key, clay } = await bootPage({ slot: "ui-prompt-minimize" });
-  const aside = prompt();
-  const tab = aside.querySelector("[data-hcp=open]");
-  aside.querySelector(".hcp-dock .hcp-x").click();
+test("clicking [visitor-intro-download] flushes drafts and follows the download link", async () => {
+  await bootPage({ slot: "ui-intro-dl-click", url: "/kanban.html?src=hn", template: INTRO });
+  const cta = intro().querySelector("[visitor-intro-download]");
+  expect(cta.getAttribute("href")).toBe("/_/download/kanban.html?as=htmlclay&src=hn");
 
-  expect(aside.hidden).toBe(false);
-  expect(aside.getAttribute("data-hcp-state")).toBe("mini");
-  expect(tab.getAttribute("aria-expanded")).toBe("false");
-  expect(active()).toBe(tab);
-  expect(tab.querySelector(".hcp-tab__mini").textContent).toBe("Keep");
-  expect(JSON.parse(localStorage.getItem(key)).prompt.shown).toBe(true);
-  expect(clay.getHTML()).not.toContain('id="hcp"');
-  expect(clay.getHTML()).not.toContain("clay-editor-ui");
+  const clicks = [];
+  const onClick = (event) => {
+    const link = event.composedPath().find((el) => el instanceof Element && el.tagName === "A");
+    if (!link) return;
+    clicks.push({ href: link.getAttribute("href"), prevented: event.defaultPrevented });
+    event.preventDefault();
+  };
+  document.addEventListener("click", onClick);
+  try {
+    cta.click();
+    for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  } finally {
+    document.removeEventListener("click", onClick);
+  }
 
-  await bootPage({ slot: "ui-prompt-minimize", keepStorage: true });
-  expect(prompt().hidden).toBe(false);
-  expect(prompt().getAttribute("data-hcp-state")).toBe("mini");
-  prompt().querySelector("[data-hcp=open]").click();
-  expect(prompt().getAttribute("data-hcp-state")).toBe("card");
-  expect(prompt().querySelector("[data-hcp=open]").getAttribute("aria-expanded")).toBe("true");
-  expect(active()).toBe(prompt().querySelector("[data-hcp-link]"));
-  expect(linkHref()).toBe("/_/download/notes.html?as=htmlclay");
-  expect(clickDownload().defaultPrevented).toBe(false);
-});
-
-test("previously dismissed notices keep a usable icon and storage errors can still open the card", async () => {
-  await bootPage({ slot: "ui-prompt-old-dismissal", ui: { v: 1, prompt: { dismissed: true } } });
-  expect(prompt().hidden).toBe(false);
-  expect(prompt().getAttribute("data-hcp-state")).toBe("mini");
-  prompt().querySelector("[data-hcp=open]").click();
-  expect(prompt().getAttribute("data-hcp-state")).toBe("card");
-  prompt().querySelector(".hcp-card [data-hcp=minimize]").click();
-  expect(prompt().getAttribute("data-hcp-state")).toBe("mini");
-  document.dispatchEvent(new CustomEvent("clay:drafts-store-failed"));
-  expect(prompt().getAttribute("data-hcp-state")).toBe("card");
-  expect(prompt().getAttribute("data-hcp-reason")).toBe("error");
-});
-
-test("Don't show again stops reminders while preserving the download icon across reloads", async () => {
-  const { key } = await bootPage({ slot: "ui-prompt-no-reminders" });
-  prompt().querySelector("[data-hcp=open]").click();
-  prompt().querySelector(".hcp-quiet[data-hcp=dismiss]").click();
-  expect(prompt().hidden).toBe(false);
-  expect(prompt().getAttribute("data-hcp-state")).toBe("mini");
-  expect(JSON.parse(localStorage.getItem(key)).prompt.dismissed).toBe(true);
-
-  await bootPage({ slot: "ui-prompt-no-reminders", keepStorage: true });
-  expect(prompt().hidden).toBe(false);
-  expect(prompt().getAttribute("data-hcp-state")).toBe("mini");
-  prompt().querySelector("[data-hcp=open]").click();
-  expect(prompt().getAttribute("data-hcp-state")).toBe("card");
+  expect(clicks).toEqual([
+    { href: "/_/download/kanban.html?as=htmlclay&src=hn", prevented: true },
+    { href: "/_/download/kanban.html?as=htmlclay&src=hn", prevented: false },
+  ]);
 });
 
 test("the first ?src= for a slot is kept and never replaced", async () => {
-  const first = await bootPage({ slot: "ui-src-1", url: "/kanban.html?src=bsky" });
-  expect(linkHref()).toBe("/_/download/kanban.html?as=htmlclay&src=bsky");
+  const first = await bootPage({ slot: "ui-src-1", url: "/kanban.html?src=bsky", template: INTRO });
   expect(first.clay.visitorDrafts.source).toBe("bsky");
   expect(first.clay.visitorDrafts.downloadUrl()).toBe("/_/download/kanban.html?as=htmlclay&src=bsky");
+  expect(intro().querySelector("[visitor-intro-download]").getAttribute("href")).toBe("/_/download/kanban.html?as=htmlclay&src=bsky");
   expect(JSON.parse(localStorage.getItem(keyFor("ui-src-1"))).src).toBe("bsky");
 
-  const second = await bootPage({ slot: "ui-src-1", url: "/kanban.html", keepStorage: true });
+  const second = await bootPage({ slot: "ui-src-1", url: "/kanban.html", keepStorage: true, template: INTRO });
   expect(second.clay.visitorDrafts.source).toBe("bsky");
-  expect(linkHref()).toBe("/_/download/kanban.html?as=htmlclay&src=bsky");
+  expect(second.clay.visitorDrafts.downloadUrl()).toBe("/_/download/kanban.html?as=htmlclay&src=bsky");
 
-  const third = await bootPage({ slot: "ui-src-1", url: "/kanban.html?src=x", keepStorage: true });
+  const third = await bootPage({ slot: "ui-src-1", url: "/kanban.html?src=x", keepStorage: true, template: INTRO });
   expect(third.clay.visitorDrafts.source).toBe("bsky");
-  expect(linkHref()).toBe("/_/download/kanban.html?as=htmlclay&src=bsky");
+  expect(third.clay.visitorDrafts.downloadUrl()).toBe("/_/download/kanban.html?as=htmlclay&src=bsky");
 
-  const invalid = await bootPage({ slot: "ui-src-2", url: "/kanban.html?src=%3Cb%3E" });
+  const invalid = await bootPage({ slot: "ui-src-2", url: "/kanban.html?src=%3Cb%3E", template: INTRO });
   expect(invalid.clay.visitorDrafts.source).toBe(null);
-  expect(linkHref()).toBe("/_/download/kanban.html?as=htmlclay");
+  expect(invalid.clay.visitorDrafts.downloadUrl()).toBe("/_/download/kanban.html?as=htmlclay");
   expect(localStorage.getItem(keyFor("ui-src-2"))).toBeNull();
 });
 
@@ -238,8 +203,8 @@ test("a route after the document keeps the download on the document, not on a pa
     ["/their-site/notes.html/today", "/_/download/their-site/notes.html?as=htmlclay"],
   ];
   for (const [url, expected] of forms) {
-    const { clay } = await bootPage({ slot: "ui-route-" + url.replace(/\W/g, "-"), url });
-    expect(linkHref()).toBe(expected);
+    const { clay } = await bootPage({ slot: "ui-route-" + url.replace(/\W/g, "-"), url, template: INTRO });
+    expect(intro().querySelector("[visitor-intro-download]").getAttribute("href")).toBe(expected);
     expect(clay.visitorDrafts.downloadUrl()).toBe(expected);
   }
 });
@@ -255,29 +220,33 @@ test("a page that is not in draft mode gets no prompt", async () => {
   expect(hostOf("owner")).toBeNull();
 });
 
-test("a failed browser write puts the prompt in its error card, and dismiss only minimizes", async () => {
-  const { key } = await bootPage({ slot: "ui-error-1" });
-  const aside = prompt();
-  expect(aside.getAttribute("data-hcp-state")).toBe("tab");
+test("a failed browser write mounts the error card lazily, minimize keeps a reopen tab, and a later save hides it", async () => {
+  const { clay } = await bootPage({ slot: "ui-error-1" });
+  expect(hostOf("download-prompt")).toBeNull();
 
-  document.dispatchEvent(new CustomEvent("clay:drafts-store-failed", { detail: { error: new Error("full") } }));
+  const aside = await triggerStorageError();
+  expect(aside.hidden).toBe(false);
   expect(aside.getAttribute("data-hcp-state")).toBe("card");
   expect(aside.getAttribute("data-hcp-reason")).toBe("error");
   expect(aside.querySelector('.hcp-title [data-hcp-for="error"]').textContent).toBe("Your work isn't being saved in this browser.");
   expect(aside.querySelector('.hcp-body [data-hcp-for="error"]').textContent).toBe("Storage is full or turned off here. Download the file to keep what you've done.");
+  expect(clay.getHTML()).not.toContain('id="hcp"');
+  expect(clay.getHTML()).not.toContain("clay-editor-ui");
 
   aside.querySelector('.hcp-quiet[data-hcp="dismiss"]').click();
   expect(aside.getAttribute("data-hcp-state")).toBe("mini");
-  expect(JSON.parse(localStorage.getItem(key)).prompt.dismissed).toBeUndefined();
+  expect(active()).toBe(aside.querySelector("[data-hcp=open]"));
 
   document.dispatchEvent(new CustomEvent("clay:drafts-saved", { detail: {} }));
-  expect(aside.getAttribute("data-hcp-reason")).toBe("use");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(aside.hidden).toBe(true);
+  expect(aside.getAttribute("data-hcp-state")).toBe("off");
+  expect(aside.getAttribute("data-hcp-reason")).toBe("saved");
 });
 
 test("an error card minimized and reopened from its tab is still the error card, so Download builds the live page", async () => {
   const { fetchMock } = await bootPage({ slot: "ui-error-reopen" });
-  const aside = prompt();
-  document.dispatchEvent(new CustomEvent("clay:drafts-store-failed", { detail: { error: new Error("full") } }));
+  const aside = await triggerStorageError();
   aside.querySelector('[data-hcp="minimize"]').click();
   expect(aside.getAttribute("data-hcp-state")).toBe("mini");
   aside.querySelector('[data-hcp="open"]').click();
@@ -295,8 +264,7 @@ test("an error card minimized and reopened from its tab is still the error card,
 
 test("the error card's download carries the live page, not the stale stored draft", async () => {
   const { fetchMock } = await bootPage({ slot: "ui-error-download" });
-  const aside = prompt();
-  document.dispatchEvent(new CustomEvent("clay:drafts-store-failed", { detail: { error: new Error("full") } }));
+  const aside = await triggerStorageError();
   expect(aside.getAttribute("data-hcp-reason")).toBe("error");
 
   const note = document.getElementById("note");
@@ -320,7 +288,7 @@ test("the error card's download drops copy-only content the live page keeps", as
     slot: "ui-error-download-copy",
     body: '<div id="promo" clay="no-copy">Subscribe now</div><div clay="no-copy-unless:paid-forms">Paid forms only</div>',
   });
-  document.dispatchEvent(new CustomEvent("clay:drafts-store-failed", { detail: { error: new Error("full") } }));
+  await triggerStorageError();
 
   const live = clay.getHTML();
   expect(live).toContain("Subscribe now");
@@ -337,28 +305,16 @@ test("the error card's download drops copy-only content the live page keeps", as
 
 test("the error card names the download after the page, index.htmlclay at the root", async () => {
   await bootPage({ slot: "ui-error-download-root", url: "/" });
-  document.dispatchEvent(new CustomEvent("clay:drafts-store-failed", { detail: { error: new Error("full") } }));
+  await triggerStorageError();
 
   const { downloads } = await withDownloadStubs(() => clickDownload());
 
   expect(downloads).toEqual([{ href: "blob:clay-test", download: "index.htmlclay" }]);
 });
 
-test("outside the error state the download link is a plain link to the host", async () => {
-  await bootPage({ slot: "ui-link-plain" });
-  const href = linkHref();
-
-  const event = clickDownload();
-
-  expect(event.defaultPrevented).toBe(false);
-  expect(linkHref()).toBe(href);
-  expect(document.querySelector("a[download]")).toBeNull();
-});
-
 test("a download that cannot be made keeps the live page open, asks for a retry, and records nothing", async () => {
   const { key } = await bootPage({ slot: "ui-error-download-failed" });
-  const aside = prompt();
-  document.dispatchEvent(new CustomEvent("clay:drafts-store-failed", { detail: { error: new Error("full") } }));
+  const aside = await triggerStorageError();
 
   const note = document.getElementById("note");
   note.value = "typed but never stored";
@@ -380,7 +336,7 @@ test("a download that cannot be made keeps the live page open, asks for a retry,
 
   expect(prevented).toBe(true);
   expect(clicks).toEqual([]);
-  expect(JSON.parse(localStorage.getItem(key)).prompt.downloaded).toBeUndefined();
+  expect(localStorage.getItem(key) && JSON.parse(localStorage.getItem(key))?.prompt?.downloaded).toBeFalsy();
   expect(aside.getAttribute("data-hcp-state")).toBe("card");
   expect(aside.getAttribute("data-hcp-reason")).toBe("error");
   expect(aside.querySelector('.hcp-body [data-hcp-for="error"]').textContent).toBe(
@@ -407,7 +363,7 @@ test("a template puts its own strip at the top of the body with one close button
   expect(html).not.toContain("clay-intro");
   expect(html).not.toContain("hcp");
   expect(html).not.toContain("clay-editor-ui");
-  expect(html).toContain('<template visitor-intro=""><p>Track your week.</p></template>');
+  expect(html).toContain('<template visitor-intro=""><p>Track your week.</p><a href="/_/download?as=htmlclay" visitor-intro-download="">Download Notes</a></template>');
 });
 
 test("an empty or whitespace-only template mounts no intro", async () => {
@@ -561,8 +517,9 @@ test("the intro stands aside for the hash the page was served with, not for one 
   expect(intro()).not.toBeNull();
 });
 
-test("the card's minimize button is a boxed minus and the download controls use bevel's download icon", async () => {
+test("the error card's minimize button is a boxed minus and its download controls use the download-simple icon", async () => {
   await bootPage({ slot: "ui-icons" });
+  await triggerStorageError();
 
   const minimize = prompt().querySelector('.hcp-card .hcp-x[data-hcp="minimize"]');
   expect(minimize.querySelector("path").getAttribute("d")).toBe("M5 12h14");
@@ -573,16 +530,16 @@ test("the card's minimize button is a boxed minus and the download controls use 
   expect(prompt().querySelector(".hcp-file svg path").getAttribute("d")).toBe(download);
 });
 
-test("the owner sees which lane they are in", async () => {
+test("the owner sees an explicit owner-only note naming which lane they are in", async () => {
   await bootPage({ slot: "ui-owner-1", owner: true, url: "/notes.html?editmode=true" });
   expect(ownerChip()).not.toBeNull();
   expect(ownerChip().getAttribute("clay")).toBe("editor-ui");
   expect(ownerChip().hasAttribute("sap-ignore")).toBe(true);
-  expect(ownerChip().querySelector(".clay-owner__lead").textContent).toBe("You're editing the original. Visitors get these changes.");
+  expect(ownerChip().querySelector(".clay-owner__lead").textContent).toBe("Owner only (visitors don't see this): you're editing the live original.");
   expect(ownerChip().querySelector(".clay-owner__action").textContent).toBe("Back to my draft");
 
   await bootPage({ slot: "ui-owner-2", owner: true, template: INTRO });
-  expect(ownerChip().querySelector(".clay-owner__lead").textContent).toBe("You're seeing a private draft, like a visitor.");
+  expect(ownerChip().querySelector(".clay-owner__lead").textContent).toBe("Owner only (visitors don't see this): you're in a private draft.");
   expect(ownerChip().querySelector(".clay-owner__action").textContent).toBe("Edit the original");
 
   await bootPage({ slot: "ui-owner-3", template: INTRO });

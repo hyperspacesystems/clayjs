@@ -31,7 +31,6 @@ test("round 1 finding 1, round 2 finding 4, round 3 finding 5: while the databas
   const { factory, state } = failingFactory(base);
   useFactory(factory);
   const { clay, key, count } = await bootPage({ slot: "gate-retry-1" });
-  await waitFor(() => promptRoot() !== null, "the download prompt");
   await sessionStarted(state);
   const watch = watchDownload();
   try {
@@ -39,7 +38,7 @@ test("round 1 finding 1, round 2 finding 4, round 3 finding 5: while the databas
     type(big("x", 600 * 1024));
     expect((await clay.save()).ok).toBe(false);
     expect(clay.hasUnsavedChanges()).toBe(true);
-    await waitFor(() => promptRoot().getAttribute("data-hcp-reason") === "error", "the prompt's error");
+    await waitFor(() => promptRoot()?.getAttribute("data-hcp-reason") === "error", "the prompt's error");
 
     // An app control retries through saveNow(): a note this large is not in the journal either.
     expect(clay.visitorDrafts.saveNow()).toBe(false);

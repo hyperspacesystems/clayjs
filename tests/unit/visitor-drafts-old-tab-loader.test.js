@@ -132,23 +132,23 @@ test("download() waits until the database holds what was typed, then follows the
 test("a click on the download link is held until the database has what was typed, and goes straight through when it already has", async () => {
   const factory = new IDBFactory();
   useFactory(factory);
-  const { clay, key, local, slots } = await bootPage({ slot: "old-download-2" });
-  await waitFor(() => promptRoot() !== null, "the download prompt");
+  const introHtml = '<template visitor-intro="manual"><a href="/_/download?as=htmlclay" visitor-intro-download data-hcp-link>Download</a></template>';
+  const { clay, key, local, slots } = await bootPage({ slot: "old-download-2", extra: introHtml });
+  await waitFor(() => document.querySelector(".clay-intro [visitor-intro-download]") !== null, "the intro download link");
   await clay.visitorDrafts.ready;
-  const link = promptRoot().querySelector("[data-hcp-link]");
+  const link = document.querySelector(".clay-intro [visitor-intro-download]");
   const watch = watchDownload(() => ({ slots: slots().length, cached: JSON.parse(local() ?? "null")?.data.note ?? null }));
   try {
     type("typed, then the link at once");
     link.click();
-    expect(watch.clicks).toEqual([{ held: true, slots: 1, cached: null }]);
+    expect(watch.clicks).toEqual([{ held: true, slots: 0, cached: null }]);
     await waitFor(() => watch.clicks.length === 2, "the link to be followed");
     expect(watch.clicks[1]).toEqual({ held: false, slots: 0, cached: "typed, then the link at once" });
     expect((await readIdb(factory, key)).record.data.note).toBe("typed, then the link at once");
 
     link.click();
-    await pause();
-    expect(watch.clicks.length).toBe(3);
-    expect(watch.clicks[2].held).toBe(false);
+    await waitFor(() => watch.clicks.length === 4, "the second download click to settle");
+    expect(watch.clicks[3].held).toBe(false);
   } finally {
     watch.stop();
   }
@@ -159,10 +159,9 @@ test("when the database refuses the write, the download is the rescue download o
   const { factory, state } = failingFactory(base);
   useFactory(factory);
   const { clay, slots } = await bootPage({ slot: "old-download-3" });
-  await waitFor(() => promptRoot() !== null, "the download prompt");
   await clay.visitorDrafts.ready;
   await sessionStarted(state);
-  const watch = watchDownload(() => ({ reason: promptRoot().getAttribute("data-hcp-reason") }));
+  const watch = watchDownload(() => ({ reason: promptRoot()?.getAttribute("data-hcp-reason") ?? null }));
   try {
     state.fail = true;
     type("typed while the database refuses");

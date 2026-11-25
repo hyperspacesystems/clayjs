@@ -4,6 +4,8 @@ import { A, bootPage, cacheOf, noDatabase, pause, readIdb, type, useFactory, wai
 
 afterEach(noDatabase);
 
+const INTRO_DL = '<template visitor-intro="manual"><a href="/_/download?as=htmlclay" visitor-intro-download>Download Notes</a></template>';
+
 async function holdDatabase(factory, key) {
   const db = await new Promise((resolve, reject) => {
     const req = factory.open("clay-visitor-drafts", 1);
@@ -19,7 +21,7 @@ async function holdDatabase(factory, key) {
   return async () => { release = true; await completed; db.close(); };
 }
 
-const promptRoot = () => document.querySelector('clay-editor-ui[data-clay-ui="download-prompt"]')?.shadowRoot?.getElementById("hcp");
+const introLink = () => document.querySelector(".clay-intro [visitor-intro-download]");
 const blobText = (blob) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(reader.result);
@@ -31,11 +33,11 @@ for (const entry of ["link", "API"]) {
   test(`${entry} download timeout exports the current page while the database still holds the older draft`, async () => {
     const factory = new IDBFactory();
     useFactory(factory);
-    const { clay, key, slots } = await bootPage({ slot: `r5-download-${entry}` });
+    const { clay, key, slots } = await bootPage({ slot: `r5-download-${entry}`, extra: INTRO_DL });
     type("saved before download");
     expect((await clay.save()).ok).toBe(true);
-    await waitFor(() => promptRoot(), "prompt");
-    const link = promptRoot().querySelector("[data-hcp-link]");
+    await waitFor(() => introLink(), "intro download button");
+    const link = introLink();
     const release = await holdDatabase(factory, key);
     const clicks = [];
     const downloads = [];
@@ -45,7 +47,8 @@ for (const entry of ["link", "API"]) {
     URL.createObjectURL = (blob) => { blobs.push(blob); return "blob:r5-current-page"; };
     URL.revokeObjectURL = () => {};
     const watch = (event) => {
-      if (event.composedPath().includes(link)) clicks.push(event.defaultPrevented);
+      const hasHcpLink = event.composedPath().some((node) => node instanceof Element && (node === link || node.hasAttribute("data-hcp-link")));
+      if (hasHcpLink) clicks.push(event.defaultPrevented);
       else if (event.target.matches?.("a[download]")) downloads.push(event.target.download);
       event.preventDefault();
     };
@@ -57,7 +60,7 @@ for (const entry of ["link", "API"]) {
       else link.click();
       await waitFor(() => downloads.length > 0 || clicks.includes(false), "download outcome", 4500);
       expect(performance.now() - started).toBeGreaterThanOrEqual(2999);
-      expect(clicks).toEqual([true]);
+      expect(clicks.every(Boolean)).toBe(true);
       expect(downloads).toEqual(["notes.htmlclay"]);
       expect(blobs).toHaveLength(1);
       expect(await blobText(blobs[0])).toContain('value="typed just before download"');
@@ -78,16 +81,17 @@ test.each([false, true])("typing during the download wait is committed before fo
   const factory = new IDBFactory();
   useFactory(factory);
   const localRaw = parked ? cacheOf({ ...A, data: { removedField: "kept aside" } }) : null;
-  const { clay, key } = await bootPage({ slot: "r5-download-more-typing-" + parked, localRaw });
+  const { clay, key } = await bootPage({ slot: "r5-download-more-typing-" + parked, localRaw, extra: INTRO_DL });
   if (parked) expect(clay.visitorDrafts.restored()).toMatchObject({ restored: false, parked: true });
   type("saved first");
   await clay.save();
-  await waitFor(() => promptRoot(), "prompt");
-  const link = promptRoot().querySelector("[data-hcp-link]");
+  await waitFor(() => introLink(), "intro download button");
+  const link = introLink();
   const release = await holdDatabase(factory, key);
   const left = [];
   const watch = (event) => {
-    if (event.composedPath().includes(link) && !event.defaultPrevented) left.push(JSON.parse(localStorage.getItem(key)).data.note);
+    const isFollow = event.composedPath().some((node) => node instanceof Element && node.hasAttribute("data-hcp-link"));
+    if (isFollow && !event.defaultPrevented) left.push(JSON.parse(localStorage.getItem(key)).data.note);
     event.preventDefault();
   };
   document.addEventListener("click", watch);

@@ -22,7 +22,9 @@ test("new edits after an incompatible draft was parked still get a current-page 
   expect((await page.clay.save()).ok).toBe(false);
   expect(page.slots()).toEqual([]);
   expect(page.clay.hasUnsavedChanges()).toBe(true);
-  const link = prompt.root.querySelector("[data-hcp-link]");
+  await pause();
+  const root = document.querySelector('clay-editor-ui[data-clay-ui="download-prompt"]').shadowRoot.getElementById("hcp");
+  const link = root.querySelector("[data-hcp-link]");
   const clicks = [], blobs = [], downloads = [];
   const originalCreate = URL.createObjectURL, originalRevoke = URL.revokeObjectURL;
   URL.createObjectURL = (blob) => { blobs.push(blob); return "blob:r6-parked"; };

@@ -20,17 +20,22 @@ import { resolveModules } from "../../../src/loader-logic.js";
 
 const LAZY = [
   "src/plugins/visitor-drafts/owner-chip.js",
+  "src/plugins/visitor-drafts/prompt.js",
   "src/plugins/visitor-drafts/prompt-style.js",
   "src/lib/autosave-debug.js",
   "src/plugins/visitor-drafts/intro.js",
 ];
 
 // The modules that fetch each chunk, and only when it is needed: the owner chip is
-// asked for by the draft plugin and by the owner's own, the other two by one module each.
+// asked for by the draft plugin and by the owner's own, the other chunks by one module each.
 const FETCHED_BY = {
   "src/plugins/visitor-drafts/owner-chip.js": {
     importer: "src/plugins/visitor-drafts.js",
     importers: ["src/plugins/visitor-drafts.js", "src/plugins/visitor-drafts-owner.js"],
+  },
+  "src/plugins/visitor-drafts/prompt.js": {
+    importer: "src/plugins/visitor-drafts.js",
+    importers: ["src/plugins/visitor-drafts.js"],
   },
   "src/plugins/visitor-drafts/prompt-style.js": {
     importer: "src/plugins/visitor-drafts/prompt.js",

@@ -5,7 +5,6 @@ import { reloadAfterDiscard } from "../core/unsaved-warning.js";
 import { createStore, adoptLegacy, draftPath, legacyKey, safeStorage, storageFailure } from "./visitor-drafts/store.js";
 import { createUiMemory } from "./visitor-drafts/ui-memory.js";
 import { rememberSource, downloadUrl } from "./visitor-drafts/source.js";
-import { mountPrompt } from "./visitor-drafts/prompt.js";
 import { DOWNLOAD_URL, backToDraft, editOriginal, inertVisitorDrafts } from "./visitor-drafts/inert.js";
 
 let store = null;
@@ -22,6 +21,19 @@ let restoredDetail = null;
 let downloadLink = DOWNLOAD_URL;
 let source = null;
 let ready = Promise.resolve();
+let errorPromptPromise = null;
+let showStorageError = () => Promise.resolve(null);
+
+function clickHostDownload(href) {
+  const a = document.createElement("a");
+  a.setAttribute("clay", "no-save no-watch no-snapshot");
+  a.setAttribute("data-hcp-link", "");
+  a.href = href;
+  a.style.setProperty("display", "none", "important");
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 // Settles once the draft is on the page. Already settled for a first visit and for a
 // draft `localStorage` holds in full; the loader awaits it before the next plugin loads.
 let restoring = Promise.resolve();
@@ -91,17 +103,38 @@ if (isDraftMode && slot && rulesTag) {
   downloadLink = downloadUrl(source);
 
   function finish(result) {
+    const bootClay = window.clay;
     restoredDetail = { restored: result.restored, hadDraft: result.hadDraft, parked: Boolean(result.parked), ...(result.partial && { partial: true }), ...(result.blocked && { blocked: true }) };
     document.dispatchEvent(new CustomEvent("clay:drafts-restored", { detail: restoredDetail }));
     const appName = document.querySelector('meta[name="application-name"]')?.content?.trim() || document.title.split(/:|\s\|\s/)[0].trim() || "This app";
     const template = document.querySelector("template[visitor-intro]");
+    const ensureErrorPrompt = () => {
+      errorPromptPromise ??= import("./visitor-drafts/prompt.js")
+        .then((m) => m.mountPrompt({ memory, appName, link: downloadLink, settle: () => settle(), canDownloadCurrent: () => !refused && !restoredDetail.blocked }))
+        .catch((error) => {
+          errorPromptPromise = null;
+          console.warn("visitor-drafts: the storage error card did not load", error);
+          return null;
+        });
+      return errorPromptPromise;
+    };
+    showStorageError = () => ensureErrorPrompt().then((prompt) => { prompt?.showError(); return prompt; });
+    document.addEventListener("clay:drafts-store-failed", () => { if (window.clay === bootClay) showStorageError(); });
+    document.addEventListener("clay:drafts-saved", () => { if (window.clay === bootClay) errorPromptPromise?.then((prompt) => prompt?.clearError()); });
     const start = () => {
-      ready = mountPrompt({ memory, appName, link: downloadLink, settle: () => settle(), canDownloadCurrent: () => !refused && !restoredDetail.blocked }).then((prompt) => mountIntroLate({ memory, template, appName, hadDraft: result.hadDraft || store.kept() }).then(() => prompt)).then((prompt) => {
-        document.addEventListener("clay:drafts-store-failed", () => prompt.showError());
-        document.addEventListener("clay:drafts-saved", () => prompt.clearError());
-        if (draftStoreFailed()) prompt.showError();
-        return (isOwner ? mountChip() : Promise.resolve(null)).then(() => prompt);
-      });
+      const initialError = draftStoreFailed() ? showStorageError() : Promise.resolve(null);
+      ready = Promise.all([
+        initialError,
+        mountIntroLate({
+          memory,
+          template,
+          appName,
+          hadDraft: result.hadDraft || store.kept(),
+          downloadLink,
+          onDownload: () => visitorDrafts.download(),
+        }),
+        isOwner ? mountChip() : Promise.resolve(null),
+      ]).then(([prompt]) => prompt);
     };
     document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", start, { once: true }) : start();
   }
@@ -250,9 +283,24 @@ export const visitorDrafts = store ? {
   editOriginal,
   backToDraft,
   downloadUrl: () => downloadLink,
-  download: () => ready.then(async (prompt) => {
+  download: () => ready.then(async () => {
+    const canDownload = !refused && !restoredDetail?.blocked;
+    if (!canDownload) {
+      if (errorPromptPromise) {
+        const prompt = await errorPromptPromise;
+        return prompt?.download(false);
+      }
+      clickHostDownload(downloadLink);
+      return;
+    }
     const saved = await settle();
-    return prompt?.download(saved === false);
+    const rescue = saved === false || draftStoreFailed();
+    if (!rescue) {
+      clickHostDownload(downloadLink);
+      return;
+    }
+    const prompt = await showStorageError();
+    return prompt?.download(true);
   }),
   source,
 } : inertVisitorDrafts();

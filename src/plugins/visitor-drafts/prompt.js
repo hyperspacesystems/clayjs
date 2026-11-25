@@ -1,11 +1,12 @@
 import { BOTTOM_UI_CHANGED, announceBottomUi, bottomBarHeight } from "./bottom-ui.js";
 import { mountEditorUI } from "../../ui/editor-ui.js";
-const ASIDE = `<aside class="hcp" id="hcp" hidden aria-label="Download this app" data-hcp-state="tab" data-hcp-reason="open" sap-ignore clay="editor-ui">
+
+const ASIDE = `<aside class="hcp" id="hcp" hidden aria-label="Download this app" data-hcp-state="off" data-hcp-reason="error" sap-ignore clay="editor-ui">
   <section class="hcp-card" id="hcp-card" role="dialog" aria-modal="false" aria-labelledby="hcp-title">
     <button type="button" class="hcp-x" data-hcp="minimize" aria-label="Minimize"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M5 12h14"/></svg></button>
-    <div class="hcp-kicker">Free download</div>
-    <h2 class="hcp-title" id="hcp-title"><span data-hcp-for="use">Your work is saved in this browser only.</span><span data-hcp-for="open">This app is free to keep.</span><span data-hcp-for="return">Your work is saved in this browser only.</span><span data-hcp-for="error">Your work isn't being saved in this browser.</span></h2>
-    <p class="hcp-body"><span data-hcp-for="open">Download it as one file and use it on your computer, no account needed.</span><span data-hcp-for="use">Download the file to keep it on your computer for good.</span><span data-hcp-for="return">Download the file to keep it on your computer for good.</span><span data-hcp-for="error">Storage is full or turned off here. Download the file to keep what you've done.</span></p>
+    <div class="hcp-kicker">Browser storage unavailable</div>
+    <h2 class="hcp-title" id="hcp-title"><span data-hcp-for="error">Your work isn't being saved in this browser.</span></h2>
+    <p class="hcp-body"><span data-hcp-for="error">Storage is full or turned off here. Download the file to keep what you've done.</span></p>
     <div class="hcp-file">
       <svg width="20" height="20" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z"/></svg>
       <div><b class="hcp-name" data-hcp-name>This app</b><small>One file with the whole app and your work in it</small></div>
@@ -13,20 +14,22 @@ const ASIDE = `<aside class="hcp" id="hcp" hidden aria-label="Download this app"
     <div class="hcp-actions">
       <a class="hcp-btn hcp-btn--primary" data-hcp-link href="/_/download?as=htmlclay"><span><svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z"/></svg>Download free</span></a>
     </div>
-    <div class="hcp-foot"><button type="button" class="hcp-quiet" data-hcp="dismiss">Don&rsquo;t show again</button></div>
+    <div class="hcp-foot"><button type="button" class="hcp-quiet" data-hcp="dismiss">Minimize</button></div>
   </section>
   <div class="hcp-dock">
-    <button type="button" class="hcp-btn hcp-tab" data-hcp="open" aria-controls="hcp-card" aria-expanded="false" aria-label="This app is free to keep"><span><svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z"/></svg><span class="hcp-tab__label">This app is free to keep</span><span class="hcp-tab__mini">Keep</span></span></button>
-    <button type="button" class="hcp-x" data-hcp="minimize" aria-label="Minimize download notice"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M1.4 0 6 4.6 10.6 0 12 1.4 7.4 6 12 10.6 10.6 12 6 7.4 1.4 12 0 10.6 4.6 6 0 1.4z"/></svg></button>
+    <button type="button" class="hcp-btn hcp-tab" data-hcp="open" aria-controls="hcp-card" aria-expanded="false" aria-label="Storage warning: download your work"><span><svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z"/></svg><span class="hcp-tab__label">Save copy</span><span class="hcp-tab__mini">Keep</span></span></button>
+    <button type="button" class="hcp-x" data-hcp="minimize" aria-label="Minimize storage warning"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M1.4 0 6 4.6 10.6 0 12 1.4 7.4 6 12 10.6 10.6 12 6 7.4 1.4 12 0 10.6 4.6 6 0 1.4z"/></svg></button>
   </div>
 </aside>`;
 
-// `settle` returns a promise while the page's last changes are not yet where the download
-// page reads them, and null once they are. False requests a download from this page.
+// Lazily mounted only when browser draft storage fails (`clay:drafts-store-failed` or an
+// interrupted download flush), so visitors get an emergency rescue download card without any
+// resting bottom-right popover during normal use.
 export async function mountPrompt({ memory, appName, link, settle, canDownloadCurrent = () => true }) {
   const { PROMPT_CSS } = await import("./prompt-style.js");
   const existing = document.querySelector('clay-editor-ui[data-clay-ui="download-prompt"]');
   let root = existing?.shadowRoot.getElementById("hcp");
+  if (root?._hcpApi) return root._hcpApi;
   if (!root) {
     const parsed = document.createElement("template");
     parsed.innerHTML = ASIDE;
@@ -36,23 +39,28 @@ export async function mountPrompt({ memory, appName, link, settle, canDownloadCu
   const ui = memory.get();
   if (!ui.prompt || typeof ui.prompt !== "object") ui.prompt = {};
   const mem = ui.prompt;
-  const USES_TO_SHOW = 3;
-  const IDLE_MS = 2500;
   const TEXTY = /^(INPUT|TEXTAREA|SELECT)$/;
   const OUR_UI = "#hcp, .clay-intro, .clay-owner";
 
   const linkEl = root.querySelector("[data-hcp-link]");
   linkEl.href = link;
-
   if (appName) root.querySelector("[data-hcp-name]").textContent = appName;
 
   const tab = root.querySelector("[data-hcp=open]");
   function set(state, reason) {
+    if (state === "off") {
+      root.hidden = true;
+      root.setAttribute("data-hcp-state", "off");
+      if (reason) root.setAttribute("data-hcp-reason", reason);
+      tab.setAttribute("aria-expanded", "false");
+      lift();
+      return;
+    }
     root.hidden = false;
     root.setAttribute("data-hcp-state", state);
     if (reason) root.setAttribute("data-hcp-reason", reason);
     tab.setAttribute("aria-expanded", state === "card" ? "true" : "false");
-    if (state === "card" || state === "mini") { mem.shown = true; memory.save(); root.setAttribute("data-hcp-arrived", ""); }
+    root.setAttribute("data-hcp-arrived", "");
     lift();
   }
 
@@ -60,33 +68,9 @@ export async function mountPrompt({ memory, appName, link, settle, canDownloadCu
     return el && !root.contains(el) && !el.closest(OUR_UI) && (TEXTY.test(el.tagName) || el.isContentEditable);
   }
 
-  let timer = null;
-  function maybeShow(reason) {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      if (mem.shown || mem.dismissed || root.getAttribute("data-hcp-state") !== "tab") return;
-      const a = document.activeElement;
-      if (isHostField(a)) {
-        const r = a.getBoundingClientRect();
-        const w = Math.min(360, innerWidth - 32);
-        if (innerWidth < 700 || (r.right > innerWidth - w - 32 && r.bottom > innerHeight - 380)) return;
-      }
-      set("card", reason);
-    }, IDLE_MS);
-  }
-
-  const touched = [];
-  function onUse(e) {
-    if (root.contains(e.target) || !isHostField(e.target)) return;
-    if (touched.indexOf(e.target) < 0) touched.push(e.target);
-    mem.uses = Math.max(mem.uses || 0, touched.length);
-    if (!mem.shown) memory.save();
-    if (touched.length >= USES_TO_SHOW) maybeShow("use");
-  }
-
   function onFocusIn(e) {
-    if (!isHostField(e.target)) return;
-    if (root.getAttribute("data-hcp-state") === "card") set(mem.shown ? "mini" : "tab");
+    if (!isHostField(e.target) || root.hidden) return;
+    if (root.getAttribute("data-hcp-state") === "card") set("mini");
     if (innerWidth < 700) root.setAttribute("data-hcp-typing", "");
   }
   function onFocusOut() {
@@ -125,12 +109,8 @@ export async function mountPrompt({ memory, appName, link, settle, canDownloadCu
     const t = e.target.closest("[data-hcp]");
     if (t) {
       const act = t.getAttribute("data-hcp");
-      if (act === "open") { set("card", root.getAttribute("data-hcp-reason") === "error" ? undefined : "open"); linkEl.focus(); }
-      else if (act === "minimize") { set("mini"); tab.focus(); }
-      else if (act === "dismiss") {
-        if (root.getAttribute("data-hcp-reason") === "error") { set("mini"); tab.focus(); }
-        else { mem.dismissed = true; set("mini"); tab.focus(); }
-      }
+      if (act === "open") { set("card", "error"); linkEl.focus(); }
+      else if (act === "minimize" || act === "dismiss") { set("mini"); tab.focus(); }
       return;
     }
     if (e.target.closest("[data-hcp-link]")) {
@@ -155,40 +135,40 @@ export async function mountPrompt({ memory, appName, link, settle, canDownloadCu
           return;
         }
       }
-      mem.downloaded = true; mem.shown = true; memory.save();
+      mem.downloaded = true;
+      memory.save();
     }
-  });
-  root.addEventListener("animationend", (e) => {
-    if (e.animationName === "hcp-arrive" || e.animationName === "hcp-arrive-fade") root.setAttribute("data-hcp-arrived", "");
   });
   root.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && root.getAttribute("data-hcp-state") === "card") { set("mini"); tab.focus(); }
   });
 
-  function showError() { set("card", "error"); }
-  function clearError() {
-    if (root.getAttribute("data-hcp-reason") === "error") root.setAttribute("data-hcp-reason", "use");
+  function showError() {
+    root.querySelector(".hcp-body [data-hcp-for='error']").textContent = "Storage is full or turned off here. Download the file to keep what you've done.";
+    set("card", "error");
   }
-  const api = { set, root, showError, clearError, download: (rescue = false) => {
-    rescueRequested = rescue;
-    try { linkEl.click(); } finally { rescueRequested = false; }
-  } };
+  function clearError() {
+    if (root.getAttribute("data-hcp-reason") === "error") set("off", "saved");
+  }
+  const api = {
+    set,
+    root,
+    showError,
+    clearError,
+    download: (rescue = false) => {
+      rescueRequested = rescue;
+      try { linkEl.click(); } finally { rescueRequested = false; }
+    },
+  };
 
-  document.addEventListener("input", onUse, true);
-  document.addEventListener("change", onUse, true);
   document.addEventListener("focusin", onFocusIn);
   document.addEventListener("focusout", onFocusOut);
   addEventListener("scroll", lift, { passive: true });
   addEventListener("resize", lift);
-  // The intro leaving can bring a page's bottom bar into view with no scroll and no transition, so the
-  // prompt measures again when anything else says the bottom of the screen changed. Its own word is skipped.
   document.addEventListener(BOTTOM_UI_CHANGED, () => { if (!announcing) lift(); });
   document.addEventListener("transitionend", lift, true);
-  // Transition events stop at a shadow root, so the prompt's own slides are heard here.
   root.addEventListener("transitionend", lift);
-
-  set(mem.shown || mem.dismissed ? "mini" : "tab");
-  if (!mem.shown && (mem.uses || 0) >= USES_TO_SHOW) maybeShow("return");
+  root._hcpApi = api;
 
   return api;
 }
