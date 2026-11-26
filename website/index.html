@@ -184,7 +184,7 @@
       <summary><span class="prob">Visitors can see my edit controls.</span><span class="sol">edit mode</span></summary>
       <div class="fold-body">
         <p>Your first HTML file can keep its controls exposed; that's fine. When you share it, mark the owner-only parts and clayjs strips or disables them for everyone else. The server decides who the owner is.</p>
-        <pre><code class="language-markup">&lt;h1 editmode:contenteditable&gt;Only the owner can edit this&lt;/h1&gt;
+        <pre><code class="language-markup">&lt;h1 editable="plain"&gt;Only the owner can edit this&lt;/h1&gt;
 &lt;button clay="no-save" onclick="clay.save()"&gt;Save&lt;/button&gt;</code></pre>
         <div class="mode-toggle" role="radiogroup" aria-label="Simulate who is looking at the file" clay="no-save no-watch">
           <button type="button" id="mode-edit" role="radio" aria-checked="true">You (owner)</button>

@@ -94,7 +94,7 @@ Each row has a `data-id`, its text is `editable="plain"`, and its checkbox is `p
   <li><span class="grip" sortable-handle show-when:editmode="true" aria-label="Drag">⠿</span><input type="checkbox" persist viewmode:disabled> <span class="title" editable="plain"></span><button type="button" data-action="remove" show-when:editmode="true" aria-label="Remove">×</button></li>
 ```
 
-Templates are blueprints. `item-tpl` holds a new row in its active form (`contenteditable="plaintext-only"`, no `disabled`), because a clone is inserted while the owner is editing and the mode transform never touches template content. ([Mode attributes: one file for editors and viewers](https://clayjs.com/docs/guide/edit-mode/#mode-attributes-one-file-for-editors-and-viewers))
+Templates are blueprints. `item-tpl` holds a new row in its active form (no `disabled`), because a clone is inserted while the owner is editing and the mode transform never touches template content. Its title is `editable="plain"` like every saved row: edit mode makes it typable inside the template too, so a clone takes the caret the moment it lands. ([Mode attributes: one file for editors and viewers](https://clayjs.com/docs/guide/edit-mode/#mode-attributes-one-file-for-editors-and-viewers))
 
 ```html
 </template>
@@ -310,7 +310,7 @@ Plugins add editing, sync, and UI features to `clay.js`. Most are off by default
 
 | Plugin | Default | Loads in view mode | Adds |
 |---|---|---|---|
-| `richclay` | on | no | the `editable` attribute, `clay.RichClay` |
+| `richclay` | on | no | the `editable` attribute (except `editable="plain"`, which is core), `clay.RichClay` |
 | `source` | on | no | byte-preserving saves, `clay.source` |
 | `sync` | off | yes | live sync, `clay.conflicts`, `clay.morph`, presence and the editing marker |
 | `live` | off | yes | `clay.live(name)`: a `clay="live"` JSON tag as a live object |
@@ -502,7 +502,7 @@ The mode this tab starts in is decided once, in this order:
 
 Nothing else opens edit, including a page whose own script makes text editable. An editor library such as OverType or CodeMirror, a `persist` field, and `contenteditable` set by your code all accept typing in view mode, and none of that typing is saved, because the save path runs only in edit. A tool page that must be editable the moment it opens, such as a journal or a notes pad, declares `<html opens-in="edit">`. Every other document needs a way into edit: the `menu` plugin, or a control that calls `clay.setMode("edit")`.
 
-When someone who can edit types into a document in view anyway, ClayJS shows a notice on the first edit to a field that would save in edit mode: a `persist` control, or `contenteditable` content outside `editor-ui`, `no-save` and `freeze`. A field that edit mode would unlock (`editmode:contenteditable`, `viewmode:readonly`, `viewmode:disabled`) raises it on the first attempt to type into it or press it. The notice reads "In view mode, so edits won't be saved." and stays until the tab enters edit, with a **Switch to edit** button that calls `clay.setMode("edit")`. A document without `clay-mode-switch="live"` reloads to switch, so the characters typed before the notice appeared are lost. A visitor who cannot edit never sees it, and a page with its own handled single-key shortcuts does not set it off. It also writes one warning to the console.
+When someone who can edit types into a document in view anyway, ClayJS shows a notice on the first edit to a field that would save in edit mode: a `persist` control, or `contenteditable` content outside `editor-ui`, `no-save` and `freeze`. A field that edit mode would unlock (`editable="plain"`, `editmode:contenteditable`, `viewmode:readonly`, `viewmode:disabled`) raises it on the first attempt to type into it or press it. The notice reads "In view mode, so edits won't be saved." and stays until the tab enters edit, with a **Switch to edit** button that calls `clay.setMode("edit")`. A document without `clay-mode-switch="live"` reloads to switch, so the characters typed before the notice appeared are lost. A visitor who cannot edit never sees it, and a page with its own handled single-key shortcuts does not set it off. It also writes one warning to the console.
 
 `<html viewonly>` in the file forces view mode. So does a response carrying only the pre-1.9.0 token `htmlclaytoken` (an out-of-date HTML Clay, which also shows an update bar).
 
@@ -637,7 +637,7 @@ Entering edit writes nothing. The session adopts the file it shows as its baseli
 
 ### 3.5 Attributes across a mode change
 
-The four controlled families, `editmode:contenteditable`, `editmode:onclick`, `viewmode:disabled` and `viewmode:readonly`, are handed back with their authored values after a cycle.
+The four controlled families, `editmode:contenteditable`, `editmode:onclick`, `viewmode:disabled` and `viewmode:readonly`, are handed back with their authored values after a cycle, and an `editable="plain"` field loses the `contenteditable` edit mode gave it.
 
 Frozen regions keep their saved contents.
 
@@ -2529,9 +2529,9 @@ For a Notion-like document, use the [page editor](https://clayjs.com/docs/plugin
 |---|---|
 | `text` | `.body[editable="toolbar-on-select"]`: paragraphs, H2/H3, lists, quotes |
 | `callout` | the same, styled as a callout |
-| `todo` | `ul.todos` of `li[data-id]` with a `persist` checkbox and an `editmode:contenteditable` span; Enter adds the next item, Backspace on an empty item removes it |
+| `todo` | `ul.todos` of `li[data-id]` with a `persist` checkbox and an `editable="plain"` span; Enter adds the next item, Backspace on an empty item removes it |
 | `divider` | `<hr>` |
-| `image` | `<figure>` with `<img>` and an `editmode:contenteditable` caption |
+| `image` | `<figure>` with `<img>` and an `editable="plain"` caption |
 
 This model gives drag, block menus, non-rich blocks and per-block Squire undo (which limits the peer-rollback trap), at the cost of selection and Enter-to-split across blocks.
 
@@ -2541,7 +2541,7 @@ This model gives drag, block menus, non-rich blocks and per-block Squire undo (w
 - Images come from a hidden file input in chrome or from a pasted screenshot (`pasteImage`), through `clay.upload` with the `data:` fallback.
 - The outline (H1 to H3 across blocks) and the word count are `editor-ui` projections; the outline rebuilds only when its signature changes.
 
-Missing pieces to add on the same model: a table block (`<table>` with `editmode:contenteditable` cells and your own Tab and add-row code), a code block (`<pre><code editmode:contenteditable>` with a copy button in chrome), a toggle (`<details>`, noting `open` saves), anchor ids on headings (assign `id` from text on blur, not on load).
+Missing pieces to add on the same model: a table block (`<table>` with `editable="plain"` cells and your own Tab and add-row code), a code block (`<pre><code editable="plain">` with a copy button in chrome), a toggle (`<details>`, noting `open` saves), anchor ids on headings (assign `id` from text on blur, not on load).
 
 ### 11.3 Finance tracker
 
@@ -2558,11 +2558,11 @@ The authored file already shows every computed value, so sap mounts without chan
 
 ### 11.4 CRM follow-up list
 
-Table-first. `<tr data-id data-stage="lead" data-next="2026-10-14">` rows with `editmode:contenteditable` name and company cells, a persisted `<select>` for stage, a persisted `<input type="date">` for the next contact, and an `editable` notes cell or a hidden notes element shown in the record-as-modal detail. Projections into `editor-ui`: "due today" (rows whose `data-next` is today or earlier) and a pipeline board (columns by stage, each card a link to the row's detail). Totals by stage with sap if deals carry amounts. `mailto:` links for contact. CSV import merges by email or id. Single owner.
+Table-first. `<tr data-id data-stage="lead" data-next="2026-10-14">` rows with `editable="plain"` name and company cells, a persisted `<select>` for stage, a persisted `<input type="date">` for the next contact, and an `editable` notes cell or a hidden notes element shown in the record-as-modal detail. Projections into `editor-ui`: "due today" (rows whose `data-next` is today or earlier) and a pipeline board (columns by stage, each card a link to the row's detail). Totals by stage with sap if deals carry amounts. `mailto:` links for contact. CSV import merges by email or id. Single owner.
 
 ### 11.5 Flashcards
 
-Decks as `<section data-id>` records, cards as `<article data-id data-due data-interval data-ease>` with `editmode:contenteditable` front and back. Study mode is tab-local: the hash holds the deck and the current card, a runtime stylesheet shows one card and hides the back until revealed. Grading writes the new `data-due`, `data-interval` and `data-ease` on the card (an SM-2 style schedule), inside one undo commit. The "due today" count is an `editor-ui` projection.
+Decks as `<section data-id>` records, cards as `<article data-id data-due data-interval data-ease>` with `editable="plain"` front and back. Study mode is tab-local: the hash holds the deck and the current card, a runtime stylesheet shows one card and hides the back until revealed. Grading writes the new `data-due`, `data-interval` and `data-ease` on the card (an SM-2 style schedule), inside one undo commit. The "due today" count is an `editor-ui` projection.
 
 ### 11.6 Typed table (a spreadsheet you can be honest about)
 

@@ -21,13 +21,13 @@
 </head>
 <body>
 
-<h1 editmode:contenteditable inert-contenteditable="plaintext-only">My list</h1>
+<h1 editable="plain">My list</h1>
 <p class="sub">What I need to get done.</p>
 
 <ul>
-  <li><input type="checkbox" persist aria-labelledby="t1"> <span id="t1" editmode:contenteditable inert-contenteditable="plaintext-only">Buy oat milk</span></li>
-  <li><input type="checkbox" persist aria-labelledby="t2"> <span id="t2" editmode:contenteditable inert-contenteditable="plaintext-only">Book the dentist</span></li>
-  <li><input type="checkbox" persist aria-labelledby="t3"> <span id="t3" editmode:contenteditable inert-contenteditable="plaintext-only">Water the fig tree</span></li>
+  <li><input type="checkbox" persist aria-labelledby="t1"> <span id="t1" editable="plain">Buy oat milk</span></li>
+  <li><input type="checkbox" persist aria-labelledby="t2"> <span id="t2" editable="plain">Book the dentist</span></li>
+  <li><input type="checkbox" persist aria-labelledby="t3"> <span id="t3" editable="plain">Water the fig tree</span></li>
 </ul>
 
 <script>
