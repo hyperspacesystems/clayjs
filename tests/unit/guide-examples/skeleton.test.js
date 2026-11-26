@@ -17,6 +17,7 @@ test("the saved file holds the record, inert, and none of the chrome", () => {
   expect(saved.querySelector("#summary")).toBeNull();
   expect(saved.querySelector("#view-state")).toBeNull();
   expect(saved.querySelectorAll("#app [contenteditable]").length).toBe(0);
+  expect(saved.querySelector('[data-id="r-mmm"] .title').getAttribute("editable")).toBe("plain");
   expect(saved.querySelector('[data-id="r-sicp"] input').hasAttribute("disabled")).toBe(true);
   expect(saved.documentElement.hasAttribute("editmode")).toBe(false);
 });
@@ -51,6 +52,7 @@ test("Add mints a unique id and saves", async () => {
   const ids = [...document.querySelectorAll("#items > li")].map((li) => li.dataset.id);
   expect(ids.length).toBe(4);
   expect(new Set(ids).size).toBe(4);
+  expect($(`[data-id="${ids[3]}"] .title`).getAttribute("contenteditable")).toBe("plaintext-only");
   const result = await clay.save();
   expect(result.ok).toBe(true);
   expect(saves.at(-1)).toContain(`data-id="${ids[3]}"`);

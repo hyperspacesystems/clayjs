@@ -39,7 +39,7 @@
 </head>
 <body>
 <main id="app" sap>
-  <h1 editmode:contenteditable inert-contenteditable="plaintext-only">Reading list</h1>
+  <h1 editable="plain">Reading list</h1>
 
   <p class="count">Books read: <output clay="no-dirty" calc:read="state.books.filter(b => b.status === 'read').length" text="state.read">1</output> of <output clay="no-dirty" calc:total="state.books.length" text="state.total">2</output></p>
 
@@ -47,8 +47,8 @@
 
   <ul id="books" items="books">
     <li item cms-template data-id=""><span class="title"></span><span class="author"></span><select bind="status" persist><option>reading</option><option>read</option></select></li>
-    <li item data-id="b-mmm"><span class="title" editmode:contenteditable inert-contenteditable="plaintext-only">The Mythical Man-Month</span> <span class="author" editmode:contenteditable inert-contenteditable="plaintext-only">Fred Brooks</span> <select bind="status" persist viewmode:disabled disabled><option>reading</option><option selected>read</option></select> <button type="button" show-when:editmode="true" trigger-remove aria-label="Remove book">×</button></li>
-    <li item data-id="b-sicp"><span class="title" editmode:contenteditable inert-contenteditable="plaintext-only">Structure and Interpretation of Computer Programs</span> <span class="author" editmode:contenteditable inert-contenteditable="plaintext-only">Abelson and Sussman</span> <select bind="status" persist viewmode:disabled disabled><option>reading</option><option>read</option></select> <button type="button" show-when:editmode="true" trigger-remove aria-label="Remove book">×</button></li>
+    <li item data-id="b-mmm"><span class="title" editable="plain">The Mythical Man-Month</span> <span class="author" editable="plain">Fred Brooks</span> <select bind="status" persist viewmode:disabled disabled><option>reading</option><option selected>read</option></select> <button type="button" show-when:editmode="true" trigger-remove aria-label="Remove book">×</button></li>
+    <li item data-id="b-sicp"><span class="title" editable="plain">Structure and Interpretation of Computer Programs</span> <span class="author" editable="plain">Abelson and Sussman</span> <select bind="status" persist viewmode:disabled disabled><option>reading</option><option>read</option></select> <button type="button" show-when:editmode="true" trigger-remove aria-label="Remove book">×</button></li>
   </ul>
 
   <p><button type="button" show-when:editmode="true" trigger-add="books">+ Add book</button></p>
@@ -57,8 +57,8 @@
 
   <template items="books">
     <li item data-id="">
-      <span class="title" editmode:contenteditable contenteditable="plaintext-only"></span>
-      <span class="author" editmode:contenteditable contenteditable="plaintext-only"></span>
+      <span class="title" editable="plain"></span>
+      <span class="author" editable="plain"></span>
       <select bind="status" persist><option>reading</option><option>read</option></select>
       <button type="button" show-when:editmode="true" trigger-remove aria-label="Remove book">×</button>
     </li>

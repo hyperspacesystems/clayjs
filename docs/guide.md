@@ -67,20 +67,20 @@ The fallback CSS rule hides `show-when:editmode="true"` controls before ClayJS r
 `<main id="app">` is the record, the part of the page that ClayJS saves. ([Element identity: `data-id` and `id`](https://clayjs.com/docs/guide/record/#element-identity-data-id-and-id))
 
 ```html
-  <h1 editmode:contenteditable inert-contenteditable="plaintext-only">Reading list</h1>
+  <h1 editable="plain">Reading list</h1>
 ```
 
-`editmode:contenteditable` makes the text editable in edit mode. The file is written in its saved form with `inert-contenteditable`, so a viewer gets inert text from the very first open. ([Mode attributes: one file for editors and viewers](https://clayjs.com/docs/guide/edit-mode/#mode-attributes-one-file-for-editors-and-viewers))
+`editable="plain"` makes the text editable as plain text in edit mode. The file never holds `contenteditable`, so a viewer gets inert text from the very first open. ([Mode attributes: one file for editors and viewers](https://clayjs.com/docs/guide/edit-mode/#mode-attributes-one-file-for-editors-and-viewers))
 
 ```html
   <ul id="items" sortable="items">
-    <li data-id="r-mmm"><span class="grip" sortable-handle show-when:editmode="true" aria-label="Drag">⠿</span><input type="checkbox" persist viewmode:disabled disabled checked> <span class="title" editmode:contenteditable inert-contenteditable="plaintext-only">The Mythical Man-Month</span><button type="button" data-action="remove" show-when:editmode="true" aria-label="Remove">×</button></li>
+    <li data-id="r-mmm"><span class="grip" sortable-handle show-when:editmode="true" aria-label="Drag">⠿</span><input type="checkbox" persist viewmode:disabled disabled checked> <span class="title" editable="plain">The Mythical Man-Month</span><button type="button" data-action="remove" show-when:editmode="true" aria-label="Remove">×</button></li>
 ```
 
-Each row has a `data-id`, its text is `editmode:contenteditable`, and its checkbox is `persist viewmode:disabled`. The saved file includes `disabled` so a viewer gets disabled checkboxes from the first open. ([Mode attributes: one file for editors and viewers](https://clayjs.com/docs/guide/edit-mode/#mode-attributes-one-file-for-editors-and-viewers))
+Each row has a `data-id`, its text is `editable="plain"`, and its checkbox is `persist viewmode:disabled`. The saved file includes `disabled` so a viewer gets disabled checkboxes from the first open. ([Mode attributes: one file for editors and viewers](https://clayjs.com/docs/guide/edit-mode/#mode-attributes-one-file-for-editors-and-viewers))
 
 ```html
-    <li data-id="r-sicp"><span class="grip" sortable-handle show-when:editmode="true" aria-label="Drag">⠿</span><input type="checkbox" persist viewmode:disabled disabled> <span class="title" editmode:contenteditable inert-contenteditable="plaintext-only">Structure and Interpretation of Computer Programs</span><button type="button" data-action="remove" show-when:editmode="true" aria-label="Remove">×</button></li>
+    <li data-id="r-sicp"><span class="grip" sortable-handle show-when:editmode="true" aria-label="Drag">⠿</span><input type="checkbox" persist viewmode:disabled disabled> <span class="title" editable="plain">Structure and Interpretation of Computer Programs</span><button type="button" data-action="remove" show-when:editmode="true" aria-label="Remove">×</button></li>
   </ul>
   <button type="button" data-action="add" show-when:editmode="true">+ Add book</button>
 </main>
@@ -91,7 +91,7 @@ Each row has a `data-id`, its text is `editmode:contenteditable`, and its checkb
 
 ```html
 <template id="item-tpl">
-  <li><span class="grip" sortable-handle show-when:editmode="true" aria-label="Drag">⠿</span><input type="checkbox" persist viewmode:disabled> <span class="title" editmode:contenteditable contenteditable="plaintext-only"></span><button type="button" data-action="remove" show-when:editmode="true" aria-label="Remove">×</button></li>
+  <li><span class="grip" sortable-handle show-when:editmode="true" aria-label="Drag">⠿</span><input type="checkbox" persist viewmode:disabled> <span class="title" editable="plain"></span><button type="button" data-action="remove" show-when:editmode="true" aria-label="Remove">×</button></li>
 ```
 
 Templates are blueprints. `item-tpl` holds a new row in its active form (`contenteditable="plaintext-only"`, no `disabled`), because a clone is inserted while the owner is editing and the mode transform never touches template content. ([Mode attributes: one file for editors and viewers](https://clayjs.com/docs/guide/edit-mode/#mode-attributes-one-file-for-editors-and-viewers))
@@ -775,6 +775,12 @@ Visibility attributes:
 
 ### 3.9 Mode attributes: one file for editors and viewers
 
+For plain text, write `editable="plain"`. In edit mode ClayJS sets `contenteditable="plaintext-only"` on the element, and leaving edit and every save take it away again, so the file keeps only `editable="plain"` and a viewer gets ordinary text from the first open. The same attribute works in records and in `<template>` content, with no saved or active form to choose. ClayJS core handles it, so it works with `exclude=richclay`, and richclay never mounts an editor on it.
+
+```html
+<span class="title" editable="plain">Title</span>
+```
+
 Four attributes make an element behave differently by mode. A **save transform** writes the inert form into the file, and **edit mode** activates it on load. A view boot never loads the activation code, so a viewer sees what the file holds.
 
 | Attribute | In the saved file | In edit mode |
@@ -799,11 +805,11 @@ There is no general `editmode:<anything>`. Only these four attributes exist.
 
 ```html
 <template id="item-tpl">
-  <li><input type="checkbox" persist viewmode:disabled> <span class="title" editmode:contenteditable contenteditable="plaintext-only"></span></li>
+  <li><input type="checkbox" persist viewmode:disabled> <span class="title" editable="plain"></span></li>
 </template>
 ```
 
-Use `contenteditable="plaintext-only"` for titles, labels, and cells to prevent formatting and pasted markup. Make Enter blur instead of inserting a line break, as in the skeleton's keydown handler. Use `editable` ([richclay: rich text (`editable`)](https://clayjs.com/docs/guide/components/#richclay-rich-text-editable)) only where you need rich text.
+Use `editable="plain"` for titles, labels, and cells to prevent formatting and pasted markup. Make Enter blur instead of inserting a line break, as in the skeleton's keydown handler. Use `editable` ([richclay: rich text (`editable`)](https://clayjs.com/docs/guide/components/#richclay-rich-text-editable)) only where you need rich text.
 
 ### 3.10 What works in view mode
 
@@ -1683,7 +1689,7 @@ See [`sheet`](https://clayjs.com/docs/plugins/sheet/#co-editing-undo-and-recover
 
 ### 7.1 richclay: rich text (`editable`)
 
-`editable` turns an element into a rich text editor in edit mode. It is the default plugin, using Squire for editing and DOMPurify on paste.
+`editable` turns an element into a rich text editor in edit mode. It is the default plugin, using Squire for editing and DOMPurify on paste. `editable="plain"` is the exception: a plain-text field with no editor, handled by ClayJS core, so it also works with `exclude=richclay` ([Mode attributes](https://clayjs.com/docs/guide/edit-mode/#mode-attributes-one-file-for-editors-and-viewers)).
 
 ```html
 <div class="desc" editable><p>Two paragraphs on <b>scope</b>.</p></div>
@@ -1700,7 +1706,7 @@ What it leaves out, and what to build instead:
 | Missing | Build it |
 |---|---|
 | Tables, checklists, dividers, callouts, toggles, embeds | Separate blocks outside the rich region (the writer's block model, [Block writer](https://clayjs.com/docs/guide/recipes/#block-writer)) |
-| Image insert, captions, alignment | An image block (`<figure>` with an `<img>` and an `editmode:contenteditable` caption), or `editor.squire.insertImage(src)` for inline images |
+| Image insert, captions, alignment | An image block (`<figure>` with an `<img>` and an `editable="plain"` caption), or `editor.squire.insertImage(src)` for inline images |
 | Screenshot paste | Squire swallows image-only pastes. Listen for `pasteImage` (below) |
 | Markdown shortcuts | Only `* ` and `1. ` start lists. Watch `editor.squire` `input` events and call `editor.setBlockType("H2")` for others |
 | Slash menu | A `keyup` handler for `/` on an empty paragraph opening an `editor-ui` menu ([Block writer](https://clayjs.com/docs/guide/recipes/#block-writer)) |
@@ -1736,7 +1742,7 @@ Traps:
 - **The floating toolbar mounts on `document.body`, not in the top layer.** Inside `dialog.showModal()` or a `popover`, it is unusable, though shortcuts still work. Do not put `editable` inside a modal dialog. The kanban shows the card itself as a fixed overlay instead ([Detail views: the record is the modal](https://clayjs.com/docs/guide/architecture/#detail-views-the-record-is-the-modal)).
 - **Two undo histories.** Inside an `editable`, Cmd+Z goes to Squire's stack. Outside, it goes to page undo, which never records rich text. Typing in a rich region, clicking elsewhere, and pressing Cmd+Z does not undo that typing.
 - **Squire's undo can roll back a peer's edit** in the same region because its history stores whole-region snapshots. Keep collaborative documents in many small regions (one `editable` per block) to limit the damage.
-- **Many editors are expensive.** Each multi-line editor installs document-level listeners and its own Squire instance. Do not put `editable` on every cell of a grid; use `editmode:contenteditable`.
+- **Many editors are expensive.** Each multi-line editor installs document-level listeners and its own Squire instance. Do not put rich `editable` on every cell of a grid; use `editable="plain"`.
 - **Paste uses an allowlist.** Tables, `<hr>`, `<details>`, `<figure>`, iframes, and inline styles are reduced to text. A pasted remote image keeps its hotlinked `src`. A pasted `data:` image bloats every save.
 - **Cloning an active region** copies runtime attributes. Strip them with `clay.RichClay.stripElement(clone)` ([Element identity: `data-id` and `id`](https://clayjs.com/docs/guide/record/#element-identity-data-id-and-id)), or clone from a `<template>`.
 - **`editable` is ignored in view mode.** Viewers get plain markup.
@@ -1829,7 +1835,7 @@ Traps:
 
 ### 7.4 Plain contenteditable
 
-For titles, labels, list items, and table cells, use `editmode:contenteditable` with `plaintext-only` ([Mode attributes: one file for editors and viewers](https://clayjs.com/docs/guide/edit-mode/#mode-attributes-one-file-for-editors-and-viewers)). It has no toolbar, Squire instance, or formatting, and is cheap at any count. Handle Enter yourself by blurring or creating the next item, as the writer's to-do list does.
+For titles, labels, list items, and table cells, use `editable="plain"` ([Mode attributes: one file for editors and viewers](https://clayjs.com/docs/guide/edit-mode/#mode-attributes-one-file-for-editors-and-viewers)). It has no toolbar, Squire instance, or formatting, and is cheap at any count. Handle Enter yourself by blurring or creating the next item, as the writer's to-do list does.
 
 ### 7.5 upload and quickcrop
 
@@ -2133,7 +2139,7 @@ Keep a record's detail fields **inside the record element**, hidden on the card 
 ```html
 <li class="card" data-id="c-brief">
   <span class="grip" sortable-handle show-when:editmode="true">⠿</span>
-  <h3 editmode:contenteditable inert-contenteditable="plaintext-only">Write the launch brief</h3>
+  <h3 editable="plain">Write the launch brief</h3>
   <div class="detail">
     <div class="desc" editable><p>Two paragraphs on <b>scope</b> and audience.</p></div>
     <ul class="checklist">…</ul>
@@ -2771,7 +2777,7 @@ The `:legacy` marker is what stops a reset from coming back: once ClayJS has cop
 </head>
 <body>
 <main id="app" sap>
-  <h1 editmode:contenteditable inert-contenteditable="plaintext-only">Reading list</h1>
+  <h1 editable="plain">Reading list</h1>
 
   <p class="count">Books read: <output clay="no-dirty" calc:read="state.books.filter(b => b.status === 'read').length" text="state.read">1</output> of <output clay="no-dirty" calc:total="state.books.length" text="state.total">2</output></p>
 
@@ -2779,8 +2785,8 @@ The `:legacy` marker is what stops a reset from coming back: once ClayJS has cop
 
   <ul id="books" items="books">
     <li item cms-template data-id=""><span class="title"></span><span class="author"></span><select bind="status" persist><option>reading</option><option>read</option></select></li>
-    <li item data-id="b-mmm"><span class="title" editmode:contenteditable inert-contenteditable="plaintext-only">The Mythical Man-Month</span> <span class="author" editmode:contenteditable inert-contenteditable="plaintext-only">Fred Brooks</span> <select bind="status" persist viewmode:disabled disabled><option>reading</option><option selected>read</option></select> <button type="button" show-when:editmode="true" trigger-remove aria-label="Remove book">×</button></li>
-    <li item data-id="b-sicp"><span class="title" editmode:contenteditable inert-contenteditable="plaintext-only">Structure and Interpretation of Computer Programs</span> <span class="author" editmode:contenteditable inert-contenteditable="plaintext-only">Abelson and Sussman</span> <select bind="status" persist viewmode:disabled disabled><option>reading</option><option>read</option></select> <button type="button" show-when:editmode="true" trigger-remove aria-label="Remove book">×</button></li>
+    <li item data-id="b-mmm"><span class="title" editable="plain">The Mythical Man-Month</span> <span class="author" editable="plain">Fred Brooks</span> <select bind="status" persist viewmode:disabled disabled><option>reading</option><option selected>read</option></select> <button type="button" show-when:editmode="true" trigger-remove aria-label="Remove book">×</button></li>
+    <li item data-id="b-sicp"><span class="title" editable="plain">Structure and Interpretation of Computer Programs</span> <span class="author" editable="plain">Abelson and Sussman</span> <select bind="status" persist viewmode:disabled disabled><option>reading</option><option>read</option></select> <button type="button" show-when:editmode="true" trigger-remove aria-label="Remove book">×</button></li>
   </ul>
 
   <p><button type="button" show-when:editmode="true" trigger-add="books">+ Add book</button></p>
@@ -2789,8 +2795,8 @@ The `:legacy` marker is what stops a reset from coming back: once ClayJS has cop
 
   <template items="books">
     <li item data-id="">
-      <span class="title" editmode:contenteditable contenteditable="plaintext-only"></span>
-      <span class="author" editmode:contenteditable contenteditable="plaintext-only"></span>
+      <span class="title" editable="plain"></span>
+      <span class="author" editable="plain"></span>
       <select bind="status" persist><option>reading</option><option>read</option></select>
       <button type="button" show-when:editmode="true" trigger-remove aria-label="Remove book">×</button>
     </li>
@@ -2819,7 +2825,7 @@ The `:legacy` marker is what stops a reset from coming back: once ClayJS has cop
 3. On an owned collaborative document, `sync` is in `plugins=`; on a [free document](https://clayjs.com/docs/guide/free-documents/), `visitor-drafts,visitor-menu,menu` is in `plugins=`. Add `exclude=richclay` if there is no rich text, and add task plugins (`sortable`, `upload`, `undo`, `indicator`) only when the document uses them.
 4. The owner has a way into edit: the `menu` plugin, or a control of your own that calls `clay.setMode()` and carries `clay-mode-toggle`. Without either, ClayJS shows a one-time note pointing to Cmd+Shift+E (Ctrl+Shift+E elsewhere).
 5. The fallback rule `html:not([editmode="true"]) [show-when\:editmode="true"] { display: none }` is in the stylesheet, and every edit-only control has `show-when:editmode="true"`.
-6. Records are authored in the saved form (`inert-contenteditable`, `disabled`, `readonly`); templates in the active form.
+6. Plain-text fields use `editable="plain"`, in records and templates alike. Other controlled attributes are authored in the saved form in records (`inert-contenteditable`, `disabled`, `readonly`) and in the active form in templates.
 7. Every repeated record has a unique `data-id`; templates carry none; every create and duplicate mints a fresh one.
 8. Every control whose value matters has `persist`; no filter or search box does.
 9. All chrome is cloned from a `<template>` into `clay="editor-ui"` after `clay.ready`; nothing in the file is chrome.

@@ -677,7 +677,7 @@ function buildChrome() {
   styleEl = document.createElement('style');
   styleEl.setAttribute('clay', RUNTIME_ONLY);
   styleEl.textContent = `
-    [editmode\\:contenteditable][contenteditable]:focus {
+    :is([editmode\\:contenteditable], [editable~="plain"], [clay-editable~="plain"])[contenteditable]:focus {
       outline: 1px solid #4a4a6a; outline-offset: 4px; border-radius: 2px;
     }
     ::highlight(clay-ai-edit) { background-color: ${TOKENS['brass-soft']} !important; }

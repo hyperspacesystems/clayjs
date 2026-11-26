@@ -1,5 +1,5 @@
 // Admin system - combines all admin features (edit-only).
-import { init as initContenteditable, enableContentEditable, disableContentEditable, SELECTOR as CONTENTEDITABLE } from './admin-contenteditable.js';
+import { init as initContenteditable, enableContentEditable, disableContentEditable, SELECTOR as CONTENTEDITABLE, PLAIN_SELECTOR } from './admin-contenteditable.js';
 import { init as initInputs, enableAdminInputs, disableAdminInputs, SELECTOR_DISABLED, SELECTOR_READONLY } from './admin-inputs.js';
 import { init as initOnClick, enableOnClick, disableOnClick, SELECTOR as ONCLICK } from './admin-onclick.js';
 import { init as initResources, enableAdminResources, disableAdminResources, SELECTOR as RESOURCES } from './admin-resources.js';
@@ -8,7 +8,7 @@ import { isEditMode } from './is-edit-mode.js';
 
 // Every control this family activates, in one selector: what a node added mid-session is
 // matched against, and what the lease enables.
-const SELECTOR = [CONTENTEDITABLE, SELECTOR_DISABLED, SELECTOR_READONLY, ONCLICK, RESOURCES].join(', ');
+const SELECTOR = [CONTENTEDITABLE, PLAIN_SELECTOR, SELECTOR_DISABLED, SELECTOR_READONLY, ONCLICK, RESOURCES].join(', ');
 
 const ENABLE = [enableContentEditable, enableAdminInputs, enableOnClick, enableAdminResources];
 

@@ -5,12 +5,23 @@ import { authoredAttr, canonicalContentEditable, captureAuthored, restoreAuthore
 
 export const SELECTOR = '[editmode\\:contenteditable]';
 
+// `editable="plain"`: plain text, editable in edit mode, and nothing in the file but that
+// one attribute. The file never holds `contenteditable`, so there is no inert spelling and
+// no template form: edit mode adds it, and leaving edit and saving take it away.
+// `clay-editable` is the spelling for a custom element that owns the bare name.
+export const PLAIN_SELECTOR = '[editable~="plain"], [clay-editable~="plain"]';
+
+function disablePlain(root) {
+  root.querySelectorAll(PLAIN_SELECTOR).forEach(el => el.removeAttribute("contenteditable"));
+}
+
 export function disableContentEditableBeforeSave () {
   addDocumentTransform(docElem => {
     docElem.querySelectorAll(SELECTOR).forEach(el => {
       canonicalContentEditable(el);
       restoreAuthoredOrder(el, originalSnapshotNode(el) ?? el);
     });
+    disablePlain(docElem);
   }, { required: true });
 }
 
@@ -39,6 +50,9 @@ export function enableContentEditable(root = document) {
     el.setAttribute("contenteditable", ["", "true", "false", "plaintext-only"].includes(keyword) ? val : "true");
     el.removeAttribute("inert-contenteditable");
   });
+  root.querySelectorAll(PLAIN_SELECTOR).forEach(el => {
+    if (!el.hasAttribute("contenteditable")) el.setAttribute("contenteditable", "plaintext-only");
+  });
 }
 
 export function disableContentEditable() {
@@ -46,6 +60,7 @@ export function disableContentEditable() {
     canonicalContentEditable(el);
     restoreAuthoredOrder(el);
   });
+  disablePlain(document);
 }
 
 // Auto-initialize

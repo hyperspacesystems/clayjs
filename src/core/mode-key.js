@@ -124,10 +124,12 @@ function onKey(e) {
 // editor at load (an OverType journal) accepts that typing all day. So for a person
 // who can edit, the first edit to a field that saves in edit mode raises a notice
 // that stays until the tab edits. Fields edit mode would unlock (inert
-// contenteditable, viewmode:readonly, viewmode:disabled) raise it on the attempt.
+// contenteditable, editable="plain", viewmode:readonly, viewmode:disabled) raise it on
+// the attempt. The plain selector is spelled out here because admin-contenteditable.js is
+// edit-only and this module loads in view.
 const VIEW_NOTICE = "In view mode, so edits won't be saved.";
 const SAVING_FIELD = ":is(input, textarea, select):is([persist], [clay-persist])";
-const INERT_FIELD = "[editmode\\:contenteditable], [viewmode\\:readonly], [viewmode\\:disabled]";
+const INERT_FIELD = '[editmode\\:contenteditable], [editable~="plain"], [clay-editable~="plain"], [viewmode\\:readonly], [viewmode\\:disabled]';
 
 let viewNotice = null;
 

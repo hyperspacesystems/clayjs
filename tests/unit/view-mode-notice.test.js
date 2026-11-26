@@ -227,6 +227,24 @@ test("typing at an inert contenteditable raises it", async () => {
   expect(notice()).not.toBeNull();
 });
 
+test("typing at an editable=plain field raises it", async () => {
+  jest.spyOn(console, "warn").mockImplementation(() => {});
+  await prepare({ cookie: true });
+  await load();
+  await tick();
+
+  document.body.innerHTML = '<span id="plain" editable="plain">hello</span>';
+  const range = document.createRange();
+  range.setStart(document.getElementById("plain").firstChild, 2);
+  range.collapse(true);
+  getSelection().removeAllRanges();
+  getSelection().addRange(range);
+  key(document.body, "a");
+
+  await tick();
+  expect(notice()).not.toBeNull();
+});
+
 test("a keystroke the page already handled does not raise it", async () => {
   jest.spyOn(console, "warn").mockImplementation(() => {});
   await prepare({ cookie: true });

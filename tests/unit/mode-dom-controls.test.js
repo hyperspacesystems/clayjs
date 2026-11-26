@@ -103,6 +103,21 @@ test("a control inserted after enable is activated, and dispose puts its authore
   expect(document.getElementById("late-input").getAttribute("readonly")).toBe("readonly");
 });
 
+test("a plain field inserted after enable is typable, and dispose leaves only editable=plain", async () => {
+  const lease = adminAttrs.controlsLease();
+  lease.enable();
+
+  const holder = document.createElement("div");
+  holder.innerHTML = '<span id="late-plain" editable="plain">late</span>';
+  document.getElementById("doc").append(holder);
+  await flush();
+
+  expect(document.getElementById("late-plain").getAttribute("contenteditable")).toBe("plaintext-only");
+
+  lease.dispose();
+  expect(document.getElementById("late-plain").outerHTML).toBe('<span id="late-plain" editable="plain">late</span>');
+});
+
 test("a template blueprint is not activated when the template itself is inserted", async () => {
   const lease = adminAttrs.controlsLease();
   lease.enable();

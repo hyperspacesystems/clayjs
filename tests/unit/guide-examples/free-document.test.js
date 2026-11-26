@@ -53,6 +53,7 @@ test("opens in draft mode, in the page's flow, with nothing stored yet", () => {
 
 test("editing a title and adding a book write the slot, and the host is never asked to save", async () => {
   const first = books()[0].querySelector(".title");
+  expect(first.getAttribute("contenteditable")).toBe("plaintext-only");
   first.textContent = "The Mythical Man-Month, second edition";
   first.dispatchEvent(new Event("input", { bubbles: true }));
 
