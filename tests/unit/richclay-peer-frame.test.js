@@ -254,7 +254,7 @@ test.each([
 });
 
 test("a frame tells a field under every attribute RichClay mounts on", async () => {
-  const names = RichClay.selector.split(",").map((part) => part.trim().replace(/^\[|\]$/g, ""));
+  const names = RichClay.selector.split(",").map((part) => part.trim().match(/^\[([\w-]+)/)[1]);
   expect(names.length).toBeGreaterThan(1);
   document.body.innerHTML = `<main>${names.map((name) => `<div id="by-${name}" ${name}><p>${name}: old</p></div>`).join("")}</main>`;
   RichClay.init();
