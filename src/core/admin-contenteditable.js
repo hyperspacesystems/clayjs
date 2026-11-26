@@ -11,8 +11,17 @@ export const SELECTOR = '[editmode\\:contenteditable]';
 // `clay-editable` is the spelling for a custom element that owns the bare name.
 export const PLAIN_SELECTOR = '[editable~="plain"], [clay-editable~="plain"]';
 
+// Plain fields inside <template> content are activated too, so a clone is editable the
+// moment it is inserted: the code that inserts it can focus it at once, and undo records
+// the row as it will stay. A template's content is its own fragment, outside the page's
+// mutation watchers, so this records nothing; leaving edit and every save take it away.
+function eachPlain(root, fn) {
+  root.querySelectorAll(PLAIN_SELECTOR).forEach(fn);
+  root.querySelectorAll("template").forEach(template => eachPlain(template.content, fn));
+}
+
 function disablePlain(root) {
-  root.querySelectorAll(PLAIN_SELECTOR).forEach(el => el.removeAttribute("contenteditable"));
+  eachPlain(root, el => el.removeAttribute("contenteditable"));
 }
 
 export function disableContentEditableBeforeSave () {
@@ -50,7 +59,7 @@ export function enableContentEditable(root = document) {
     el.setAttribute("contenteditable", ["", "true", "false", "plaintext-only"].includes(keyword) ? val : "true");
     el.removeAttribute("inert-contenteditable");
   });
-  root.querySelectorAll(PLAIN_SELECTOR).forEach(el => {
+  eachPlain(root, el => {
     if (!el.hasAttribute("contenteditable")) el.setAttribute("contenteditable", "plaintext-only");
   });
 }

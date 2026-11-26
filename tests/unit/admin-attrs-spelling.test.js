@@ -22,7 +22,8 @@ beforeAll(async () => {
     <div id="plain" editmode:contenteditable inert-contenteditable="plaintext-only">f</div>
     <input id="dis" viewmode:disabled disabled="disabled">
     <input id="ro" viewmode:readonly readonly>
-    <span id="short" editable="plain">g</span>`;
+    <span id="short" editable="plain">g</span>
+    <template id="tpl"><li><span editable="plain">h</span></li></template>`;
   snapshot = await import("../../src/core/snapshot.js");
   const onclick = await import("../../src/core/admin-onclick.js");
   editable = await import("../../src/core/admin-contenteditable.js");
@@ -61,6 +62,8 @@ test("disabled and readonly go back with the author's spelling", () => {
 test("editable=plain is typable in edit mode and the file keeps only editable=plain", () => {
   expect(document.getElementById("short").getAttribute("contenteditable")).toBe("plaintext-only");
   expect(raw()).toContain('<span id="short" editable="plain">g</span>');
+  expect(document.getElementById("tpl").content.querySelector("span").getAttribute("contenteditable")).toBe("plaintext-only");
+  expect(raw()).toContain('<template id="tpl"><li><span editable="plain">h</span></li></template>');
 });
 
 test("leaving edit hands the page back the author's spelling, not a canonical one", () => {
@@ -72,4 +75,5 @@ test("leaving edit hands the page back the author's spelling, not a canonical on
   expect(document.getElementById("dis").getAttribute("disabled")).toBe("disabled");
   expect(document.getElementById("ro").getAttribute("readonly")).toBe("");
   expect(document.getElementById("short").outerHTML).toBe('<span id="short" editable="plain">g</span>');
+  expect(document.getElementById("tpl").innerHTML).toBe('<li><span editable="plain">h</span></li>');
 });

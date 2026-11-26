@@ -58,6 +58,17 @@ test("Add mints a unique id and saves", async () => {
   expect(saves.at(-1)).toContain(`data-id="${ids[3]}"`);
 });
 
+test("an added row's title takes the caret at once, and one undo takes the row back", async () => {
+  const before = document.querySelectorAll("#items > li").length;
+  click($('[data-action="add"]'));
+  const added = document.querySelector("#items > li:last-child .title");
+  expect(document.activeElement).toBe(added);
+  await tick(600);
+  clay.undo.undo();
+  await flushMicrotasks();
+  expect(document.querySelectorAll("#items > li").length).toBe(before);
+});
+
 test("a peer's edit merges in beside an unsaved local edit", async () => {
   const p = await peer();
   $('[data-id="r-mmm"] .title').textContent = "The Mythical Man-Month (local)";
