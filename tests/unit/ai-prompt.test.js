@@ -15,25 +15,25 @@ beforeEach(() => {
 
 const ask = (extra = {}) => ai.prompt({ request: "What changed on this branch?", instructions: ["review"], result: "reviews", omit: ["id", "diff"], into: "incoming", ...extra });
 
-test("an owner's prompt holds the request, the instruction text, the shape and the clay-agent steps", () => {
+test("an owner's prompt holds the request, the instruction text, the shape and the Clay CLI steps", () => {
   const text = ask();
   const doc = window.location.origin + window.location.pathname;
   expect(text.startsWith("What changed on this branch?\n")).toBe(true);
   expect(text).toContain("### review\n\nExplain the change for a reviewer.");
   const shape = JSON.parse(text.match(/```json\n([\s\S]*?)\n```/)[1]);
   expect(shape.required).toEqual(["title", "summary"]);
-  expect(text).toContain(`npx -y @panphora/clay-agent data '${doc}' --json > /tmp/clay-read.json`);
+  expect(text).toContain(`npx -y @panphora/claycli data '${doc}' --json > /tmp/clay-read.json`);
   expect(text).toContain(`'{"incoming": ((.data["incoming"] // []) + $item)}'`);
   expect(text).toContain(`--write - --if-match "$(jq -r .etag /tmp/clay-read.json)"`);
   expect(text).not.toContain("drop that file");
 });
 
-test("a visitor's prompt asks for a file to drop and names no clay-agent step", () => {
+test("a visitor's prompt asks for a file to drop and names no Clay CLI step", () => {
   window.clay = { canEdit: true, isDraftMode: true };
   const text = ask({ fileName: "review.json" });
   expect(text).toContain("Save your JSON object to a file named review.json.");
   expect(text).toContain("drop that file on the page");
-  expect(text).not.toContain("clay-agent");
+  expect(text).not.toContain("claycli");
 });
 
 test("notes from the page come last", () => {

@@ -14,7 +14,7 @@ import { fetchRunFile } from "../core/run-files.js";
  * files. ClayJS never writes the answer into the document: the page applies it.
  *
  * clay.ai.prompt builds the same request as text, for an agent in a terminal (Copy
- * prompt), with steps to write the answer back through clay-agent or as a file.
+ * prompt), with steps to write the answer back through Clay CLI or as a file.
  *
  * Loads in view, edit and draft mode. In draft mode the wire is dropped, so ask
  * answers ai_unavailable and prompt still works: a visitor copies the prompt.
@@ -226,13 +226,13 @@ function agentSteps(into) {
     "2. Read the document's current data:",
     "",
     "```sh",
-    `npx -y @panphora/clay-agent data ${doc} --json > /tmp/clay-read.json`,
+    `npx -y @panphora/claycli data ${doc} --json > /tmp/clay-read.json`,
     "```",
     "",
     `3. Add your answer to the end of the "${into}" list and write it back:`,
     "",
     "```sh",
-    `jq --slurpfile item /tmp/clay-answer.json ${filter} /tmp/clay-read.json | npx -y @panphora/clay-agent data ${doc} --write - --if-match "$(jq -r .etag /tmp/clay-read.json)"`,
+    `jq --slurpfile item /tmp/clay-answer.json ${filter} /tmp/clay-read.json | npx -y @panphora/claycli data ${doc} --write - --if-match "$(jq -r .etag /tmp/clay-read.json)"`,
     "```",
     "",
     "4. If the write answers with a conflict, start again from step 2.",
@@ -255,7 +255,7 @@ function prompt(options = {}) {
   const shape = answerSchema(options);
   const mode = writeBackMode(writeBack);
   if (mode === "agent" && !/^https?:$/.test(window.location.protocol)) {
-    throw coded("invalid_request", "clay-agent can only write back to a document with a web address. Use writeBack \"file\".");
+    throw coded("invalid_request", "Clay CLI can only write back to a document with a web address. Use writeBack \"file\".");
   }
   const parts = String(request).trim() ? [String(request).trim()] : [];
   if (resolved.length) {
