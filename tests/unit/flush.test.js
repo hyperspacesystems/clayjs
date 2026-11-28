@@ -65,7 +65,7 @@ test("load-time render churn waits for the baseline and is not saved", async () 
   expect(saveMod.baselineSettled()).toBe(false);
   global.fetch = jest.fn(async () => okResponse());
 
-  // The page's own script renders from data after boot, the way malleable apps do:
+  // The page's own script renders from data after boot, the way HTML file apps do:
   // churn that is not the person's work, which autosave's settle window also holds.
   const settled = new Promise((resolve) => document.addEventListener("clay:baseline-settled", resolve, { once: true }));
   let settledFirst = false;

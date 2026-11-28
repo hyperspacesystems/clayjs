@@ -2,7 +2,7 @@
   "name": "@panphora/clayjs",
   "version": "1.29.0",
   "type": "module",
-  "description": "clayjs: malleable documents. Save lifecycle for self-saving HTML.",
+  "description": "clayjs: HTML file apps. Save lifecycle for self-saving HTML files.",
   "license": "MIT-0",
   "homepage": "https://clayjs.com",
   "repository": {
@@ -15,7 +15,7 @@
   "keywords": [
     "html",
     "self-saving",
-    "malleable",
+    "html-file-app",
     "local-first",
     "no-build",
     "contenteditable",

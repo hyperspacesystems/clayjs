@@ -645,7 +645,7 @@ function stampToSend() {
  * The absolute URL a save goes to.
  *
  * A relative path is resolved by fetch against the DOCUMENT's base URL, which
- * `<base href>` sets and the author of a malleable document controls. Left
+ * `<base href>` sets and the author of an HTML file app controls. Left
  * relative, a `<base href="https://elsewhere.example/">` sends the document and
  * the per-document token in the path to an origin the document picked. Pinning to
  * the real origin is the whole fix.
