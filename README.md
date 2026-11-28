@@ -6,13 +6,13 @@ Self-saving HTML files from one classic `<script>`. Load `clay.js` on a page and
 becomes editable in place, snapshots its own DOM, and saves that DOM back to the file it
 came from. No build step, no framework, no account.
 
-The document is the app *and* the database. State lives in the DOM, and a save is one POST
+The HTML file is the app *and* the database. State lives in the DOM, and a save is one POST
 of the entire serialized document. There is no data layer, no JSON on a server, no schema.
 Open the saved file in a text editor and your edit is right there in the HTML.
 
 ## See it save itself
 
-[`examples/notes.html`](https://github.com/panphora/clayjs/blob/main/examples/notes.html) is a complete self-saving document. Two
+[`examples/notes.html`](https://github.com/panphora/clayjs/blob/main/examples/notes.html) is a complete self-saving HTML file. Two
 attributes do the work: `autosave` on `<html>`, and `editable` on the parts you type into.
 
 ```html
@@ -54,8 +54,8 @@ query params on the script URL:
 - `?plugins=` — add optional plugins: `sync`, `live`, `cms`, `undo`, `sortable`, `indicator`, `ai-edit`, `quickcrop`, `upload`, `wire`, `message`, `like`, `demo`, `visitor-drafts`.
   In edit mode `richclay` and `source` load by default. `ai-edit` brings `wire` with it.
   `cms` brings `quickcrop` with it, because the CMS uses it for `data-hcms-crop` image fields.
-  `visitor-drafts` turns the page into a free document: a visitor who is not the owner gets the editing
-  UI and their work is kept in their own browser (guide section 14).
+  `visitor-drafts` turns the page into a free HTML file: a visitor who is not the owner gets the editing
+  UI and their work is kept in their own browser ([guide chapter 12](https://clayjs.com/docs/guide/free-documents/)).
 - `?exclude=` — drop a plugin that would otherwise load (a default, or one another plugin pulled in).
   One `exclude=` takes a comma list, e.g. `?exclude=source,richclay`; a second `exclude=` is ignored.
   Excluding `wire` turns `ai-edit` off too.
@@ -155,7 +155,7 @@ projections and drag previews; use `no-trigger-autosave` for a heavy editor you 
 **Everything in `entries/` is served under a version prefix on clayjs.com.**
 `entries/clay.js` is `https://clayjs.com/v1/clay.js`, which rolls forward within major
 version 1, and `https://clayjs.com/1.0.0/clay.js`, which never changes. Same for each
-satellite. A saved document hardcodes its script URL and has no update channel, which is
+satellite. A saved HTML file hardcodes its script URL and has no update channel, which is
 why the version is in the URL and why a served path, once published, is permanent. Repo
 paths are not: `build.js` flattens `entries/` into each prefix on the way out. `clay.js`
 derives its own base URL from its script tag and imports `<base>/src/loader.js`, so `src/`

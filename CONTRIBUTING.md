@@ -49,11 +49,11 @@ the source file. The pages in `tests/fixtures/` are built to run against it.
 
 **Every file in `entries/` is a permanent public URL.** `build.js` flattens that directory
 to the root of the served site, so `entries/clay.js` is `https://clayjs.com/v1/clay.js`.
-Documents people have already saved hardcode those URLs in a script tag and can never be
+HTML files people have already saved hardcode those URLs in a script tag and can never be
 updated, so the served name of a file in `entries/` can never change, and neither can
 `src/`: `clay.js` derives its own base URL from `document.currentScript.src` and imports
 `<base>/src/loader.js` from it. Renaming inside `entries/`, or moving `src/`, breaks every
-document ever authored.
+HTML file ever authored.
 
 **Two of those entries are generated.** `entries/sap.js` and `entries/clay-data.js` are
 built in sibling repositories (`sapjs` and `hyper-html-api`) and copied here by their own
