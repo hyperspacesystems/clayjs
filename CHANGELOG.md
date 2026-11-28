@@ -136,6 +136,19 @@
 
 ## [Unreleased]
 
+## [1.30.0] - 2026-11-28
+
+### Added
+- `editable="plain"` turns any element into a plain-text field: it is typable in edit mode and saved as just `editable="plain"`. It works inside templates too, so a row you add takes the caret at once and a single undo removes it.
+
+### Changed
+- Grip-dragging a block that a text selection crosses drags every block the selection touches.
+- While you drag blocks, a copy of them follows the pointer and a drop line marks where they land. The blocks being dragged are no longer dimmed.
+- Visitors see Image and File in the slash menu marked "Needs your copy". Picking one explains that pictures and files need a saved copy and offers a Download copy button, instead of opening a file chooser.
+
+### Fixed
+- When the editor mounts inside the article, the text stays where it first painted, on desktop and on phones.
+
 ## [1.29.0] - 2026-11-25
 
 ### Added
